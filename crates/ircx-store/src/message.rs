@@ -6,7 +6,7 @@ use crate::{from_json_column, to_json, StoreError};
 pub(crate) const COLUMNS: &str = "m.message_id, m.network, m.target, m.kind, m.sender_nick, \
      m.sender_user, m.sender_host, m.sender_account, m.sender_is_self, m.timestamp, \
      m.timestamp_is_local, m.text, m.tags, m.reply_to, m.batch, m.delivery, m.attachments, \
-     m.encryption, m.raw";
+     m.encryption, m.raw, m.server_msgid";
 
 const INSERT: &str = "INSERT OR IGNORE INTO messages (
         message_id, server_msgid, network, target, kind, sender_nick, sender_user, sender_host,
@@ -48,6 +48,7 @@ pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), Stor
 pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
     Ok(ChatMessage {
         id: row.get(0)?,
+        id_is_local: row.get::<_, Option<String>>(19)?.is_none(),
         network: row.get(1)?,
         target: row.get(2)?,
         kind: from_json_column(row, 3)?,
@@ -72,36 +73,8 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
     })
 }
 
-/// `ChatMessage::id` holds either a server msgid or a locally minted UUID, and
-/// only the former identifies a message across a replay. Recover it from the
-/// tags, falling back to the shape of the id for senders that drop the tag.
+/// Only a server msgid identifies a message across a replay. A locally minted
+/// id is left out so the row falls to content-based dedupe instead.
 fn server_msgid(message: &ChatMessage) -> Option<&str> {
-    let tagged = message
-        .tags
-        .iter()
-        .find(|(name, _)| name == "msgid")
-        .and_then(|(_, value)| value.as_deref())
-        .filter(|value| !value.is_empty());
-
-    tagged.or_else(|| (!is_uuid(&message.id)).then_some(message.id.as_str()))
-}
-
-fn is_uuid(id: &str) -> bool {
-    id.len() == 36
-        && id.bytes().enumerate().all(|(index, byte)| match index {
-            8 | 13 | 18 | 23 => byte == b'-',
-            _ => byte.is_ascii_hexdigit(),
-        })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_uuid_is_not_a_msgid() {
-        assert!(is_uuid("67e55044-10b1-426f-9247-bb680e5fe0c8"));
-        assert!(!is_uuid("hZ0jgN2P8CqiO3F9Hx1nOs"));
-        assert!(!is_uuid("67e55044-10b1-426f-9247-bb680e5fe0cZ"));
-    }
+    (!message.id_is_local).then_some(message.id.as_str())
 }

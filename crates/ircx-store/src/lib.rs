@@ -130,7 +130,7 @@ impl Store {
         while let Some(row) = rows.next().map_err(search_error)? {
             hits.push(SearchHit {
                 message: message::from_row(row)?,
-                snippet: row.get(19)?,
+                snippet: row.get(20)?,
             });
         }
         Ok(hits)

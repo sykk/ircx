@@ -10,6 +10,7 @@ vi.mock("@/lib/ipc", () => ({ ipc: { searchHistory: (req: unknown) => searchHist
 function message(id: string, text: string): ChatMessage {
   return {
     id,
+    idIsLocal: false,
     network: "libera",
     target: "#ctf-ops",
     kind: "privmsg",

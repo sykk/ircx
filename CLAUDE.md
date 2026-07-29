@@ -3,6 +3,12 @@
 Desktop IRCv3 client. Rust core, Tauri 2 shell, React 19 frontend.
 Product spec: `ircclient.md`. Visual reference: `docs/mockup.png`.
 
+Anything that renders the conversation — messages, grouping, nick colour,
+presence, the unread seam, typography — follows `readability/READABILITY.md`.
+It supersedes the mockup where the two disagree. Its studies assume an
+encryption layer this milestone does not build; take the structural findings
+and leave the verdict machinery.
+
 ## Layer boundaries
 
 Dependencies point one direction. A layer may use the one below it, never above.

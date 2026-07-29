@@ -17,5 +17,12 @@ export default defineConfig({
     watch: { ignored: ["**/src-tauri/**", "**/target/**"] },
   },
   build: { target: "esnext", sourcemap: true },
-  test: { environment: "jsdom", globals: true, passWithNoTests: true },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    passWithNoTests: true,
+    // Agent worktrees under .claude hold full checkouts; without this vitest
+    // collects their tests alongside the real ones.
+    exclude: ["node_modules/**", "dist/**", ".claude/**", "target/**"],
+  },
 });

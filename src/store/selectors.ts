@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { EMPTY_TIMELINE, useAppStore } from "./index";
@@ -6,8 +7,18 @@ import type { AppState, TimelineState } from "./types";
 /** Operator, voiced, then everyone else — the grouping the member list renders. */
 export type MemberGroup = "operators" | "voiced" | "members";
 
+/** Shared so an absent lookup returns one stable reference, not a fresh literal. */
+const EMPTY: readonly never[] = [];
+
+// Every selector below derives a new array. zustand 5 compares snapshots by
+// identity, so returning one unwrapped re-renders on every store read and
+// React eventually bails out with a getSnapshot warning. useShallow compares
+// element-wise instead.
+
 export function useNetworks(): Network[] {
-  return useAppStore((s) => s.networkOrder.map((id) => s.networks[id]!).filter(Boolean));
+  return useAppStore(
+    useShallow((s) => s.networkOrder.map((id) => s.networks[id]).filter(Boolean) as Network[]),
+  );
 }
 
 export function useNetwork(id: string | undefined): Network | undefined {
@@ -15,11 +26,11 @@ export function useNetwork(id: string | undefined): Network | undefined {
 }
 
 export function useChannelsFor(network: string): Channel[] {
-  return useAppStore((s) => selectChannelsFor(s, network));
+  return useAppStore(useShallow((s) => selectChannelsFor(s, network)));
 }
 
 export function useQueriesFor(network: string): Query[] {
-  return useAppStore((s) => selectQueriesFor(s, network));
+  return useAppStore(useShallow((s) => selectQueriesFor(s, network)));
 }
 
 export function useActiveTimeline(): TimelineState {
@@ -36,20 +47,22 @@ export function useActiveChannel(): Channel | undefined {
 }
 
 export function useMembers(network: string, channel: string): Member[] {
-  return useAppStore((s) => s.members[targetKey(network, channel)] ?? []);
+  return useAppStore((s) => s.members[targetKey(network, channel)] ?? (EMPTY as Member[]));
 }
 
 /** Nicks whose indicator has not expired. Call from a component that re-renders
  * on a timer; this does not schedule its own. */
 export function useTypingNicks(network: string, target: string): string[] {
-  return useAppStore((s) => {
-    const entries = s.typing[targetKey(network, target)];
-    if (!entries) return [];
-    const now = Date.now();
-    return Object.entries(entries)
-      .filter(([, expiry]) => expiry > now)
-      .map(([nick]) => nick);
-  });
+  return useAppStore(
+    useShallow((s) => {
+      const entries = s.typing[targetKey(network, target)];
+      if (!entries) return EMPTY as string[];
+      const now = Date.now();
+      return Object.entries(entries)
+        .filter(([, expiry]) => expiry > now)
+        .map(([nick]) => nick);
+    }),
+  );
 }
 
 export function selectChannelsFor(s: AppState, network: string): Channel[] {

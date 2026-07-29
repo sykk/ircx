@@ -1794,7 +1794,6 @@ dependencies = [
 name = "ircx-net"
 version = "0.1.0"
 dependencies = [
- "ircx-proto",
  "rustls",
  "rustls-pki-types",
  "thiserror 2.0.19",

@@ -113,8 +113,9 @@ pub struct SearchHit {
 #[ts(export)]
 #[serde(rename_all = "camelCase", tag = "kind", content = "value")]
 pub enum CommandOutcome {
-    /// Plain text, sent as PRIVMSG. Carries the optimistic local copy.
-    Sent(ChatMessage),
+    /// Plain text, sent as PRIVMSG. Carries the optimistic local copy. Boxed so
+    /// the enum is not the size of its largest variant; serialises unchanged.
+    Sent(Box<ChatMessage>),
     /// A slash command ran and produced nothing to render.
     Handled,
     /// A slash command produced output for the timeline.

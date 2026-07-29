@@ -8,7 +8,7 @@ import type { AppState, TimelineState } from "./types";
 export type MemberGroup = "operators" | "voiced" | "members";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
-const EMPTY: readonly never[] = [];
+const EMPTY: never[] = [];
 
 // Every selector below derives a new array. zustand 5 compares snapshots by
 // identity, so returning one unwrapped re-renders on every store read and
@@ -47,7 +47,7 @@ export function useActiveChannel(): Channel | undefined {
 }
 
 export function useMembers(network: string, channel: string): Member[] {
-  return useAppStore((s) => s.members[targetKey(network, channel)] ?? (EMPTY as Member[]));
+  return useAppStore((s) => s.members[targetKey(network, channel)] ?? EMPTY);
 }
 
 /** Nicks whose indicator has not expired. Call from a component that re-renders
@@ -56,7 +56,7 @@ export function useTypingNicks(network: string, target: string): string[] {
   return useAppStore(
     useShallow((s) => {
       const entries = s.typing[targetKey(network, target)];
-      if (!entries) return EMPTY as string[];
+      if (!entries) return EMPTY;
       const now = Date.now();
       return Object.entries(entries)
         .filter(([, expiry]) => expiry > now)

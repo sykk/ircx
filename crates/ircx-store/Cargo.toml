@@ -1,0 +1,15 @@
+[package]
+name = "ircx-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ircx-ipc.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+keyring = { version = "3", features = ["linux-native", "apple-native", "windows-native"] }

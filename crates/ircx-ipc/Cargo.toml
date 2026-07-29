@@ -1,0 +1,11 @@
+[package]
+name = "ircx-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+ts-rs.workspace = true
+time.workspace = true

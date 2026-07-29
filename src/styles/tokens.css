@@ -1,0 +1,132 @@
+/* Design tokens for ircx.
+ *
+ * Every colour the UI uses is declared here as a custom property. Components
+ * must not hardcode hex values: a theme is a stylesheet that redefines this
+ * block, and a hardcoded colour is a hole a theme cannot patch.
+ *
+ * Palette sampled from the mockup in docs/mockup.png. */
+
+@theme {
+  --font-ui:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+}
+
+:root,
+:root[data-theme="ircx-dark"] {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to lightest. */
+  --surface-base: #0a0d12;
+  --surface-sidebar: #0d1117;
+  --surface-raised: #12161d;
+  --surface-overlay: #171c24;
+  --surface-hover: #1a1f28;
+  --surface-active: #1f2733;
+
+  --border-subtle: #1a1f27;
+  --border-default: #232a34;
+  --border-strong: #313a46;
+
+  --text-primary: #d4dae3;
+  --text-secondary: #9aa4b0;
+  --text-muted: #6e7781;
+  --text-faint: #4d555f;
+  --text-inverse: #0a0d12;
+
+  --accent: #4493f8;
+  --accent-hover: #58a6ff;
+  --accent-muted: #1f6feb33;
+
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+
+  /* Connection and security indicators in the status bar. */
+  --state-connected: #3fb950;
+  --state-connecting: #d29922;
+  --state-disconnected: #6e7781;
+  --state-error: #f85149;
+
+  --badge-bg: #21262d;
+  --badge-text: #9aa4b0;
+  --badge-highlight-bg: #1f6feb;
+  --badge-highlight-text: #ffffff;
+
+  --divider-unread: #f85149;
+  --mention-bg: #1f6feb1a;
+
+  /* Deterministic nickname colours. Assigned by hashing the nick, so the same
+   * person keeps the same colour across sessions and channels. Kept clear of
+   * --danger and --success so a nick never reads as a status. */
+  --nick-1: #79c0ff;
+  --nick-2: #d2a8ff;
+  --nick-3: #ff7b72;
+  --nick-4: #ffa657;
+  --nick-5: #56d4c4;
+  --nick-6: #f778ba;
+  --nick-7: #a5d6ff;
+  --nick-8: #e3b341;
+  --nick-9: #7ee787;
+  --nick-10: #c9a0ff;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+}
+
+:root[data-theme="ircx-light"] {
+  color-scheme: light;
+
+  --surface-base: #ffffff;
+  --surface-sidebar: #f6f8fa;
+  --surface-raised: #f6f8fa;
+  --surface-overlay: #ffffff;
+  --surface-hover: #eef1f4;
+  --surface-active: #e4e8ed;
+
+  --border-subtle: #e6eaef;
+  --border-default: #d0d7de;
+  --border-strong: #b6bfc9;
+
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --text-muted: #818b98;
+  --text-faint: #a3acb6;
+  --text-inverse: #ffffff;
+
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-muted: #0969da1a;
+
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --danger: #cf222e;
+
+  --state-connected: #1a7f37;
+  --state-connecting: #9a6700;
+  --state-disconnected: #818b98;
+  --state-error: #cf222e;
+
+  --badge-bg: #eaeef2;
+  --badge-text: #59636e;
+  --badge-highlight-bg: #0969da;
+  --badge-highlight-text: #ffffff;
+
+  --divider-unread: #cf222e;
+  --mention-bg: #0969da14;
+
+  --nick-1: #0550ae;
+  --nick-2: #8250df;
+  --nick-3: #cf222e;
+  --nick-4: #bc4c00;
+  --nick-5: #0f766e;
+  --nick-6: #bf3989;
+  --nick-7: #1f6feb;
+  --nick-8: #7d4e00;
+  --nick-9: #1a7f37;
+  --nick-10: #6639ba;
+}

@@ -1,0 +1,27 @@
+// Re-exports the ts-rs output so application code imports from one place and
+// never reaches into ./generated directly. Regenerate with `npm run bindings`.
+export type { AppSnapshot } from "./generated/AppSnapshot";
+export type { Attachment } from "./generated/Attachment";
+export type { AttachmentPreview } from "./generated/AttachmentPreview";
+export type { Channel } from "./generated/Channel";
+export type { ChatMessage } from "./generated/ChatMessage";
+export type { CommandOutcome } from "./generated/CommandOutcome";
+export type { ConnectionStatus } from "./generated/ConnectionStatus";
+export type { Delivery } from "./generated/Delivery";
+export type { EncryptionState } from "./generated/EncryptionState";
+export type { HistoryRequest } from "./generated/HistoryRequest";
+export type { IrcxEvent } from "./generated/IrcxEvent";
+export type { Member } from "./generated/Member";
+export type { MessageKind } from "./generated/MessageKind";
+export type { MessageSource } from "./generated/MessageSource";
+export type { Network } from "./generated/Network";
+export type { NetworkConfig } from "./generated/NetworkConfig";
+export type { Query } from "./generated/Query";
+export type { SaslConfig } from "./generated/SaslConfig";
+export type { SaslMechanism } from "./generated/SaslMechanism";
+export type { SaslStatus } from "./generated/SaslStatus";
+export type { SearchHit } from "./generated/SearchHit";
+export type { SearchRequest } from "./generated/SearchRequest";
+export type { Sender } from "./generated/Sender";
+export type { Severity } from "./generated/Severity";
+export type { Topic } from "./generated/Topic";

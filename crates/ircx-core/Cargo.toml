@@ -1,0 +1,19 @@
+[package]
+name = "ircx-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ircx-proto.workspace = true
+ircx-net.workspace = true
+ircx-ipc.workspace = true
+ircx-store.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+time.workspace = true
+uuid.workspace = true
+serde.workspace = true
+base64 = "0.22"

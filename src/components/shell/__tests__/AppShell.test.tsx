@@ -1,0 +1,105 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useAppStore } from "@/store";
+import { AppShell } from "../AppShell";
+import { makeChannel, makeNetwork, resetStore, seedStore } from "../fixtures";
+import { loadViewState } from "../viewState";
+
+function resizeTo(px: number) {
+  window.innerWidth = px;
+  act(() => void window.dispatchEvent(new Event("resize")));
+}
+
+beforeEach(() => {
+  resetStore();
+  localStorage.clear();
+  window.innerWidth = 1200;
+});
+
+describe("AppShell", () => {
+  it("renders against an empty store", () => {
+    render(<AppShell />);
+    expect(screen.getByRole("navigation", { name: "Networks" })).toBeTruthy();
+    expect(screen.getByRole("contentinfo")).toBeTruthy();
+  });
+
+  it("gives the drawer a column only once it is open", () => {
+    const { container } = render(<AppShell drawer={<p>members</p>} />);
+    const body = container.querySelector("main")!.parentElement!;
+
+    expect(screen.queryByText("members")).toBeNull();
+    expect(body.style.gridTemplateColumns).toBe("240px 4px minmax(0, 1fr)");
+
+    act(() => useAppStore.getState().toggleDrawer());
+
+    expect(screen.getByText("members")).toBeTruthy();
+    expect(body.style.gridTemplateColumns).toBe("240px 4px minmax(0, 1fr) 264px");
+  });
+
+  it("withholds the sidebar and drawer on a narrow window", () => {
+    useAppStore.getState().toggleDrawer(true);
+    render(<AppShell drawer={<p>members</p>} />);
+
+    resizeTo(800);
+
+    expect(screen.queryByRole("navigation", { name: "Networks" })).toBeNull();
+    expect(screen.queryByText("members")).toBeNull();
+  });
+
+  it("brings the sidebar back over the main column on demand when narrow", () => {
+    window.innerWidth = 800;
+    render(<AppShell />);
+    expect(screen.queryByRole("navigation", { name: "Networks" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.getByRole("navigation", { name: "Networks" })).toBeTruthy();
+
+    resizeTo(1200);
+    expect(screen.getByRole("navigation", { name: "Networks" })).toBeTruthy();
+  });
+
+  it("resizes the sidebar from the keyboard within the store's bounds", () => {
+    render(<AppShell />);
+    const handle = screen.getByRole("separator", { name: "Sidebar width" });
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(useAppStore.getState().sidebarWidth).toBe(256);
+
+    for (let i = 0; i < 20; i++) fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    expect(useAppStore.getState().sidebarWidth).toBe(180);
+  });
+
+  it("persists sidebar width and collapsed networks", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<AppShell />);
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Sidebar width" }), {
+      key: "ArrowRight",
+    });
+    fireEvent.click(screen.getByRole("treeitem", { name: /^libera,/ }));
+
+    expect(loadViewState()).toEqual({
+      sidebarWidth: 256,
+      collapsedNetworks: ["libera"],
+    });
+  });
+
+  it("restores persisted view state on mount", () => {
+    localStorage.setItem(
+      "ircx.shell.view",
+      JSON.stringify({ sidebarWidth: 320, collapsedNetworks: ["libera"] }),
+    );
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<AppShell />);
+
+    expect(useAppStore.getState().sidebarWidth).toBe(320);
+    expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
+  });
+
+  it("ignores a corrupt stored view state", () => {
+    localStorage.setItem("ircx.shell.view", "{not json");
+    render(<AppShell />);
+
+    expect(useAppStore.getState().sidebarWidth).toBe(240);
+  });
+});

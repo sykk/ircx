@@ -4,3 +4,6 @@ dist/
 .vite/
 *.log
 .DS_Store
+
+# Agent worktrees created by Claude Code.
+.claude/worktrees/

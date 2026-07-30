@@ -87,9 +87,16 @@ What is left:
 
   What that leaves:
 
-  - **Whether `+reply` survives on a `PRIVMSG`.** The bisect used `TAGMSG`. It
-    matters separately, because `reply_to` reads `+reply` on the way in, so if
-    Libera drops it there too then a reply quote never appears from any client.
+  - `+reply` **does not survive on a `PRIVMSG` either**, checked the same way on
+    the same connection: the echo came back without the tag while a `+typing`
+    TAGMSG echoed seconds earlier. So the mechanism is an allowlist rather than
+    a filter on the `draft/` namespace — `reply` is not a draft tag and is
+    dropped in both message types.
+
+    That costs a second feature. `reply_to` is read from `+reply` on the way in
+    and `ReplyQuote` draws from it, so on Libera that component cannot render.
+    It also surfaced #112: ircx never *sends* `+reply` on a message at all, so
+    the reply path has never worked end to end anywhere.
   - **Another network.** Nothing has tried a server whose client-tag policy is
     more permissive, which is what would show the ircx side is correct.
   - **A second client rendering one**, which needs both a server that relays and

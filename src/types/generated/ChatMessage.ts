@@ -10,7 +10,13 @@ export type ChatMessage = {
 /**
  * IRCv3 `msgid` when the server sends one, otherwise a local UUID.
  */
-id: string, network: string, target: string, kind: MessageKind, sender: Sender, 
+id: string, 
+/**
+ * Whether `id` was minted here. A server msgid is the same string on
+ * every client and survives a replay; a local one identifies the message
+ * only within this archive.
+ */
+idIsLocal: boolean, network: string, target: string, kind: MessageKind, sender: Sender, 
 /**
  * RFC 3339 UTC. From the `server-time` tag when negotiated, else receipt time.
  */

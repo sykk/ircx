@@ -1,0 +1,210 @@
+use crate::casemap::CaseMapping;
+
+/// What `RPL_ISUPPORT` told us, pre-seeded with the RFC defaults so a server
+/// that sends no 005 at all still parses channel names and member prefixes.
+#[derive(Debug, Clone)]
+pub struct ISupport {
+    pub casemapping: CaseMapping,
+    pub chantypes: String,
+    /// Mode letter and its prefix character, highest rank first.
+    pub prefixes: Vec<(char, char)>,
+    /// The four `CHANMODES` classes: list, always-argument, argument on set, flag.
+    pub chanmodes: [String; 4],
+    pub network: Option<String>,
+    targmax: Vec<(String, Option<u32>)>,
+}
+
+impl Default for ISupport {
+    fn default() -> Self {
+        Self {
+            casemapping: CaseMapping::default(),
+            chantypes: "#&".into(),
+            prefixes: vec![('o', '@'), ('v', '+')],
+            chanmodes: ["b".into(), "k".into(), "l".into(), "imnpst".into()],
+            network: None,
+            targmax: Vec::new(),
+        }
+    }
+}
+
+impl ISupport {
+    /// The parameters of one 005 line, without the leading nick and the
+    /// trailing "are supported by this server".
+    pub fn apply(&mut self, tokens: &[String]) {
+        for token in tokens {
+            if let Some(name) = token.strip_prefix('-') {
+                self.reset(name);
+                continue;
+            }
+            let (key, value) = match token.split_once('=') {
+                Some((key, value)) => (key, value),
+                None => (token.as_str(), ""),
+            };
+            self.set(&key.to_ascii_uppercase(), value);
+        }
+    }
+
+    fn set(&mut self, key: &str, value: &str) {
+        match key {
+            "CASEMAPPING" => {
+                if let Some(mapping) = CaseMapping::from_token(value) {
+                    self.casemapping = mapping;
+                }
+            }
+            "CHANTYPES" if !value.is_empty() => self.chantypes = value.into(),
+            "PREFIX" => self.prefixes = parse_prefix(value),
+            "CHANMODES" => {
+                for (slot, class) in self.chanmodes.iter_mut().zip(value.split(',')) {
+                    *slot = class.into();
+                }
+            }
+            "NETWORK" if !value.is_empty() => self.network = Some(value.into()),
+            "TARGMAX" => self.targmax = parse_targmax(value),
+            _ => {}
+        }
+    }
+
+    fn reset(&mut self, key: &str) {
+        let defaults = ISupport::default();
+        match key.to_ascii_uppercase().as_str() {
+            "CASEMAPPING" => self.casemapping = defaults.casemapping,
+            "CHANTYPES" => self.chantypes = defaults.chantypes,
+            "PREFIX" => self.prefixes = defaults.prefixes,
+            "CHANMODES" => self.chanmodes = defaults.chanmodes,
+            "NETWORK" => self.network = None,
+            "TARGMAX" => self.targmax = Vec::new(),
+            _ => {}
+        }
+    }
+
+    pub fn is_channel(&self, target: &str) -> bool {
+        target
+            .chars()
+            .next()
+            .is_some_and(|c| self.chantypes.contains(c))
+    }
+
+    pub fn prefix_for_mode(&self, mode: char) -> Option<char> {
+        self.prefixes
+            .iter()
+            .find(|(letter, _)| *letter == mode)
+            .map(|(_, prefix)| *prefix)
+    }
+
+    pub fn is_prefix(&self, c: char) -> bool {
+        self.prefixes.iter().any(|(_, prefix)| *prefix == c)
+    }
+
+    /// Lower is higher standing: `@` outranks `+`.
+    pub fn rank(&self, prefix: char) -> usize {
+        self.prefixes
+            .iter()
+            .position(|(_, p)| *p == prefix)
+            .unwrap_or(usize::MAX)
+    }
+
+    /// How many targets one command may name. `None` means no stated limit.
+    pub fn targmax(&self, command: &str) -> Option<u32> {
+        self.targmax
+            .iter()
+            .find(|(name, _)| name == command)
+            .and_then(|(_, limit)| *limit)
+    }
+
+    /// Splits the leading membership prefixes off a `RPL_NAMREPLY` entry.
+    /// Without `multi-prefix` only the highest one is there to find.
+    pub fn split_prefixes<'a>(&self, entry: &'a str) -> (Vec<String>, &'a str) {
+        let end = entry
+            .char_indices()
+            .find(|(_, c)| !self.is_prefix(*c))
+            .map(|(index, _)| index)
+            .unwrap_or(entry.len());
+        let prefixes = entry[..end].chars().map(String::from).collect();
+        (prefixes, &entry[end..])
+    }
+
+    /// Mode letters that carry an argument when set, taken from `CHANMODES`
+    /// classes A-C plus the membership modes from `PREFIX`.
+    pub fn takes_argument(&self, mode: char, adding: bool) -> bool {
+        if self.prefixes.iter().any(|(letter, _)| *letter == mode) {
+            return true;
+        }
+        if self.chanmodes[0].contains(mode) || self.chanmodes[1].contains(mode) {
+            return true;
+        }
+        adding && self.chanmodes[2].contains(mode)
+    }
+}
+
+fn parse_prefix(value: &str) -> Vec<(char, char)> {
+    let Some((modes, prefixes)) = value.strip_prefix('(').and_then(|v| v.split_once(')')) else {
+        return Vec::new();
+    };
+    modes.chars().zip(prefixes.chars()).collect()
+}
+
+fn parse_targmax(value: &str) -> Vec<(String, Option<u32>)> {
+    value
+        .split(',')
+        .filter_map(|entry| entry.split_once(':'))
+        .map(|(command, limit)| (command.to_ascii_uppercase(), limit.parse().ok()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokens(line: &str) -> Vec<String> {
+        line.split(' ').map(String::from).collect()
+    }
+
+    #[test]
+    fn a_libera_005_lands_in_every_field() {
+        let mut isupport = ISupport::default();
+        isupport.apply(&tokens(
+            "CHANTYPES=# PREFIX=(ov)@+ CHANMODES=eIbq,k,flj,CFLMPQScgimnprstz \
+             CASEMAPPING=rfc1459 NETWORK=Libera.Chat TARGMAX=PRIVMSG:4,WHOIS:1,JOIN:",
+        ));
+
+        assert_eq!(isupport.chantypes, "#");
+        assert_eq!(isupport.prefixes, vec![('o', '@'), ('v', '+')]);
+        assert_eq!(isupport.chanmodes[0], "eIbq");
+        assert_eq!(isupport.chanmodes[3], "CFLMPQScgimnprstz");
+        assert_eq!(isupport.casemapping, CaseMapping::Rfc1459);
+        assert_eq!(isupport.network.as_deref(), Some("Libera.Chat"));
+        assert_eq!(isupport.targmax("PRIVMSG"), Some(4));
+        assert_eq!(isupport.targmax("JOIN"), None);
+        assert_eq!(isupport.targmax("KICK"), None);
+    }
+
+    #[test]
+    fn a_negated_token_restores_the_default() {
+        let mut isupport = ISupport::default();
+        isupport.apply(&tokens("CHANTYPES=#&! NETWORK=Example"));
+        isupport.apply(&tokens("-CHANTYPES -NETWORK"));
+
+        assert_eq!(isupport.chantypes, "#&");
+        assert_eq!(isupport.network, None);
+    }
+
+    #[test]
+    fn multi_prefix_entries_split_down_to_the_nick() {
+        let mut isupport = ISupport::default();
+        isupport.apply(&tokens("PREFIX=(qaohv)~&@%+"));
+
+        let (prefixes, nick) = isupport.split_prefixes("~@sable");
+        assert_eq!(prefixes, vec!["~", "@"]);
+        assert_eq!(nick, "sable");
+        assert_eq!(isupport.split_prefixes("sable").0, Vec::<String>::new());
+        assert!(isupport.rank('~') < isupport.rank('+'));
+    }
+
+    #[test]
+    fn a_server_that_sends_nothing_still_knows_a_channel_from_a_nick() {
+        let isupport = ISupport::default();
+        assert!(isupport.is_channel("#ircx"));
+        assert!(!isupport.is_channel("sable"));
+        assert_eq!(isupport.prefix_for_mode('o'), Some('@'));
+    }
+}

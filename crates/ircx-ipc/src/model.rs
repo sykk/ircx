@@ -9,6 +9,10 @@ use crate::{NetworkId, TargetName};
 pub struct ChatMessage {
     /// IRCv3 `msgid` when the server sends one, otherwise a local UUID.
     pub id: String,
+    /// Whether `id` was minted here. A server msgid is the same string on
+    /// every client and survives a replay; a local one identifies the message
+    /// only within this archive.
+    pub id_is_local: bool,
     pub network: NetworkId,
     pub target: TargetName,
     pub kind: MessageKind,

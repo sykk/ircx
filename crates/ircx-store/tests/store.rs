@@ -14,6 +14,7 @@ const FUTURE: &str = "2999-01-01T00:00:00Z";
 fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
     ChatMessage {
         id: id.into(),
+        id_is_local: true,
         network: "libera".into(),
         target: target.into(),
         kind: MessageKind::Privmsg,
@@ -41,6 +42,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
 fn with_msgid(mut message: ChatMessage, msgid: &str) -> ChatMessage {
     message.tags.push(("msgid".into(), Some(msgid.into())));
     message.id = msgid.into();
+    message.id_is_local = false;
     message
 }
 
@@ -83,6 +85,7 @@ fn a_round_trip_preserves_every_field() {
     let store = Store::open_in_memory().unwrap();
     let original = ChatMessage {
         id: "vDBRR1KcZTFf9pfJn5tsZQ".into(),
+        id_is_local: false,
         network: "libera".into(),
         target: "#ircx".into(),
         kind: MessageKind::Action,
@@ -129,6 +132,7 @@ fn a_round_trip_preserves_every_field() {
     let read = &loaded[0];
 
     assert_eq!(read.id, original.id);
+    assert_eq!(read.id_is_local, original.id_is_local);
     assert_eq!(read.network, original.network);
     assert_eq!(read.target, original.target);
     assert_eq!(read.kind, original.kind);

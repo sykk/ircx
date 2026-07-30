@@ -54,6 +54,14 @@ describe("chordFor", () => {
     expect(chordFor(event, true)).toBe("Mod+Alt+1");
   });
 
+  it("names the backslash key, which Shift rewrites to a pipe", () => {
+    const shifted = keydown({ key: "|", code: "Backslash", ctrlKey: true, shiftKey: true });
+    expect(chordFor(shifted, false)).toBe("Mod+Shift+\\");
+    expect(chordFor(keydown({ key: "\\", code: "Backslash", ctrlKey: true }), false)).toBe(
+      "Mod+\\",
+    );
+  });
+
   it("names arrows and Escape as themselves", () => {
     expect(chordFor(keydown({ key: "ArrowUp", altKey: true, shiftKey: true }), false)).toBe(
       "Alt+Shift+ArrowUp",
@@ -67,8 +75,11 @@ describe("the shipped table", () => {
 
   it.each([
     ["Mod+K", "palette.toggle"],
-    ["Alt+ArrowUp", "target.previous"],
-    ["Alt+ArrowDown", "target.next"],
+    ["Mod+\\", "pane.splitVertical"],
+    ["Mod+Shift+\\", "pane.splitHorizontal"],
+    ["Mod+W", "pane.close"],
+    ["Alt+ArrowUp", "pane.previous"],
+    ["Alt+ArrowDown", "pane.next"],
     ["Alt+Shift+ArrowUp", "target.previousUnread"],
     ["Alt+Shift+ArrowDown", "target.nextUnread"],
     ["Alt+ArrowLeft", "history.back"],
@@ -88,7 +99,7 @@ describe("the shipped table", () => {
     }
   });
 
-  it("lets exactly the overlay and target-walking chords through while typing", () => {
+  it("lets exactly the overlay, pane and target-walking chords through while typing", () => {
     const typing = DEFAULT_BINDINGS.filter((b) => b.whenTyping).map((b) => b.chord);
     expect(typing.toSorted()).toEqual(
       [
@@ -99,6 +110,9 @@ describe("the shipped table", () => {
         "Escape",
         "Mod+F",
         "Mod+K",
+        "Mod+W",
+        "Mod+Shift+\\",
+        "Mod+\\",
       ].toSorted(),
     );
   });

@@ -2,11 +2,15 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import { useActiveChannel } from "@/store/selectors";
+import { useChannelForView } from "@/store/selectors";
+import type { ViewId } from "@/store/types";
 import { MembersIcon, OverflowIcon, SearchIcon } from "./icons";
 
-export function ChannelHeader() {
-  const channel = useActiveChannel();
+export function ChannelHeader({ view }: { view: ViewId | null }) {
+  const channel = useChannelForView(view);
+  // The channel name carries the focus indicator, so an unfocused pane reads a
+  // step quieter. With one pane there is nothing to tell apart.
+  const focused = useAppStore((s) => s.viewOrder.length < 2 || s.activeViewId === view);
   const drawerOpen = useAppStore((s) => s.drawerOpen);
   const toggleDrawer = useAppStore((s) => s.toggleDrawer);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
@@ -48,7 +52,12 @@ export function ChannelHeader() {
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--border-default)] bg-[var(--surface-base)] px-3">
-      <h1 className="shrink-0 text-[15px] font-medium text-[var(--text-primary)]">
+      <h1
+        className={clsx(
+          "shrink-0 text-[15px] font-medium",
+          focused ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]",
+        )}
+      >
         {channel.name}
       </h1>
       <span className="shrink-0 text-[var(--text-muted)]">

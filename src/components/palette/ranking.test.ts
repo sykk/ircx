@@ -48,6 +48,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     views: {},
     viewOrder: [],
     activeViewId: null,
+    layout: null,
     recent,
     drawerOpen: false,
     paletteOpen: false,

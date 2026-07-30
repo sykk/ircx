@@ -9,7 +9,7 @@ import {
 } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
-import type { ActiveTarget, AppState } from "@/store/types";
+import type { ActiveTarget, AppState, ViewId } from "@/store/types";
 
 const HISTORY_CAP = 100;
 
@@ -112,12 +112,32 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       go(h.entries[next]);
     };
 
+    const walk = (delta: number) => {
+      const state = useAppStore.getState();
+      if (state.viewOrder.length < 2) {
+        step(delta, false);
+        return;
+      }
+      const at = state.activeViewId ? state.viewOrder.indexOf(state.activeViewId) : -1;
+      const next = state.viewOrder.at((at + delta) % state.viewOrder.length);
+      if (next) focusPane(next);
+    };
+
     return {
       "palette.toggle": () => useAppStore.getState().togglePalette(),
       "search.open": () => useAppStore.getState().toggleSearch(true),
       "drawer.toggle": () => useAppStore.getState().toggleDrawer(),
-      "target.previous": () => step(-1, false),
-      "target.next": () => step(1, false),
+      "pane.splitVertical": () => useAppStore.getState().splitActiveView("row"),
+      "pane.splitHorizontal": () => useAppStore.getState().splitActiveView("column"),
+      "pane.close": () => {
+        const state = useAppStore.getState();
+        if (!state.activeViewId) return;
+        state.closeView(state.activeViewId);
+        const focused = useAppStore.getState().activeViewId;
+        if (focused) focusPane(focused);
+      },
+      "pane.previous": () => walk(-1),
+      "pane.next": () => walk(1),
       "target.previousUnread": () => step(-1, true),
       "target.nextUnread": () => step(1, true),
       "target.jump": (arg) => {
@@ -137,6 +157,13 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
   }, []);
 
   useHotkeys(handlers, bindings);
+}
+
+/** Focuses a pane and takes the caret with it. Moving the store's focus alone
+ * would leave the next keystroke going to the pane the user just left. */
+function focusPane(id: ViewId): void {
+  useAppStore.getState().focusView(id);
+  document.querySelector<HTMLTextAreaElement>(`[data-view="${id}"] textarea`)?.focus();
 }
 
 /** Sidebar order: networks as configured, each one's channels then its queries,

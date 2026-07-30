@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
-import { oneView } from "@/components/shell/fixtures";
+import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
 import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
 import { formatClock } from "./rows";
@@ -70,6 +70,18 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
   });
 }
 
+/** A second pane on the same channel, as a split would open, parked at
+ * `scrollPosition` so it is reading history rather than following. */
+function openSecondView(scrollPosition: number) {
+  const id = "second-view";
+  const { views, viewOrder } = useAppStore.getState();
+  useAppStore.setState({
+    views: { ...views, [id]: { ...views[TEST_VIEW]!, id, scrollPosition } },
+    viewOrder: [...viewOrder, id],
+  });
+  return id;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   ipcMock.loadHistory.mockResolvedValue([]);
@@ -78,7 +90,7 @@ beforeEach(() => {
 
 describe("Timeline", () => {
   it("says so when nothing is open", () => {
-    render(<Timeline />);
+    render(<Timeline view={null} />);
     expect(screen.getByText("No conversation open")).toBeTruthy();
   });
 
@@ -89,7 +101,7 @@ describe("Timeline", () => {
       makeMessage({ id: "b", nick: "phrack", text: "second", timestamp: new Date(base + 1000).toISOString() }),
       makeMessage({ id: "c", nick: "nyx", text: "third", timestamp: new Date(base + 61_000).toISOString() }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const clocks = document.querySelectorAll("time");
     expect(clocks).toHaveLength(2);
@@ -104,7 +116,7 @@ describe("Timeline", () => {
       makeMessage({ id: "a", nick: "kade", text: "first", timestamp: new Date(base).toISOString() }),
       makeMessage({ id: "b", nick: "kade", text: "second", timestamp: new Date(base + 1000).toISOString() }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getAllByText("kade")).toHaveLength(2);
     expect(document.querySelectorAll("time")).toHaveLength(1);
@@ -115,7 +127,7 @@ describe("Timeline", () => {
       makeMessage({ id: "a", text: "late", timestamp: new Date(2026, 6, 28, 23, 55).toISOString() }),
       makeMessage({ id: "b", text: "early", timestamp: new Date(2026, 6, 29, 0, 5).toISOString() }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
@@ -140,7 +152,7 @@ describe("Timeline", () => {
       ],
       "b",
     );
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
     expect(
       screen.getByText("2 messages, 2 people, 45 minutes · 1 of them mentions you"),
     ).toBeTruthy();
@@ -151,7 +163,7 @@ describe("Timeline", () => {
       makeMessage({ id: "a", nick: "phrack", text: "sable: look at this" }),
       makeMessage({ id: "b", nick: "phrack", text: "sableton is a different person" }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const mention = document.querySelector('[data-msgid="a"]');
     const other = document.querySelector('[data-msgid="b"]');
@@ -161,7 +173,7 @@ describe("Timeline", () => {
 
   it("renders markdown as elements, never as markup", () => {
     seed([makeMessage({ id: "a", text: "**bold** and <b>not a tag</b>" })]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const row = document.querySelector('[data-msgid="a"]')!;
     expect(within(row as HTMLElement).getByText("bold").tagName).toBe("STRONG");
@@ -182,7 +194,7 @@ describe("Timeline", () => {
         }),
       ),
     );
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText("7 joined")).toBeTruthy();
     expect(screen.queryByText("user0 joined")).toBe(null);
@@ -210,7 +222,7 @@ describe("Timeline", () => {
         timestamp: new Date(base + 2000).toISOString(),
       }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     // Present with the fold shut, and still present once it opens.
     expect(screen.getByText(/ChanServ set \+o kade/)).toBeTruthy();
@@ -221,7 +233,7 @@ describe("Timeline", () => {
 
   it("bounds a paste and states its length", () => {
     seed([makeMessage({ id: "a", text: "```py\nx = 1\ny = 2\nz = 3\n```" })]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText("3 lines")).toBeTruthy();
     expect(screen.getByText("py")).toBeTruthy();
@@ -229,7 +241,7 @@ describe("Timeline", () => {
 
   it("shows a reply stub when the parent is outside the window", () => {
     seed([makeMessage({ id: "a", text: "answer", replyTo: "older-msgid" })]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
     expect(screen.getByText("in reply to older-msgid")).toBeTruthy();
   });
 
@@ -238,7 +250,7 @@ describe("Timeline", () => {
       makeMessage({ id: "a", nick: "sable", text: "the question" }),
       makeMessage({ id: "b", nick: "phrack", text: "the answer", replyTo: "a" }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const quote = screen.getByTitle("the question");
     expect(quote.textContent).toContain("the question");
@@ -246,7 +258,7 @@ describe("Timeline", () => {
 
   it("renders a slice of a long conversation rather than all of it", () => {
     seed(makeConversation({ count: 4000 }));
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
     const rendered = document.querySelectorAll("[data-index]");
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(80);
@@ -261,7 +273,7 @@ describe("Timeline", () => {
     ipcMock.loadHistory.mockResolvedValue(older);
 
     seed(makeConversation({ count: 400, seed: 3 }));
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const scroller = screen.getByTestId("timeline-scroller");
     const heightBefore = scroller.scrollHeight;
@@ -295,7 +307,7 @@ describe("Timeline", () => {
         makeMessage({ id: `m${i}`, nick: "sable", text: `line ${i}`, timestamp: stamp(10_000 + i * 30_000) }),
       ),
     );
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     const scroller = screen.getByTestId("timeline-scroller");
     const heightBefore = scroller.scrollHeight;
@@ -311,10 +323,44 @@ describe("Timeline", () => {
     expect(scroller.scrollTop).toBe(100 + grew);
   });
 
+  it("anchors each pane on its own position when two show the same channel", async () => {
+    // The anchor is per instance and keys on message identity, so a second pane
+    // on the channel history arrives for has to hold its own place too.
+    const older = makeConversation({
+      count: 200,
+      seed: 11,
+      startedAt: Date.parse("2026-07-28T00:00:00.000Z"),
+    }).map((m) => ({ ...m, id: `old-${m.id}` }));
+    ipcMock.loadHistory.mockResolvedValue(older);
+
+    seed(makeConversation({ count: 400, seed: 3 }));
+    const second = openSecondView(200);
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+
+    const [reading, other] = screen.getAllByTestId("timeline-scroller");
+    const heightBefore = reading!.scrollHeight;
+    reading!.scrollTop = 100;
+    fireEvent.scroll(reading!);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+
+    const grew = reading!.scrollHeight - heightBefore;
+    expect(grew).toBeGreaterThan(0);
+    expect(reading!.scrollTop).toBe(100 + grew);
+    expect(other!.scrollTop).toBe(200 + grew);
+  });
+
   it("asks for history from before the oldest message it holds", async () => {
     const messages = makeConversation({ count: 50, seed: 5 });
     seed(messages);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     fireEvent.scroll(screen.getByTestId("timeline-scroller"));
 
@@ -337,7 +383,7 @@ describe("Timeline", () => {
         delivery: { state: "failed", detail: "Cannot send to channel" },
       }),
     ]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect((document.querySelector('[data-msgid="a"]') as HTMLElement).style.opacity).toBe("0.55");
     expect(screen.getByText("Not sent — Cannot send to channel")).toBeTruthy();
@@ -346,7 +392,7 @@ describe("Timeline", () => {
 
   it("does not fetch an attachment before the user asks", () => {
     seed([makeMessage({ id: "a", text: "here", attachments: [makeAttachment()] })]);
-    render(<Timeline />);
+    render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
     expect(screen.getByText("fetch")).toBeTruthy();

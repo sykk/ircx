@@ -25,6 +25,18 @@ export interface ChatView {
   selectedUser: string | null;
 }
 
+/** `row` puts the two panes side by side, `column` stacks them. */
+export type SplitDirection = "row" | "column";
+
+/**
+ * How the panes divide the window. A tree rather than a list of panes with one
+ * direction: splitting one pane must not rearrange the others, and only nesting
+ * expresses a side-by-side pair with one half stacked.
+ */
+export type Layout =
+  | { type: "view"; id: ViewId }
+  | { type: "split"; direction: SplitDirection; children: [Layout, Layout] };
+
 export interface TimelineState {
   messages: ChatMessage[];
   /** msgid of the first message below the unread rule; null when caught up. */
@@ -57,9 +69,12 @@ export interface AppState {
 
   // View.
   views: Record<ViewId, ChatView>;
-  /** Layout order. One entry until splits land. */
+  /** Depth-first pane order, derived from `layout`. Focus movement and anything
+   * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];
   activeViewId: ViewId | null;
+  /** Null until the first view opens. */
+  layout: Layout | null;
 
   // Chrome.
   /** One shared context panel that follows focus, so its open state is global

@@ -61,10 +61,6 @@ export function useTimelineForView(id: ViewId | null | undefined): TimelineState
   });
 }
 
-export function useActiveTimeline(): TimelineState {
-  return useTimelineForView(useAppStore((s) => s.activeViewId));
-}
-
 export function useChannelForView(id: ViewId | null | undefined): Channel | undefined {
   return useAppStore((s) => {
     const view = id ? s.views[id] : undefined;

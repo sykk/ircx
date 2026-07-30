@@ -101,6 +101,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     views: {},
     viewOrder: [],
     activeViewId: null,
+    layout: null,
     recent: [],
     drawerOpen: false,
     paletteOpen: false,

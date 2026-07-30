@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
-import { oneView } from "@/components/shell/fixtures";
+import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ChannelHeader } from "./ChannelHeader";
 
 const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
@@ -31,19 +31,19 @@ function openMenu() {
 describe("ChannelHeader", () => {
   it("renders nothing when no channel is active", () => {
     useAppStore.setState(oneView(null));
-    const { container } = render(<ChannelHeader />);
+    const { container } = render(<ChannelHeader view={null} />);
     expect(container.firstChild).toBeNull();
   });
 
   it("names the channel and counts its members, and leaves the topic out", () => {
-    render(<ChannelHeader />);
+    render(<ChannelHeader view={TEST_VIEW} />);
     expect(screen.getByRole("heading", { name: CTF_OPS.name })).toBeTruthy();
     expect(screen.getByText("16 members")).toBeTruthy();
     expect(screen.queryByText(TOPIC)).toBeNull();
   });
 
   it("toggles the drawer", () => {
-    render(<ChannelHeader />);
+    render(<ChannelHeader view={TEST_VIEW} />);
     const toggle = screen.getByRole("button", { name: "Toggle member drawer" });
     fireEvent.click(toggle);
     expect(useAppStore.getState().drawerOpen).toBe(true);
@@ -52,13 +52,13 @@ describe("ChannelHeader", () => {
   });
 
   it("opens search for the channel", () => {
-    render(<ChannelHeader />);
+    render(<ChannelHeader view={TEST_VIEW} />);
     fireEvent.click(screen.getByRole("button", { name: `Search ${CTF_OPS.name}` }));
     expect(useAppStore.getState().searchOpen).toBe(true);
   });
 
   it("keeps invite in the overflow menu, and asks for a nick", () => {
-    render(<ChannelHeader />);
+    render(<ChannelHeader view={TEST_VIEW} />);
     expect(screen.queryByRole("menuitem", { name: "Invite" })).toBeNull();
 
     openMenu();
@@ -67,7 +67,7 @@ describe("ChannelHeader", () => {
   });
 
   it("closes the overflow menu on Escape", () => {
-    render(<ChannelHeader />);
+    render(<ChannelHeader view={TEST_VIEW} />);
     openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Invite" }));
 

@@ -1,7 +1,15 @@
 import { create } from "zustand";
 import type { ChatMessage, IrcxEvent } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
+import { paneOrder, removeLeaf, splitLeaf } from "./layout";
+import type {
+  ActiveTarget,
+  AppState,
+  ChatView,
+  SplitDirection,
+  TimelineState,
+  ViewId,
+} from "./types";
 
 /** Older messages stay in SQLite; the window is what the timeline can scroll. */
 const TIMELINE_CAP = 10_000;
@@ -34,6 +42,12 @@ export interface AppActions {
   setViewScroll: (view: ViewId, position: number) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
 
+  /** Opens a second pane on the focused view's target and focuses it. */
+  splitActiveView: (direction: SplitDirection) => void;
+  /** Refused for the last pane; the window always holds at least one. */
+  closeView: (view: ViewId) => void;
+  focusView: (view: ViewId) => void;
+
   toggleDrawer: (open?: boolean) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
@@ -53,6 +67,7 @@ const initialState: AppState = {
   views: {},
   viewOrder: [],
   activeViewId: null,
+  layout: null,
   recent: [],
   drawerOpen: false,
   paletteOpen: false,
@@ -90,6 +105,7 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
           views: { [view.id]: view },
           viewOrder: [view.id],
           activeViewId: view.id,
+          layout: { type: "view", id: view.id },
           recent,
           timelines,
         };
@@ -110,6 +126,43 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
       if (!current || current.selectedUser === nick) return {};
       return { views: { ...s.views, [view]: { ...current, selectedUser: nick } } };
     }),
+
+  splitActiveView: (direction) =>
+    set((s) => {
+      const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
+      if (!active || !s.layout) return {};
+
+      const opened = newView(active.network, active.target);
+      const layout = splitLeaf(s.layout, active.id, direction, opened.id);
+      return {
+        layout,
+        views: { ...s.views, [opened.id]: opened },
+        viewOrder: paneOrder(layout),
+        activeViewId: opened.id,
+      };
+    }),
+
+  closeView: (view) =>
+    set((s) => {
+      if (!s.layout || !s.views[view] || s.viewOrder.length < 2) return {};
+      const layout = removeLeaf(s.layout, view);
+      if (!layout) return {};
+
+      const { [view]: _closed, ...views } = s.views;
+      const at = s.viewOrder.indexOf(view);
+      return {
+        layout,
+        views,
+        viewOrder: paneOrder(layout),
+        activeViewId:
+          s.activeViewId === view
+            ? (s.viewOrder[at + 1] ?? s.viewOrder[at - 1] ?? null)
+            : s.activeViewId,
+      };
+    }),
+
+  focusView: (view) =>
+    set((s) => (s.views[view] && s.activeViewId !== view ? { activeViewId: view } : {})),
 
   prependHistory: (key, older, hasMore) =>
     set((s) => {

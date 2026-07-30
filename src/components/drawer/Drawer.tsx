@@ -72,6 +72,15 @@ export function Drawer() {
       }}
       className="flex h-full min-h-0 flex-col"
     >
+      {/* Same height and rule as a pane header, so the line under the header
+          carries on into the panel and the panel reads as part of that
+          conversation rather than as application furniture. Naming the channel
+          says which pane the panel is following, which matters once there are
+          two of them. */}
+      <div className="flex h-11 shrink-0 items-center border-b border-[var(--border-default)] px-3 text-[var(--text-secondary)]">
+        {channel.name}
+      </div>
+
       {selected === undefined ? (
         <MemberList members={members} selected={selectedNick} onSelect={setSelectedNick} />
       ) : (

@@ -55,6 +55,10 @@ export interface AppActions {
   setContextMode: (mode: ContextMode) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
+  /** Opens the network setup form on an existing network, or on a new one for
+   * a null id. */
+  openSetup: (network: string | null) => void;
+  closeSetup: () => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
 }
@@ -78,6 +82,7 @@ const initialState: AppState = {
   contextPane: null,
   paletteOpen: false,
   searchOpen: false,
+  setup: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
 };
@@ -224,6 +229,9 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
 
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
   toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),
+
+  openSetup: (network) => set({ setup: { network } }),
+  closeSetup: () => set({ setup: null }),
 
   toggleNetworkCollapsed: (network) =>
     set((s) => ({

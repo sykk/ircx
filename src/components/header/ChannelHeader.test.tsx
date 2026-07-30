@@ -21,6 +21,7 @@ beforeEach(() => {
     ...oneView({ network: "libera", target: CTF_OPS.name }),
     drawerOpen: false,
     searchOpen: false,
+    setup: null,
   });
 });
 
@@ -64,6 +65,15 @@ describe("ChannelHeader", () => {
     openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Invite" }));
     expect(screen.getByLabelText(`Nick to invite to ${CTF_OPS.name}`)).toBeTruthy();
+  });
+
+  it("reaches the network's settings from the overflow menu", () => {
+    render(<ChannelHeader view={TEST_VIEW} />);
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: `${LIBERA.name} settings` }));
+
+    expect(useAppStore.getState().setup).toEqual({ network: "libera" });
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("closes the overflow menu on Escape", () => {

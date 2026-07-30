@@ -96,6 +96,9 @@ export interface AppState {
   contextPane: ViewId | null;
   paletteOpen: boolean;
   searchOpen: boolean;
+  /** The network setup sheet: null while it is closed, otherwise the id of the
+   * network it is editing, or null inside for one that does not exist yet. */
+  setup: { network: string | null } | null;
   collapsedNetworks: Record<string, boolean>;
   sidebarWidth: number;
   /** Most recent first. Ranks palette results and drives Alt+Left/Right.

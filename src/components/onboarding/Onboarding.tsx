@@ -18,13 +18,29 @@ type Step = FormStep | "choose" | "connect";
 
 const FIRST = PUBLIC_NETWORKS[0] as PublicNetwork;
 
-export function Onboarding({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState<Step>("choose");
+/** Opens the flow on a form instead of the chooser, for the entry points that
+ * already know which network they mean (#45). Back then leaves the flow, since
+ * there is no chooser behind it to go back to. */
+export interface OnboardingStart {
+  step: "server" | "advanced";
+  draft: Draft;
+}
+
+export function Onboarding({
+  onDone,
+  start,
+}: {
+  onDone: () => void;
+  start?: OnboardingStart;
+}) {
+  const [step, setStep] = useState<Step>(start?.step ?? "choose");
   /** Where "Edit settings" goes back to from the connect step. */
-  const [form, setForm] = useState<FormStep>("public");
+  const [form, setForm] = useState<FormStep>(start?.step ?? "public");
   const [preset, setPreset] = useState<PublicNetwork>(FIRST);
-  const [draft, setDraft] = useState<Draft>(() => presetDraft(FIRST, emptyDraft()));
-  const [networkId, setNetworkId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>(
+    () => start?.draft ?? presetDraft(FIRST, emptyDraft()),
+  );
+  const [networkId, setNetworkId] = useState<string | null>(start?.draft.id ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +102,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   }
 
   const submit = () => void save();
+  const back = start ? onDone : () => setStep("choose");
 
   return (
     <div className="flex h-full min-h-0 items-center-safe justify-center overflow-y-auto bg-[var(--surface-base)] px-6 py-12">
@@ -106,7 +123,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             onChange={change}
             onPreset={choosePreset}
             onSubmit={submit}
-            onBack={() => setStep("choose")}
+            onBack={back}
             onAdvanced={() => openForm("advanced")}
             busy={busy}
             error={error}
@@ -119,7 +136,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             advanced={step === "advanced"}
             onChange={change}
             onSubmit={submit}
-            onBack={() => setStep("choose")}
+            onBack={back}
             onAdvanced={() => openForm("advanced")}
             busy={busy}
             error={error}

@@ -108,6 +108,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     contextPane: null,
     paletteOpen: false,
     searchOpen: false,
+    setup: null,
     collapsedNetworks: {},
     sidebarWidth: 240,
     rawLog: {},

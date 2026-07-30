@@ -55,6 +55,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     contextPane: null,
     paletteOpen: false,
     searchOpen: false,
+    setup: null,
     collapsedNetworks: {},
     sidebarWidth: 240,
     rawLog: {},

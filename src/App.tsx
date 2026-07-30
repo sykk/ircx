@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Drawer } from "@/components/drawer/Drawer";
+import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
@@ -44,6 +45,7 @@ export function App() {
 
       <CommandPalette />
       <SearchOverlay />
+      <NetworkSetup />
     </>
   );
 }

@@ -5,6 +5,7 @@ const PATHS = {
   restore: "M5.5 5.5V3.5h7v7h-2M3.5 5.5h7v7h-7z",
   close: "m4 4 8 8M12 4l-8 8",
   sidebar: "M2.5 3h11v10h-11zM6.5 3v10",
+  plus: "M8 3.75v8.5M3.75 8h8.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

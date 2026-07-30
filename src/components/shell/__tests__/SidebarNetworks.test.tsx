@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { useAppStore } from "@/store";
 import { SidebarNetworks } from "../SidebarNetworks";
 import {
   activeTarget,
@@ -18,6 +19,19 @@ describe("SidebarNetworks", () => {
     render(<SidebarNetworks />);
     expect(screen.getByText("No networks configured.")).toBeTruthy();
     expect(screen.queryByRole("tree")).toBeNull();
+  });
+
+  it("opens network setup from the + beside the section label", () => {
+    seedMockupWorkspace();
+    render(<SidebarNetworks />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a network" }));
+    expect(useAppStore.getState().setup).toEqual({ network: null });
+  });
+
+  it("offers the + even with nothing configured yet", () => {
+    render(<SidebarNetworks />);
+    expect(screen.getByRole("button", { name: "Add a network" })).toBeTruthy();
   });
 
   it("renders one group per network with its channels", () => {

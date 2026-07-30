@@ -1,319 +1,223 @@
-//! The requirement is that a broken plugin cannot take the host with it, so it
-//! is asserted rather than described. Each test misbehaves one way, then makes
-//! the same process load a fresh plugin and answer — if the host were gone the
-//! second half could not run.
+//! The hard requirement in #13 is that a broken plugin cannot take the host
+//! with it, so it is asserted rather than described. Each test misbehaves one
+//! way and then makes the same process run a working plugin — if the host were
+//! gone the second half could not run.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
-use ircx_plugin::{fixtures, Failure, Manifest, Sandbox};
+use ircx_plugin::{net, Failure, Grants, Limits, Permission, PluginRuntime, Route, Sandbox};
+
+mod common;
+use common::{author, call, grants, in_channels, TARGET};
 
 /// Generous next to the 100 ms deadline: the assertion is that termination
 /// happens on the deadline's order rather than never, not that it is prompt to
 /// the millisecond on a loaded machine.
-const SLACK: Duration = Duration::from_millis(2000);
+const SLACK: Duration = Duration::from_millis(2_000);
 
-fn manifest() -> Manifest {
-    Manifest::command_only("test")
+fn limits() -> Limits {
+    Limits {
+        call: Duration::from_millis(100),
+        memory: 8 << 20,
+        grace: Duration::from_millis(250),
+    }
 }
 
-#[cfg(feature = "js")]
-mod js {
-    use super::*;
-    use ircx_plugin::js::JsSandbox;
-    use ircx_plugin::Permission;
+fn allowed() -> Grants {
+    grants(&[Permission::AddCommands, Permission::RenderContent])
+}
 
-    fn survives(source: &str) -> (Failure, Duration) {
-        let mut plugin = JsSandbox::load(manifest(), source.as_bytes()).expect("load");
-        let at = Instant::now();
-        let failure = plugin
-            .call_command(&fixtures::call())
-            .expect_err("plugin misbehaves");
-        let took = at.elapsed();
-        drop(plugin);
+fn load(directory: &Path, source: &str) -> Sandbox {
+    Sandbox::load(
+        &allowed(),
+        limits(),
+        net::refuses(),
+        source,
+        directory.join("data.json"),
+    )
+    .expect("the fixture loads")
+}
 
-        let mut fresh = JsSandbox::load(manifest(), fixtures::JS_ECHO.as_bytes()).expect("load");
-        assert!(fresh
-            .call_command(&fixtures::call())
-            .expect("host still runs")
-            .starts_with("pong:"));
-        (failure, took)
+/// Runs a misbehaving plugin, then loads a fresh one in the same process and
+/// makes it answer.
+fn survives(command: &str, source: &str) -> (Failure, Duration) {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let mut plugin = load(directory.path(), source);
+    let at = Instant::now();
+    let failure = plugin
+        .call(&call(command, "hello"))
+        .expect_err("plugin misbehaves");
+    let took = at.elapsed();
+    drop(plugin);
+
+    let mut fresh = load(directory.path(), include_str!("plugins/echo.js"));
+    let reply = fresh
+        .call(&call("echo", "hello"))
+        .expect("the host still runs");
+    assert_eq!(reply.content.as_deref(), Some("pong: hello"));
+    (failure, took)
+}
+
+/// One runtime with the two plugins named, both granted, both routed.
+fn runtime_with(root: &Path, plugins: &[(&str, &str)]) -> PluginRuntime {
+    let runtime =
+        PluginRuntime::open(root.join("plugins"), limits(), net::refuses()).expect("open");
+    for (id, source) in plugins {
+        let source = author(root, id, source, allowed());
+        runtime.install(&source).expect("install");
+        runtime.set_grants(id, allowed()).expect("grant");
     }
+    runtime
+}
 
-    #[test]
-    fn a_throwing_plugin_reports_and_leaves_the_host_running() {
-        let (failure, _) = survives(fixtures::JS_PANIC);
-        assert!(
-            matches!(&failure, Failure::Raised(m) if m.contains("boom")),
-            "{failure}"
-        );
-    }
+fn route(runtime: &PluginRuntime, command: &str) -> Route {
+    runtime.route(command).expect("the plugin owns its command")
+}
 
-    #[test]
-    fn a_looping_plugin_is_terminated_on_its_deadline() {
-        let (failure, took) = survives(fixtures::JS_LOOP);
-        assert_eq!(failure, Failure::Timeout);
-        assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
-    }
+#[test]
+fn a_throwing_plugin_reports_and_leaves_the_host_running() {
+    let (failure, _) = survives("panic", include_str!("plugins/panic.js"));
+    assert!(
+        matches!(&failure, Failure::Raised(message) if message.contains("boom")),
+        "{failure}"
+    );
+}
 
-    #[test]
-    fn a_plugin_looping_inside_the_regex_engine_is_also_terminated() {
-        let (failure, took) = survives(fixtures::JS_REGEX);
-        assert_eq!(failure, Failure::Timeout);
-        assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
-    }
+#[test]
+fn a_looping_plugin_is_terminated_on_its_deadline() {
+    let (failure, took) = survives("loop", include_str!("plugins/loop.js"));
+    assert_eq!(failure, Failure::Timeout);
+    assert!(took < limits().call + SLACK, "took {took:?}");
+}
 
-    /// The interrupt handler runs between bytecodes, so anything that parks in
-    /// C is invisible to it. `Atomics.wait` is the only such thing a plugin can
-    /// reach, and this build refuses it rather than blocking, which is what lets
-    /// the write-up say a QuickJS plugin can spin but cannot hang.
-    #[test]
-    fn a_plugin_cannot_park_itself_where_the_deadline_cannot_see_it() {
-        let (failure, took) = survives(fixtures::JS_ATOMICS);
-        assert!(
-            matches!(&failure, Failure::Raised(m) if m.contains("cannot block")),
-            "{failure}"
-        );
-        assert!(took < manifest().call_timeout, "took {took:?}");
-    }
+/// The interrupt handler runs between bytecodes, so a loop inside QuickJS's own
+/// C could be invisible to it. This build calls the handler from the regex
+/// engine too, which is a property of the build rather than of QuickJS: a
+/// version bump could regress it silently, and this is what would catch it.
+#[test]
+fn a_plugin_looping_inside_the_regex_engine_is_also_terminated() {
+    let (failure, took) = survives("regex", include_str!("plugins/regex.js"));
+    assert_eq!(failure, Failure::Timeout);
+    assert!(took < limits().call + SLACK, "took {took:?}");
+}
 
-    #[test]
-    fn a_plugin_that_allocates_without_end_hits_its_memory_limit() {
-        let (failure, _) = survives(fixtures::JS_MEMORY);
-        assert_eq!(failure, Failure::OutOfMemory);
-    }
+/// `Atomics.wait` is the one way a plugin could park in C where the deadline
+/// cannot see it. This build refuses it, which is what lets the host say a
+/// plugin can spin but cannot hang — for as long as no host function waits.
+#[test]
+fn a_plugin_cannot_park_itself_where_the_deadline_cannot_see_it() {
+    let (failure, took) = survives("atomics", include_str!("plugins/atomics.js"));
+    assert!(
+        matches!(&failure, Failure::Raised(message) if message.contains("cannot block")),
+        "{failure}"
+    );
+    assert!(took < limits().call, "took {took:?}");
+}
 
-    #[test]
-    fn a_terminated_plugin_is_not_asked_to_run_again() {
-        let mut plugin = JsSandbox::load(manifest(), fixtures::JS_LOOP.as_bytes()).expect("load");
+/// Hooks are synchronous, so a promise that never settles is refused rather
+/// than waited for. Making them asynchronous would give that away: nothing
+/// would be executing to trip the deadline while a job queue sat empty, and the
+/// host would have to time out the pump itself.
+#[test]
+fn a_promise_that_never_settles_is_refused_rather_than_waited_for() {
+    let (failure, took) = survives("hang", include_str!("plugins/hang.js"));
+    assert!(
+        matches!(&failure, Failure::Raised(message) if message.contains("answer with text now")),
+        "{failure}"
+    );
+    assert!(took < limits().call, "took {took:?}");
+}
+
+#[test]
+fn a_plugin_that_allocates_without_end_hits_its_memory_limit() {
+    let (failure, _) = survives("memory", include_str!("plugins/memory.js"));
+    assert_eq!(failure, Failure::OutOfMemory);
+}
+
+#[test]
+fn a_terminated_runtime_is_not_asked_to_run_again() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let mut plugin = load(directory.path(), include_str!("plugins/loop.js"));
+    assert_eq!(plugin.call(&call("loop", "one")), Err(Failure::Timeout));
+    assert_eq!(
+        plugin.call(&call("loop", "two")),
+        Err(Failure::Timeout),
+        "a runtime interrupted mid-call is not offered more work"
+    );
+}
+
+#[test]
+fn one_broken_plugin_leaves_the_others_answering() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = runtime_with(
+        root.path(),
+        &[
+            ("loop", include_str!("plugins/loop.js")),
+            ("echo", include_str!("plugins/echo.js")),
+        ],
+    );
+
+    let failure = runtime
+        .run(&route(&runtime, "loop"), call("loop", "hello"))
+        .expect_err("the loop is terminated");
+    assert_eq!(failure.failure, Failure::Timeout);
+    assert!(
+        failure.to_string().contains("loop"),
+        "an error names the plugin: {failure}"
+    );
+
+    let reply = runtime
+        .run(&route(&runtime, "echo"), call("echo", "hello"))
+        .expect("the host runs");
+    assert_eq!(reply.content.as_deref(), Some("pong: hello"));
+}
+
+/// The reload path that #13's "terminated and reported" needs to mean
+/// anything: a plugin stopped on its deadline is not dead for the session, it
+/// is loaded again the next time the user asks for it.
+#[test]
+fn a_terminated_plugin_is_loaded_again_for_the_next_command() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = runtime_with(root.path(), &[("loop", include_str!("plugins/loop.js"))]);
+    let route = route(&runtime, "loop");
+
+    for _ in 0..2 {
+        let failure = runtime
+            .run(&route, call("loop", "hello"))
+            .expect_err("it loops every time");
         assert_eq!(
-            plugin.call_command(&fixtures::call()),
-            Err(Failure::Timeout)
+            failure.failure,
+            Failure::Timeout,
+            "a fresh runtime is loaded rather than the dead one being handed back"
         );
-        assert_eq!(
-            plugin.call_command(&fixtures::call()),
-            Err(Failure::Timeout),
-            "a runtime QuickJS interrupted mid-call is not offered more work"
-        );
-    }
-
-    #[test]
-    fn sending_needs_the_grant() {
-        let mut granted =
-            JsSandbox::load(manifest(), fixtures::JS_SENDER.as_bytes()).expect("load");
-        granted.call_command(&fixtures::call()).expect("sends");
-        assert_eq!(granted.outbox().len(), 1);
-
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        let mut denied = JsSandbox::load(bare, fixtures::JS_SENDER.as_bytes()).expect("load");
-        assert!(
-            matches!(
-                denied.call_command(&fixtures::call()),
-                Err(Failure::Denied(_))
-            ),
-            "host.send must refuse without the grant"
-        );
-        assert!(denied.outbox().is_empty());
-    }
-
-    /// The permission table rests on this: QuickJS hands out no way to reach
-    /// the network or the disk, so those permissions mean something. If this
-    /// starts failing the runtime grew an intrinsic and the table is wrong.
-    #[test]
-    fn a_plugin_finds_no_network_or_filesystem_global() {
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        let mut plugin = JsSandbox::load(bare, fixtures::JS_REACH.as_bytes()).expect("load");
-        let json = plugin.call_command(&fixtures::call()).expect("call");
-        let found: serde_json::Value = serde_json::from_str(&json).expect("reach answers json");
-        let reachable = found["reachable"].as_array().expect("reachable is a list");
-        assert!(reachable.is_empty(), "plugin reached {reachable:?}");
     }
 }
 
-#[cfg(feature = "wasm")]
-mod wasm {
-    use super::*;
-    use ircx_plugin::wasm::WasmSandbox;
-    use ircx_plugin::Permission;
-
-    fn survives(source: &[u8]) -> (Failure, Duration) {
-        let mut plugin = WasmSandbox::load(manifest(), source).expect("load");
-        let at = Instant::now();
-        let failure = plugin
-            .call_command(&fixtures::call())
-            .expect_err("plugin misbehaves");
-        let took = at.elapsed();
-        drop(plugin);
-
-        let mut fresh = WasmSandbox::load(manifest(), fixtures::WASM_ECHO).expect("load");
-        assert!(fresh
-            .call_command(&fixtures::call())
-            .expect("host still runs")
-            .starts_with("pong:"));
-        (failure, took)
-    }
-
-    #[test]
-    fn a_trapping_plugin_reports_and_leaves_the_host_running() {
-        let (failure, _) = survives(fixtures::WASM_PANIC);
-        assert!(
-            matches!(&failure, Failure::Raised(m) if m.contains("unreachable")),
-            "{failure}"
-        );
-    }
-
-    #[test]
-    fn a_looping_plugin_is_terminated_on_its_deadline() {
-        let (failure, took) = survives(fixtures::WASM_LOOP);
-        assert_eq!(failure, Failure::Timeout);
-        assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
-    }
-
-    #[test]
-    fn a_plugin_that_grows_without_end_is_capped_and_carries_on() {
-        let mut plugin = WasmSandbox::load(manifest(), fixtures::WASM_MEMORY).expect("load");
-        plugin.call_command(&fixtures::call()).expect("no trap");
-        assert!(
-            plugin.memory_bytes() <= manifest().memory_limit,
-            "guest holds {} bytes",
-            plugin.memory_bytes()
-        );
-    }
-
-    #[test]
-    fn sending_needs_the_grant() {
-        let mut granted = WasmSandbox::load(manifest(), fixtures::WASM_SENDER).expect("load");
-        granted.call_command(&fixtures::call()).expect("sends");
-        assert_eq!(granted.outbox().len(), 1);
-
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        assert!(
-            matches!(
-                WasmSandbox::load(bare, fixtures::WASM_SENDER),
-                Err(Failure::Denied(_))
-            ),
-            "without the grant the import does not exist and the module cannot instantiate"
-        );
-    }
-
-    /// The wasm equivalent of the QuickJS global check. A module's imports are
-    /// its whole capability list, so asking for WASI is asking for something
-    /// the host never defined, and it is refused before any code runs.
-    #[test]
-    fn a_module_that_imports_wasi_cannot_be_instantiated() {
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        assert!(
-            matches!(
-                WasmSandbox::load(bare, fixtures::WASM_WASI),
-                Err(Failure::Denied(_))
-            ),
-            "an import the host does not define must stop instantiation"
-        );
-    }
-
-    #[test]
-    fn a_precompiled_module_behaves_like_the_one_it_came_from() {
-        let compiled = WasmSandbox::precompile(fixtures::WASM_ECHO).expect("precompile");
-        let mut plugin =
-            unsafe { WasmSandbox::load_precompiled(manifest(), &compiled) }.expect("load");
-        assert!(plugin
-            .call_command(&fixtures::call())
-            .expect("call")
-            .starts_with("pong:"));
-    }
-}
-
-#[cfg(feature = "proc")]
-mod proc {
-    use super::*;
-    use ircx_plugin::proc::ProcSandbox;
-    use ircx_plugin::Permission;
-    use std::path::Path;
-
-    fn exe() -> &'static Path {
-        Path::new(env!("CARGO_BIN_EXE_plugin-child"))
-    }
-
-    fn survives(mode: &str) -> (Failure, Duration) {
-        let mut plugin = ProcSandbox::spawn(manifest(), exe(), mode).expect("spawn");
-        let at = Instant::now();
-        let failure = plugin
-            .call_command(&fixtures::call())
-            .expect_err("plugin misbehaves");
-        let took = at.elapsed();
-        drop(plugin);
-
-        let mut fresh = ProcSandbox::spawn(manifest(), exe(), "echo").expect("spawn");
-        assert!(fresh
-            .call_command(&fixtures::call())
-            .expect("host still runs")
-            .starts_with("pong:"));
-        (failure, took)
-    }
-
-    #[test]
-    fn a_panicking_plugin_reports_and_leaves_the_host_running() {
-        let (failure, _) = survives("panic");
-        assert!(
-            matches!(&failure, Failure::Raised(m) if m.contains("exited")),
-            "{failure}"
-        );
-    }
-
-    #[test]
-    fn a_looping_plugin_is_killed_on_its_deadline() {
-        let (failure, took) = survives("loop");
-        assert_eq!(failure, Failure::Timeout);
-        assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
-    }
-
-    #[test]
-    fn a_plugin_that_answers_nothing_is_killed_on_its_deadline() {
-        let (failure, took) = survives("hang");
-        assert_eq!(failure, Failure::Timeout);
-        assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
-    }
-
-    #[test]
-    fn a_plugin_that_allocates_without_end_dies_under_its_rlimit() {
-        let (failure, took) = survives("memory");
-        assert!(
-            matches!(&failure, Failure::Raised(m) if m.contains("exited")),
-            "the kernel refuses the allocation and the plugin aborts: {failure}"
-        );
-        assert!(took < manifest().call_timeout, "took {took:?}");
-    }
-
-    #[test]
-    fn sending_needs_the_grant() {
-        let mut granted = ProcSandbox::spawn(manifest(), exe(), "sender").expect("spawn");
-        granted.call_command(&fixtures::call()).expect("sends");
-        assert_eq!(granted.outbox().len(), 1);
-
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        let mut denied = ProcSandbox::spawn(bare, exe(), "sender").expect("spawn");
-        assert!(
-            matches!(
-                denied.call_command(&fixtures::call()),
-                Err(Failure::Denied(_))
-            ),
-            "the parent is the only thing that can refuse"
-        );
-    }
-
-    /// This one asserts the hole rather than the guarantee. If it ever starts
-    /// failing, something began sandboxing the child and the permission table
-    /// in `docs/plugin-isolation.md` needs revisiting.
-    #[test]
-    fn nothing_stops_a_plugin_process_reading_files_it_was_never_granted() {
-        let mut bare = manifest();
-        bare.permissions = vec![Permission::AddCommands];
-        let mut rogue = ProcSandbox::spawn(bare, exe(), "rogue").expect("spawn");
-        let reply = rogue.call_command(&fixtures::call()).expect("call");
-        assert!(reply.contains("read /etc/passwd"), "{reply}");
-    }
+/// A command that sends without end is the flood the spec names. The call is
+/// stopped at the cap and nothing goes out, because a half-sent flood is still
+/// a flood.
+#[test]
+fn a_plugin_that_floods_is_stopped_at_the_cap() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let allowed = in_channels(
+        grants(&[
+            Permission::AddCommands,
+            Permission::SendMessages,
+            Permission::RenderContent,
+        ]),
+        &[TARGET],
+    );
+    let mut plugin = Sandbox::load(
+        &allowed,
+        limits(),
+        net::refuses(),
+        include_str!("plugins/flooder.js"),
+        directory.path().join("data.json"),
+    )
+    .expect("load");
+    assert_eq!(
+        plugin.call(&call("flooder", "hello")),
+        Err(Failure::Flooded)
+    );
 }

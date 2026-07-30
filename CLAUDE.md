@@ -37,6 +37,7 @@ Dependencies point one direction. A layer may use the one below it, never above.
 src/                 React UI
 src-tauri/           Tauri commands, event pump, app wiring
 crates/ircx-core     caps, SASL, session state, command dispatch
+crates/ircx-plugin   plugin manifest, permission grants, QuickJS sandbox
 crates/ircx-store    SQLite archive, FTS5, drafts, config, keyring
 crates/ircx-net      TLS transport, line framing, reconnect, the preview fetch
 crates/ircx-proto    line parsing and serialisation
@@ -44,7 +45,10 @@ crates/ircx-ipc      types crossing the Tauri boundary
 ```
 
 `ircx-proto` has no I/O and no async. `ircx-net` knows where a line ends and
-nothing about what it means. Neither depends on `ircx-ipc`.
+nothing about what it means. Neither depends on `ircx-ipc`. `ircx-plugin` knows
+nothing about IRC: it takes a command and gives back what the plugin asked the
+host to do, and `ircx-core` is what turns that into messages. `docs/plugins.md`
+is the permission model.
 
 ## The IPC contract
 

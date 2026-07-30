@@ -1,17 +1,20 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use ircx_ipc::HistoryRequest;
 use ircx_ipc::{
     Channel, ChatMessage, CommandOutcome, ConnectionStatus, IrcxEvent, Member, Network, NetworkId,
     Query, Severity, TargetName,
 };
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
+use ircx_plugin::PluginRuntime;
 use ircx_store::Store;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
 
+use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES};
 use crate::session::{Action, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
@@ -103,9 +106,21 @@ pub fn spawn_network(
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
 ) -> NetworkHandle {
+    spawn_network_with_plugins(config, store, events, None)
+}
+
+/// The same, with plugins. A network given a runtime routes a slash command no
+/// built-in claims to the plugin that owns it; a network given `None` never
+/// looks, which is the whole of what a user with no plugins pays here.
+pub fn spawn_network_with_plugins(
+    config: SessionConfig,
+    store: Arc<Store>,
+    events: mpsc::Sender<IrcxEvent>,
+    plugins: Option<Arc<PluginRuntime>>,
+) -> NetworkHandle {
     let (commands, inbox) = mpsc::channel(COMMAND_QUEUE);
     let network = config.network.clone();
-    let task = tokio::spawn(supervise(config, store, events, inbox));
+    let task = tokio::spawn(supervise(config, store, events, inbox, plugins));
     NetworkHandle {
         network,
         commands,
@@ -120,10 +135,11 @@ async fn supervise(
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
     inbox: mpsc::Receiver<SessionCommand>,
+    plugins: Option<Arc<PluginRuntime>>,
 ) {
     let network = config.network.clone();
     let name = config.name.clone();
-    let outcome = tokio::spawn(run(config, store, events.clone(), inbox)).await;
+    let outcome = tokio::spawn(run(config, store, events.clone(), inbox, plugins)).await;
 
     if outcome.as_ref().is_err_and(|error| error.is_panic()) {
         let message = format!("The connection to {name} stopped unexpectedly");
@@ -151,6 +167,7 @@ async fn run(
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
     mut inbox: mpsc::Receiver<SessionCommand>,
+    plugins: Option<Arc<PluginRuntime>>,
 ) {
     let endpoint = (
         config.host.clone(),
@@ -164,6 +181,7 @@ async fn run(
         network: session.network_id().clone(),
         store,
         events,
+        plugins,
     };
 
     let remembered = match context.store.open_targets(&context.network) {
@@ -224,7 +242,7 @@ async fn run(
                     None => break,
                 },
                 command = inbox.recv() => match command {
-                    Some(command) => apply(command, &mut session, &context),
+                    Some(command) => apply(command, &mut session, &context).await,
                     None => { stop = true; break }
                 },
                 _ = keepalive.tick() => session.keepalive(),
@@ -270,7 +288,7 @@ async fn wait_to_retry(
             _ = tokio::time::sleep_until(deadline) => return true,
             command = inbox.recv() => match command {
                 Some(command) => {
-                    let actions = apply(command, session, context);
+                    let actions = apply(command, session, context).await;
                     if context.deliver(actions, None).await {
                         return false;
                     }
@@ -281,13 +299,22 @@ async fn wait_to_retry(
     }
 }
 
-fn apply(command: SessionCommand, session: &mut SessionState, context: &Context) -> Vec<Action> {
+async fn apply(
+    command: SessionCommand,
+    session: &mut SessionState,
+    context: &Context,
+) -> Vec<Action> {
     match command {
         SessionCommand::Submit {
             target,
             input,
             reply,
         } => {
+            if let Some(call) = context.plugin_call(session, &target, &input) {
+                let (outcome, actions) = context.run_plugin(session, call).await;
+                let _ = reply.send(outcome);
+                return actions;
+            }
             let (outcome, actions) = session.submit(&target, &input);
             if let CommandOutcome::Sent(message) = &outcome {
                 context.persist(std::slice::from_ref(message.as_ref()));
@@ -328,9 +355,54 @@ struct Context {
     network: NetworkId,
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
+    /// `None` when no runtime was given, which is the whole of what a launch
+    /// with no plugins costs on this path.
+    plugins: Option<Arc<PluginRuntime>>,
 }
 
 impl Context {
+    /// The plugin command this input names, with the conversation's recent
+    /// messages attached if the plugin was granted them. The archive is not
+    /// read at all otherwise.
+    fn plugin_call(&self, session: &SessionState, target: &str, input: &str) -> Option<PluginCall> {
+        let runtime = self.plugins.as_ref()?;
+        let call = session.plugin_command(runtime, target, input)?;
+        if !call.wants_messages() {
+            return Some(call);
+        }
+        let request = HistoryRequest {
+            network: self.network.clone(),
+            target: target.to_string(),
+            before: None,
+            limit: CONTEXT_MESSAGES,
+        };
+        match self.store.load_history(&request) {
+            Ok(messages) => Some(call.with_messages(messages)),
+            Err(error) => {
+                warn!(%error, "could not read the conversation for a plugin");
+                Some(call)
+            }
+        }
+    }
+
+    /// Waits for the plugin and applies what it produced. The wait is bounded
+    /// by the plugin's limits, so the worst a plugin does to the connection is
+    /// hold this command for its deadline.
+    async fn run_plugin(
+        &self,
+        session: &mut SessionState,
+        call: PluginCall,
+    ) -> (CommandOutcome, Vec<Action>) {
+        let Some(runtime) = self.plugins.clone() else {
+            return (CommandOutcome::Handled, Vec::new());
+        };
+        let answer = plugins::run_plugin(runtime, &call).await;
+        if let Err(failure) = &answer {
+            warn!(plugin = %failure.plugin, %failure, "a plugin command failed");
+        }
+        session.apply_plugin(&call, answer)
+    }
+
     /// Returns `true` when the session asked to stop for good.
     async fn deliver(&self, actions: Vec<Action>, sender: Option<&LineSender>) -> bool {
         let mut close = false;

@@ -15,6 +15,7 @@ ircx-ipc = { path = "crates/ircx-ipc" }
 ircx-net = { path = "crates/ircx-net" }
 ircx-core = { path = "crates/ircx-core" }
 ircx-store = { path = "crates/ircx-store" }
+ircx-plugin = { path = "crates/ircx-plugin" }
 
 anyhow = "1.0"
 thiserror = "2.0"

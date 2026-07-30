@@ -1,8 +1,8 @@
-// What a plugin can reach when its manifest grants it nothing. Returns both
-// the escape hatches it found and every name the sandbox does define, because
-// the permission table needs the second list as much as the first: a capability
-// the runtime hands out unasked cannot be granted or withheld.
-globalThis.onCommand = () => {
+// What a plugin can reach. The permission table rests on the answer being
+// nothing: a capability the runtime hands out unasked can be neither granted
+// nor withheld. The second list is here because the first one being empty only
+// means something next to what the sandbox does define.
+ircx.command("reach", () => {
   const escapes = [
     "fetch",
     "XMLHttpRequest",
@@ -22,4 +22,4 @@ globalThis.onCommand = () => {
     reachable: escapes.filter((name) => globalThis[name] !== undefined),
     globals: Object.getOwnPropertyNames(globalThis).sort(),
   });
-};
+});

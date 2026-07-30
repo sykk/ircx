@@ -6,39 +6,18 @@ rust-version = "1.94"
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Design spike for issue #13: which isolation mechanism for plugins. Not wired into the app."
-
-[features]
-default = ["js", "wasm", "proc"]
-js = ["dep:rquickjs"]
-wasm = ["dep:wasmtime", "dep:wat"]
-proc = ["dep:libc"]
+description = "Sandboxed plugins: the manifest, the permission grants, and the QuickJS runtime that enforces them."
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rquickjs = "0.12"
 
-rquickjs = { version = "0.12", optional = true }
-libc = { version = "0.2", optional = true }
-# Only so the harness can weigh a plugin shipped as wat against the same plugin
-# shipped as binary wasm. Nothing in the sandbox itself needs it.
-wat = { version = "1", optional = true }
-
-[dependencies.wasmtime]
-version = "47"
-optional = true
-default-features = false
-features = ["cranelift", "runtime", "std", "wat", "gc", "gc-drc", "component-model"]
-
-[[bin]]
-name = "probe"
-path = "src/bin/probe.rs"
+[dev-dependencies]
+tempfile = "3"
 
 [[bin]]
 name = "bench"
 path = "src/bin/bench.rs"
-
-[[bin]]
-name = "plugin-child"
-path = "src/bin/plugin_child.rs"
-required-features = ["proc"]

@@ -106,6 +106,26 @@ What is still open:
   ~200 lines of a quiet session comfortably. Nobody has watched it during a
   netsplit or a `LIST`.
 
+## Plugins
+
+The failure modes are covered by `crates/ircx-plugin/tests/failure_modes.rs`,
+which asserts that the host survives each one. What no test reaches:
+
+- **The unresponsive backstop.** If a plugin's thread never comes back, the host
+  stops waiting after the call deadline plus its grace, abandons the thread and
+  carries on. Nothing in the current host surface can produce that: the only
+  function that waits is `ircx.fetch`, and it is bounded by what is left of the
+  same deadline. The path exists for the next host function that waits, and it
+  is reachable only by making one misbehave.
+- **A plugin's request crossing a real socket.** The permission tests give the
+  sandbox a fetcher that answers without a network, so what they cover is the
+  grant, the host list and the budget. The socket underneath is `ircx-net`'s and
+  is covered by its own tests, but nothing exercises the two together.
+- **A plugin installed by the application.** No Tauri command installs, lists or
+  grants one, so every install in the tests is driven from Rust. The grant
+  dialogue the spec asks for — each permission in plain terms, at install — is
+  unbuilt, and `Permission::summary` is the line it should show.
+
 ## Themes installed on disk
 
 The two built-in themes are exercised by every test run and by every render, so

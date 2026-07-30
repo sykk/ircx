@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { ipc } from "@/lib/ipc";
+import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
 import { sameTarget, splitTargetKey, type TargetKey } from "@/store/keys";
 import type { Member } from "@/types";
 import { BackIcon } from "./icons";
-import { actionsFor, nickColour, rankOf } from "./members";
+import { actionsFor, rankOf } from "./members";
 
 interface UserInspectorProps {
   network: string;
@@ -73,7 +74,7 @@ export function UserInspector({
         <span
           aria-hidden
           className="size-2.5 shrink-0 rounded-full"
-          style={{ background: nickColour(member.nick) }}
+          style={{ background: nickColor(member.nick) }}
         />
         <h3 className="truncate text-[15px] text-[var(--text-primary)]">{member.nick}</h3>
         {member.prefixes.length > 0 && (

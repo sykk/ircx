@@ -1,5 +1,5 @@
 import type { Member } from "@/types";
-import { nickColour } from "./members";
+import { nickColor } from "@/lib/nickColor";
 
 interface MemberRowProps {
   member: Member;
@@ -27,7 +27,7 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
       <span
         aria-hidden
         className={`size-2 shrink-0 rounded-full ${away ? "opacity-40" : ""}`}
-        style={{ background: nickColour(member.nick) }}
+        style={{ background: nickColor(member.nick) }}
       />
       <span
         className={`truncate ${away ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"}`}

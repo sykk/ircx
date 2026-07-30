@@ -61,38 +61,28 @@ send, split a pane, use the palette and search, quit and relaunch. It found ten
 defects, filed as #49 to #58; the report says which parts of the walk worked and
 which are still unevidenced.
 
-Three things that walk was meant to settle are still open, because the run could
-not produce the conditions for them:
+The fixes for those ten were re-walked the same day and written up in
+`docs/end-to-end-run-2.md`. All ten hold up against a live connection. That run
+settled the console filling up on its own, the absence of a targetless `TAGMSG`
+now that the raw log can be read from inside the app, and the restart seam. It
+found two new defects, #67 and #68.
+
+What is still open:
 
 - **The topic path.** `##test` has no topic set, so nothing exercised `332` or a
   `/topic` round trip. Whoever is next in a channel that has a topic should
   check that the header carries it.
-- **Independent scrolling between split panes.** Both panes held three rows.
-  The store keeps a scroll position per view and the code path looks right, but
-  nothing has watched two panes scroll apart.
+- **Independent scrolling between split panes.** The store keeps a scroll
+  position per view and the code path looks right, but nothing has watched two
+  panes scroll apart. The first run's panes held three rows each; the second run
+  never split.
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
-- **The restart itself (#52).** `SessionState` records and restores the open
-  conversations under test, and `Store` keeps them under test, but the seam
-  between them — `spawn_network` reading `open_targets` on launch and the
-  connection task writing the set as it changes — is fifteen lines that only a
-  real relaunch runs. Join a channel, open a query, close the app, reopen it:
-  both should be in the sidebar before the network finishes connecting, the
-  channel should be rejoined, and a conversation closed before quitting should
-  stay gone.
-
-The server console and the raw log (#53, #54, #57, #58) are covered by unit
-tests against seeded state. What no test can show:
-
-- **That the console fills up on its own.** The tests seed the timeline core
-  files under `*`. Whether a live connection puts the MOTD there, and whether
-  the pane is scrolled to the end of it when you open it, wants one connection
-  to see.
-- **That no `TAGMSG` leaves for the console.** `ipc.setTyping` returns without
-  invoking, and the console's input never calls it, so the only remaining way to
-  earn a `411` is a caller nobody has written yet. Reading the raw log while
-  typing in the console is now the way to confirm that from inside the app.
+- **A conversation closed before quitting staying closed.** The restart in the
+  second run restored a channel and a query, both of which were open when the
+  app was closed. Nobody has closed one first and checked that it stays gone.
 - **The raw log under load.** It renders every line it holds, up to the store's
-  cap of 2,000, and re-renders per arriving line while it is open. Nobody has
-  watched it during a netsplit or a `LIST`.
+  cap of 2,000, and re-renders per arriving line while it is open. It held the
+  ~200 lines of a quiet session comfortably. Nobody has watched it during a
+  netsplit or a `LIST`.

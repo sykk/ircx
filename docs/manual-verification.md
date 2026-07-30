@@ -171,10 +171,18 @@ What is still open:
   possible — close a channel and a query, quit, relaunch, and neither should
   come back. Core is covered either side of it; what no test joins up is that
   set and the archive it is written to.
-- **The raw log under load.** It renders every line it holds, up to the store's
-  cap of 2,000, and re-renders per arriving line while it is open. It held the
-  ~200 lines of a quiet session comfortably. Nobody has watched it during a
-  netsplit or a `LIST`.
+- **The raw log under load.** Watched during a `/raw LIST` against Libera on
+  2026-07-30, and it froze the window hard enough to need the process killed —
+  twice. Libera answers with roughly 22,000 lines and the log drew every line it
+  held on every arrival. It is virtualised now (#119), so what is drawn is what
+  fits.
+
+  What that leaves is the cost behind the freeze rather than the freeze: each
+  line is still its own event across the Tauri boundary, its own store write and
+  its own render. `lane()` returns `None` for a raw line, so the pump's 8ms
+  window cannot merge them either. Run a `LIST` again and say whether what is
+  left is acceptable or merely survivable — that measurement is what decides
+  whether batching is worth building.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

@@ -198,6 +198,24 @@ describe("the server console", () => {
       expect(log.textContent).toContain("<< :platinum.libera.chat NOTICE * :*** Checking Ident");
     });
 
+    /**
+     * #119: a `LIST` against Libera writes ~22,000 lines through this buffer,
+     * and drawing every line it holds on every arrival froze the window hard
+     * enough to need the process killed. The cap is 2,000; what is drawn should
+     * be what fits on screen.
+     */
+    it("draws what fits rather than everything it holds", () => {
+      const many = Array.from({ length: 2_000 }, (_, n) => `<< :server 322 syk ##channel${n} 1 :a topic`);
+      act(() => useAppStore.setState({ rawLog: { libera: many } }));
+      render(<ChatPane view={TEST_VIEW} />);
+      fireEvent.click(screen.getByRole("button", { name: "Raw protocol log" }));
+
+      const log = screen.getByRole("log", { name: "Raw protocol log" });
+      const drawn = log.querySelectorAll("[data-index]").length;
+      expect(drawn).toBeGreaterThan(0);
+      expect(drawn).toBeLessThan(200);
+    });
+
     it("goes back to the console", () => {
       render(<ChatPane view={TEST_VIEW} />);
       const toggle = screen.getByRole("button", { name: "Raw protocol log" });

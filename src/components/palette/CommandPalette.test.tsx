@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyTheme } from "@/lib/theme";
 import { catalogue } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -316,6 +317,22 @@ describe("CommandPalette", () => {
 
       expect(root.style.getPropertyValue("--surface-base")).toBe("#0a0d12");
       expect(root.dataset.theme).toBe("ircx-dark");
+    });
+
+    it("goes back to dark from a light theme, not only away from dark", () => {
+      // Every other case here starts on dark. The owner hit this one live:
+      // switching to a disk theme worked, switching back did nothing.
+      useAppStore.setState({ themeId: "ircx-light" });
+      applyTheme(catalogue().themes.find((t) => t.id === "ircx-light")!);
+      expect(root.style.getPropertyValue("--surface-base")).toBe("#ffffff");
+
+      render(<CommandPalette />);
+      type("ircx Dark");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(root.style.getPropertyValue("--surface-base")).toBe("#0a0d12");
+      expect(useAppStore.getState().themeId).toBe("ircx-dark");
+      expect(localStorage.getItem("ircx.theme")).toBe("ircx-dark");
     });
 
     it("keeps the theme, and remembers it, on Enter", () => {

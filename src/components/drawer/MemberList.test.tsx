@@ -38,13 +38,18 @@ function plain(count: number) {
 }
 
 describe("MemberList", () => {
-  it("heads each group with its count", () => {
+  it("heads two groups with their counts, folding voice into members", () => {
     show();
     expect(screen.getByRole("heading", { name: /operators/i }).textContent).toContain(
       "4",
     );
-    expect(screen.getByRole("heading", { name: /voiced/i }).textContent).toContain("3");
-    expect(screen.getByRole("heading", { name: /members/i }).textContent).toContain("9");
+    expect(screen.getByRole("heading", { name: /members/i }).textContent).toContain("12");
+    expect(screen.queryByRole("heading", { name: /voiced/i })).toBeNull();
+
+    // A voiced member sits in members and still carries its sigil.
+    expect(
+      within(screen.getByRole("button", { name: /phrack/ })).getByText("+"),
+    ).toBeTruthy();
   });
 
   it("shows the top prefix as the row's sigil", () => {
@@ -66,6 +71,8 @@ describe("MemberList", () => {
 
   it("puts the away reason on the row and dims the nick", () => {
     show();
+    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
+
     const wren = screen.getByRole("button", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
     expect(within(wren).getByText("wren").className).toContain("--text-muted");
@@ -79,11 +86,18 @@ describe("MemberList", () => {
     );
   });
 
-  it("truncates a long group and reveals the rest on demand", () => {
+  it("truncates the members group and reveals the rest on demand", () => {
     show(plain(15));
     expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(10);
 
     fireEvent.click(screen.getByRole("button", { name: "… and 5 more" }));
+
+    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+  });
+
+  it("never hides an operator behind the truncation", () => {
+    show(plain(15).map((m) => ({ ...m, prefixes: ["@"] })));
 
     expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();

@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { MemberGroup } from "@/store/selectors";
 import type { Member } from "@/types";
 import { MemberRow } from "./MemberRow";
 import { GROUP_LABEL, groupMembers, toRows } from "./members";
@@ -15,10 +14,10 @@ interface MemberListProps {
 }
 
 export function MemberList({ members, selected, onSelect }: MemberListProps) {
-  const [expanded, setExpanded] = useState<ReadonlySet<MemberGroup>>(() => new Set());
+  const [expandMembers, setExpandMembers] = useState(false);
   const rows = useMemo(
-    () => toRows(groupMembers(members), expanded),
-    [members, expanded],
+    () => toRows(groupMembers(members), expandMembers),
+    [members, expandMembers],
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -55,9 +54,7 @@ export function MemberList({ members, selected, onSelect }: MemberListProps) {
                 ) : row.kind === "more" ? (
                   <button
                     type="button"
-                    onClick={() =>
-                      setExpanded((groups) => new Set(groups).add(row.group))
-                    }
+                    onClick={() => setExpandMembers(true)}
                     className="flex h-full w-full items-center px-2 text-left font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                   >
                     … and {row.hidden} more

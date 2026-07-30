@@ -1,13 +1,21 @@
 import type { Member } from "@/types";
-import { groupOf, type MemberGroup } from "@/store/selectors";
 
-export const GROUP_ORDER: MemberGroup[] = ["operators", "voiced", "members"];
+/* The store exports a three-way `MemberGroup` splitting voiced off from plain
+ * members. The list draws two groups (READABILITY.md §4.2), so it is shadowed
+ * here rather than changed there; voice still shows as the row's `+` sigil. */
+export type MemberGroup = "operators" | "members";
+
+export const GROUP_ORDER: MemberGroup[] = ["operators", "members"];
 
 export const GROUP_LABEL: Record<MemberGroup, string> = {
   operators: "Operators",
-  voiced: "Voiced",
   members: "Members",
 };
+
+export function groupOf(member: Member): MemberGroup {
+  const top = member.prefixes[0];
+  return top === "~" || top === "&" || top === "@" ? "operators" : "members";
+}
 
 const PREFIX_RANK: Record<string, number> = { "~": 5, "&": 4, "@": 3, "%": 2, "+": 1 };
 
@@ -24,7 +32,7 @@ export interface MemberSection {
 }
 
 export function groupMembers(members: Member[]): MemberSection[] {
-  const buckets: Record<MemberGroup, Member[]> = { operators: [], voiced: [], members: [] };
+  const buckets: Record<MemberGroup, Member[]> = { operators: [], members: [] };
   for (const member of members) buckets[groupOf(member)].push(member);
   return GROUP_ORDER.filter((group) => buckets[group].length > 0).map((group) => ({
     group,
@@ -42,26 +50,28 @@ function byNick(a: Member, b: Member): number {
 export type MemberRow =
   | { kind: "header"; group: MemberGroup; count: number }
   | { kind: "member"; member: Member }
-  | { kind: "more"; group: MemberGroup; hidden: number };
+  | { kind: "more"; hidden: number };
 
-/** How much of a group is shown before the `… and n more` row takes over. */
-export const GROUP_PREVIEW = 10;
+/** How much of the members group is shown before `… and n more` takes over. */
+export const MEMBERS_PREVIEW = 10;
 
 /** Sections to a flat row list, which is what the virtualiser indexes into.
- * Groups not named in `expanded` stop after `GROUP_PREVIEW` members. */
-export function toRows(
-  sections: MemberSection[],
-  expanded: ReadonlySet<MemberGroup> = new Set(),
-): MemberRow[] {
+ * Operators are enumerated whatever their number; only the members group
+ * truncates, and only until `expandMembers` (READABILITY.md §4.2). */
+export function toRows(sections: MemberSection[], expandMembers = false): MemberRow[] {
   const rows: MemberRow[] = [];
   for (const section of sections) {
     rows.push({ kind: "header", group: section.group, count: section.members.length });
-    const hidden = expanded.has(section.group)
-      ? 0
-      : Math.max(0, section.members.length - GROUP_PREVIEW);
-    const shown = hidden === 0 ? section.members : section.members.slice(0, GROUP_PREVIEW);
+
+    const truncates = section.group === "members" && !expandMembers;
+    const hidden = truncates
+      ? Math.max(0, section.members.length - MEMBERS_PREVIEW)
+      : 0;
+    const shown =
+      hidden === 0 ? section.members : section.members.slice(0, MEMBERS_PREVIEW);
+
     for (const member of shown) rows.push({ kind: "member", member });
-    if (hidden > 0) rows.push({ kind: "more", group: section.group, hidden });
+    if (hidden > 0) rows.push({ kind: "more", hidden });
   }
   return rows;
 }

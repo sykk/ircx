@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { groupOf } from "@/store/selectors";
 import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
-import { GROUP_PREVIEW, actionsFor, groupMembers, rankOf, toRows } from "./members";
+import {
+  MEMBERS_PREVIEW,
+  actionsFor,
+  groupMembers,
+  groupOf,
+  rankOf,
+  toRows,
+} from "./members";
 
 describe("groupMembers", () => {
-  it("splits every prefix a server can send into three groups", () => {
+  it("splits every prefix a server can send into two groups", () => {
     const sections = groupMembers([
       member("owner", { prefixes: ["~"] }),
       member("admin", { prefixes: ["&"] }),
@@ -16,8 +22,7 @@ describe("groupMembers", () => {
 
     expect(sections.map((s) => [s.group, s.members.length])).toEqual([
       ["operators", 3],
-      ["voiced", 2],
-      ["members", 1],
+      ["members", 3],
     ]);
   });
 
@@ -66,43 +71,51 @@ describe("groupMembers", () => {
     const sections = groupMembers(members);
     const total = sections.reduce((sum, s) => sum + s.members.length, 0);
     expect(total).toBe(4000);
-    expect(sections.map((s) => s.group)).toEqual(["operators", "voiced", "members"]);
+    expect(sections.map((s) => s.group)).toEqual(["operators", "members"]);
   });
 });
 
 describe("toRows", () => {
   it("puts a counted header in front of each group", () => {
-    const rows = toRows(groupMembers(CTF_OPS_MEMBERS));
+    const rows = toRows(groupMembers(CTF_OPS_MEMBERS), true);
     const headers = rows.filter((row) => row.kind === "header");
     expect(headers).toEqual([
       { kind: "header", group: "operators", count: 4 },
-      { kind: "header", group: "voiced", count: 3 },
-      { kind: "header", group: "members", count: 9 },
+      { kind: "header", group: "members", count: 12 },
     ]);
     expect(rows.length).toBe(CTF_OPS_MEMBERS.length + headers.length);
   });
 
-  it("stops a long group at the preview and counts what it withheld", () => {
-    const rows = toRows(groupMembers(crowd(500)));
-    const shown = rows.filter((row) => row.kind === "member");
-    const more = rows.filter((row) => row.kind === "more");
+  it("enumerates every operator however many there are", () => {
+    const sections = groupMembers(crowd(500));
+    const operators = sections.find((s) => s.group === "operators")!.members;
+    expect(operators.length).toBeGreaterThan(MEMBERS_PREVIEW);
 
-    expect(shown.length).toBe(GROUP_PREVIEW * 3);
-    expect(more.map((row) => row.group)).toEqual(["operators", "voiced", "members"]);
-    expect(
-      more.reduce((sum, row) => sum + row.hidden, 0) + shown.length,
-    ).toBe(500);
+    const rows = toRows(sections);
+    const shownOperators = rows
+      .slice(0, rows.findIndex((row) => row.kind === "header" && row.group === "members"))
+      .filter((row) => row.kind === "member");
+
+    expect(shownOperators.length).toBe(operators.length);
+    expect(rows.filter((row) => row.kind === "more")).toHaveLength(1);
   });
 
-  it("shows the whole of a group named as expanded", () => {
+  it("stops the members group at the preview and counts what it withheld", () => {
     const sections = groupMembers(crowd(500));
-    const rows = toRows(sections, new Set(["members"]));
     const members = sections.find((s) => s.group === "members")!.members.length;
+    const rows = toRows(sections);
+    const more = rows.filter((row) => row.kind === "more");
 
+    expect(more).toEqual([{ kind: "more", hidden: members - MEMBERS_PREVIEW }]);
     expect(rows.filter((row) => row.kind === "member").length).toBe(
-      members + GROUP_PREVIEW * 2,
+      500 - (members - MEMBERS_PREVIEW),
     );
-    expect(rows.some((row) => row.kind === "more" && row.group === "members")).toBe(false);
+  });
+
+  it("shows the whole members group once expanded", () => {
+    const rows = toRows(groupMembers(crowd(500)), true);
+    expect(rows.filter((row) => row.kind === "member").length).toBe(500);
+    expect(rows.some((row) => row.kind === "more")).toBe(false);
   });
 });
 

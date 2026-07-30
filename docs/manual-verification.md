@@ -177,13 +177,13 @@ What is still open:
   held on every arrival. It is virtualised now (#119), so what is drawn is what
   fits.
 
-  Run again on the same day it no longer froze, and lagged the client heavily
-  while the lines arrived. That measurement is what bought the second half: the
-  pump now delivers a window's worth of events as one message and the store
-  writes once for it, rather than a message, a write and a render per line.
+  It still lagged after both, and the cause turned out to be neither: every
+  `LIST` reply also fell through to `server_words` and became a console message,
+  so twenty-two thousand of them poured into a timeline that caps at ten
+  thousand. #125 collects them instead and shows them as something searchable.
 
-  What is left to watch is a `LIST` after that change, and a netsplit, which is
-  the other burst this entry was written for and which nothing has yet seen.
+  What is left to watch is a `LIST` after that, and a netsplit — the other burst
+  this entry was written for, which nothing has yet seen.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

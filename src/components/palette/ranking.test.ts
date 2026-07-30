@@ -63,6 +63,8 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     themeId: "ircx-dark",
     sidebarWidth: 240,
     rawLog: {},
+    channelList: {},
+    channelsOpen: null,
   };
 }
 

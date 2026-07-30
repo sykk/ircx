@@ -14,6 +14,7 @@ export type { AppSnapshot } from "./generated/AppSnapshot";
 export type { Attachment } from "./generated/Attachment";
 export type { AttachmentPreview } from "./generated/AttachmentPreview";
 export type { Channel } from "./generated/Channel";
+export type { ChannelListing } from "./generated/ChannelListing";
 export type { ChatMessage } from "./generated/ChatMessage";
 export type { CommandOutcome } from "./generated/CommandOutcome";
 export type { ConnectionStatus } from "./generated/ConnectionStatus";

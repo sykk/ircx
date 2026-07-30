@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::model::{Channel, ChatMessage, ConnectionStatus, Member, Network, Query, SaslStatus};
+use crate::model::{
+    Channel, ChannelListing, ChatMessage, ConnectionStatus, Member, Network, Query, SaslStatus,
+};
 use crate::{NetworkId, TargetName};
 
 pub const EVENT_CHANNEL: &str = "ircx://event";
@@ -67,6 +69,16 @@ pub enum IrcxEvent {
     QueryRemoved {
         network: NetworkId,
         nick: TargetName,
+    },
+    /// A `LIST` that finished, whole. Sent once rather than per reply: a
+    /// network answers with tens of thousands, and an event each is what #119
+    /// was about.
+    ChannelsListed {
+        network: NetworkId,
+        channels: Vec<ChannelListing>,
+        /// True when the server sent more than ircx would hold, so the list is
+        /// the beginning of one rather than all of it.
+        truncated: bool,
     },
     MembersReplaced {
         network: NetworkId,

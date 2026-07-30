@@ -242,3 +242,16 @@ pub struct Query {
     pub unread: u32,
     pub online: bool,
 }
+
+/// One line of a `LIST` reply. Not a `Channel`: the user is not in it, so there
+/// is nothing to say about membership, modes or unread — only what the server
+/// offers to help them choose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelListing {
+    pub name: TargetName,
+    /// What the server said, which nobody verifies and which is a moment old.
+    pub users: u32,
+    pub topic: String,
+}

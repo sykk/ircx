@@ -1,6 +1,7 @@
 import type { BrokenTheme, Theme } from "@/lib/theme";
 import type {
   Channel,
+  ChannelListing,
   ChatMessage,
   InstalledPlugin,
   Member,
@@ -86,6 +87,9 @@ export interface AppState {
   typing: Record<TargetKey, Record<string, number>>;
   /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
+  /** The last `LIST` a network answered, whole. Not `channels`: these are
+   * places the user is not in, and knowing about one is not being in it. */
+  channelList: Record<string, { channels: ChannelListing[]; truncated: boolean }>;
 
   // View.
   views: Record<ViewId, ChatView>;
@@ -107,6 +111,9 @@ export interface AppState {
    * network it is editing, or null inside for one that does not exist yet. */
   setup: { network: string | null } | null;
   pluginsOpen: boolean;
+  /** The network whose channel list is on screen, or null. Held rather than a
+   * boolean because a list belongs to the network that answered it. */
+  channelsOpen: string | null;
   /** Every installed plugin, with what it asked for and what it was allowed.
    * Read once at startup, and kept current by the sheet that changes it — the
    * status bar reads the same list with no sheet open. */

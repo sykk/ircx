@@ -78,6 +78,8 @@ export interface AppActions {
   openSetup: (network: string | null) => void;
   closeSetup: () => void;
   togglePlugins: (open?: boolean) => void;
+  /** Shows the channel list a network answered, or puts it away. */
+  showChannels: (network: string | null) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
   /** Records that the library could not be read at all. */
   setPluginsUnavailable: (reason: string) => void;
@@ -102,6 +104,7 @@ const initialState: AppState = {
   timelines: {},
   typing: {},
   rawLog: {},
+  channelList: {},
   views: {},
   viewOrder: [],
   activeViewId: null,
@@ -112,6 +115,7 @@ const initialState: AppState = {
   searchOpen: false,
   setup: null,
   pluginsOpen: false,
+  channelsOpen: null,
   plugins: [],
   pluginsUnavailable: null,
   collapsedNetworks: {},
@@ -297,6 +301,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   closeSetup: () => set({ setup: null }),
 
   togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
+  showChannels: (network) => set({ channelsOpen: network }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
   upsertPlugin: (plugin) =>
@@ -553,6 +558,17 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         typing: { ...s.typing, [key]: { ...current, [event.nick]: Date.now() + 6_000 } },
       };
     }
+
+    case "channelsListed":
+      // The list opens itself: a user types `/list` and waits, and a result that
+      // arrived silently would look like nothing happened.
+      return {
+        channelsOpen: event.network,
+        channelList: {
+          ...s.channelList,
+          [event.network]: { channels: event.channels, truncated: event.truncated },
+        },
+      };
 
     case "rawLine": {
       const line = `${event.outgoing ? ">>" : "<<"} ${event.line}`;

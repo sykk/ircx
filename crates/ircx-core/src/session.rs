@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use ircx_ipc::{
-    Channel, ChatMessage, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
-    MessageSource, Network, NetworkConfig, NetworkId, Query, SaslMechanism, SaslStatus, Severity,
-    TargetName, Topic,
+    Channel, ChannelListing, ChatMessage, ConnectionStatus, Delivery, IrcxEvent, Member,
+    MessageKind, MessageSource, Network, NetworkConfig, NetworkId, Query, SaslMechanism,
+    SaslStatus, Severity, TargetName, Topic,
 };
 use ircx_net::TlsInfo;
 use ircx_proto::{Command, Message, MessageBuilder, Prefix};
@@ -20,6 +20,11 @@ use crate::text;
 /// The network's own tab: connection notes, MOTD, WHOIS output, anything the
 /// server said that was not about a channel.
 pub const SERVER_TARGET: &str = "*";
+
+/// How many channels a `LIST` may leave in memory. Libera answers with about
+/// twenty-two thousand; the cap is here because the count comes from the server
+/// and a hostile one could stream without end.
+const MAX_LISTING: usize = 50_000;
 
 #[derive(Debug)]
 pub enum Action {
@@ -154,6 +159,10 @@ pub struct SessionState {
     next_label: u64,
     ping: Option<(String, Instant)>,
     lag_ms: Option<u32>,
+    /// Collected between `321` and `323`. A `LIST` is answered with one reply
+    /// per channel and a network has tens of thousands, so they are gathered
+    /// and sent once rather than becoming an event and a console line each.
+    listing: Vec<ChannelListing>,
 }
 
 impl SessionState {
@@ -183,6 +192,7 @@ impl SessionState {
             next_label: 1,
             ping: None,
             lag_ms: None,
+            listing: Vec::new(),
         }
     }
 
@@ -563,6 +573,9 @@ impl SessionState {
                     .unwrap_or_default();
                 self.apply_isupport(&tokens);
             }
+            RPL_LISTSTART => self.listing.clear(),
+            RPL_LIST => self.on_list_reply(&params),
+            RPL_LISTEND => self.on_list_end(),
             RPL_NAMREPLY => self.on_names(&params),
             RPL_ENDOFNAMES => self.on_end_of_names(&params),
             RPL_TOPIC => self.on_topic_reply(&params),
@@ -831,6 +844,37 @@ impl SessionState {
         }
         let suffix = self.nick_attempt - self.config.alt_nicks.len();
         (suffix <= 3).then(|| format!("{}{}", self.config.nick, "_".repeat(suffix)))
+    }
+
+    /// `322 <me> <channel> <users> :<topic>`, with the leading target already
+    /// stripped by the numeric dispatch — so the channel is the first parameter
+    /// here, not the second.
+    ///
+    /// Collected rather than shown: the user asked to find a channel, not to
+    /// read tens of thousands of lines.
+    fn on_list_reply(&mut self, params: &[String]) {
+        if self.listing.len() >= MAX_LISTING {
+            return;
+        }
+        let Some(name) = params.first() else {
+            return;
+        };
+        self.listing.push(ChannelListing {
+            name: name.clone(),
+            users: params.get(1).and_then(|n| n.parse().ok()).unwrap_or(0),
+            topic: params.get(2).cloned().unwrap_or_default(),
+        });
+    }
+
+    /// `323`. The whole list goes at once, which is the difference between one
+    /// event and one per channel.
+    fn on_list_end(&mut self) {
+        let channels = std::mem::take(&mut self.listing);
+        self.emit(IrcxEvent::ChannelsListed {
+            network: self.config.network.clone(),
+            truncated: channels.len() >= MAX_LISTING,
+            channels,
+        });
     }
 
     fn on_other_numeric(&mut self, code: u16, params: &[String], message: &Message) {

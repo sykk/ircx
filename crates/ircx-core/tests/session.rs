@@ -1832,3 +1832,73 @@ fn closing_a_query_says_so_the_way_closing_a_channel_does() {
         "and it is not reopened next launch"
     );
 }
+
+/// A `LIST` is answered with one reply per channel, and a network has tens of
+/// thousands. #119 was the client lagging under exactly that, because every
+/// reply fell through to `server_words` and became a console message. They are
+/// collected now and sent once — #125.
+#[test]
+fn a_channel_list_arrives_once_rather_than_a_line_at_a_time() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat 321 sykk Channel :Users  Name");
+    session.feed(":irc.libera.chat 322 sykk #ircx 42 :the topic goes here");
+    session.feed(":irc.libera.chat 322 sykk #rust 1337 :systems programming");
+    session.feed(":irc.libera.chat 322 sykk #quiet 0 :");
+
+    assert!(
+        session.messages().is_empty(),
+        "no console line per channel: {:?}",
+        session.messages()
+    );
+
+    session.feed(":irc.libera.chat 323 sykk :End of /LIST");
+
+    let events: Vec<(String, u32, String)> = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::ChannelsListed { channels, .. } => Some(
+                channels
+                    .iter()
+                    .map(|c| (c.name.clone(), c.users, c.topic.clone()))
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .expect("the list arrives when the server says it ended");
+
+    assert_eq!(
+        events,
+        vec![
+            ("#ircx".to_string(), 42, "the topic goes here".to_string()),
+            ("#rust".to_string(), 1337, "systems programming".to_string()),
+            ("#quiet".to_string(), 0, String::new()),
+        ]
+    );
+}
+
+/// A second `LIST` replaces the first rather than appending to it.
+#[test]
+fn a_new_listing_starts_from_nothing() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat 321 sykk Channel :Users  Name");
+    session.feed(":irc.libera.chat 322 sykk #first 1 :one");
+    session.feed(":irc.libera.chat 323 sykk :End of /LIST");
+    session.events.clear();
+
+    session.feed(":irc.libera.chat 321 sykk Channel :Users  Name");
+    session.feed(":irc.libera.chat 322 sykk #second 2 :two");
+    session.feed(":irc.libera.chat 323 sykk :End of /LIST");
+
+    let names: Vec<String> = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::ChannelsListed { channels, .. } => {
+                Some(channels.iter().map(|c| c.name.clone()).collect())
+            }
+            _ => None,
+        })
+        .expect("the second list");
+    assert_eq!(names, vec!["#second".to_string()]);
+}

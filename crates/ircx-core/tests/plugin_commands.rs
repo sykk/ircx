@@ -473,7 +473,7 @@ fn message(nick: &str, text: &str) -> ircx_ipc::ChatMessage {
 fn every_built_in_command_is_answered_by_the_client() {
     for name in [
         "join", "j", "part", "leave", "msg", "notice", "react", "unreact", "me", "query", "nick",
-        "topic", "mode", "kick", "invite", "whois", "away", "quit", "raw", "quote", "help",
+        "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "help",
     ] {
         let mut session = session();
         let (outcome, _) = session.submit(CHANNEL, &format!("/{name}"));

@@ -115,7 +115,7 @@ try {
 | permission | in plain terms | enforced by |
 |---|---|---|
 | read messages | Read the recent messages in the conversation it is used in | The host reads the archive only for a plugin that holds it, and the sandbox drops `call.messages` if handed any without it |
-| send messages | Send messages as you | `ircx.send` throws; nothing else can reach the socket |
+| send messages | Send messages under your nick, which nobody else can tell from your own | `ircx.send` throws; nothing else can reach the socket |
 | add commands | Add slash commands you can type | Routing ignores plugins without it, so the command does not exist |
 | store local data | Keep its own settings and data on this computer | `ircx.store` throws; it is the only writing a plugin can do, and only inside its own folder |
 | access selected channels | Work in the channels you choose, and no others | Scopes both `ircx.send` and `call.messages`; `*` is every conversation and is a choice the user makes explicitly |

@@ -13,16 +13,16 @@ export async function startBridge(): Promise<() => void> {
   const held: IrcxEvent[] = [];
   let loaded = false;
 
-  const unlisten = await onIrcxEvent((event) => {
-    if (loaded) useAppStore.getState().applyEvent(event);
-    else held.push(event);
+  const unlisten = await onIrcxEvent((events) => {
+    if (loaded) useAppStore.getState().applyEvents(events);
+    else held.push(...events);
   });
 
   try {
     await loadSnapshot();
   } finally {
     loaded = true;
-    for (const event of held) useAppStore.getState().applyEvent(event);
+    useAppStore.getState().applyEvents(held);
     held.length = 0;
   }
 

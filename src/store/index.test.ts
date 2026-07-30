@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeMessage } from "@/components/timeline/fixtures";
-import { resetStore } from "@/components/shell/fixtures";
+import { makeChannel, makeNetwork, resetStore } from "@/components/shell/fixtures";
+import type { IrcxEvent } from "@/types";
 import { useAppStore } from "./index";
 import { targetKey } from "./keys";
 
@@ -259,5 +260,49 @@ describe("showing a target", () => {
     store().showTarget({ network: "libera", target: "#ctf-ops" });
 
     expect(store().activeViewId).toBe(first);
+  });
+});
+
+/**
+ * The backend delivers a window's worth of events as one message (#119). A
+ * batch has to mean exactly what the same events mean one at a time — the
+ * saving is one store write, not different behaviour.
+ */
+describe("a batch of events", () => {
+  const store = () => useAppStore.getState();
+
+  const events = (): IrcxEvent[] => [
+    { type: "networkUpdated", network: makeNetwork("libera") },
+    { type: "channelUpdated", channel: makeChannel("libera", "#ctf-ops") },
+    { type: "channelUpdated", channel: makeChannel("libera", "#hackint") },
+    { type: "channelRemoved", network: "libera", name: "#ctf-ops" },
+  ];
+
+  it("lands the same as the same events applied one at a time", () => {
+    for (const event of events()) store().applyEvent(event);
+    const separately = {
+      networks: store().networks,
+      channels: store().channels,
+    };
+
+    resetStore();
+    store().applyEvents(events());
+
+    expect(store().networks).toEqual(separately.networks);
+    expect(store().channels).toEqual(separately.channels);
+  });
+
+  it("lets an event later in the batch see what an earlier one did", () => {
+    store().applyEvents(events());
+
+    // The removal is the fourth event and undoes the second. Reducing each
+    // against the original state rather than the running one would keep it.
+    expect(Object.keys(store().channels)).toEqual([targetKey("libera", "#hackint")]);
+  });
+
+  it("changes nothing when the batch is empty", () => {
+    const before = store().channels;
+    store().applyEvents([]);
+    expect(store().channels).toBe(before);
   });
 });

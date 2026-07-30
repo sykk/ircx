@@ -39,6 +39,10 @@ function mintViewId(): ViewId {
 
 export interface AppActions {
   applyEvent: (event: IrcxEvent) => void;
+  /** A window's worth of events in one write. The backend delivers them
+   * together; applying them one at a time would render once per event, which is
+   * what made a `LIST` sluggish after the raw log stopped freezing — #119. */
+  applyEvents: (events: IrcxEvent[]) => void;
 
   /** Points the focused view at a target, opening a view if none exists. */
   setActive: (target: ActiveTarget | null) => void;
@@ -121,6 +125,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   ...initialState,
 
   applyEvent: (event) => set((s) => reduce(s, event)),
+
+  applyEvents: (events) =>
+    set((s) => {
+      let next = s;
+      for (const event of events) {
+        // Each event reduces against what the ones before it left, so a batch
+        // reads the same as the same events applied one at a time.
+        const patch = reduce(next, event);
+        if (Object.keys(patch).length > 0) next = { ...next, ...patch };
+      }
+      return next === s ? {} : next;
+    }),
 
   setActive: (target) =>
     set((s) => {

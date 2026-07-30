@@ -13,7 +13,8 @@ use tracing::warn;
 const WINDOW: Duration = Duration::from_millis(8);
 
 /// Forwards core's events to the frontend, merging whatever arrives inside one
-/// window. Nothing is dropped: a slow webview widens the batches instead.
+/// window and delivering it as one message. Nothing is dropped: a slow webview
+/// widens the batches instead.
 pub fn pump(app: AppHandle, mut inbox: mpsc::Receiver<IrcxEvent>) {
     tauri::async_runtime::spawn(async move {
         let mut batch = Batch::default();
@@ -32,9 +33,13 @@ pub fn pump(app: AppHandle, mut inbox: mpsc::Receiver<IrcxEvent>) {
                 }
             }
 
-            for event in batch.take() {
-                if let Err(error) = app.emit(EVENT_CHANNEL, &event) {
-                    warn!(%error, "could not deliver an event to the window");
+            // One delivery for the window rather than one per event. A `LIST`
+            // answers with tens of thousands of lines, and a message each meant
+            // a store write and a render each — #119.
+            let ready = batch.take();
+            if !ready.is_empty() {
+                if let Err(error) = app.emit(EVENT_CHANNEL, &ready) {
+                    warn!(%error, "could not deliver events to the window");
                 }
             }
         }

@@ -1607,6 +1607,9 @@ fn a_react_command_in_the_server_tab_has_nothing_to_address() {
     let mut session = registered("message-tags");
     let outcome = session.submit("*", "/react 123 lol");
 
-    assert!(matches!(outcome, CommandOutcome::Rejected(_)), "{outcome:?}");
+    assert!(
+        matches!(outcome, CommandOutcome::Rejected(_)),
+        "{outcome:?}"
+    );
     assert!(session.sent().is_empty());
 }

@@ -36,5 +36,7 @@ rusqlite = { version = "0.37", features = ["bundled", "chrono"] }
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
 strip = true
+# panic = "abort" is deliberately absent. ircx-core supervises one task per
+# network so a panic reports as that network failing instead of taking the
+# process down, and aborting would defeat that in exactly the builds users run.

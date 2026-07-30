@@ -68,7 +68,15 @@ for, which is what keeps the deadline meaningful.
 
 A refusal is thrown into the plugin, so it can catch it and do less rather than
 die — the same shape the client uses when a server is missing an IRCv3
-capability.
+capability. It is an `Error`, so a plugin that degrades can say why it did:
+
+```js
+try {
+  ircx.fetch(url);
+} catch (refused) {
+  return "carried on without it: " + refused.message;
+}
+```
 
 ## What each permission means, and what enforces it
 

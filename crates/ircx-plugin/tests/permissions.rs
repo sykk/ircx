@@ -111,6 +111,11 @@ fn sending_needs_the_grant() {
 /// A refusal is thrown into the plugin rather than returned, so a plugin can
 /// catch it and do less — the same way the client degrades when a server is
 /// missing an IRCv3 capability.
+///
+/// It is an `Error`, and this asserts the shape the plugin receives rather than
+/// only that it received something. A bare string is catchable too, but then
+/// `refused.message` is `undefined` and a plugin that degrades correctly cannot
+/// say why it did.
 #[test]
 fn a_refusal_can_be_caught_and_worked_around() {
     let directory = tempfile::tempdir().expect("a temporary directory");
@@ -120,7 +125,10 @@ fn a_refusal_can_be_caught_and_worked_around() {
         &shows(),
     );
     let reply = plugin.call(&call("degrader", "hello")).expect("carries on");
-    assert_eq!(reply.content.as_deref(), Some("carried on without sending"));
+    assert_eq!(
+        reply.content.as_deref(),
+        Some("carried on without sending: ircx: send-messages was not granted")
+    );
     assert!(reply.sends.is_empty());
 }
 

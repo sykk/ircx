@@ -159,23 +159,35 @@ mod tests {
         line.split(' ').map(String::from).collect()
     }
 
+    /// The three 005 lines `irc.libera.chat` sent on 2026-07-30, verbatim.
     #[test]
     fn a_libera_005_lands_in_every_field() {
         let mut isupport = ISupport::default();
         isupport.apply(&tokens(
-            "CHANTYPES=# PREFIX=(ov)@+ CHANMODES=eIbq,k,flj,CFLMPQScgimnprstz \
-             CASEMAPPING=rfc1459 NETWORK=Libera.Chat TARGMAX=PRIVMSG:4,WHOIS:1,JOIN:",
+            "ETRACE KNOCK SAFELIST ELIST=CMNTU MONITOR=100 FNC WHOX CALLERID=g \
+             ACCOUNTEXTBAN=a CHANTYPES=# EXCEPTS INVEX",
+        ));
+        isupport.apply(&tokens(
+            "CHANMODES=eIbq,k,flj,CFLMPQRSTcgimnprstuz CHANLIMIT=#:250 PREFIX=(ov)@+ \
+             MAXLIST=bqeI:100 MODES=4 NETWORK=Libera.Chat STATUSMSG=@+ CASEMAPPING=rfc1459 \
+             NICKLEN=16 MAXNICKLEN=16 CHANNELLEN=50 TOPICLEN=390",
+        ));
+        isupport.apply(&tokens(
+            "DEAF=D TARGMAX=NAMES:1,LIST:1,KICK:1,WHOIS:1,PRIVMSG:4,NOTICE:4,ACCEPT:,MONITOR: \
+             EXTBAN=$,agjrxz CLIENTTAGDENY=*,-typing",
         ));
 
         assert_eq!(isupport.chantypes, "#");
         assert_eq!(isupport.prefixes, vec![('o', '@'), ('v', '+')]);
         assert_eq!(isupport.chanmodes[0], "eIbq");
-        assert_eq!(isupport.chanmodes[3], "CFLMPQScgimnprstz");
+        assert_eq!(isupport.chanmodes[3], "CFLMPQRSTcgimnprstuz");
         assert_eq!(isupport.casemapping, CaseMapping::Rfc1459);
         assert_eq!(isupport.network.as_deref(), Some("Libera.Chat"));
         assert_eq!(isupport.targmax("PRIVMSG"), Some(4));
+        assert_eq!(isupport.targmax("KICK"), Some(1));
+        // `ACCEPT:` states no limit; `JOIN` is not listed at all.
+        assert_eq!(isupport.targmax("ACCEPT"), None);
         assert_eq!(isupport.targmax("JOIN"), None);
-        assert_eq!(isupport.targmax("KICK"), None);
     }
 
     #[test]

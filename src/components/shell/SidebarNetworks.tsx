@@ -172,6 +172,19 @@ export function SidebarNetworks() {
     }
   }
 
+  /** Stops a network, or starts one that is stopped. A network that keeps
+   * failing is retrying, so what somebody reaching for this wants is the loop
+   * to end — `disconnect` is tolerant of a handle that has already gone. */
+  async function toggleConnection(network: Network) {
+    setMenuFor(null);
+    const running = network.status.state !== "disconnected";
+    try {
+      await (running ? ipc.disconnectNetwork(network.id) : ipc.connectNetwork(network.id));
+    } catch (reason) {
+      console.warn("ircx could not change", network.name, reason);
+    }
+  }
+
   function isSelected(row: Row): boolean {
     if (!active) return false;
     if (row.kind === "network") {
@@ -214,6 +227,7 @@ export function SidebarNetworks() {
             open={menuFor === row.network.id}
             onOpenChange={(open) => setMenuFor(open ? row.network.id : null)}
             onCollapse={() => toggleNetworkCollapsed(row.network.id)}
+            onConnection={() => void toggleConnection(row.network)}
             onRawLog={() => openConsole(row.network.id, true)}
             onSettings={() => openSetup(row.network.id)}
           />
@@ -442,6 +456,7 @@ function NetworkMenu({
   open,
   onOpenChange,
   onCollapse,
+  onConnection,
   onRawLog,
   onSettings,
 }: {
@@ -453,6 +468,7 @@ function NetworkMenu({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCollapse: () => void;
+  onConnection: () => void;
   onRawLog: () => void;
   onSettings: () => void;
 }) {
@@ -515,6 +531,9 @@ function NetworkMenu({
         >
           <MenuItem onClick={choose(onCollapse)}>
             {collapsed ? "Show channels" : "Hide channels"}
+          </MenuItem>
+          <MenuItem onClick={choose(onConnection)}>
+            {network.status.state === "disconnected" ? "Connect" : "Disconnect"}
           </MenuItem>
           <MenuItem onClick={choose(onRawLog)}>Raw protocol log</MenuItem>
           <MenuItem onClick={choose(onSettings)}>{network.name} settings</MenuItem>

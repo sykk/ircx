@@ -22,6 +22,9 @@ interface Props {
   onSubmit: () => void;
   onBack: () => void;
   onAdvanced: () => void;
+  /** Given only for a network that is already saved, so adding one has no way
+   * to remove something that does not exist yet. */
+  onRemove?: (() => void) | undefined;
   busy: boolean;
   error: string | null;
 }
@@ -39,10 +42,12 @@ export function ServerForm({
   onSubmit,
   onBack,
   onAdvanced,
+  onRemove,
   busy,
   error,
 }: Props) {
   const [submitted, setSubmitted] = useState(false);
+  const [removing, setRemoving] = useState(false);
   /** An id means the network is already saved, so this is its settings rather
    * than the last step of adding it (#45). */
   const editing = draft.id !== null;
@@ -230,6 +235,34 @@ export function ServerForm({
         <span className="flex-1" />
         {!advanced && <LinkButton onClick={onAdvanced}>Show every setting</LinkButton>}
       </div>
+
+      {/* Only for a network that exists to be removed. Adding one has a Back
+          button; this is the settings of one already saved (#45). */}
+      {editing && onRemove && (
+        <div className="flex flex-col gap-1 border-t border-[var(--border-subtle)] pt-3">
+          {removing ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onRemove}
+                className="h-8 rounded-[var(--radius-sm)] border border-[var(--danger)] px-3 text-[12px] text-[var(--danger)] hover:bg-[var(--surface-hover)] disabled:opacity-[var(--disabled-opacity)]"
+              >
+                Remove {draft.name || "this network"}
+              </button>
+              <SecondaryButton disabled={busy} onClick={() => setRemoving(false)}>
+                Keep it
+              </SecondaryButton>
+            </div>
+          ) : (
+            <LinkButton onClick={() => setRemoving(true)}>Remove this network</LinkButton>
+          )}
+          <Note>
+            Removing it disconnects it and forgets its settings. The conversations
+            already archived stay on this computer.
+          </Note>
+        </div>
+      )}
     </form>
   );
 }

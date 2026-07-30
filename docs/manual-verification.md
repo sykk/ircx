@@ -79,9 +79,13 @@ What is left:
   | `@+typing=done TAGMSG #omgwtf` | yes |
   | `@+draft/react=x TAGMSG #omgwtf` | no |
   | `@+reply=<real msgid> TAGMSG #omgwtf` | no |
+  | `@+zzz=1 TAGMSG #omgwtf` | no |
 
-  Libera appears to relay only the client tags it knows. A reaction sent from
-  ircx therefore reaches nobody, including the sender — the chip that appears is
+  Libera relays only the client tags it knows. That was an inference from the
+  table above until a tag no server has heard of settled it: `@+zzz=1 TAGMSG`
+  did not come back either, so nothing about ircx's tag names or values is at
+  fault. A reaction sent from ircx therefore reaches nobody, including the
+  sender — the chip that appears is
   the local copy `SessionState::react` emits without waiting, which is why this
   looked like it worked for as long as it did.
 

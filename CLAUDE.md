@@ -16,9 +16,13 @@ structural findings and leave the verdict machinery. Two deliberate departures
 from it: typography stays semantic (prose in the text face, data in mono) and
 the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`.
 
-`docs/multiwindow.md` describes split panes and per-pane context. The layout
-tree and the context panel that follows focus are built. Pinning the panel to a
-pane and embedding it inside one are not.
+`docs/multiwindow.md` describes split panes and per-pane context. All of it is
+built: the layout tree, the panel that follows focus, and the pinned and
+embedded modes.
+
+`docs/manual-verification.md` lists what no test covers — SASL against a real
+account, and the gaps the live Libera runs left open. Add to it rather than
+letting an unverified path pass for a verified one.
 
 ## Layer boundaries
 

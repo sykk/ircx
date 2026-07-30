@@ -13,17 +13,19 @@ import { member } from "./fixtures";
  */
 describe("how wide the roster asks to be", () => {
   it("asks for room for the longest name it holds", () => {
-    const width = rosterWidth([member("syk"), member("halloy5505"), member("syker_")], false);
-    expect(width).toContain("10ch");
+    const width = rosterWidth([member("nyx"), member("bitwise"), member("sable")], false);
+    expect(width).toContain("7ch");
   });
 
   it("counts the prefixes, which are drawn in the same column", () => {
-    expect(rosterWidth([member("ash", { prefixes: ["~", "@", "+"] })], false)).toContain("6ch");
+    // `Ariel` carries all three in `CTF_OPS_MEMBERS`, which is why she is there.
+    const founder = member("Ariel", { prefixes: ["~", "@", "+"] });
+    expect(rosterWidth([founder], false)).toContain("8ch");
   });
 
   it("never asks for less than the heading above it needs", () => {
-    // "MEMBERS — 1" is wider than a one-character channel, so the floor holds.
-    expect(rosterWidth([member("a")], false)).toMatch(/^clamp\(7rem,/);
+    // "MEMBERS — 1" is wider than a one-character nick, so the floor holds.
+    expect(rosterWidth([member("j")], false)).toMatch(/^clamp\(7rem,/);
   });
 
   it("stops at the width it used to always be", () => {
@@ -32,7 +34,7 @@ describe("how wide the roster asks to be", () => {
   });
 
   it("gives the inspector the whole column, whatever the nicks are", () => {
-    expect(rosterWidth([member("syk")], true)).toBe("13rem");
+    expect(rosterWidth([member("nyx")], true)).toBe("13rem");
   });
 
   it("asks for the floor when there is nobody to list yet", () => {

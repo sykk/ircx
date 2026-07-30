@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
-import { useAppStore } from "@/store";
+import { EMPTY_TIMELINE, useAppStore } from "@/store";
 import { targetKey, useTimelineForView, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
@@ -127,8 +127,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const loadOlder = useCallback(async () => {
     const key = targetKey(network, target);
     const store = useAppStore.getState();
-    const current = store.timelines[key];
-    if (!current || !current.hasMore || current.loadingOlder) return;
+    // A channel restored across a restart has no entry at all until something
+    // is filed under it, and that is exactly the pane with an archive to read.
+    const current = store.timelines[key] ?? EMPTY_TIMELINE;
+    if (!current.hasMore || current.loadingOlder) return;
 
     store.setLoadingOlder(key, true);
     try {

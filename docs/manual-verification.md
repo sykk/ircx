@@ -43,11 +43,18 @@ cold start timed from process exec to the first frame the compositor was handed.
 What is left:
 
 - **Netsplit recovery.** Nothing can provoke one politely, and none happened
-  during either run. The client held a busy channel's member list correctly
-  across the churn it did see, but that churn was one JOIN in 45 seconds, so it
-  says almost nothing about a burst of hundreds of QUITs and the rejoin storm
-  after it. Whoever is next in a channel when a split happens should watch what
-  the member list and the timeline do.
+  during either run. The member list half is now scripted instead:
+  `a_netsplit_takes_its_half_of_the_channel_and_gives_it_back` in
+  `crates/ircx-core/tests/session.rs` divides a hundred-member channel with a
+  burst of QUITs carrying a split reason, brings them back with a burst of
+  JOINs and a second NAMES, and asserts nobody is lost, doubled or stripped of
+  their rank. A rejoin arriving before the QUIT that explains it has its own
+  test.
+
+  What that leaves is what a hundred arrivals at once look like: the timeline
+  folds presence into a digest and the roster re-renders per change, and neither
+  has been watched under a burst. Whoever is next in a channel when one happens
+  should look at those two rather than at the membership, which is settled.
 
 - **Reactions on the wire.** `+draft/react` is a work-in-progress tag and no
   run has carried one. The scripted tests in `crates/ircx-core/tests/session.rs`
@@ -62,15 +69,27 @@ What is left:
 ## The preview fetch over TLS
 
 `crates/ircx-net/tests/http_loopback.rs` drives the whole fetch — framing,
-redirects, caps, timeouts — over plaintext loopback, for the same reason
-`tests/loopback.rs` does: TLS needs a certificate fixture. So nothing has
-watched the preview fetch complete an actual handshake, and `ircx-net::http`
-sets `alpn_protocols` where the IRC transport does not.
+redirects, caps, timeouts — over plaintext loopback, because TLS there would
+need a certificate fixture.
 
-Paste an `https://` link to a PNG into a channel, click fetch, and watch the
-image appear. Then check that a link to a host that redirects across origins
-(`https://imgur.com/<id>.png` does) refuses and names the host it would have
-gone to, rather than following it.
+**The transport is verified** by `crates/ircx-net/tests/https_probe.rs`, which
+is ignored by default and opens real connections the way `sasl_probe.rs` does:
+
+```text
+cargo test -p ircx-net --test https_probe -- --ignored --nocapture
+```
+
+On 2026-07-30 it completed a handshake with `example.com` and read 559 bytes of
+`text/html`, refused a body past a 64-byte cap with `TooLarge` specifically
+rather than by accident, and refused a real cross-host redirect by name —
+`http://google.com/` would have gone to `www.google.com`. It also turned up #106:
+`www.host` redirecting to `host` counts as crossing hosts, which refuses most of
+the web.
+
+What that leaves is the path through the application. Paste an `https://` link
+to a PNG into a channel, click fetch, and watch the image appear — the probe
+proves `ircx-net` can fetch it, not that the click reaches the fetch or that
+what comes back is drawn.
 
 ## Assembled-application testing
 
@@ -88,19 +107,25 @@ found two new defects, #67 and #68.
 
 What is still open:
 
-- **The topic path.** `##test` has no topic set, so nothing exercised `332` or a
-  `/topic` round trip. Whoever is next in a channel that has a topic should
-  check that the header carries it.
-- **Independent scrolling between split panes.** The store keeps a scroll
-  position per view and the code path looks right, but nothing has watched two
-  panes scroll apart. The first run's panes held three rows each; the second run
-  never split.
+- **The topic path.** `##test` has no topic set, so no run has seen one. Core is
+  covered — `session.rs` feeds `332` and asserts what the header is told — so
+  what is left is narrower: that the header draws a topic it is given, and that
+  a `/topic` typed by the user comes back from the server changed. Whoever is
+  next in a channel that has one should look.
+- **Independent scrolling between split panes.** `PaneTree.test.tsx` asserts
+  both halves — two panes on one channel restore their own positions, and
+  scrolling one leaves the other's alone. jsdom lays nothing out, so those
+  positions are numbers rather than pixels; what is left is whether two panes
+  scroll apart on screen. The first run's panes held three rows each and the
+  second never split.
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
-- **A conversation closed before quitting staying closed.** The restart in the
-  second run restored a channel and a query, both of which were open when the
-  app was closed. Nobody has closed one first and checked that it stays gone.
+- **A conversation closed before quitting staying closed.** Core is covered:
+  `close_target` drops the target from the set a restart reopens, and
+  `session.rs` asserts it for a channel and for a query, case-insensitively.
+  What no test joins up is that set and the archive it is written to, so the
+  check is still worth a minute — close one, quit, relaunch.
 - **The raw log under load.** It renders every line it holds, up to the store's
   cap of 2,000, and re-renders per arriving line while it is open. It held the
   ~200 lines of a quiet session comfortably. Nobody has watched it during a

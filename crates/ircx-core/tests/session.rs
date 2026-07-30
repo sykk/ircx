@@ -1632,3 +1632,85 @@ fn a_react_command_in_the_server_tab_has_nothing_to_address() {
     );
     assert!(session.sent().is_empty());
 }
+
+/// The oldest gap in `docs/manual-verification.md`: neither Libera run met a
+/// netsplit, and the churn they did see was one JOIN in 45 seconds.
+///
+/// A split is a burst of QUITs whose reason is the two servers that lost each
+/// other, and the rejoin is a burst of JOINs, sometimes with the NAMES list
+/// sent again. Nothing about that is special on the wire, which is the point:
+/// this asserts the member list survives the volume and the repetition rather
+/// than assuming a hundred of something behaves like one of it.
+#[test]
+fn a_netsplit_takes_its_half_of_the_channel_and_gives_it_back() {
+    const SPLIT: &str = "molybdenum.libera.chat silver.libera.chat";
+    let mut session = registered("multi-prefix");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+
+    // A hundred and one members: the user, and a hundred who will divide.
+    let names: Vec<String> = (0..100).map(|n| format!("nick{n:03}")).collect();
+    for chunk in names.chunks(20) {
+        session.feed(&format!(
+            ":irc.libera.chat 353 sykk = #ircx :{}",
+            chunk.join(" ")
+        ));
+    }
+    session.feed(":irc.libera.chat 353 sykk = #ircx :@sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    assert_eq!(session.members("#ircx").len(), 101);
+
+    // The half on the far side of the split goes, all at once.
+    let lost = &names[..50];
+    for nick in lost {
+        session.feed(&format!(":{nick}!~u@host/{nick} QUIT :{SPLIT}"));
+    }
+    let after = session.members("#ircx");
+    assert_eq!(after.len(), 51, "half the channel and the user are left");
+    assert!(
+        !after.iter().any(|member| lost.contains(&member.nick)),
+        "nobody who quit is still listed"
+    );
+
+    // They come back, and the server sends the list again on the rejoin.
+    for nick in lost {
+        session.feed(&format!(":{nick}!~u@host/{nick} JOIN #ircx"));
+    }
+    for chunk in names.chunks(20) {
+        session.feed(&format!(
+            ":irc.libera.chat 353 sykk = #ircx :{}",
+            chunk.join(" ")
+        ));
+    }
+    session.feed(":irc.libera.chat 353 sykk = #ircx :@sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+
+    let back = session.members("#ircx");
+    assert_eq!(back.len(), 101, "everyone is back exactly once");
+    let mut nicks: Vec<&str> = back.iter().map(|member| member.nick.as_str()).collect();
+    nicks.sort_unstable();
+    let before = nicks.len();
+    nicks.dedup();
+    assert_eq!(nicks.len(), before, "and nobody is listed twice");
+    assert!(
+        back.iter()
+            .any(|m| m.nick == "sykk" && m.prefixes == vec!["@"]),
+        "the user keeps the rank the second NAMES gave them"
+    );
+}
+
+/// A rejoin arriving before the QUIT that explains it — the two servers
+/// reconnect and the JOIN overtakes the split on the way. The member list must
+/// not end up holding the same person twice.
+#[test]
+fn a_rejoin_that_overtakes_its_own_quit_does_not_double_a_member() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sykk ash sable");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+
+    session.feed(":ash!~a@user/ash JOIN #ircx");
+
+    let members = session.members("#ircx");
+    assert_eq!(members.iter().filter(|m| m.nick == "ash").count(), 1);
+    assert_eq!(members.len(), 3);
+}

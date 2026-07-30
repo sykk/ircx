@@ -146,6 +146,21 @@ fn attributed(actions: &[Action]) -> Vec<(String, Option<String>)> {
         .collect()
 }
 
+/// Every message a call put into a conversation, whatever kind.
+fn appended(actions: &[Action]) -> Vec<ircx_ipc::ChatMessage> {
+    actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Emit(event) => match event.as_ref() {
+                IrcxEvent::MessagesAppended { messages, .. } => Some(messages.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
 fn client_notes(actions: &[Action]) -> impl Iterator<Item = ircx_ipc::ChatMessage> + '_ {
     actions
         .iter()
@@ -225,6 +240,39 @@ async fn a_plugin_answer_is_attributed_to_the_plugin_and_not_to_the_user() {
     let note = client_notes(&actions).next().expect("the answer");
     assert!(!note.sender.is_self, "the user did not say this");
     assert_ne!(note.sender.nick, "sykk", "nor is it under their nick");
+}
+
+/// A standing constraint, per `docs/plugins.md`: a plugin may add to a
+/// conversation and may not change what somebody else said. Nothing in the host
+/// surface can do it today, and this is what would notice a hook that could.
+///
+/// Every message a call produces is either the user's own — what `ircx.send`
+/// put on the wire, which is sent as them and by their choice to run it — or
+/// the plugin's, named. Neither wears a third party's nick.
+#[tokio::test]
+async fn nothing_a_plugin_produces_speaks_as_another_person() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = runtime(root.path(), &[("greeter", "greet", GREETER, speaks())]);
+    let mut session = session();
+    // Somebody else is in the conversation and has spoken in it.
+    session.on_line(":sable!~s@user/sable PRIVMSG #ircx :what I actually said");
+
+    let (_, actions) = submit(&runtime, &mut session, "/greet #ircx").await;
+
+    let produced = appended(&actions);
+    assert!(!produced.is_empty(), "the call put something in the room");
+    for message in produced {
+        let mine = message.sender.is_self;
+        let named = message.via.is_some();
+        assert!(
+            mine || named,
+            "a plugin produced a message that is neither the user's nor its own: {message:?}"
+        );
+        assert_ne!(
+            message.sender.nick, "sable",
+            "and none of it wears her nick"
+        );
+    }
 }
 
 /// The client's own output keeps saying nothing about a plugin, so the field

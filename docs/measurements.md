@@ -35,9 +35,17 @@ figure.
 
 | | |
 |---|---|
-| `ircx` release binary, stripped | 9.19 MiB |
+| `ircx` release binary, stripped | 9.25 MiB |
 
 Rust side only — no frontend bundle embedded, no installer packaging.
+
+The preview fetch (`ircx-net::http`, issue #14) added **46.0 KiB**: 9,650,552 to
+9,697,656 bytes. Measured as a back-to-back pair on one machine, building the
+same tree with and without the change, because a shared `CARGO_TARGET_DIR`
+makes the previous row's absolute figure a poor baseline — it and a clean
+rebuild of the same commit differ by 18 KiB. The added dependency is `httparse`;
+`http` and `base64` were already linked, and the TLS stack is the one the IRC
+transport already carried.
 
 ## Memory
 

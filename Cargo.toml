@@ -25,6 +25,11 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = "1"
 webpki-roots = "1"
+# The whole HTTP client behind attachment previews: `http` for URL parsing,
+# `httparse` for the response head, and the rustls above for the transport.
+# Anything larger would have brought a second TLS configuration with it.
+http = "1"
+httparse = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = { version = "12", features = ["serde-compat", "no-serde-warnings"] }

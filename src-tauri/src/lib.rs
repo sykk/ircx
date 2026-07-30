@@ -1,5 +1,6 @@
 mod commands;
 mod events;
+mod preview;
 mod state;
 mod themes;
 

@@ -38,7 +38,7 @@ src/                 React UI
 src-tauri/           Tauri commands, event pump, app wiring
 crates/ircx-core     caps, SASL, session state, command dispatch
 crates/ircx-store    SQLite archive, FTS5, drafts, config, keyring
-crates/ircx-net      TLS transport, line framing, reconnect
+crates/ircx-net      TLS transport, line framing, reconnect, the preview fetch
 crates/ircx-proto    line parsing and serialisation
 crates/ircx-ipc      types crossing the Tauri boundary
 ```

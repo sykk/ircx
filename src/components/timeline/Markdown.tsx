@@ -1,6 +1,30 @@
 import { Fragment } from "react";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
 
+/**
+ * The same message flattened to one line of text, for excerpts that quote a
+ * message rather than render it. A dimmed line at reduced weight can carry
+ * neither the syntax nor the emphasis, so `**do not**` reads as `do not` and a
+ * fenced paste contributes its code without its fence.
+ */
+export function plainText(text: string): string {
+  return parseMarkdown(text)
+    .map(blockText)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function blockText(block: Block): string {
+  return block.type === "code" ? block.text : spansText(block.spans);
+}
+
+function spansText(spans: Span[]): string {
+  return spans
+    .map((span) => (span.type === "text" || span.type === "code" ? span.text : spansText(span.spans)))
+    .join("");
+}
+
 export function Markdown({ text }: { text: string }) {
   return (
     <>

@@ -3,29 +3,23 @@ import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { isHighlight } from "@/store/selectors";
-import { AttachmentCard } from "./AttachmentCard";
+import { AttachmentLine } from "./AttachmentLine";
 import { Markdown } from "./Markdown";
 import { ReplyQuote } from "./ReplyQuote";
-import { formatClock } from "./rows";
+import { writesOwnNick } from "./rows";
 
 interface MessageRowProps {
   message: ChatMessage;
   ownNick: string | null;
-  /** `none` when a group heading already carries the time for this row. */
-  clock: "always" | "hover" | "none";
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
   flashing: boolean;
 }
 
-export function MessageRow({
-  message,
-  ownNick,
-  clock,
-  parentOf,
-  onJump,
-  flashing,
-}: MessageRowProps) {
+/** Indent that puts anything without a nick under the text column. */
+const TEXT_INDENT = "calc(var(--nick-col) + var(--text-gap))";
+
+export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: MessageRowProps) {
   const highlight = isHighlight(message, ownNick);
   const failed = message.delivery.state === "failed";
 
@@ -33,7 +27,9 @@ export function MessageRow({
     <div
       data-msgid={message.id}
       data-highlight={highlight || undefined}
-      className="group/row relative px-4"
+      // Monospace here so `--nick-col`, which is stated in `ch`, resolves
+      // against the face the nick is actually set in.
+      className="font-[family-name:var(--font-mono)] text-[13px]"
       style={{
         paddingBlock: "var(--row-pad-y)",
         background: flashing
@@ -46,35 +42,44 @@ export function MessageRow({
       }}
     >
       {message.replyTo && (
-        <ReplyQuote
-          msgid={message.replyTo}
-          parent={parentOf(message.replyTo)}
-          onJump={onJump}
-        />
+        <div style={{ marginLeft: TEXT_INDENT, maxWidth: "var(--measure)" }}>
+          <ReplyQuote
+            msgid={message.replyTo}
+            parent={parentOf(message.replyTo)}
+            onJump={onJump}
+          />
+        </div>
       )}
 
-      {/* Prose gets the text face; code, clocks and identifiers keep monospace. */}
-      <div className="selectable text-[13px]" style={{ lineHeight: "var(--body-leading)" }}>
-        <Body message={message} />
-      </div>
-
-      {message.attachments.map((attachment) => (
-        <AttachmentCard key={attachment.url} attachment={attachment} />
-      ))}
-
-      {failed && <FailureNotice message={message} />}
-
-      {clock !== "none" && (
-        <span
-          className={
-            "pointer-events-none absolute right-3 top-px font-[family-name:var(--font-mono)] text-[11px] tabular-nums" +
-            (clock === "hover" ? " opacity-0 group-hover/row:opacity-100" : "")
-          }
-          style={{ color: "var(--text-faint)" }}
-        >
-          {formatClock(message.timestamp)}
+      <div
+        className="grid items-baseline"
+        style={{
+          gridTemplateColumns: "var(--nick-col) minmax(0, var(--measure))",
+          columnGap: "var(--text-gap)",
+        }}
+      >
+        {/* The nickname is the identifier; colour only reinforces it, so the
+            name is written out in full beside every line its author sent. */}
+        <span className="font-semibold" style={{ color: nickColor(message.sender.nick) }}>
+          {writesOwnNick(message.kind) ? "" : message.sender.nick}
         </span>
-      )}
+
+        <div>
+          {/* Prose gets the text face; code and identifiers keep monospace. */}
+          <div
+            className="selectable font-[family-name:var(--font-ui)]"
+            style={{ lineHeight: "var(--body-leading)" }}
+          >
+            <Body message={message} />
+          </div>
+
+          {message.attachments.map((attachment) => (
+            <AttachmentLine key={attachment.url} attachment={attachment} />
+          ))}
+
+          {failed && <FailureNotice message={message} />}
+        </div>
+      </div>
     </div>
   );
 }
@@ -125,7 +130,10 @@ function FailureNotice({ message }: { message: ChatMessage }) {
   };
 
   return (
-    <div className="flex items-baseline gap-2 text-[11px]" style={{ color: "var(--danger)" }}>
+    <div
+      className="flex items-baseline gap-2 font-[family-name:var(--font-ui)] text-[11px]"
+      style={{ color: "var(--danger)" }}
+    >
       <span>Not sent — {detail}</span>
       <button
         type="button"

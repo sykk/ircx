@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { plainText } from "./Markdown";
 
 interface Props {
   msgid: string;
@@ -16,10 +17,12 @@ interface Props {
 const CONNECTOR = "2px solid var(--border-strong)";
 
 export function ReplyQuote({ msgid, parent, onJump }: Props) {
+  const excerpt = parent ? plainText(parent.text) : "";
+
   if (!parent) {
     return (
       <div
-        className="ml-1 truncate pl-2 text-[12px]"
+        className="truncate pl-2 font-[family-name:var(--font-ui)] text-[12px]"
         style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
       >
         in reply to {msgid}
@@ -31,9 +34,9 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
     <button
       type="button"
       onClick={() => onJump(msgid)}
-      title={parent.text}
-      className="ml-1 flex w-full items-baseline gap-1.5 overflow-hidden pl-2 text-left text-[12px]"
-      style={{ borderLeft: CONNECTOR, color: "var(--text-muted)" }}
+      title={excerpt}
+      className="flex w-full items-baseline gap-1.5 overflow-hidden pl-2 text-left font-[family-name:var(--font-ui)] text-[12px]"
+      style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
     >
       <span
         className="shrink-0 font-[family-name:var(--font-mono)]"
@@ -41,7 +44,10 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
       >
         {parent.sender.nick}
       </span>
-      <span className="truncate">{parent.text}</span>
+      <span aria-hidden="true" className="shrink-0">
+        —
+      </span>
+      <span className="truncate">{excerpt}</span>
     </button>
   );
 }

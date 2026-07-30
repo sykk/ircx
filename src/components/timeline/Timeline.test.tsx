@@ -5,6 +5,7 @@ import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
 import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
+import { formatClock } from "./rows";
 
 const { ipcMock } = vi.hoisted(() => ({
   ipcMock: { loadHistory: vi.fn(), loadPreview: vi.fn(), submitInput: vi.fn() },
@@ -80,19 +81,42 @@ describe("Timeline", () => {
     expect(screen.getByText("No conversation open")).toBeTruthy();
   });
 
-  it("prints one nick heading for a run from the same sender", () => {
+  it("prints one gutter time per minute, over as many speakers as it holds", () => {
     const base = Date.parse("2026-07-29T02:00:00.000Z");
     seed([
       makeMessage({ id: "a", nick: "sable", text: "first", timestamp: new Date(base).toISOString() }),
-      makeMessage({ id: "b", nick: "sable", text: "second", timestamp: new Date(base + 1000).toISOString() }),
-      makeMessage({ id: "c", nick: "phrack", text: "third", timestamp: new Date(base + 2000).toISOString() }),
+      makeMessage({ id: "b", nick: "phrack", text: "second", timestamp: new Date(base + 1000).toISOString() }),
+      makeMessage({ id: "c", nick: "nyx", text: "third", timestamp: new Date(base + 61_000).toISOString() }),
     ]);
     render(<Timeline />);
 
-    expect(screen.getAllByText("sable")).toHaveLength(1);
+    const clocks = document.querySelectorAll("time");
+    expect(clocks).toHaveLength(2);
+    expect(clocks[0]!.textContent).toBe(formatClock(new Date(base).toISOString()));
     expect(screen.getByText("first")).toBeTruthy();
     expect(screen.getByText("second")).toBeTruthy();
-    expect(screen.getAllByText("phrack")).toHaveLength(1);
+  });
+
+  it("names the author of every line, including a repeat inside one block", () => {
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    seed([
+      makeMessage({ id: "a", nick: "kade", text: "first", timestamp: new Date(base).toISOString() }),
+      makeMessage({ id: "b", nick: "kade", text: "second", timestamp: new Date(base + 1000).toISOString() }),
+    ]);
+    render(<Timeline />);
+
+    expect(screen.getAllByText("kade")).toHaveLength(2);
+    expect(document.querySelectorAll("time")).toHaveLength(1);
+  });
+
+  it("rules off each day it has messages for", () => {
+    seed([
+      makeMessage({ id: "a", text: "late", timestamp: new Date(2026, 6, 28, 23, 55).toISOString() }),
+      makeMessage({ id: "b", text: "early", timestamp: new Date(2026, 6, 29, 0, 5).toISOString() }),
+    ]);
+    render(<Timeline />);
+
+    expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 
   it("states the size of what was missed at the unread rule", () => {
@@ -116,7 +140,9 @@ describe("Timeline", () => {
       "b",
     );
     render(<Timeline />);
-    expect(screen.getByText("2 messages, 2 people, 45 minutes · 1 mentions you")).toBeTruthy();
+    expect(
+      screen.getByText("2 messages, 2 people, 45 minutes · 1 of them mentions you"),
+    ).toBeTruthy();
   });
 
   it("marks a message that mentions the user and leaves a longer nick alone", () => {
@@ -251,6 +277,39 @@ describe("Timeline", () => {
     expect(scroller.scrollTop).toBe(100 + grew);
   });
 
+  it("keeps the viewport still when the prepended page merges into the top block", async () => {
+    // The page that arrives ends inside the same minute as the message that is
+    // currently first, so the top block absorbs it and its membership changes
+    // under the virtualiser. Anchoring reads message identity, not row
+    // identity, which is the only reason that still holds.
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    const stamp = (ms: number) => new Date(base + ms).toISOString();
+    const older = Array.from({ length: 200 }, (_, i) =>
+      makeMessage({ id: `o${i}`, nick: "phrack", text: `older ${i}`, timestamp: stamp(5_000 - (199 - i) * 30_000) }),
+    );
+    ipcMock.loadHistory.mockResolvedValue(older);
+
+    seed(
+      Array.from({ length: 400 }, (_, i) =>
+        makeMessage({ id: `m${i}`, nick: "sable", text: `line ${i}`, timestamp: stamp(10_000 + i * 30_000) }),
+      ),
+    );
+    render(<Timeline />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    const heightBefore = scroller.scrollHeight;
+    scroller.scrollTop = 100;
+    fireEvent.scroll(scroller);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+
+    const grew = scroller.scrollHeight - heightBefore;
+    expect(grew).toBeGreaterThan(0);
+    expect(scroller.scrollTop).toBe(100 + grew);
+  });
+
   it("asks for history from before the oldest message it holds", async () => {
     const messages = makeConversation({ count: 50, seed: 5 });
     seed(messages);
@@ -289,7 +348,7 @@ describe("Timeline", () => {
     render(<Timeline />);
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
-    expect(screen.getByText("Load preview")).toBeTruthy();
+    expect(screen.getByText("fetch")).toBeTruthy();
     expect(document.querySelector("img")).toBe(null);
   });
 });

@@ -31,8 +31,8 @@ pub struct FetchPolicy {
     /// Covers name resolution, connect, handshake, every redirect and the body
     /// together. A user is watching a click, not a download.
     pub timeout: Duration,
-    /// Only same-host redirects are followed, so this bounds a server looping
-    /// back to itself rather than a chain across hosts.
+    /// Only redirects within the site are followed, so this bounds a server
+    /// looping back to itself rather than a chain across hosts.
     pub max_redirects: u8,
     /// Loopback, private, link-local and carrier-NAT addresses are refused:
     /// the URL came from whoever spoke in the channel, and the machines behind
@@ -448,9 +448,29 @@ impl Target {
     }
 }
 
-/// Same-host redirects are followed because no new party learns anything from
-/// them. A redirect to another host is refused and named, so the second host
-/// gets the user's IP only if the user goes there deliberately.
+/// Whether a redirect stays on the site the user chose.
+///
+/// The same host, or the same name with a leading `www.` added or dropped.
+/// That pair is one site by any reading a user would recognise, and refusing
+/// it refused most of the web: `www.host` redirecting to `host` is one of the
+/// commonest redirects there is, and a preview that will not follow it reads as
+/// broken rather than as careful.
+///
+/// It is the narrowest loosening that helps. `i.imgur.com` and `imgur.com` are
+/// still two hosts, because deciding otherwise needs a public suffix list —
+/// without one, matching on a shared suffix would take `evil-imgur.com` for
+/// `imgur.com`, which is the attack the rule exists to stop.
+fn same_site(from: &str, to: &str) -> bool {
+    let bare = |host: &str| -> String {
+        let host = host.to_ascii_lowercase();
+        host.strip_prefix("www.").unwrap_or(&host).to_owned()
+    };
+    from.eq_ignore_ascii_case(to) || bare(from) == bare(to)
+}
+
+/// Redirects within the site are followed because no new party learns anything
+/// from them. A redirect to another host is refused and named, so the second
+/// host gets the user's IP only if the user goes there deliberately.
 fn redirect_target(from: &Target, location: &str) -> Result<Target, HttpError> {
     let location = location.trim();
     let candidate = if let Some(rest) = location.strip_prefix("//") {
@@ -466,7 +486,7 @@ fn redirect_target(from: &Target, location: &str) -> Result<Target, HttpError> {
     };
 
     let to = Target::parse(&candidate)?;
-    if !to.host.eq_ignore_ascii_case(&from.host) {
+    if !same_site(&from.host, &to.host) {
         return Err(HttpError::CrossHostRedirect {
             url: from.url(),
             target: to.host,
@@ -577,6 +597,59 @@ mod tests {
 
     fn target(url: &str) -> Target {
         Target::parse(url).expect("a URL the tests wrote")
+    }
+
+    /// `www.host` redirecting to `host` is one of the commonest redirects on
+    /// the web, and refusing it refused most previews — #106.
+    #[test]
+    fn a_leading_www_is_the_same_site() {
+        assert!(same_site("www.rust-lang.org", "rust-lang.org"));
+        assert!(same_site("rust-lang.org", "www.rust-lang.org"));
+        assert!(same_site("WWW.Rust-Lang.org", "rust-lang.ORG"));
+        assert!(same_site("files.example", "files.example"));
+    }
+
+    /// The narrowest loosening that helps. Anything that needs a public suffix
+    /// list to decide is refused, because deciding it wrong by matching on a
+    /// shared suffix is the attack this rule exists to stop.
+    #[test]
+    fn nothing_else_is_the_same_site() {
+        assert!(!same_site("imgur.com", "i.imgur.com"));
+        assert!(!same_site("example.com", "evil.com"));
+        assert!(!same_site("imgur.com", "evil-imgur.com"));
+        assert!(!same_site("example.com", "example.com.evil.test"));
+        assert!(!same_site("www.example.com", "www.evil.com"));
+        // `www` on its own is a host, not a prefix to be stripped to nothing.
+        assert!(!same_site("www.example.com", "example.net"));
+    }
+
+    #[test]
+    fn a_redirect_that_only_drops_www_is_followed() {
+        let from = target("https://www.files.example/a.png");
+        let to = redirect_target(&from, "https://files.example/b.png").expect("followed");
+        assert_eq!(to.url(), "https://files.example/b.png");
+    }
+
+    #[test]
+    fn a_redirect_to_a_different_site_is_still_refused_by_name() {
+        let from = target("https://www.files.example/a.png");
+        let error = redirect_target(&from, "https://tracker.example/b.png").expect_err("refused");
+        match error {
+            HttpError::CrossHostRedirect { target, .. } => assert_eq!(target, "tracker.example"),
+            other => panic!("expected a cross-site refusal, got {other}"),
+        }
+    }
+
+    /// Dropping `www.` does not also drop the scheme check: the same site over
+    /// plain http would still put the request in the clear.
+    #[test]
+    fn the_same_site_over_http_is_refused_as_it_was_before() {
+        let from = target("https://www.files.example/a.png");
+        let error = redirect_target(&from, "http://files.example/b.png").expect_err("refused");
+        assert!(
+            matches!(error, HttpError::InsecureRedirect { .. }),
+            "{error}"
+        );
     }
 
     #[test]

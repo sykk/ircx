@@ -111,10 +111,12 @@ cargo test -p ircx-net --test https_probe -- --ignored --nocapture
 
 On 2026-07-30 it completed a handshake with `example.com` and read 559 bytes of
 `text/html`, refused a body past a 64-byte cap with `TooLarge` specifically
-rather than by accident, and refused a real cross-host redirect by name —
-`http://google.com/` would have gone to `www.google.com`. It also turned up #106:
-`www.host` redirecting to `host` counts as crossing hosts, which refuses most of
-the web.
+rather than by accident, and did not let a request land on a site that was not
+asked for.
+
+It also turned up #106, since fixed: `www.host` redirecting to `host` counted as
+crossing hosts, which refused most of the web. The probe now follows
+`https://www.rust-lang.org/` to its apex, which is the URL that found it.
 
 What that leaves is the path through the application. Paste an `https://` link
 to a PNG into a channel, click fetch, and watch the image appear — the probe

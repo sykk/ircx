@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatMessage } from "@/types";
+import { stripIrcFormatting } from "@/lib/ircFormat";
 import { Block } from "./MessageBlock";
 import { describePresence, partitionSystemRun } from "./rows";
 
@@ -8,7 +9,7 @@ import { describePresence, partitionSystemRun } from "./rows";
  * `join` with no text still reads as a sentence rather than an empty row.
  */
 function systemText(message: ChatMessage): string {
-  if (message.text.trim() !== "") return message.text;
+  if (message.text.trim() !== "") return stripIrcFormatting(message.text);
   const nick = message.sender.nick;
   switch (message.kind) {
     case "join":

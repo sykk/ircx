@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
+import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
@@ -94,7 +95,7 @@ function Body({ message }: { message: ChatMessage }) {
         >
           * {message.sender.nick}{" "}
         </span>
-        {message.text}
+        {stripIrcFormatting(message.text)}
       </span>
     );
   }

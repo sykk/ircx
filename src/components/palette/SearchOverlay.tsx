@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
+import { stripIrcFormatting } from "@/lib/ircFormat";
 import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
@@ -182,7 +183,7 @@ function Search({ onJump }: Props) {
 function Snippet({ snippet }: { snippet: string }) {
   return (
     <>
-      {snippetSegments(snippet).map((segment, i) =>
+      {snippetSegments(stripIrcFormatting(snippet)).map((segment, i) =>
         segment.mark ? (
           <mark key={i} className="rounded-[var(--radius-sm)] bg-[var(--mention-bg)] text-[var(--accent-hover)]">
             {segment.text}

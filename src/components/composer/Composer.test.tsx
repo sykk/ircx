@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
+import { makeMessage } from "@/components/timeline/fixtures";
 import { Composer } from "./Composer";
 
 const { ipcMock } = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ beforeEach(() => {
 
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
+    timelines: {},
     members: {
       [KEY]: ["sable", "sableton", "phrack", "nyx"].map((nick) => ({
         nick,
@@ -71,6 +73,38 @@ describe("Composer sending", () => {
       "the flag is in the env",
     );
     await waitFor(() => expect(box.value).toBe(""));
+  });
+
+  it("draws the local copy the backend hands back, before any echo", async () => {
+    const local = makeMessage({
+      id: "local-1",
+      nick: "sable",
+      text: "the flag is in the env",
+      delivery: { state: "sent" },
+    });
+    local.sender.isSelf = true;
+    ipcMock.submitInput.mockResolvedValue({ kind: "sent", value: local });
+
+    const box = await mount();
+    type(box, "the flag is in the env");
+    press(box, "Enter");
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]?.messages).toEqual([local]),
+    );
+  });
+
+  it("does not raise its own unread rule over a line the user just typed", async () => {
+    const local = makeMessage({ id: "local-1", nick: "sable", text: "mine" });
+    local.sender.isSelf = true;
+    ipcMock.submitInput.mockResolvedValue({ kind: "sent", value: local });
+
+    const box = await mount();
+    type(box, "mine");
+    press(box, "Enter");
+
+    await waitFor(() => expect(useAppStore.getState().timelines[KEY]).toBeTruthy());
+    expect(useAppStore.getState().timelines[KEY]?.unreadFrom).toBe(null);
   });
 
   it("leaves Shift+Enter to the textarea", async () => {

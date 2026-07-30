@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { stripIrcFormatting } from "@/lib/ircFormat";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
 
 /**
@@ -8,7 +9,7 @@ import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
  * fenced paste contributes its code without its fence.
  */
 export function plainText(text: string): string {
-  return parseMarkdown(text)
+  return parseMarkdown(stripIrcFormatting(text))
     .map(blockText)
     .join(" ")
     .replace(/\s+/g, " ")
@@ -28,7 +29,7 @@ function spansText(spans: Span[]): string {
 export function Markdown({ text }: { text: string }) {
   return (
     <>
-      {parseMarkdown(text).map((block, i) => (
+      {parseMarkdown(stripIrcFormatting(text)).map((block, i) => (
         <BlockView key={i} block={block} />
       ))}
     </>

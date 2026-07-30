@@ -146,6 +146,19 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     }
   }, [network, target]);
 
+  // A pane holding less than a screenful cannot be scrolled, so the handler
+  // below would never fire and a conversation that only exists in the archive
+  // would stay empty for good. The component is keyed by conversation, so this
+  // reads it once per target a pane shows.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    const el = scrollRef.current;
+    if (el && el.scrollHeight - el.clientHeight > LOAD_OLDER_PX) return;
+    void loadOlder();
+  }, [loadOlder]);
+
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;

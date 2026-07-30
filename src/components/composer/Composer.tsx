@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
+import { useAppStore } from "@/store";
 import { targetKey, useMembers, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
@@ -122,6 +123,20 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     void ipc.setDraft(network, target, "");
 
     const outcome = await ipc.submitInput(network, target, text);
+    // Core hands the local copy of a sent line back to the caller instead of
+    // emitting it, so nothing else will draw it. A server with `echo-message`
+    // confirms it later as an update to this same id; one without it never
+    // says anything more, and this stays the only copy.
+    if (outcome.kind === "sent") {
+      const message = outcome.value;
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        network: message.network,
+        target: message.target,
+        messages: [message],
+      });
+      return;
+    }
     if (outcome.kind !== "rejected") return;
     setError(outcome.value);
     // Restoring only into an empty box: the user may have started the next

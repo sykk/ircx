@@ -84,7 +84,9 @@ function openSecondView(scrollPosition: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  ipcMock.loadHistory.mockResolvedValue([]);
+  // Opening a pane reads the archive, so every render below starts one. Left
+  // in flight by default: a test that cares about the answer says what it is.
+  ipcMock.loadHistory.mockReturnValue(new Promise(() => {}));
   useAppStore.setState({ ...oneView(null), networks: {}, timelines: {}, typing: {} });
 });
 
@@ -357,6 +359,46 @@ describe("Timeline", () => {
     expect(other!.scrollTop).toBe(200 + grew);
   });
 
+  it("reads the archive when a pane opens on a conversation the window holds none of", async () => {
+    const stored = makeConversation({ count: 30, seed: 9 });
+    ipcMock.loadHistory.mockResolvedValue(stored);
+    seed([]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(30),
+    );
+    expect(ipcMock.loadHistory).toHaveBeenCalledWith({
+      network: "libera",
+      target: "#ctf-ops",
+      before: null,
+      limit: 200,
+    });
+    expect(screen.queryByText("Nothing here yet")).toBe(null);
+  });
+
+  it("reads it for a pane holding only the note it was opened by", async () => {
+    const note = makeMessage({ id: "j", kind: "join", nick: "sable", text: "" });
+    ipcMock.loadHistory.mockResolvedValue([]);
+    seed([note]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    await waitFor(() =>
+      expect(ipcMock.loadHistory).toHaveBeenCalledWith({
+        network: "libera",
+        target: "#ctf-ops",
+        before: note.timestamp,
+        limit: 200,
+      }),
+    );
+  });
+
+  it("leaves a pane with a screenful to the scroll handler", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    expect(ipcMock.loadHistory).not.toHaveBeenCalled();
+  });
+
   it("asks for history from before the oldest message it holds", async () => {
     const messages = makeConversation({ count: 50, seed: 5 });
     seed(messages);
@@ -371,6 +413,35 @@ describe("Timeline", () => {
       before: messages[0]!.timestamp,
       limit: 200,
     });
+  });
+
+  it("draws none of the IRC formatting codes a services reply arrives with", () => {
+    seed([
+      makeMessage({
+        id: "a",
+        nick: "NickServ",
+        kind: "notice",
+        text: "\u0002ircx-e39169\u0002 is not registered.",
+      }),
+      makeMessage({
+        id: "b",
+        nick: "phrack",
+        text: "\u000304,08red on yellow\u0003 and back",
+      }),
+      makeMessage({
+        id: "c",
+        nick: "irc.libera.chat",
+        kind: "server",
+        text: "\u001funderlined motd\u000f",
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const drawn = screen.getByTestId("timeline-scroller").textContent ?? "";
+    expect(drawn).toContain("ircx-e39169 is not registered.");
+    expect(drawn).toContain("red on yellow and back");
+    expect(drawn).toContain("underlined motd");
+    expect([...drawn].filter((ch) => ch.charCodeAt(0) < 0x20)).toEqual([]);
   });
 
   it("dims a pending message and offers a retry on a failed one", () => {

@@ -344,12 +344,13 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
 
     case "messageUpdated": {
       const key = targetKey(event.message.network, event.message.target);
-      const timeline = s.timelines[key];
-      if (!timeline) return {};
-      const at = timeline.messages.findIndex((m) => m.id === event.message.id);
-      if (at === -1) return {};
+      const timeline = s.timelines[key] ?? EMPTY_TIMELINE;
       const messages = timeline.messages.slice();
-      messages[at] = event.message;
+      const at = messages.findIndex((m) => m.id === event.message.id);
+      // An update for a message the window does not hold is still the whole
+      // message, and dropping it loses the only copy there may ever be.
+      if (at === -1) messages.splice(insertionPoint(messages, event.message), 0, event.message);
+      else messages[at] = event.message;
       return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
     }
 
@@ -424,6 +425,17 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       // target; nothing to hold in the store.
       return {};
   }
+}
+
+/** A timeline is held in the order the conversation happened, so a message that
+ * arrives late lands at its own time rather than at the bottom. */
+function insertionPoint(messages: readonly ChatMessage[], message: ChatMessage): number {
+  const at = Date.parse(message.timestamp);
+  if (Number.isNaN(at)) return messages.length;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (Date.parse(messages[i]!.timestamp) <= at) return i + 1;
+  }
+  return 0;
 }
 
 function patchNetwork(

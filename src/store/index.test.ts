@@ -166,3 +166,98 @@ describe("a reaction", () => {
     expect(timeline()?.messages[1]?.reactions).toEqual([{ emoji: "lol", nicks: ["sable"] }]);
   });
 });
+
+describe("showing a target", () => {
+  const store = () => useAppStore.getState();
+
+  /** Two panes, the first on #ctf-ops and the second on #hackint, focused. */
+  function twoPanes(): [string, string] {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    store().setActive({ network: "libera", target: "#hackint" });
+    const [first, second] = store().viewOrder;
+    return [first!, second!];
+  }
+
+  function targets(): string[] {
+    return store().viewOrder.map((id) => store().views[id]!.target);
+  }
+
+  it("focuses the pane already showing it rather than taking over another", () => {
+    const [first, second] = twoPanes();
+    expect(store().activeViewId).toBe(second);
+
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().activeViewId).toBe(first);
+    // The point of the change: neither pane was retargeted, so the
+    // conversation the user was reading in the second pane is still there.
+    expect(targets()).toEqual(["#ctf-ops", "#hackint"]);
+  });
+
+  it("matches the way a server does, not by exact spelling", () => {
+    const [first] = twoPanes();
+    store().showTarget({ network: "libera", target: "#CTF-Ops" });
+    expect(store().activeViewId).toBe(first);
+  });
+
+  it("stays put when the focused pane is the one already showing it", () => {
+    const [, second] = twoPanes();
+    store().showTarget({ network: "libera", target: "#hackint" });
+    expect(store().activeViewId).toBe(second);
+  });
+
+  it("takes the same network into account, not the target alone", () => {
+    twoPanes();
+    store().showTarget({ network: "hackint", target: "#ctf-ops" });
+
+    // No pane is on that network, so the focused one goes there.
+    expect(targets()).toEqual(["#ctf-ops", "#ctf-ops"]);
+    expect(store().views[store().activeViewId!]!.network).toBe("hackint");
+  });
+
+  it("retargets the focused pane when nothing is showing it", () => {
+    const [, second] = twoPanes();
+    store().showTarget({ network: "libera", target: "#linux" });
+
+    expect(store().activeViewId).toBe(second);
+    expect(targets()).toEqual(["#ctf-ops", "#linux"]);
+  });
+
+  it("counts as reading it wherever it was already open", () => {
+    const [first] = twoPanes();
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: { messages: [], unreadFrom: "m-7", hasMore: true, loadingOlder: false },
+      },
+    }));
+
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().activeViewId).toBe(first);
+    expect(store().timelines[KEY]!.unreadFrom).toBeNull();
+    expect(store().recent[0]).toBe(KEY);
+  });
+
+  it("opens the first pane when there are none at all", () => {
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().viewOrder).toHaveLength(1);
+    expect(targets()).toEqual(["#ctf-ops"]);
+  });
+
+  /** Splitting opens a second view on one target deliberately, so more than one
+   * pane can be showing it. Pane order decides, rather than whichever the map
+   * happened to yield. */
+  it("takes the first in pane order when two panes show it", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    const [first, second] = store().viewOrder;
+    expect(store().activeViewId).toBe(second);
+
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().activeViewId).toBe(first);
+  });
+});

@@ -108,7 +108,7 @@ function Palette() {
 
     switch (action.type) {
       case "activate":
-        store.setActive({ network: action.network, target: action.target });
+        store.showTarget({ network: action.network, target: action.target });
         break;
       case "refine":
         setQuery(action.text);
@@ -122,7 +122,7 @@ function Palette() {
             return;
           }
           const joined = channelJoinedBy(action.input);
-          if (joined) store.setActive({ network: action.network, target: joined });
+          if (joined) store.showTarget({ network: action.network, target: joined });
           close();
         }, report);
         return;

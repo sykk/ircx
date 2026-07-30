@@ -83,6 +83,9 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
   const handlers = useMemo<HotkeyHandlers>(() => {
     const go = (key: TargetKey | undefined) => {
       if (!key) return;
+      // Walking the target list moves the pane you are in. `showTarget` would
+      // throw focus across the window mid-cycle, which is not what a chord
+      // that steps through a list means.
       useAppStore.getState().setActive(splitTargetKey(key));
     };
 

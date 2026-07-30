@@ -201,6 +201,26 @@ describe("useAppHotkeys", () => {
     expect(activeKey()).toBe(targetKey("libera", "#hackint"));
   });
 
+  /** Where the sidebar's rule stops. A chord that steps through the target list
+   * moves the pane you are in; throwing focus to whichever pane already held
+   * that target would make the list unwalkable. */
+  it("jumps the focused pane even onto a target another pane is showing", () => {
+    render(<AppHost />);
+    const store = useAppStore.getState();
+    store.setActive({ network: "libera", target: "#ctf-ops" });
+    store.splitActiveView("row");
+    store.setActive({ network: "libera", target: "#hackint" });
+    const [first, second] = useAppStore.getState().viewOrder;
+    expect(useAppStore.getState().activeViewId).toBe(second);
+
+    // Ctrl+1 is #ctf-ops, which the first pane is already on.
+    press(document, CTRL_1);
+
+    expect(useAppStore.getState().activeViewId).toBe(second);
+    expect(useAppStore.getState().views[first!]!.target).toBe("#ctf-ops");
+    expect(useAppStore.getState().views[second!]!.target).toBe("#ctf-ops");
+  });
+
   it("skips read targets with Alt+Shift+Down", () => {
     render(<AppHost />);
     useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });

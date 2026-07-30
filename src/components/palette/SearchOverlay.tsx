@@ -68,7 +68,7 @@ function Search({ onJump }: Props) {
     if (!hit) return;
     useAppStore
       .getState()
-      .setActive({ network: hit.message.network, target: hit.message.target });
+      .showTarget({ network: hit.message.network, target: hit.message.target });
     onJump?.(hit);
     close();
   }

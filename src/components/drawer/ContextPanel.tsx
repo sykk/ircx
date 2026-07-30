@@ -11,9 +11,33 @@ import { UserInspector } from "./UserInspector";
  * useSyncExternalStore treats as a changed snapshot. Index the map instead. */
 const NO_MEMBERS: Member[] = [];
 
-/** It sits beside the conversation it lists rather than beside the window, so
- * it is narrower than a sidebar would be. */
-export const ROSTER_PX = 208;
+/**
+ * The roster is as wide as the names in it, not as wide as a column somebody
+ * chose. Three nicks reserving the room four hundred would need is what made a
+ * split pane unreadable — see #114.
+ *
+ * The list is monospace, so a character is exactly one `ch` and the arithmetic
+ * is not a guess. It has to be arithmetic rather than `width: fit-content`
+ * because `MemberList` virtualises: its rows are positioned absolutely and
+ * contribute no intrinsic width for the browser to fit to.
+ */
+const ROSTER_MIN = "7rem";
+/** What it used to always be. A nick longer than this truncates rather than
+ * taking the conversation's room. */
+const ROSTER_MAX = "13rem";
+/** Row padding either side, and the scrollbar. */
+const ROSTER_GUTTER = "2.25rem";
+
+export function rosterWidth(members: readonly Member[], inspecting: boolean): string {
+  // The inspector is prose and a set of fields rather than a list of names, so
+  // it takes the full column whatever the longest nick happens to be.
+  if (inspecting) return ROSTER_MAX;
+  const widest = members.reduce(
+    (chars, member) => Math.max(chars, member.prefixes.join("").length + member.nick.length),
+    0,
+  );
+  return `clamp(${ROSTER_MIN}, ${widest}ch + ${ROSTER_GUTTER}, ${ROSTER_MAX})`;
+}
 
 /** The member list for one pane, drawn inside that pane. Every pane on a
  * channel has its own: a roster is part of the conversation it belongs to, not
@@ -60,7 +84,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         else if (view) toggleRoster(view, false);
       }}
       className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
-      style={{ width: ROSTER_PX }}
+      style={{ width: rosterWidth(members, selected !== undefined) }}
     >
       {/* Empty, and the same height and rule as the pane header a few inches to
           the left, so the line under that header carries on into the roster and

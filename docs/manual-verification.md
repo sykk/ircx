@@ -194,11 +194,12 @@ is whether it looks like one conversation or like two things sharing a box.
   application furniture parked next to the conversation, which is the thing this
   replaced.
 
-- **A narrow window.** The roster is a fixed 208px and there is no longer a
-  width below which it is withheld — the shared sidebar had one at 900px, and
-  the embedded mode this replaced ignored it anyway. A half-width pane on a
-  small window now spends 208px of whatever it has on the roster. Nobody has
-  watched what is left of the conversation at, say, 1000px split in two.
+- **A narrow pane was watched, and it was worse than this entry guessed.** A
+  `Ctrl+\` split on a 1194px window gave the roster about 45% of each pane and
+  wrapped `/help` mid-phrase — #114. The roster no longer takes a fixed column:
+  it asks for the longest name it holds, between a 7rem floor and the 13rem it
+  used to always take. What is left to watch is a channel whose nicks are long
+  enough to reach that ceiling, where the old problem returns in miniature.
 
 - **A large channel.** The second Libera run read `#libera`'s member list across
   31 replies, so it is the size of channel worth trying. `MemberList` renders

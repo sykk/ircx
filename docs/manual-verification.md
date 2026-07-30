@@ -55,6 +55,21 @@ What is left:
 
 ## Assembled-application testing
 
-Agents have verified the protocol layer against a live server and the UI in a
-browser. Nobody has driven the whole application end to end: launch, onboard,
-connect, talk, split a pane, restart, and confirm the archive reloaded.
+Driven end to end on 2026-07-30 and written up in `docs/end-to-end-run.md`:
+launch against an empty profile, onboard to Libera, connect, join `##test`,
+send, split a pane, use the palette and search, quit and relaunch. It found ten
+defects, filed as #49 to #58; the report says which parts of the walk worked and
+which are still unevidenced.
+
+Three things that walk was meant to settle are still open, because the run could
+not produce the conditions for them:
+
+- **The topic path.** `##test` has no topic set, so nothing exercised `332` or a
+  `/topic` round trip. Whoever is next in a channel that has a topic should
+  check that the header carries it.
+- **Independent scrolling between split panes.** Both panes held three rows.
+  The store keeps a scroll position per view and the code path looks right, but
+  nothing has watched two panes scroll apart.
+- **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
+  flags and `##test` drew a lock. There is no way to see a channel's modes in
+  the interface, so nobody knows whether that lock is right.

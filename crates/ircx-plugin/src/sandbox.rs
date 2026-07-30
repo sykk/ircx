@@ -153,11 +153,12 @@ impl Host {
     }
 }
 
+/// Every refusal a plugin can catch, thrown as an `Error`. A bare string would
+/// also be catchable, but `refused.message` is what a JavaScript author writes,
+/// and on a string that is `undefined` — a plugin that degrades correctly could
+/// not say why.
 fn throw(ctx: &Ctx<'_>, message: &str) -> rquickjs::Error {
-    match rquickjs::String::from_str(ctx.clone(), message) {
-        Ok(text) => ctx.throw(text.into_value()),
-        Err(error) => error,
-    }
+    rquickjs::Exception::throw_message(ctx, message)
 }
 
 pub struct Sandbox {

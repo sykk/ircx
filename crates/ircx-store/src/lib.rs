@@ -85,6 +85,13 @@ impl Store {
         Ok(())
     }
 
+    /// Applies what a server echo added to a message already archived: its
+    /// delivery state, the server's msgid and time, the tags it arrived with.
+    /// Silently does nothing when the message is not in the archive.
+    pub fn update_message(&self, message: &ChatMessage) -> Result<(), StoreError> {
+        message::confirm(&self.conn(), message)
+    }
+
     /// Oldest first, so a caller can render the page in order. `before` pages
     /// backwards from the oldest message already on screen.
     pub fn load_history(&self, req: &HistoryRequest) -> Result<Vec<ChatMessage>, StoreError> {

@@ -481,13 +481,17 @@ async fn say_something(report: &mut Report, live: &mut Live, marker: &str) {
     let parsed = Message::parse(&echo).ok();
     let msgid = parsed.as_ref().and_then(|m| m.tag("msgid")).unwrap_or("");
     let time = parsed.as_ref().and_then(|m| m.tag("time")).unwrap_or("");
+    // The id stays the local one — that is what the frontend drew — so the
+    // server's name for the message rides along as the tag it arrived as.
+    let kept = confirmed
+        .tags
+        .iter()
+        .find(|(name, _)| name == "msgid")
+        .and_then(|(_, value)| value.as_deref());
     report.check(
-        "a confirmed message takes the server's msgid",
-        !msgid.is_empty() && confirmed.id == msgid,
-        &format!(
-            "echo carried msgid {msgid:?}, the message kept id {:?}",
-            confirmed.id
-        ),
+        "a confirmed message keeps the server's msgid",
+        !msgid.is_empty() && kept == Some(msgid),
+        &format!("echo carried msgid {msgid:?}, the message kept {kept:?}"),
     );
     report.check(
         "a confirmed message takes the server's timestamp",
@@ -551,9 +555,9 @@ async fn a_query_window(report: &mut Report, live: &mut Live, nick: &str) {
     );
 }
 
-/// `##test` is small enough to fit in one 353, so the accumulation path needs a
-/// crowd elsewhere. A bare `NAMES` is read-only: it joins nothing, says
-/// nothing, and nobody in the channel sees it.
+/// A bare `NAMES` is read-only: it joins nothing, says nothing, and nobody in
+/// the channel sees it. The answer names a channel the user is not in, and none
+/// of it should reach the sidebar.
 async fn names_across_replies(report: &mut Report, live: &mut Live) {
     const CROWD: &str = "#libera";
     live.send(SessionCommand::Raw {
@@ -561,65 +565,37 @@ async fn names_across_replies(report: &mut Report, live: &mut Live) {
     })
     .await;
 
-    let members = live
+    let leaked = live
         .wait(Duration::from_secs(60), |event| match event {
-            IrcxEvent::MembersReplaced {
-                channel, members, ..
-            } if channel == CROWD => Some(members.clone()),
+            IrcxEvent::MembersReplaced { channel, .. } if channel == CROWD => Some(()),
             _ => None,
         })
         .await;
-    let Some(members) = members else {
-        report.fail(
-            "NAMES across replies",
-            &format!("no member list for {CROWD}"),
-        );
-        return;
-    };
-
-    let replies: Vec<&String> = live
+    let replies = live
         .incoming
         .iter()
         .filter(|line| numeric_for(line, 353, CROWD))
-        .collect();
-    let named: usize = replies
-        .iter()
-        .filter_map(|line| Message::parse(line).ok())
-        .filter_map(|message| message.params.last().cloned())
-        .map(|list| list.split_whitespace().count())
-        .sum();
-
+        .count();
     report.check(
-        "every name across every reply reaches the member list",
-        members.len() == named,
-        &format!(
-            "{named} names over {} replies, {} members held: {}",
-            replies.len(),
-            members.len(),
-            sample(&members)
-        ),
+        "a NAMES reply for a channel we are not in is dropped",
+        leaked.is_none(),
+        &format!("{replies} replies came back for {CROWD}"),
     );
-    if replies.len() < 2 {
-        report.unverified(
-            "NAMES spanning several 353 replies",
-            "solanum hides invisible users from a NAMES asked from outside the \
-             channel, and ##test is too small to split — covered only by the \
-             scripted test",
-        );
-    }
 
     let listed = live
         .snapshot()
         .await
-        .map(|(_, channels, _)| {
-            channels
-                .iter()
-                .any(|channel| channel.name == CROWD && !channel.joined)
-        })
-        .unwrap_or(false);
-    report.note(
-        "a NAMES query for a channel we are not in",
-        &format!("leaves {CROWD} in the channel list: {listed}"),
+        .map(|(_, channels, _)| channels.iter().any(|channel| channel.name == CROWD))
+        .unwrap_or(true);
+    report.check(
+        "and does not put that channel in the list",
+        !listed,
+        &format!("{CROWD} in the channel list: {listed}"),
+    );
+    report.unverified(
+        "NAMES spanning several 353 replies",
+        "the only channel this run is in is ##test, which is too small to split \
+         its member list — covered only by the scripted test",
     );
 }
 

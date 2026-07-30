@@ -12,7 +12,6 @@ pub const SUPPORTED: &[&str] = &[
     "extended-join",
     "invite-notify",
     "labeled-response",
-    "message-ids",
     "message-tags",
     "multi-prefix",
     "sasl",

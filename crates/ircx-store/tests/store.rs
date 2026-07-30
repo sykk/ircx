@@ -238,6 +238,80 @@ fn messages_without_a_msgid_dedupe_on_content() {
     assert_eq!(loaded[0].id, "67e55044-10b1-426f-9247-bb680e5fe0c8");
 }
 
+/// One message from the Libera run: the id ircx minted, the time it wrote the
+/// optimistic copy, and the name and time the server came back with.
+const LOCAL_ID: &str = "06cd00f8-56d6-4f10-8bf5-1466a8ee9690";
+const WROTE_AT: &str = "2026-07-30T11:05:10.289Z";
+const SERVER_MSGID: &str = "11785409510340009285048AAHH6NIyN0ZXN0";
+const SERVER_TIME: &str = "2026-07-30T11:05:10.340Z";
+
+/// A message of our own between pressing enter and the echo coming back.
+fn pending() -> ChatMessage {
+    let mut message = message(LOCAL_ID, "##test", WROTE_AT, "please ignore");
+    message.sender.is_self = true;
+    message.timestamp_is_local = true;
+    message.delivery = Delivery::Pending;
+    message
+}
+
+/// The same message once the echo has named it.
+fn confirmed() -> ChatMessage {
+    let mut message = pending();
+    message.delivery = Delivery::Delivered;
+    message.timestamp = SERVER_TIME.into();
+    message.timestamp_is_local = false;
+    message.tags = vec![
+        ("msgid".into(), Some(SERVER_MSGID.into())),
+        ("time".into(), Some(SERVER_TIME.into())),
+    ];
+    message
+}
+
+#[test]
+fn a_confirmed_delivery_reaches_the_row_the_pending_copy_left_behind() {
+    let store = Store::open_in_memory().unwrap();
+    store.append_messages(&[pending()]).unwrap();
+    store.update_message(&confirmed()).unwrap();
+
+    let rows = store.load_history(&history("##test", None, 10)).unwrap();
+    assert_eq!(rows.len(), 1, "a confirmation updates, it does not append");
+    assert_eq!(rows[0].delivery, Delivery::Delivered);
+    assert_eq!(rows[0].id, LOCAL_ID, "the id the UI drew it with is kept");
+    assert!(rows[0].id_is_local);
+    assert_eq!(rows[0].timestamp, SERVER_TIME);
+    assert!(!rows[0].timestamp_is_local);
+}
+
+#[test]
+fn a_replay_of_a_message_we_sent_is_recognised_by_its_msgid() {
+    let store = Store::open_in_memory().unwrap();
+    store.append_messages(&[pending()]).unwrap();
+    store.update_message(&confirmed()).unwrap();
+
+    // What a `chathistory` backfill of the same conversation carries: the
+    // server's id and time, and none of our local ones.
+    let replayed = with_msgid(
+        message("ignored", "##test", SERVER_TIME, "please ignore"),
+        SERVER_MSGID,
+    );
+    store.append_messages(&[replayed]).unwrap();
+
+    let rows = store.load_history(&history("##test", None, 10)).unwrap();
+    assert_eq!(rows.len(), 1, "the user's own history is not doubled");
+    assert_eq!(rows[0].id, LOCAL_ID);
+}
+
+#[test]
+fn confirming_a_message_the_archive_never_took_changes_nothing() {
+    let store = Store::open_in_memory().unwrap();
+    store.update_message(&confirmed()).unwrap();
+
+    assert!(store
+        .load_history(&history("##test", None, 10))
+        .unwrap()
+        .is_empty());
+}
+
 #[test]
 fn history_pages_backwards_across_a_boundary() {
     let store = Store::open_in_memory().unwrap();

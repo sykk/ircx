@@ -9,6 +9,7 @@ use ircx_ipc::{
     ChatMessage, CommandOutcome, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
     MessageSource, SaslMechanism, SaslStatus, Severity,
 };
+use ircx_net::TlsInfo;
 
 /// What `irc.libera.chat` actually offered on 2026-07-30, copied off the wire
 /// rather than guessed. Notably it does not offer `userhost-in-names`, and six
@@ -68,7 +69,12 @@ impl Harness {
     }
 
     fn connect(&mut self) {
-        let actions = self.state.on_connected();
+        let actions = self.state.on_connected(None);
+        self.apply(actions);
+    }
+
+    fn connect_over_tls(&mut self, info: TlsInfo) {
+        let actions = self.state.on_connected(Some(info));
         self.apply(actions);
     }
 
@@ -344,11 +350,13 @@ fn names_arriving_in_pieces_become_one_member_list() {
 fn multi_prefix_keeps_every_rank_and_its_absence_keeps_the_highest() {
     let mut with = registered("multi-prefix");
     with.feed(":irc.libera.chat 005 sykk PREFIX=(qaohv)~&@%+ :are supported by this server");
+    with.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     with.feed(":irc.libera.chat 353 sykk = #ircx :~&@sable");
     with.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
     assert_eq!(with.members("#ircx")[0].prefixes, vec!["~", "&", "@"]);
 
     let mut without = registered("");
+    without.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     without.feed(":irc.libera.chat 353 sykk = #ircx :@sable");
     without.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
     assert_eq!(without.members("#ircx")[0].prefixes, vec!["@"]);
@@ -357,6 +365,7 @@ fn multi_prefix_keeps_every_rank_and_its_absence_keeps_the_highest() {
 #[test]
 fn userhost_in_names_does_not_leak_the_mask_into_the_nick() {
     let mut session = registered("userhost-in-names multi-prefix");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     session.feed(":irc.libera.chat 353 sykk = #ircx :@sable!~sable@user/sable ash!a@b");
     session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
 
@@ -368,6 +377,7 @@ fn userhost_in_names_does_not_leak_the_mask_into_the_nick() {
 #[test]
 fn rfc1459_folding_finds_a_member_whose_nick_changed_case() {
     let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     session.feed(":irc.libera.chat 353 sykk = #ircx :sable[m]");
     session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
     session.feed(":irc.libera.chat MODE #ircx +o SABLE{M}");
@@ -388,6 +398,7 @@ fn an_ascii_casemapping_keeps_bracketed_nicks_apart() {
     session.feed(":irc.example CAP * LS :");
     session.feed(":irc.example 001 sykk :Welcome");
     session.feed(":irc.example 005 sykk CASEMAPPING=ascii :are supported by this server");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     session.feed(":irc.example 353 sykk = #ircx :sable[m]");
     session.feed(":irc.example 366 sykk #ircx :End of /NAMES list.");
     session.feed(":irc.example MODE #ircx +o SABLE{M}");
@@ -879,6 +890,298 @@ fn a_ping_is_answered_with_the_token_it_carried() {
     let mut session = registered("");
     session.feed("PING :libera-1234");
     assert_eq!(session.sent(), vec!["PONG libera-1234"]);
+}
+
+/// The channel, text, msgid and time are the ones off the wire on 2026-07-30,
+/// down to the label ircx put on the line it sent.
+mod probe {
+    pub const CHANNEL: &str = "##test";
+    pub const NICK: &str = "ircx-t78015";
+    pub const MASK: &str = "ircx-t78015!~ircxtest@2607:3c40:2900:b480::4cd";
+    pub const TEXT: &str = "ircx client verification run ircxprobe78015 — please ignore";
+    pub const MSGID: &str = "11785409510340009285048AAHH6NIyN0ZXN0";
+    pub const TIME: &str = "2026-07-30T11:05:10.340Z";
+}
+
+/// Registered as the nick the Libera run used, so its lines can be replayed
+/// verbatim.
+fn probe_session(caps: &str) -> Harness {
+    let mut config = config();
+    config.nick = probe::NICK.into();
+    config.username = "ircxtest".into();
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(&format!(":cadmium.libera.chat CAP * LS :{caps}"));
+    session.feed(&format!(":cadmium.libera.chat CAP * ACK :{caps}"));
+    session.feed(&format!(
+        ":cadmium.libera.chat 001 {} :Welcome to the Libera.Chat IRC Network {}",
+        probe::NICK,
+        probe::NICK
+    ));
+    session.feed(&format!(
+        ":cadmium.libera.chat 005 {} CHANTYPES=# PREFIX=(ov)@+ CASEMAPPING=rfc1459 \
+         NETWORK=Libera.Chat :are supported by this server",
+        probe::NICK
+    ));
+    session.feed(&format!(":{} JOIN {}", probe::MASK, probe::CHANNEL));
+    session.sent();
+    session.events.clear();
+    session
+}
+
+/// The echo is the only place the server names the message it took from us.
+/// Losing that name means a `chathistory` replay cannot be told it is the same
+/// message, and the user's own history comes back doubled.
+#[test]
+fn an_echo_hands_the_confirmed_message_the_servers_msgid_and_time() {
+    let mut session = probe_session("echo-message labeled-response message-tags server-time");
+
+    let CommandOutcome::Sent(optimistic) = session.submit(probe::CHANNEL, probe::TEXT) else {
+        panic!("expected a sent message");
+    };
+    assert_eq!(optimistic.delivery, Delivery::Pending);
+    assert!(optimistic.timestamp_is_local);
+
+    let sent = session.sent();
+    assert_eq!(
+        sent,
+        vec![format!(
+            "@label=ircx-1 PRIVMSG {} :{}",
+            probe::CHANNEL,
+            probe::TEXT
+        )],
+        "the line the Libera run put on the wire"
+    );
+
+    session.feed(&format!(
+        "@msgid={};time={};label=ircx-1 :{} PRIVMSG {} :{}",
+        probe::MSGID,
+        probe::TIME,
+        probe::MASK,
+        probe::CHANNEL,
+        probe::TEXT
+    ));
+
+    let confirmed = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::MessageUpdated { message } => Some(message),
+            _ => None,
+        })
+        .expect("the echo confirms the optimistic copy");
+    assert_eq!(confirmed.delivery, Delivery::Delivered);
+    assert_eq!(
+        confirmed.id, optimistic.id,
+        "the id the UI drew is still the id"
+    );
+    assert!(
+        confirmed.id_is_local,
+        "that id is ours, and says so, even though the server has one too"
+    );
+    assert_eq!(
+        confirmed.tags.iter().find(|(name, _)| name == "msgid"),
+        Some(&("msgid".to_string(), Some(probe::MSGID.to_string()))),
+        "the server's name for the message is kept beside the local id"
+    );
+    assert_eq!(confirmed.timestamp, probe::TIME);
+    assert!(
+        !confirmed.timestamp_is_local,
+        "the server saw it 50 ms after we wrote it, and its clock is the shared one"
+    );
+}
+
+/// `message-ids` was never a capability. The tag that carries a msgid is part
+/// of `message-tags`, which is what Libera actually offers.
+#[test]
+fn a_msgid_arrives_under_message_tags_with_no_capability_of_its_own() {
+    let mut session = Harness::new(config());
+    session.connect();
+    session.sent();
+    session.feed(&format!(":cadmium.libera.chat CAP * LS :{LIBERA_CAPS}"));
+
+    let requested = session.sent().join(" ");
+    assert!(
+        !requested.contains("message-ids"),
+        "no server can offer it, because it is not a capability: {requested}"
+    );
+    assert!(requested.contains("message-tags"));
+
+    session.feed(":cadmium.libera.chat CAP * ACK :message-tags server-time");
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.events.clear();
+    session.feed(
+        "@msgid=abc123;time=2026-07-30T11:05:10.340Z \
+         :sable!~s@user/sable PRIVMSG #ircx :hello",
+    );
+
+    let messages = session.messages();
+    assert_eq!(messages[0].id, "abc123");
+    assert!(!messages[0].id_is_local);
+}
+
+/// A `PONG` answers the keepalive, and the figure it produced has to outlive
+/// the event: anything rebuilding from a snapshot is two minutes behind it.
+#[test]
+fn the_measured_lag_is_still_there_at_the_next_snapshot() {
+    let mut session = registered("");
+    assert_eq!(session.state.snapshot().lag_ms, None);
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    let ping = session.sent();
+    let token = ping[0]
+        .strip_prefix("PING ")
+        .expect("the keepalive sends a token")
+        .to_string();
+
+    session.feed(&format!(
+        ":cadmium.libera.chat PONG cadmium.libera.chat :{token}"
+    ));
+    let announced = session.events.iter().find_map(|event| match event {
+        IrcxEvent::LagChanged { lag_ms, .. } => Some(*lag_ms),
+        _ => None,
+    });
+    assert!(announced.is_some());
+    assert_eq!(session.state.snapshot().lag_ms, announced);
+
+    let actions = session
+        .state
+        .on_disconnected("the server closed the connection");
+    session.apply(actions);
+    assert_eq!(
+        session.state.snapshot().lag_ms,
+        None,
+        "a new socket has not been measured yet"
+    );
+}
+
+/// The socket drops without the session being asked to stop, which is what a
+/// bare `QUIT` through `/raw` does. Whatever the user was in comes back.
+#[test]
+fn a_channel_joined_by_hand_is_rejoined_after_a_reconnect() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx-dev");
+    session.feed(":sykk!~sykk@user/sykk PART #ircx-dev :bye");
+    session.sent();
+
+    let actions = session.state.on_disconnected("the connection ended");
+    session.apply(actions);
+    session.connect();
+    session.feed(":cadmium.libera.chat CAP * LS :");
+    session.sent();
+
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+    assert_eq!(
+        session.sent_starting("JOIN"),
+        vec!["JOIN #ircx"],
+        "what was left is not walked back into, and autojoin was empty"
+    );
+}
+
+#[test]
+fn a_channel_the_user_was_kicked_out_of_is_not_rejoined() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":sable!~s@user/sable KICK #ircx sykk :take a break");
+
+    let actions = session.state.on_disconnected("the connection ended");
+    session.apply(actions);
+    session.connect();
+    session.feed(":cadmium.libera.chat CAP * LS :");
+    session.sent();
+
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome");
+    assert!(session.sent_starting("JOIN").is_empty());
+}
+
+#[test]
+fn an_autojoin_channel_is_not_joined_twice_after_a_reconnect() {
+    let mut config = config();
+    config.autojoin = vec!["#ircx".into()];
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(":cadmium.libera.chat CAP * LS :");
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+
+    let actions = session.state.on_disconnected("the connection ended");
+    session.apply(actions);
+    session.connect();
+    session.feed(":cadmium.libera.chat CAP * LS :");
+    session.sent();
+
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome");
+    assert_eq!(session.sent_starting("JOIN"), vec!["JOIN #ircx"]);
+}
+
+/// What the handshake negotiated is the only honest answer to "is this
+/// connection safe", and a network can turn verification off.
+#[test]
+fn what_tls_negotiated_reaches_the_network_tab() {
+    let mut session = Harness::new(config());
+    session.connect_over_tls(TlsInfo {
+        protocol: "TLS 1.3".into(),
+        cipher_suite: "TLS13_AES_256_GCM_SHA384".into(),
+        peer_cert_subject: Some("CN=cadmium.libera.chat".into()),
+    });
+
+    let messages = session.messages();
+    let note = messages
+        .iter()
+        .find(|message| message.kind == MessageKind::Client)
+        .expect("the connection says what it got");
+    assert_eq!(note.target, "*");
+    assert_eq!(
+        note.text,
+        "Connected to irc.libera.chat over TLS 1.3, TLS13_AES_256_GCM_SHA384, \
+         certificate CN=cadmium.libera.chat"
+    );
+
+    let mut plain = Harness::new(config());
+    plain.connect();
+    assert_eq!(
+        plain.messages()[0].text,
+        "Connected to irc.libera.chat without TLS"
+    );
+}
+
+/// `NAMES` can be asked about any channel. The answer is not a reason to put
+/// that channel in the user's sidebar, and nothing would ever take it out.
+#[test]
+fn a_names_reply_for_a_channel_we_are_not_in_creates_nothing() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN ##test");
+    session.feed(":cadmium.libera.chat 353 sykk = ##test :sykk @sable");
+    session.feed(":cadmium.libera.chat 366 sykk ##test :End of /NAMES list.");
+    session.events.clear();
+
+    session.feed(":cadmium.libera.chat 353 sykk = #libera :ash basil @sable");
+    session.feed(":cadmium.libera.chat 366 sykk #libera :End of /NAMES list.");
+    session.feed(":cadmium.libera.chat 332 sykk #libera :Libera.Chat | libera.chat");
+    session.feed(":cadmium.libera.chat 324 sykk #libera +CLPcnrtf");
+
+    assert_eq!(
+        session
+            .state
+            .channels()
+            .iter()
+            .map(|channel| channel.name.clone())
+            .collect::<Vec<_>>(),
+        vec!["##test"],
+        "asking about a channel is not joining it"
+    );
+    assert!(
+        session.members("#libera").is_empty(),
+        "and nothing is held for it"
+    );
+    assert!(
+        session.events.is_empty(),
+        "nor is the UI told about it: {:?}",
+        session.events
+    );
 }
 
 #[test]

@@ -6,6 +6,7 @@ use ircx_ipc::{
     MessageSource, Network, NetworkConfig, NetworkId, Query, SaslMechanism, SaslStatus, Severity,
     TargetName, Topic,
 };
+use ircx_net::TlsInfo;
 use ircx_proto::{Command, Message, MessageBuilder, Prefix};
 use tracing::debug;
 
@@ -97,6 +98,9 @@ pub(crate) struct ChannelState {
     pub(crate) topic: Option<Topic>,
     pub(crate) modes: String,
     pub(crate) joined: bool,
+    /// The user asked to be in here and has not left. Survives a reconnect,
+    /// which `joined` cannot: it is what the next registration rejoins.
+    pub(crate) rejoin: bool,
     pub(crate) members: HashMap<String, MemberState>,
     pub(crate) names: Vec<MemberState>,
     pub(crate) unread: u32,
@@ -143,6 +147,7 @@ pub struct SessionState {
     pending: Vec<PendingSend>,
     next_label: u64,
     ping: Option<(String, Instant)>,
+    lag_ms: Option<u32>,
 }
 
 impl SessionState {
@@ -171,6 +176,7 @@ impl SessionState {
             pending: Vec::new(),
             next_label: 1,
             ping: None,
+            lag_ms: None,
         }
     }
 
@@ -189,7 +195,7 @@ impl SessionState {
             current_nick: self.registered.then(|| self.nick.clone()),
             sasl: self.sasl.clone(),
             caps_enabled: self.caps.enabled(),
-            lag_ms: None,
+            lag_ms: self.lag_ms,
         }
     }
 
@@ -229,9 +235,19 @@ impl SessionState {
         self.drain()
     }
 
-    pub fn on_connected(&mut self) -> Vec<Action> {
+    /// `tls` is what the handshake actually negotiated, and `None` means the
+    /// socket is in the clear. Either way the user is told, in the network tab:
+    /// a client that lets a network turn certificate verification off owes them
+    /// a way to see what they got.
+    pub fn on_connected(&mut self, tls: Option<TlsInfo>) -> Vec<Action> {
         self.reset_connection_state();
         self.set_status(ConnectionStatus::Registering);
+        let host = self.config.host.clone();
+        let text = match tls {
+            Some(info) => format!("Connected to {host} over {info}"),
+            None => format!("Connected to {host} without TLS"),
+        };
+        self.note(SERVER_TARGET, MessageKind::Client, text);
 
         self.send_line("CAP LS 302".into());
         self.send_command("NICK", &[&self.nick.clone()]);
@@ -362,6 +378,7 @@ impl SessionState {
             return;
         }
         let lag_ms = sent.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+        self.lag_ms = Some(lag_ms);
         self.emit(IrcxEvent::LagChanged {
             network: self.config.network.clone(),
             lag_ms,
@@ -581,13 +598,38 @@ impl SessionState {
                 None => debug!(command, "skipped an unsendable connect command"),
             }
         }
-        let autojoin = self.config.autojoin.clone();
-        for channel in autojoin {
-            let channel = channel.trim();
-            if !channel.is_empty() {
-                self.send_command("JOIN", &[channel]);
+        for channel in self.channels_to_join() {
+            self.send_command("JOIN", &[&channel]);
+        }
+    }
+
+    /// The network's `autojoin`, then whatever the user had joined by hand when
+    /// the connection went away. A channel joined by hand is remembered for the
+    /// session only: `autojoin` is a saved preference and a dropped socket is
+    /// not the user editing it.
+    fn channels_to_join(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .config
+            .autojoin
+            .iter()
+            .map(|channel| channel.trim().to_string())
+            .filter(|channel| !channel.is_empty())
+            .collect();
+
+        let mut rejoin: Vec<String> = self
+            .channels
+            .values()
+            .filter(|channel| channel.rejoin)
+            .map(|channel| channel.name.clone())
+            .collect();
+        rejoin.sort();
+
+        for name in rejoin {
+            if !names.iter().any(|held| self.fold(held) == self.fold(&name)) {
+                names.push(name);
             }
         }
+        names
     }
 
     fn apply_isupport(&mut self, tokens: &[String]) {
@@ -613,6 +655,10 @@ impl SessionState {
             .collect();
     }
 
+    /// Like the other channel replies below it, this one only updates a channel
+    /// the session already holds. `NAMES`, `TOPIC` and `MODE` can all be asked
+    /// about a channel we are not in, and an answer to one of those is not a
+    /// reason to put it in the user's channel list.
     fn on_names(&mut self, params: &[String]) {
         let Some(name) = params.get(1) else { return };
         let entries = params.get(2).cloned().unwrap_or_default();
@@ -632,17 +678,18 @@ impl SessionState {
             })
             .collect();
 
-        let name = name.clone();
-        let channel = self.channel_entry(&key, &name);
-        channel.names.extend(members);
+        if let Some(channel) = self.channels.get_mut(&key) {
+            channel.names.extend(members);
+        }
     }
 
     fn on_end_of_names(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
         let key = self.fold(name);
-        let name = name.clone();
         let mapping = self.isupport.casemapping;
-        let channel = self.channel_entry(&key, &name);
+        let Some(channel) = self.channels.get_mut(&key) else {
+            return;
+        };
         channel.members = std::mem::take(&mut channel.names)
             .into_iter()
             .map(|member| (mapping.fold(&member.nick), member))
@@ -656,9 +703,10 @@ impl SessionState {
             return;
         };
         let key = self.fold(name);
-        let name = name.clone();
         let topic = topic.clone();
-        let channel = self.channel_entry(&key, &name);
+        let Some(channel) = self.channels.get_mut(&key) else {
+            return;
+        };
         channel.topic = Some(Topic {
             text: topic,
             set_by: None,
@@ -670,8 +718,10 @@ impl SessionState {
     fn on_no_topic(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
         let key = self.fold(name);
-        let name = name.clone();
-        self.channel_entry(&key, &name).topic = None;
+        let Some(channel) = self.channels.get_mut(&key) else {
+            return;
+        };
+        channel.topic = None;
         self.emit_channel(&key);
     }
 
@@ -679,11 +729,12 @@ impl SessionState {
         let Some(name) = params.first() else { return };
         let key = self.fold(name);
         let (set_by, set_at) = (params.get(1).cloned(), params.get(2).cloned());
-        if let Some(channel) = self.channels.get_mut(&key) {
-            if let Some(topic) = channel.topic.as_mut() {
-                topic.set_by = set_by;
-                topic.set_at = set_at;
-            }
+        let Some(channel) = self.channels.get_mut(&key) else {
+            return;
+        };
+        if let Some(topic) = channel.topic.as_mut() {
+            topic.set_by = set_by;
+            topic.set_at = set_at;
         }
         self.emit_channel(&key);
     }
@@ -695,8 +746,10 @@ impl SessionState {
             .map(|modes| modes.trim_start_matches('+').to_string())
             .unwrap_or_default();
         let key = self.fold(name);
-        let name = name.clone();
-        self.channel_entry(&key, &name).modes = modes;
+        let Some(channel) = self.channels.get_mut(&key) else {
+            return;
+        };
+        channel.modes = modes;
         self.emit_channel(&key);
     }
 
@@ -814,13 +867,13 @@ impl SessionState {
         };
 
         if let Some(label) = message.tag("label").map(str::to_string) {
-            if self.deliver(Some(&label), &target, &text) {
+            if self.deliver(message, Some(&label), &target, &text) {
                 return;
             }
         }
         if sender.is_self
             && self.caps.is_enabled("echo-message")
-            && self.deliver(None, &target, &text)
+            && self.deliver(message, None, &target, &text)
         {
             return;
         }
@@ -841,8 +894,11 @@ impl SessionState {
     }
 
     /// Matches a server echo to the optimistic copy already on screen. The id
-    /// stays the local one so the frontend can find the message it drew.
-    fn deliver(&mut self, label: Option<&str>, target: &str, text: &str) -> bool {
+    /// stays the local one so the frontend can find the message it drew, which
+    /// leaves the echo's tags to carry the server's `msgid`. Something has to:
+    /// it is what a later history replay of this message is recognised by, and
+    /// without it the user's own history comes back doubled.
+    fn deliver(&mut self, echo: &Message, label: Option<&str>, target: &str, text: &str) -> bool {
         let found = self.pending.iter().position(|pending| match label {
             Some(label) => pending.label.as_deref() == Some(label),
             None => {
@@ -856,6 +912,12 @@ impl SessionState {
 
         let mut message = self.pending.remove(index).message;
         message.delivery = Delivery::Delivered;
+        message.tags = echo.tags.clone();
+        message.raw = echo.raw.clone();
+        if let Some(time) = echo.tag("time").filter(|time| !time.is_empty()) {
+            message.timestamp = time.to_string();
+            message.timestamp_is_local = false;
+        }
         self.emit(IrcxEvent::MessageUpdated { message });
         true
     }
@@ -899,6 +961,7 @@ impl SessionState {
             self.host = sender.host.clone().or(self.host.clone());
             let channel = self.channel_entry(&key, &name);
             channel.joined = true;
+            channel.rejoin = true;
             channel.members.clear();
             self.send_command("MODE", &[&name]);
         } else {
@@ -939,6 +1002,7 @@ impl SessionState {
         if sender.is_self {
             if let Some(channel) = self.channels.get_mut(&key) {
                 channel.joined = false;
+                channel.rejoin = false;
                 channel.members.clear();
             }
             self.emit_channel(&key);
@@ -994,8 +1058,11 @@ impl SessionState {
         self.append(chat);
 
         if self.is_me(&nick) {
+            // Being kicked is being told to leave, so the next reconnect does
+            // not walk back in.
             if let Some(channel) = self.channels.get_mut(&key) {
                 channel.joined = false;
+                channel.rejoin = false;
                 channel.members.clear();
             }
         } else {
@@ -1440,6 +1507,7 @@ impl SessionState {
         self.batches.clear();
         self.pending.clear();
         self.ping = None;
+        self.lag_ms = None;
         self.sasl = match self.config.sasl {
             Some(_) => SaslStatus::InProgress,
             None => SaslStatus::NotConfigured,

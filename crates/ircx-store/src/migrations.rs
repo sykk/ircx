@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use crate::StoreError;
 
-const MIGRATIONS: &[&str] = &[INITIAL];
+const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
 /// database at any earlier version, including an empty one.
@@ -130,6 +130,12 @@ CREATE TABLE retention (
 );
 "#;
 
+/// Confirming a delivery reaches its row by the id the message was drawn with,
+/// which is the one lookup the timeline index cannot serve.
+const MESSAGE_ID_INDEX: &str = r#"
+CREATE INDEX idx_messages_message_id ON messages (network, message_id);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,7 +153,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(versions, vec![1]);
+        assert_eq!(versions, (1..=MIGRATIONS.len() as u32).collect::<Vec<_>>());
     }
 
     #[test]

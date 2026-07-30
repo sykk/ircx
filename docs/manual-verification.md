@@ -177,12 +177,13 @@ What is still open:
   held on every arrival. It is virtualised now (#119), so what is drawn is what
   fits.
 
-  What that leaves is the cost behind the freeze rather than the freeze: each
-  line is still its own event across the Tauri boundary, its own store write and
-  its own render. `lane()` returns `None` for a raw line, so the pump's 8ms
-  window cannot merge them either. Run a `LIST` again and say whether what is
-  left is acceptable or merely survivable — that measurement is what decides
-  whether batching is worth building.
+  Run again on the same day it no longer froze, and lagged the client heavily
+  while the lines arrived. That measurement is what bought the second half: the
+  pump now delivers a window's worth of events as one message and the store
+  writes once for it, rather than a message, a write and a render per line.
+
+  What is left to watch is a `LIST` after that change, and a netsplit, which is
+  the other burst this entry was written for and which nothing has yet seen.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

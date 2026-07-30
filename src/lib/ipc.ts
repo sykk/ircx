@@ -106,8 +106,10 @@ export async function chooseFolder(title: string): Promise<string | null> {
 }
 
 /** Resolves to an unsubscribe function. */
-export function onIrcxEvent(handler: (event: IrcxEvent) => void) {
-  return listen<IrcxEvent>(EVENT_CHANNEL, (e) => handler(e.payload));
+/** The backend delivers a window's worth of events as one message, so the
+ * handler takes the batch and the store writes once for it. */
+export function onIrcxEvent(handler: (events: IrcxEvent[]) => void) {
+  return listen<IrcxEvent[]>(EVENT_CHANNEL, (e) => handler(e.payload));
 }
 
 /** Fires with the whole themes directory whenever a file in it changes. */

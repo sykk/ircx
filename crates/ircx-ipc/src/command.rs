@@ -25,6 +25,11 @@
 //! get_draft(network, target)                  -> Option<String>
 //! set_draft(network, target, text)            -> ()
 //! list_themes()                               -> Vec<ThemeSource>
+//! list_plugins()                              -> Vec<InstalledPlugin>
+//! plugin_permissions()                        -> Vec<PluginPermissionInfo>
+//! install_plugin(source: String)              -> InstalledPlugin
+//! set_plugin_grants(plugin, grants)           -> InstalledPlugin
+//! remove_plugin(plugin: String)               -> ()
 //! ```
 //!
 //! Every handler returns `Result<T, String>`; the error string is user-facing.
@@ -132,6 +137,74 @@ pub struct AppSnapshot {
     pub networks: Vec<Network>,
     pub channels: Vec<Channel>,
     pub queries: Vec<Query>,
+}
+
+/// The seven permissions a plugin can ask for. Spelled as the manifest spells
+/// them, so a name here and a name in a `plugin.json` are the same string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginPermission {
+    ReadMessages,
+    SendMessages,
+    AddCommands,
+    StoreLocalData,
+    AccessChannels,
+    NetworkRequests,
+    RenderContent,
+}
+
+/// A permission and the plain terms the install dialogue shows for it. Sent
+/// from the backend rather than written into the frontend, so the wording has
+/// one home: `Permission::summary` in `ircx-plugin`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginPermissionInfo {
+    pub permission: PluginPermission,
+    pub summary: String,
+}
+
+/// A permission set. The same shape is both what a plugin asks for and what the
+/// user allowed, so the dialogue can show one against the other.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginGrants {
+    pub permissions: Vec<PluginPermission>,
+    /// Conversations `read-messages` and `send-messages` reach. `*` is all of
+    /// them and is a choice the user makes explicitly.
+    pub channels: Vec<String>,
+    /// Hosts `network-requests` may reach. Matched exactly; no wildcard.
+    pub hosts: Vec<String>,
+}
+
+/// A slash command a plugin adds, as declared in its manifest.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCommand {
+    pub name: String,
+    pub summary: String,
+}
+
+/// An installed plugin: what it declared about itself, and what the user
+/// allowed it. Nothing here says whether it is running — a plugin's thread
+/// starts on its first call and that is not the user's concern.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledPlugin {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub commands: Vec<PluginCommand>,
+    /// What the manifest asks for. Nothing outside this can be granted.
+    pub requests: PluginGrants,
+    /// What the user allowed, which may be less. Empty until they say
+    /// otherwise: installing a plugin grants it nothing.
+    pub grants: PluginGrants,
 }
 
 /// One theme directory, read but not understood: the backend does not parse

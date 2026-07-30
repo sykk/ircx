@@ -1,14 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSnapshot,
   Attachment,
   ChatMessage,
   CommandOutcome,
   HistoryRequest,
+  InstalledPlugin,
   IrcxEvent,
   Member,
   NetworkConfig,
+  PluginGrants,
+  PluginPermissionInfo,
   Query,
   SearchHit,
   SearchRequest,
@@ -80,7 +84,26 @@ export const ipc = {
     invoke<void>("set_draft", { network, target, text }),
 
   listThemes: () => invoke<ThemeSource[]>("list_themes"),
+
+  listPlugins: () => invoke<InstalledPlugin[]>("list_plugins"),
+  /** The plain-terms line each permission is shown as. Written in
+   * `ircx-plugin`, not here, so the wording has one home. */
+  pluginPermissions: () => invoke<PluginPermissionInfo[]>("plugin_permissions"),
+  /** `source` is a folder holding a `plugin.json` and its script. Installing
+   * grants nothing; the returned plugin says what it asked for. */
+  installPlugin: (source: string) => invoke<InstalledPlugin>("install_plugin", { source }),
+  /** The whole grant set, not a change to it: revoking is granting less. */
+  setPluginGrants: (plugin: string, grants: PluginGrants) =>
+    invoke<InstalledPlugin>("set_plugin_grants", { plugin, grants }),
+  removePlugin: (plugin: string) => invoke<void>("remove_plugin", { plugin }),
 };
+
+/** The native folder picker, or null if it was dismissed. Wrapped here for the
+ * reason `invoke` is: a component does not reach for a Tauri plugin itself. */
+export async function chooseFolder(title: string): Promise<string | null> {
+  const picked = await open({ directory: true, title });
+  return typeof picked === "string" ? picked : null;
+}
 
 /** Resolves to an unsubscribe function. */
 export function onIrcxEvent(handler: (event: IrcxEvent) => void) {

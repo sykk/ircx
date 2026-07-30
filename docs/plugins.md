@@ -47,6 +47,24 @@ Commands are declared in the manifest, not discovered by running the plugin, so
 typing `/greet` can find the plugin that owns it without starting a runtime.
 Built-in commands always win: a plugin declaring `quit` never sees it.
 
+## Installing one from the application
+
+The command palette's **plugins** action opens the library. Installing asks for
+a folder — the one holding a `plugin.json` and the file of code it names — and
+copies those two files, and only those two, into `app_data_dir()/plugins/<id>`.
+A plugin cannot arrive with its own `grants.json`.
+
+Installing grants nothing, so the permissions screen follows immediately with
+what the manifest asked for, each line written by `Permission::summary`. The
+two scoped permissions ask where they apply: channels for `access-channels`,
+hosts for `network-requests`, and a permission allowed with an empty scope
+cannot be saved, because it would read as a grant while giving nothing.
+
+The same screen is how a grant is taken back — `set_grants` writes exactly what
+it is handed, so revoking is granting less. It takes effect on the next call: a
+running session holds the runtime rather than a copy of the grants, and the
+plugin's own thread is thrown away whenever they change.
+
 ## The host surface
 
 Everything a plugin can reach, and nothing else. There is no `fetch`, no
@@ -136,9 +154,10 @@ constraints on future work, not things already banked.
 
 - **The other four extension points.** Renderers, providers, notification rules
   and protocol adapters.
-- **The install dialogue.** `Permission::summary` is the plain-terms line each
-  grant needs; nothing draws it yet, and no Tauri command installs, lists or
-  grants. The runtime is driveable from `ircx-core`.
+- **Which channels a plugin may reach, chosen from the ones it is in.** The
+  install dialogue offers the channels the manifest named, and lets the user
+  type one when the manifest asked for `*`. Neither is a list of the channels
+  they are actually in, so naming one is spelling rather than picking.
 - **Attribution in the timeline.** A plugin's answer arrives as a client note
   like `/help` output does, so the timeline does not say which plugin said it.
   That wants the message renderer seam.

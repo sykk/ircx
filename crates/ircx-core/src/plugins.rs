@@ -8,15 +8,22 @@
 //! Custom slash commands are the one extension point built. Message renderers,
 //! link and attachment providers, notification rules and protocol adapters are
 //! the same shape and are follow-up work.
+//!
+//! What the install dialogue shows is also converted here. `ircx-plugin` knows
+//! nothing about the window and `ircx-ipc` is below both of them, so this crate
+//! is the only place the manifest's types and the window's types may meet.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use ircx_ipc::{ChatMessage, CommandOutcome, MessageKind};
+use ircx_ipc::{
+    ChatMessage, CommandOutcome, InstalledPlugin, MessageKind, PluginCommand, PluginGrants,
+    PluginPermission, PluginPermissionInfo,
+};
 use ircx_net::http::{fetch, FetchPolicy};
 use ircx_plugin::{
-    CommandReply, CommandRequest, ContextMessage, Failure, Fetched, Fetcher, PluginFailure,
-    PluginRuntime, Route,
+    CommandReply, CommandRequest, ContextMessage, Failure, Fetched, Fetcher, Grants, Installed,
+    Permission, PluginFailure, PluginRuntime, Route,
 };
 
 use crate::dispatch;
@@ -138,6 +145,88 @@ pub fn network_for_plugins(handle: tokio::runtime::Handle) -> Fetcher {
             .map_err(|_| format!("{} answered with something that is not text", request.url))?;
         Ok(Fetched { status: 200, body })
     })
+}
+
+/// Every permission a plugin may ask for, with the words the install dialogue
+/// shows for it. The wording is read from `ircx-plugin` rather than written
+/// again here, so what is enforced and what the user was told are one text.
+pub fn describe_permissions() -> Vec<PluginPermissionInfo> {
+    Permission::ALL
+        .into_iter()
+        .map(|permission| PluginPermissionInfo {
+            permission: sent(permission),
+            summary: permission.summary().to_owned(),
+        })
+        .collect()
+}
+
+/// An installed plugin as the window shows it, with what the manifest asks for
+/// beside what the user allowed.
+pub fn describe_plugin(installed: &Installed) -> InstalledPlugin {
+    let manifest = &installed.manifest;
+    InstalledPlugin {
+        id: manifest.id.clone(),
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
+        description: manifest.description.clone(),
+        commands: manifest
+            .commands
+            .iter()
+            .map(|command| PluginCommand {
+                name: command.name.clone(),
+                summary: command.summary.clone(),
+            })
+            .collect(),
+        requests: listed(&manifest.requests),
+        grants: listed(&installed.grants),
+    }
+}
+
+/// What the user chose in the install dialogue, in the shape the library
+/// enforces. Nothing is checked here: a grant the manifest never asked for is
+/// refused by `Grants::within`, which is the one place that decides.
+pub fn chosen_grants(grants: PluginGrants) -> Grants {
+    Grants {
+        permissions: grants.permissions.into_iter().map(enforced).collect(),
+        channels: grants.channels,
+        hosts: grants.hosts,
+    }
+}
+
+fn listed(grants: &Grants) -> PluginGrants {
+    PluginGrants {
+        permissions: grants.permissions.iter().copied().map(sent).collect(),
+        channels: grants.channels.clone(),
+        hosts: grants.hosts.clone(),
+    }
+}
+
+/// The seven permissions are spelled once in `ircx-plugin`, which enforces
+/// them, and once in `ircx-ipc`, which carries them to the window; neither may
+/// depend on the other. Both matches are exhaustive, so an eighth permission
+/// stops the build here until it has been named on both sides.
+fn sent(permission: Permission) -> PluginPermission {
+    match permission {
+        Permission::ReadMessages => PluginPermission::ReadMessages,
+        Permission::SendMessages => PluginPermission::SendMessages,
+        Permission::AddCommands => PluginPermission::AddCommands,
+        Permission::StoreLocalData => PluginPermission::StoreLocalData,
+        Permission::AccessChannels => PluginPermission::AccessChannels,
+        Permission::NetworkRequests => PluginPermission::NetworkRequests,
+        Permission::RenderContent => PluginPermission::RenderContent,
+    }
+}
+
+fn enforced(permission: PluginPermission) -> Permission {
+    match permission {
+        PluginPermission::ReadMessages => Permission::ReadMessages,
+        PluginPermission::SendMessages => Permission::SendMessages,
+        PluginPermission::AddCommands => Permission::AddCommands,
+        PluginPermission::StoreLocalData => Permission::StoreLocalData,
+        PluginPermission::AccessChannels => Permission::AccessChannels,
+        PluginPermission::NetworkRequests => Permission::NetworkRequests,
+        PluginPermission::RenderContent => Permission::RenderContent,
+    }
 }
 
 /// Runs the call on a thread of the blocking pool, so a plugin spending its

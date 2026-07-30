@@ -43,6 +43,34 @@ fn installing_grants_nothing_until_the_user_says_otherwise() {
     );
 }
 
+/// The source is a folder the user picked, so picking the wrong one is the
+/// ordinary mistake rather than a corrupt install. Both halves of "a plugin is
+/// a manifest and the file it names" say which half is missing.
+#[test]
+fn a_folder_that_is_not_a_plugin_says_what_it_is_missing() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let mut library = Library::open(root.path().join("plugins")).expect("open");
+
+    let empty = root.path().join("holiday-photos");
+    fs::create_dir_all(&empty).expect("a test can write to its own temporary directory");
+    let refused = library
+        .install(&empty)
+        .expect_err("there is no plugin here");
+    assert!(
+        matches!(&refused, LibraryError::NotAPlugin(_)),
+        "{refused:?}"
+    );
+    assert!(refused.to_string().contains("plugin.json"), "{refused}");
+
+    let source = author(root.path(), "echo", ECHO, asked());
+    fs::remove_file(source.join("main.js")).expect("take the code away");
+    let refused = library.install(&source).expect_err("the code is gone");
+    assert!(
+        matches!(&refused, LibraryError::MissingEntry(id, entry) if id == "echo" && entry == "main.js"),
+        "{refused:?}"
+    );
+}
+
 #[test]
 fn nothing_can_be_granted_that_was_not_asked_for() {
     let root = tempfile::tempdir().expect("a temporary directory");

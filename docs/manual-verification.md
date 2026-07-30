@@ -121,10 +121,21 @@ which asserts that the host survives each one. What no test reaches:
   sandbox a fetcher that answers without a network, so what they cover is the
   grant, the host list and the budget. The socket underneath is `ircx-net`'s and
   is covered by its own tests, but nothing exercises the two together.
-- **A plugin installed by the application.** No Tauri command installs, lists or
-  grants one, so every install in the tests is driven from Rust. The grant
-  dialogue the spec asks for — each permission in plain terms, at install — is
-  unbuilt, and `Permission::summary` is the line it should show.
+- **The folder picker.** `install_plugin` takes a path, and every test hands it
+  one directly. Nothing has watched `chooseFolder` open a native dialogue,
+  which is the one step of installing that no headless test reaches. Cancelling
+  it should leave the library alone rather than installing nothing under a
+  blank name.
+- **Whether the grant dialogue reads as plain terms.** `Permission::summary` is
+  written for someone who has never heard the word capability, and the tests
+  only assert that the string arrives — no test can say whether it lands.
+  Install a plugin asking for all seven and read the seven lines cold: the
+  question is whether you would know what you were agreeing to.
+- **A plugin's command appearing without a reconnect.** Granting `add-commands`
+  rebuilds the route table on a runtime a live session already holds, so
+  `/greet` should work in an open channel the moment the grant is saved. The
+  path is shared state rather than a message, so nothing in the test suite
+  watches a connected session pick it up.
 
 ## Themes installed on disk
 

@@ -1,11 +1,15 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use ircx_core::{spawn_network, NetworkHandle, SessionCommand, SessionConfig};
+use ircx_core::{
+    chosen_grants, describe_plugin, spawn_network_with_plugins, LibraryError, NetworkHandle,
+    PluginRuntime, SessionCommand, SessionConfig,
+};
 use ircx_ipc::{
-    AppSnapshot, ConnectionStatus, IrcxEvent, Network, NetworkConfig, NetworkId, SaslStatus,
-    Severity,
+    AppSnapshot, ConnectionStatus, InstalledPlugin, IrcxEvent, Network, NetworkConfig, NetworkId,
+    PluginGrants, SaslStatus, Severity,
 };
 use ircx_store::{Store, StoreError};
 use tokio::sync::{mpsc, oneshot};
@@ -23,6 +27,9 @@ const DEFAULT_QUIT: &str = "ircx";
 pub struct App {
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
+    /// `None` when the plugin library could not be opened. The client runs
+    /// without it: an unreadable folder is not a reason to lose the client.
+    plugins: Option<Arc<PluginRuntime>>,
     /// The lock is held only long enough to clone a command sender out or to
     /// swap a handle. Every `.await` in this file happens after the guard has
     /// been dropped: Tauri runs commands concurrently, so a guard living
@@ -31,10 +38,15 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(store: Arc<Store>, events: mpsc::Sender<IrcxEvent>) -> Self {
+    pub fn new(
+        store: Arc<Store>,
+        events: mpsc::Sender<IrcxEvent>,
+        plugins: Option<Arc<PluginRuntime>>,
+    ) -> Self {
         Self {
             store,
             events,
+            plugins,
             networks: Mutex::new(HashMap::new()),
         }
     }
@@ -136,7 +148,12 @@ impl App {
         }
         networks.insert(
             network.clone(),
-            spawn_network(session, self.store.clone(), self.events.clone()),
+            spawn_network_with_plugins(
+                session,
+                self.store.clone(),
+                self.events.clone(),
+                self.plugins.clone(),
+            ),
         );
         Ok(())
     }
@@ -228,6 +245,53 @@ impl App {
         }
     }
 
+    /// Every installed plugin, with what it asks for beside what it was given.
+    pub fn list_plugins(&self) -> Result<Vec<InstalledPlugin>, String> {
+        Ok(self
+            .plugin_runtime()?
+            .installed()
+            .iter()
+            .map(describe_plugin)
+            .collect())
+    }
+
+    /// Copies a plugin folder into the library. It arrives granted nothing;
+    /// what the user allows is a separate decision and a separate call.
+    pub fn install_plugin(&self, source: &Path) -> Result<InstalledPlugin, String> {
+        let installed = self
+            .plugin_runtime()?
+            .install(source)
+            .map_err(describe_library)?;
+        Ok(describe_plugin(&installed))
+    }
+
+    /// Writes exactly what it is given, so granting less is how a permission is
+    /// taken back and granting nothing turns the plugin off.
+    pub fn set_plugin_grants(
+        &self,
+        plugin: &str,
+        grants: PluginGrants,
+    ) -> Result<InstalledPlugin, String> {
+        let installed = self
+            .plugin_runtime()?
+            .set_grants(plugin, chosen_grants(grants))
+            .map_err(describe_library)?;
+        Ok(describe_plugin(&installed))
+    }
+
+    pub fn remove_plugin(&self, plugin: &str) -> Result<(), String> {
+        self.plugin_runtime()?
+            .remove(plugin)
+            .map_err(describe_library)
+    }
+
+    fn plugin_runtime(&self) -> Result<&PluginRuntime, String> {
+        self.plugins.as_deref().ok_or_else(|| {
+            "Your plugins folder could not be opened, so plugins are off until ircx is restarted"
+                .to_string()
+        })
+    }
+
     /// Sends QUIT everywhere and gives the writes a moment to land.
     pub async fn shutdown(&self) {
         let handles: Vec<NetworkHandle> = self.guard().drain().map(|(_, handle)| handle).collect();
@@ -308,10 +372,17 @@ pub fn describe(error: StoreError) -> String {
     error.to_string()
 }
 
+/// So are `LibraryError`'s.
+pub fn describe_library(error: LibraryError) -> String {
+    error.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ircx_ipc::{HistoryRequest, TargetName};
+    use ircx_core::{network_for_plugins, CommandSpec, Grants, Manifest, PluginLimits};
+    use ircx_ipc::{HistoryRequest, PluginPermission, TargetName};
+    use std::path::PathBuf;
 
     /// A network that will never answer: the port refuses immediately, so the
     /// session task is alive and idle in its reconnect wait.
@@ -336,10 +407,58 @@ mod tests {
 
     /// The event channel has to keep draining: a full one stops every session.
     fn app() -> App {
-        let store = Arc::new(Store::open_in_memory().expect("in-memory store"));
+        App::new(store(), events(), None)
+    }
+
+    /// The same, with a plugin library under `root`. The directory does not
+    /// exist yet, which is the state a first launch is in.
+    fn plugin_app(root: &Path) -> App {
+        let runtime = PluginRuntime::open(
+            root.join("plugins"),
+            PluginLimits::default(),
+            network_for_plugins(tokio::runtime::Handle::current()),
+        )
+        .expect("open the plugin library");
+        App::new(store(), events(), Some(Arc::new(runtime)))
+    }
+
+    fn store() -> Arc<Store> {
+        Arc::new(Store::open_in_memory().expect("in-memory store"))
+    }
+
+    fn events() -> mpsc::Sender<IrcxEvent> {
         let (events, mut inbox) = mpsc::channel(256);
         tokio::spawn(async move { while inbox.recv().await.is_some() {} });
-        App::new(store, events)
+        events
+    }
+
+    /// A plugin as an author would ship it: a manifest asking for what it needs
+    /// and one file of code, in the folder the user would pick. It asks for
+    /// `add-commands` and `render-content` and for nothing else, so a grant of
+    /// anything else is one the manifest never made.
+    fn author(root: &Path, id: &str) -> PathBuf {
+        let manifest = Manifest {
+            id: id.into(),
+            name: format!("{id} for tests"),
+            version: "1.0.0".into(),
+            description: String::new(),
+            entry: "main.js".into(),
+            commands: vec![CommandSpec {
+                name: id.into(),
+                summary: format!("what {id} does"),
+            }],
+            requests: Grants::command_only(),
+        };
+        let directory = root.join(format!("{id}-source"));
+        std::fs::create_dir_all(&directory).expect("write a plugin");
+        let json = serde_json::to_vec(&manifest).expect("a manifest serialises");
+        std::fs::write(directory.join("plugin.json"), json).expect("write the manifest");
+        std::fs::write(
+            directory.join("main.js"),
+            format!(r#"ircx.command("{id}", () => "hello");"#),
+        )
+        .expect("write the code");
+        directory
     }
 
     #[tokio::test]
@@ -399,6 +518,106 @@ mod tests {
 
         assert!(app.store().list_networks().unwrap().is_empty());
         assert!(app.snapshot().await.unwrap().networks.is_empty());
+    }
+
+    /// Installing is not consenting: the plugin arrives with what it asked for
+    /// on the record and nothing allowed.
+    #[tokio::test]
+    async fn an_installed_plugin_is_granted_nothing() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let app = plugin_app(root.path());
+
+        let installed = app.install_plugin(&author(root.path(), "greeter")).unwrap();
+
+        assert_eq!(installed.id, "greeter");
+        assert_eq!(
+            installed.requests.permissions,
+            vec![
+                PluginPermission::AddCommands,
+                PluginPermission::RenderContent
+            ]
+        );
+        assert_eq!(installed.grants, PluginGrants::default());
+        assert_eq!(app.list_plugins().unwrap().len(), 1);
+    }
+
+    /// The manifest is the ceiling. A dialogue that offered more than the
+    /// plugin asked for would be granting on the user's behalf.
+    #[tokio::test]
+    async fn granting_what_a_plugin_never_asked_for_is_refused_by_name() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let app = plugin_app(root.path());
+        app.install_plugin(&author(root.path(), "greeter")).unwrap();
+
+        let error = app
+            .set_plugin_grants(
+                "greeter",
+                PluginGrants {
+                    permissions: vec![PluginPermission::SendMessages],
+                    ..PluginGrants::default()
+                },
+            )
+            .unwrap_err();
+
+        assert!(error.contains("greeter"), "{error}");
+        assert!(error.contains("send-messages"), "{error}");
+        assert_eq!(
+            app.list_plugins().unwrap()[0].grants,
+            PluginGrants::default(),
+            "a refused grant changes nothing"
+        );
+    }
+
+    /// Revoking is granting less, so it goes through the same call.
+    #[tokio::test]
+    async fn granting_less_takes_a_permission_back() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let app = plugin_app(root.path());
+        let installed = app.install_plugin(&author(root.path(), "greeter")).unwrap();
+        app.set_plugin_grants("greeter", installed.requests.clone())
+            .unwrap();
+
+        let narrowed = app
+            .set_plugin_grants(
+                "greeter",
+                PluginGrants {
+                    permissions: vec![PluginPermission::AddCommands],
+                    ..PluginGrants::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            narrowed.grants.permissions,
+            vec![PluginPermission::AddCommands]
+        );
+        assert_eq!(
+            app.list_plugins().unwrap()[0].grants.permissions,
+            vec![PluginPermission::AddCommands]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_removed_plugin_is_gone_from_the_list() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let app = plugin_app(root.path());
+        app.install_plugin(&author(root.path(), "greeter")).unwrap();
+
+        app.remove_plugin("greeter").unwrap();
+
+        assert!(app.list_plugins().unwrap().is_empty());
+        let error = app.remove_plugin("greeter").unwrap_err();
+        assert!(error.contains("greeter"), "{error}");
+    }
+
+    /// A client whose plugin library could not be opened is still a client.
+    #[tokio::test]
+    async fn without_a_library_listing_plugins_says_so() {
+        let app = app();
+
+        let error = app.list_plugins().unwrap_err();
+
+        assert!(error.contains("plugins folder"), "{error}");
     }
 
     /// Every handler that touches the network map or the archive, run at once

@@ -268,6 +268,15 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().drawerOpen).toBe(true);
   });
 
+  it("opens the plugins sheet", () => {
+    render(<CommandPalette />);
+    type("plugins");
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().pluginsOpen).toBe(true);
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("closes on Escape without letting it reach the global layer", () => {
     const outside = vi.fn();
     document.addEventListener("keydown", outside);

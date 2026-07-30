@@ -17,6 +17,7 @@ const HELP: &str = "\
 /topic [text]             read or set the topic
 /mode [target] <modes>    read or set modes
 /kick <nick> [reason]     remove someone from the channel
+/invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
 /away [reason]            mark yourself away, or back
 /quit [reason]            disconnect
@@ -185,6 +186,7 @@ impl SessionState {
             "topic" => self.cmd_topic(target, args),
             "mode" => self.cmd_mode(target, args),
             "kick" => self.cmd_kick(target, args),
+            "invite" => self.cmd_invite(target, args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
             "away" => self.cmd_away(args),
             "quit" => {
@@ -338,6 +340,23 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// The channel is the tab it was typed in unless a second word names one,
+    /// which is how the header's invite control spells it.
+    fn cmd_invite(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let mut parts = args.split_whitespace();
+        let Some(nick) = parts.next() else {
+            return CommandOutcome::Rejected("`/invite <nickname> [#channel]` needs a name".into());
+        };
+        let channel = parts.next().unwrap_or(target);
+        if !self.isupport.is_channel(channel) {
+            return CommandOutcome::Rejected(
+                "`/invite` needs a channel: name one, or run it in the channel's tab".into(),
+            );
+        }
+        self.send_command("INVITE", &[nick, channel]);
+        CommandOutcome::Handled
+    }
+
     fn cmd_away(&mut self, args: &str) -> CommandOutcome {
         match args.is_empty() {
             true => self.send_command("AWAY", &[]),
@@ -459,8 +478,8 @@ impl SessionState {
 /// the routing in `plugins.rs` looks here first. Every name in the match in
 /// `dispatch` belongs in this list, which `plugin_commands.rs` checks.
 pub(crate) const BUILTIN: &[&str] = &[
-    "join", "j", "part", "leave", "msg", "notice", "me", "query", "nick", "topic", "mode", "kick",
-    "whois", "away", "quit", "raw", "quote", "help",
+    "join", "j", "part", "leave", "msg", "notice", "react", "unreact", "me", "query", "nick",
+    "topic", "mode", "kick", "invite", "whois", "away", "quit", "raw", "quote", "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

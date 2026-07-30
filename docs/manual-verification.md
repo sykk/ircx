@@ -164,13 +164,13 @@ What is still open:
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
-- **A conversation closed before quitting staying closed.** This sat open from
-  the second end-to-end run and nobody could have done it: until #121 there was
-  no way to close a conversation at all. `close_target` was reachable from
-  nothing. Now the sidebar row's menu closes one, so the check is finally
-  possible — close a channel and a query, quit, relaunch, and neither should
-  come back. Core is covered either side of it; what no test joins up is that
-  set and the archive it is written to.
+**A conversation closed before quitting stays closed**, verified by the owner on
+2026-07-30. That entry sat open from the second end-to-end run and nobody could
+have done it: until #121 there was no way to close a conversation at all, so it
+was an unreachable behaviour rather than an untested one. The sidebar row's menu
+closes one now, and it does not come back on the next launch — which is the join
+between the set core forgets and the archive it is written to, and the part no
+test reaches.
 - **The raw log under load.** Watched during a `/raw LIST` against Libera on
   2026-07-30, and it froze the window hard enough to need the process killed —
   twice. Libera answers with roughly 22,000 lines and the log drew every line it

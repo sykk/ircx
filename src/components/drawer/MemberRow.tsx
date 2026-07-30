@@ -24,10 +24,19 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
         selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]"
       }`}
     >
+      {/* Away is a shape, not a shade. Dimming the nick colour by a fixed
+       * fraction was tuned against a dark surface: the same fraction of a
+       * light-theme nick on #f6f8fa is a pale wash, and no fraction is right
+       * for both. A hollow dot carries the state at full strength in either
+       * theme and asks a theme for nothing. */}
       <span
         aria-hidden
-        className={`size-2 shrink-0 rounded-full ${away ? "opacity-40" : ""}`}
-        style={{ background: nickColor(member.nick) }}
+        className={`size-2 shrink-0 rounded-full ${away ? "border-[1.5px]" : ""}`}
+        style={
+          away
+            ? { borderColor: nickColor(member.nick) }
+            : { background: nickColor(member.nick) }
+        }
       />
       <span
         className={`truncate ${away ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"}`}

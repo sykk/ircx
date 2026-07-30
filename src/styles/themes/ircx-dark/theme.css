@@ -74,6 +74,26 @@
   --radius-md: 6px;
   --radius-lg: 10px;
 
+  /* How far a disabled control fades. One fraction for every disabled control,
+   * so two of them cannot drift apart again.
+   *
+   * The value solves for 2.5:1 between --accent faded over the surface it sits
+   * on and that same surface. Below that the control reads as absent rather
+   * than as present and unavailable, which is what the previous 0.4 did on the
+   * light theme. Fading toward black loses contrast more slowly than fading
+   * toward white, so the light theme carries a higher fraction for the same
+   * result. tokens.test.ts asserts the floor. */
+  --disabled-opacity: 0.55;
+
+  /* The focus ring is an accessibility affordance before it is a style: a
+   * theme that wants a thicker one has to be able to say so. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Track width, and the transparent inset that thins the thumb inside it. */
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
+
   /* Behind the palette and other modal overlays. */
   --scrim: rgb(2 4 8 / 0.66);
 

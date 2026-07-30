@@ -31,13 +31,13 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-sm);
-  border: 2px solid transparent;
+  border: var(--scrollbar-thumb-inset) solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
@@ -45,6 +45,6 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
 }

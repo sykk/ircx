@@ -5,7 +5,7 @@ function Rule({ tint, children }: { tint: string; children: ReactNode }) {
   return (
     <div
       className="flex items-center gap-3 py-2"
-      style={{ paddingInline: "var(--rail-pad)" }}
+      style={{ paddingInline: "var(--timeline-rail-pad)" }}
       role="separator"
     >
       <span className="h-px flex-1" style={{ background: tint }} />

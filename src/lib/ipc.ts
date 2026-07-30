@@ -47,6 +47,16 @@ export const ipc = {
 
   submitInput: (network: string, target: string, input: string) =>
     invoke<CommandOutcome>("submit_input", { network, target, input }),
+  /** Reacting has no command of its own: it is `/react`, spelled here so the
+   * timeline does not have to know it. `message` is the server msgid — a
+   * locally minted id names nothing anyone else can resolve, so the caller
+   * checks `idIsLocal` before offering the control. */
+  react: (network: string, target: string, message: string, emoji: string, active: boolean) =>
+    invoke<CommandOutcome>("submit_input", {
+      network,
+      target,
+      input: `${active ? "/react" : "/unreact"} ${message} ${emoji}`,
+    }),
   sendRaw: (network: string, line: string) => invoke<void>("send_raw", { network, line }),
 
   listMembers: (network: string, channel: string) =>

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, Reaction } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
@@ -10,7 +10,12 @@ import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
 import { formatClock } from "./rows";
 
 const { ipcMock } = vi.hoisted(() => ({
-  ipcMock: { loadHistory: vi.fn(), loadPreview: vi.fn(), submitInput: vi.fn() },
+  ipcMock: {
+    loadHistory: vi.fn(),
+    loadPreview: vi.fn(),
+    submitInput: vi.fn(),
+    react: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn() }));
@@ -118,6 +123,7 @@ beforeEach(() => {
   // Opening a pane reads the archive, so every render below starts one. Left
   // in flight by default: a test that cares about the answer says what it is.
   ipcMock.loadHistory.mockReturnValue(new Promise(() => {}));
+  ipcMock.react.mockResolvedValue({ kind: "handled" });
   useAppStore.setState({ ...oneView(null), networks: {}, timelines: {}, typing: {} });
 });
 
@@ -607,5 +613,130 @@ describe("Timeline", () => {
     expect(screen.getByText("burp-req.png")).toBeTruthy();
     expect(screen.getByText("fetch")).toBeTruthy();
     expect(document.querySelector("img")).toBe(null);
+  });
+});
+
+describe("reaction chips", () => {
+  /** `sable` is the nick the seeded network is connected under. */
+  function seedReacted(reactions: Reaction[], message: Partial<ChatMessage> = {}) {
+    seed([makeMessage({ id: "123", nick: "phrack", text: "the flag is in the env", ...message })]);
+    useAppStore.getState().applyEvent({
+      type: "capsChanged",
+      network: "libera",
+      enabled: ["message-tags"],
+    });
+    for (const { emoji, nicks } of reactions) {
+      for (const nick of nicks) {
+        useAppStore.getState().applyEvent({
+          type: "reactionChanged",
+          network: "libera",
+          target: "#ctf-ops",
+          message: "123",
+          nick,
+          emoji,
+          active: true,
+        });
+      }
+    }
+  }
+
+  function chip(emoji: string) {
+    return screen.getByRole("button", { name: new RegExp(`^${emoji} — `) });
+  }
+
+  // readability/READABILITY.md study 14: a count on its own is a popularity
+  // metric. The names are the information, and your own is written as `you`.
+  it("names who reacted rather than only counting them", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade", "sable", "wren"] }]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(chip("🔥").getAttribute("aria-label")).toBe("🔥 — kade, you, wren");
+    expect(within(chip("🔥")).getByText("3")).toBeTruthy();
+  });
+
+  it("marks the one you sent and takes it back when it is clicked again", () => {
+    seedReacted([
+      { emoji: "🔥", nicks: ["kade", "sable"] },
+      { emoji: "👀", nicks: ["wren"] },
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(chip("🔥").getAttribute("aria-pressed")).toBe("true");
+    expect(chip("👀").getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(chip("🔥"));
+    expect(ipcMock.react).toHaveBeenCalledWith("libera", "#ctf-ops", "123", "🔥", false);
+
+    fireEvent.click(chip("👀"));
+    expect(ipcMock.react).toHaveBeenCalledWith("libera", "#ctf-ops", "123", "👀", true);
+  });
+
+  it("reacts by the msgid the server gave a message we sent, not the local id", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade"] }], {
+      id: "local-1",
+      idIsLocal: true,
+      tags: [["msgid", "123"]],
+    });
+    render(<Timeline view={TEST_VIEW} />);
+
+    fireEvent.click(chip("🔥"));
+    expect(ipcMock.react).toHaveBeenCalledWith("libera", "#ctf-ops", "123", "🔥", true);
+  });
+
+  // The window between sending a line and its echo: nothing can name it yet.
+  it("offers nothing on a message the server has not named", () => {
+    seed([makeMessage({ id: "local-1", idIsLocal: true, text: "in flight" })]);
+    useAppStore.getState().applyEvent({
+      type: "capsChanged",
+      network: "libera",
+      enabled: ["message-tags"],
+    });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByRole("button", { name: "Add a reaction" })).toBe(null);
+  });
+
+  // A missing capability changes what the interface offers; it never produces
+  // an error. The chips an archive already holds are still worth drawing.
+  it("keeps the chips but drops the control on a server without message-tags", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
+    useAppStore.getState().applyEvent({ type: "capsChanged", network: "libera", enabled: [] });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(chip("🔥").getAttribute("aria-disabled")).toBe("true");
+    expect(chip("🔥").getAttribute("aria-pressed")).toBe(null);
+    fireEvent.click(chip("🔥"));
+    expect(ipcMock.react).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Add a reaction" })).toBe(null);
+  });
+
+  it("opens the picker onto its first choice and sends the one taken", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const add = screen.getByRole("button", { name: "Add a reaction" });
+    fireEvent.click(add);
+
+    const picker = screen.getByRole("group", { name: "React with" });
+    const choices = within(picker).getAllByRole("button");
+    expect(document.activeElement).toBe(choices[0]);
+
+    fireEvent.click(within(picker).getByText("🎉"));
+    expect(ipcMock.react).toHaveBeenCalledWith("libera", "#ctf-ops", "123", "🎉", true);
+    expect(screen.queryByRole("group", { name: "React with" })).toBe(null);
+    expect(document.activeElement).toBe(add);
+  });
+
+  it("closes the picker on Escape and gives the focus back", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const add = screen.getByRole("button", { name: "Add a reaction" });
+    fireEvent.click(add);
+    fireEvent.keyDown(screen.getByRole("group", { name: "React with" }), { key: "Escape" });
+
+    expect(screen.queryByRole("group", { name: "React with" })).toBe(null);
+    expect(document.activeElement).toBe(add);
+    expect(ipcMock.react).not.toHaveBeenCalled();
   });
 });

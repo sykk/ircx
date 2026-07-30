@@ -60,6 +60,8 @@ What is left:
   nobody has seen: whether Libera relays a `TAGMSG` carrying the tag at all,
   and whether the `msgid` a `+reply` names survives the relay unchanged. Send
   one from a client that supports it — IRCCloud does — and watch the raw log.
+  The timeline now sends one as well as drawing it, and neither direction has
+  met a server. Nobody has watched a chip appear on the other client.
 
 ## Assembled-application testing
 

@@ -12,9 +12,16 @@
  * focus ring and scrollbar dimensions, which a high-contrast theme exists to
  * change and which no colour can stand in for.
  *
+ * The `--timeline-*` properties are the same argument at the scale of a whole
+ * pane. Three of them are the density readability/READABILITY.md study 05 asks
+ * to be settable; the rest are the ladder every row hangs from. They are
+ * declared here rather than in the component that reads them because an inline
+ * style wins over a stylesheet, and a property declared on the element that
+ * consumes it cannot be reached from `:root` at all.
+ *
  * Components must not hardcode a value a theme needs to reach. A hardcoded
- * colour, border, shadow, scrim, opacity or focus-ring dimension is a hole a
- * theme cannot patch.
+ * colour, border, shadow, scrim, opacity, focus-ring or layout dimension is a
+ * hole a theme cannot patch.
  *
  * The full list of required properties is `REQUIRED_TOKENS` in
  * `src/lib/theme/tokens.ts`, which is derived from the dark theme's stylesheet

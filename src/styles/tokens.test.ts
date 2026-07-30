@@ -48,6 +48,18 @@ function readVars(css: string, prefix: string): Record<string, string> {
   return out;
 }
 
+/** Every custom property in the sheet, whatever kind of value it holds.
+ * `readVars` only sees hex, which is the point of it; layout is not a colour. */
+function readAll(css: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [, name, value] of css
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
+    out[name!] = value!.trim();
+  }
+  return out;
+}
+
 function readNumber(css: string, name: string): number {
   const match = new RegExp(`--${name}:\\s*([0-9.]+)\\s*;`).exec(css);
   if (!match) throw new Error(`missing --${name}`);
@@ -146,6 +158,32 @@ describe.each(THEMES)("$id nick palette", ({ css }) => {
 // on the light one. The rule that produced each theme's value is the floor
 // below, not a preference, so a theme that retunes it has something to check
 // against.
+// The timeline's ladder and density were inline styles until #73, which put
+// them out of a theme's reach entirely. Now that they are tokens, a theme that
+// forgets one lays the pane out with an undefined column — the same failure
+// #70-72 were, arriving through a property rather than a colour. The names come
+// from the dark theme because that is what REQUIRED_TOKENS is derived from.
+const LAYOUT_TOKENS = Object.keys(
+  readAll(THEMES.find((theme) => theme.id === "ircx-dark")!.css),
+).filter((name) => name.startsWith("timeline-"));
+
+describe.each(THEMES)("$id timeline layout", ({ css }) => {
+  const all = readAll(css);
+
+  it("declares the same set the dark theme does", () => {
+    expect(Object.keys(all).filter((name) => name.startsWith("timeline-")).sort()).toEqual(
+      [...LAYOUT_TOKENS].sort(),
+    );
+  });
+
+  // A length or a bare ratio. Anything else — a colour, a keyword, a var()
+  // chain pointing somewhere else — collapses a column rather than restyling
+  // one, and does it silently.
+  it.each(LAYOUT_TOKENS)("gives --%s a measure to lay out with", (name) => {
+    expect(all[name]).toMatch(/^\d+(\.\d+)?(px|rem|em|ch)?$/);
+  });
+});
+
 describe.each(THEMES)("$id disabled controls", ({ css }) => {
   const all = readVars(css, "");
   const opacity = readNumber(css, "disabled-opacity");

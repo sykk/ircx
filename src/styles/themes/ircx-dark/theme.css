@@ -85,6 +85,36 @@
    * result. tokens.test.ts asserts the floor. */
   --disabled-opacity: 0.55;
 
+  /* How tightly the timeline packs. readability/READABILITY.md study 05 asks
+   * for three of these — compact for log reading, comfortable for being in the
+   * conversation, read for nine hours of backlog — and a density is these
+   * three numbers and nothing else, which is what makes it a theme rather than
+   * a fork. The values below are comfortable.
+   *
+   * They live here rather than on the element that reads them because an
+   * inline style beats any stylesheet: declared in the component, a theme
+   * redefining them on :root was silently ignored. */
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 14px;
+  --timeline-body-leading: 1.7;
+
+  /* The horizontal ladder, measured off docs/chat-output.png: the clock ends
+   * at x=71, the spine sits at x=98, the nick column opens at x=120, and text
+   * runs to a bounded measure. Every row reads these, so the columns hold
+   * whatever a row turns out to contain. */
+  --timeline-rail-pad: 35px;
+  --timeline-clock-col: 36px;
+  --timeline-spine-gap: 27px;
+  --timeline-spine-width: 2px;
+  --timeline-nick-gap: 20px;
+  --timeline-text-gap: 16px;
+  --timeline-measure: 595px;
+
+  /* A reply quote's connector. Solid because a reply_to is a fact the sender
+   * declared over the protocol, and at study 19's "declared" weight — the
+   * heaviest of the three grades, the only one a human named. */
+  --timeline-quote-width: 2px;
+
   /* The focus ring is an accessibility affordance before it is a style: a
    * theme that wants a thicker one has to be able to say so. */
   --focus-ring-width: 2px;

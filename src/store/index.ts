@@ -455,10 +455,11 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
 
 /** What a `+reply` can name a message by. A message this client sent keeps the
  * local id the UI drew it with, so the server's name for it is the `msgid` tag
- * its echo carried. */
-function serverMsgid(message: ChatMessage): string {
+ * its echo carried — and `null` until one arrives, because a local id names
+ * nothing anyone else can resolve. */
+export function serverMsgid(message: ChatMessage): string | null {
   if (!message.idIsLocal) return message.id;
-  return message.tags.find(([name]) => name === "msgid")?.[1] ?? message.id;
+  return message.tags.find(([name]) => name === "msgid")?.[1] ?? null;
 }
 
 /** Adding a reaction someone already holds changes nothing, and taking back one

@@ -59,6 +59,23 @@
    * black. See the note in ircx-dark/theme.css for what the floor is for. */
   --disabled-opacity: 0.65;
 
+  /* Layout, not colour, so both built-in themes hold the same numbers. What
+   * each one is for is written out in ircx-dark/theme.css; a theme that wants
+   * study 05's compact or read density changes the first three. */
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 14px;
+  --timeline-body-leading: 1.7;
+
+  --timeline-rail-pad: 35px;
+  --timeline-clock-col: 36px;
+  --timeline-spine-gap: 27px;
+  --timeline-spine-width: 2px;
+  --timeline-nick-gap: 20px;
+  --timeline-text-gap: 16px;
+  --timeline-measure: 595px;
+
+  --timeline-quote-width: 2px;
+
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
 

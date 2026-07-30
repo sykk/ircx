@@ -11,6 +11,8 @@ export const COMMANDS: SlashCommand[] = [
   { name: "msg", usage: "/msg target text", summary: "Send without opening a tab" },
   { name: "me", usage: "/me text", summary: "Send an action" },
   { name: "notice", usage: "/notice target text", summary: "Send a notice" },
+  { name: "react", usage: "/react msgid value", summary: "React to a message" },
+  { name: "unreact", usage: "/unreact msgid value", summary: "Take a reaction back" },
   { name: "nick", usage: "/nick newnick", summary: "Change your nickname" },
   { name: "topic", usage: "/topic [text]", summary: "Show or set the topic" },
   { name: "mode", usage: "/mode target modes", summary: "Change channel or user modes" },

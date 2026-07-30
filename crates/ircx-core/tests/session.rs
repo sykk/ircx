@@ -683,6 +683,21 @@ fn an_unknown_command_is_refused_in_words() {
     assert!(session.sent().is_empty());
 }
 
+/// `/invite` in a query has no channel to fall back on, and inventing one
+/// would invite someone somewhere the user did not name.
+#[test]
+fn invite_from_a_query_asks_for_the_channel() {
+    let mut session = registered("");
+    match session.submit("sable", "/invite ash") {
+        CommandOutcome::Rejected(reason) => assert!(reason.contains("channel"), "{reason}"),
+        other => panic!("expected a rejection, got {other:?}"),
+    }
+    assert!(session.sent().is_empty());
+
+    session.submit("sable", "/invite ash #ircx");
+    assert_eq!(session.sent(), vec!["INVITE ash #ircx"]);
+}
+
 /// `/help` is written to be read, so it has to arrive somewhere: the tab it
 /// was typed in, one client note per line, whether or not we are registered.
 #[test]
@@ -726,6 +741,8 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
     session.submit("#ircx", "/join ircx-dev");
     session.submit("#ircx", "/topic the topic goes here");
     session.submit("#ircx", "/kick ash being loud");
+    session.submit("#ircx", "/invite sable");
+    session.submit("#ircx", "/invite sable #ircx-dev");
     session.submit("#ircx", "/me waves");
     session.submit("#ircx", "/msg sable in private");
     session.submit("#ircx", "/nick sykk2");
@@ -739,6 +756,8 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
             "JOIN #ircx-dev",
             "TOPIC #ircx :the topic goes here",
             "KICK #ircx ash :being loud",
+            "INVITE sable #ircx",
+            "INVITE sable #ircx-dev",
             "PRIVMSG #ircx :\u{1}ACTION waves\u{1}",
             "PRIVMSG sable :in private",
             "NICK sykk2",

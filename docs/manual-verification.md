@@ -101,6 +101,13 @@ What is still open:
 - **A conversation closed before quitting staying closed.** The restart in the
   second run restored a channel and a query, both of which were open when the
   app was closed. Nobody has closed one first and checked that it stays gone.
+- **The header's invite control.** Core now answers `/invite`, and
+  `crates/ircx-core/tests/session.rs` asserts the line it puts on the wire. What
+  no test reaches is a server acting on it: whether the invitee is told, and
+  what a channel you lack `+o` on answers. `ChannelHeader`'s test mocks the IPC
+  boundary, which is why the missing dispatch arm survived to #83 in the first
+  place. Invite someone to a channel you hold and watch both ends.
+
 - **The raw log under load.** It renders every line it holds, up to the store's
   cap of 2,000, and re-renders per arriving line while it is open. It held the
   ~200 lines of a quiet session comfortably. Nobody has watched it during a

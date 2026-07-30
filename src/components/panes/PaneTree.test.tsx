@@ -271,3 +271,143 @@ describe("pane keys", () => {
     expect(panes()).toHaveLength(1);
   });
 });
+
+describe("resizing a split", () => {
+  /** jsdom lays nothing out, so a divider asking its parent how wide the split
+   * is gets zero and refuses to move. This is the only geometry these tests
+   * need: one split, 1000 by 800, with its top left at the origin. */
+  function measured() {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 1000,
+      bottom: 800,
+      width: 1000,
+      height: 800,
+      toJSON: () => ({}),
+    });
+  }
+
+  function divider(name = "Pane width"): HTMLElement {
+    return screen.getByRole("separator", { name });
+  }
+
+  function drag(handle: HTMLElement, to: { clientX?: number; clientY?: number }) {
+    handle.setPointerCapture = () => {};
+    handle.releasePointerCapture = () => {};
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerMove(handle, { pointerId: 1, ...to });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+  }
+
+  function ratio(): number {
+    const layout = useAppStore.getState().layout;
+    return layout?.type === "split" ? (layout.ratio ?? 0.5) : NaN;
+  }
+
+  /** What the split actually carries, which is nothing until something moves
+   * it — distinct from the even half that absence is read as. */
+  function written(): number | undefined {
+    const layout = useAppStore.getState().layout;
+    return layout?.type === "split" ? layout.ratio : undefined;
+  }
+
+  it("starts even, and says so", async () => {
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    expect(written()).toBeUndefined();
+    expect(ratio()).toBe(0.5);
+    expect(divider().getAttribute("aria-valuenow")).toBe("50");
+    expect(divider().getAttribute("aria-orientation")).toBe("vertical");
+  });
+
+  it("follows the pointer, as a share of the split rather than a pixel count", async () => {
+    measured();
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    drag(divider(), { clientX: 700, clientY: 400 });
+
+    expect(ratio()).toBeCloseTo(0.7);
+    expect(divider().getAttribute("aria-valuenow")).toBe("70");
+  });
+
+  it("measures a stacked split down the window instead of across it", async () => {
+    measured();
+    split("column");
+    render(<PaneTree />);
+    await settle();
+
+    const handle = divider("Pane height");
+    expect(handle.getAttribute("aria-orientation")).toBe("horizontal");
+    drag(handle, { clientX: 500, clientY: 200 });
+
+    // 200 of 800 down, not 500 of 1000 across.
+    expect(ratio()).toBeCloseTo(0.25);
+  });
+
+  it("leaves both sides a pane rather than a sliver", async () => {
+    measured();
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    drag(divider(), { clientX: 5, clientY: 400 });
+
+    expect(ratio()).toBeCloseTo(0.15);
+  });
+
+  it("moves on the arrow keys, so it is not a pointer-only control", async () => {
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    fireEvent.keyDown(divider(), { key: "ArrowRight" });
+    expect(ratio()).toBeCloseTo(0.52);
+
+    fireEvent.keyDown(divider(), { key: "ArrowLeft" });
+    fireEvent.keyDown(divider(), { key: "ArrowLeft" });
+    expect(ratio()).toBeCloseTo(0.48);
+  });
+
+  it("ignores a pointer that never went down on it", async () => {
+    measured();
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 900, clientY: 400 });
+
+    expect(written()).toBeUndefined();
+    expect(divider().getAttribute("aria-valuenow")).toBe("50");
+  });
+
+  /** Each divider names its own split by the path to it, so dragging the inner
+   * one must not move the outer one and the other way round. */
+  it("moves the split its own divider belongs to, and no other", async () => {
+    measured();
+    const [first] = split("row");
+    act(() => useAppStore.getState().focusView(first));
+    split("column");
+    render(<PaneTree />);
+    await settle();
+
+    // The timeline draws its own separators for dates and the unread seam, so
+    // this counts the ones that divide panes.
+    expect(screen.getAllByRole("separator", { name: /^Pane / })).toHaveLength(2);
+    drag(divider("Pane height"), { clientX: 500, clientY: 600 });
+
+    const layout = useAppStore.getState().layout;
+    expect(layout?.type === "split" && (layout.ratio ?? 0.5)).toBe(0.5);
+    expect(
+      layout?.type === "split" &&
+        layout.children[0].type === "split" &&
+        layout.children[0].ratio,
+    ).toBeCloseTo(0.75);
+  });
+});

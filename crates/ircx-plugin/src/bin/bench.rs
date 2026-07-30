@@ -185,6 +185,7 @@ mod js {
             ("hang", fixtures::JS_HANG),
             ("memory exhaustion", fixtures::JS_MEMORY),
             ("runtime loop (regex)", fixtures::JS_REGEX),
+            ("blocking wait (Atomics)", fixtures::JS_ATOMICS),
         ] {
             let mut plugin = match JsSandbox::load(manifest(), source.as_bytes()) {
                 Ok(p) => p,
@@ -232,6 +233,38 @@ mod js {
                 Err(e) => format!("call failed: {e}"),
             }
         );
+
+        let (reachable, globals) = reach();
+        println!(
+            "| QuickJS | reach the network or the filesystem | no | {} |",
+            if reachable.is_empty() {
+                "no such global is defined".to_owned()
+            } else {
+                format!("reached {}", reachable.join(", "))
+            }
+        );
+        // The denominator for the row above: everything the runtime does hand
+        // out, so a reader can check the list rather than trust the filter.
+        println!(
+            "\nEvery global a QuickJS plugin starts with ({}):\n",
+            globals.len()
+        );
+        println!("`{}`", globals.join("`, `"));
+    }
+
+    /// Escape hatches the `reach` fixture found, and every global it saw.
+    fn reach() -> (Vec<String>, Vec<String>) {
+        #[derive(serde::Deserialize)]
+        struct Reach {
+            reachable: Vec<String>,
+            globals: Vec<String>,
+        }
+        let mut bare = manifest();
+        bare.permissions = vec![Permission::AddCommands];
+        let mut plugin = JsSandbox::load(bare, fixtures::JS_REACH.as_bytes()).expect("load");
+        let json = plugin.call_command(&fixtures::call()).expect("call");
+        let found: Reach = serde_json::from_str(&json).expect("reach answers json");
+        (found.reachable, found.globals)
     }
 }
 
@@ -376,7 +409,15 @@ mod wasm {
         bare.permissions = vec![Permission::AddCommands];
         println!(
             "| wasmtime | send a message | no | {} |",
-            match WasmSandbox::load(bare, fixtures::WASM_SENDER) {
+            match WasmSandbox::load(bare.clone(), fixtures::WASM_SENDER) {
+                Ok(_) => "instantiated anyway".to_owned(),
+                Err(e) => format!("refused at load: {e}"),
+            }
+        );
+
+        println!(
+            "| wasmtime | reach the filesystem, via a WASI import | no | {} |",
+            match WasmSandbox::load(bare, fixtures::WASM_WASI) {
                 Ok(_) => "instantiated anyway".to_owned(),
                 Err(e) => format!("refused at load: {e}"),
             }

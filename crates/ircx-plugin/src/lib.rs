@@ -153,12 +153,15 @@ pub mod fixtures {
     pub const JS_MEMORY: &str = js!("memory");
     pub const JS_REGEX: &str = js!("regex");
     pub const JS_SENDER: &str = js!("sender");
+    pub const JS_REACH: &str = js!("reach");
+    pub const JS_ATOMICS: &str = js!("atomics");
 
     pub const WASM_ECHO: &[u8] = wasm!("echo");
     pub const WASM_PANIC: &[u8] = wasm!("panic");
     pub const WASM_LOOP: &[u8] = wasm!("loop");
     pub const WASM_MEMORY: &[u8] = wasm!("memory");
     pub const WASM_SENDER: &[u8] = wasm!("sender");
+    pub const WASM_WASI: &[u8] = wasm!("wasi");
 
     /// The call every measurement uses.
     pub fn call() -> super::CommandCall {

@@ -62,6 +62,20 @@ mod js {
         assert!(took < manifest().call_timeout + SLACK, "took {took:?}");
     }
 
+    /// The interrupt handler runs between bytecodes, so anything that parks in
+    /// C is invisible to it. `Atomics.wait` is the only such thing a plugin can
+    /// reach, and this build refuses it rather than blocking, which is what lets
+    /// the write-up say a QuickJS plugin can spin but cannot hang.
+    #[test]
+    fn a_plugin_cannot_park_itself_where_the_deadline_cannot_see_it() {
+        let (failure, took) = survives(fixtures::JS_ATOMICS);
+        assert!(
+            matches!(&failure, Failure::Raised(m) if m.contains("cannot block")),
+            "{failure}"
+        );
+        assert!(took < manifest().call_timeout, "took {took:?}");
+    }
+
     #[test]
     fn a_plugin_that_allocates_without_end_hits_its_memory_limit() {
         let (failure, _) = survives(fixtures::JS_MEMORY);
@@ -100,6 +114,20 @@ mod js {
             "host.send must refuse without the grant"
         );
         assert!(denied.outbox().is_empty());
+    }
+
+    /// The permission table rests on this: QuickJS hands out no way to reach
+    /// the network or the disk, so those permissions mean something. If this
+    /// starts failing the runtime grew an intrinsic and the table is wrong.
+    #[test]
+    fn a_plugin_finds_no_network_or_filesystem_global() {
+        let mut bare = manifest();
+        bare.permissions = vec![Permission::AddCommands];
+        let mut plugin = JsSandbox::load(bare, fixtures::JS_REACH.as_bytes()).expect("load");
+        let json = plugin.call_command(&fixtures::call()).expect("call");
+        let found: serde_json::Value = serde_json::from_str(&json).expect("reach answers json");
+        let reachable = found["reachable"].as_array().expect("reachable is a list");
+        assert!(reachable.is_empty(), "plugin reached {reachable:?}");
     }
 }
 
@@ -167,6 +195,22 @@ mod wasm {
                 Err(Failure::Denied(_))
             ),
             "without the grant the import does not exist and the module cannot instantiate"
+        );
+    }
+
+    /// The wasm equivalent of the QuickJS global check. A module's imports are
+    /// its whole capability list, so asking for WASI is asking for something
+    /// the host never defined, and it is refused before any code runs.
+    #[test]
+    fn a_module_that_imports_wasi_cannot_be_instantiated() {
+        let mut bare = manifest();
+        bare.permissions = vec![Permission::AddCommands];
+        assert!(
+            matches!(
+                WasmSandbox::load(bare, fixtures::WASM_WASI),
+                Err(Failure::Denied(_))
+            ),
+            "an import the host does not define must stop instantiation"
         );
     }
 

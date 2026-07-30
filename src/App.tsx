@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Drawer } from "@/components/drawer/Drawer";
 import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
@@ -42,7 +41,7 @@ export function App() {
 
   return (
     <>
-      <AppShell drawer={<Drawer />}>
+      <AppShell>
         {startup === "onboarding" ? <Onboarding onDone={finish} /> : <PaneTree />}
       </AppShell>
 

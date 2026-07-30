@@ -23,27 +23,21 @@ describe("AppShell", () => {
     expect(screen.getByRole("contentinfo")).toBeTruthy();
   });
 
-  it("gives the drawer a column only once it is open", () => {
-    const { container } = render(<AppShell drawer={<p>members</p>} />);
+  /** The member list is drawn inside the pane that owns it, so the shell is
+   * the sidebar, the conversation and the status bar and nothing else. */
+  it("leaves the main column everything the sidebar does not take", () => {
+    const { container } = render(<AppShell />);
     const body = container.querySelector("main")!.parentElement!;
 
-    expect(screen.queryByText("members")).toBeNull();
     expect(body.style.gridTemplateColumns).toBe("240px 4px minmax(0, 1fr)");
-
-    act(() => useAppStore.getState().toggleDrawer());
-
-    expect(screen.getByText("members")).toBeTruthy();
-    expect(body.style.gridTemplateColumns).toBe("240px 4px minmax(0, 1fr) 264px");
   });
 
-  it("withholds the sidebar and drawer on a narrow window", () => {
-    useAppStore.getState().toggleDrawer(true);
-    render(<AppShell drawer={<p>members</p>} />);
+  it("withholds the sidebar on a narrow window", () => {
+    render(<AppShell />);
 
     resizeTo(800);
 
     expect(screen.queryByRole("navigation", { name: "Networks" })).toBeNull();
-    expect(screen.queryByText("members")).toBeNull();
   });
 
   it("brings the sidebar back over the main column on demand when narrow", () => {

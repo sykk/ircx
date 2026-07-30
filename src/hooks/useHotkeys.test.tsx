@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Binding } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
@@ -161,7 +161,7 @@ function seedStore() {
     queries: { [targetKey("libera", "phrack")]: query("phrack") },
     ...oneView(null),
     recent: [],
-    drawerOpen: false,
+    rosterHidden: {},
     paletteOpen: false,
     searchOpen: false,
   });
@@ -237,14 +237,17 @@ describe("useAppHotkeys", () => {
     expect(activeKey()).toBe(targetKey("libera", "#linux"));
   });
 
-  it("toggles the palette and the drawer", () => {
+  it("toggles the palette, and the focused pane's member list", () => {
+    // The roster belongs to a pane, so the chord needs one to act on.
+    act(() => useAppStore.getState().setActive({ network: "libera", target: "#linux" }));
     render(<AppHost />);
+    const focused = useAppStore.getState().activeViewId!;
 
     press(document, CTRL_K);
     expect(useAppStore.getState().paletteOpen).toBe(true);
 
     press(document, { key: "m", code: "KeyM", ctrlKey: true, shiftKey: true });
-    expect(useAppStore.getState().drawerOpen).toBe(true);
+    expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
   it("opens search with Ctrl+F even from the composer", () => {

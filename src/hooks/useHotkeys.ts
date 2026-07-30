@@ -126,7 +126,10 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
     return {
       "palette.toggle": () => useAppStore.getState().togglePalette(),
       "search.open": () => useAppStore.getState().toggleSearch(true),
-      "drawer.toggle": () => useAppStore.getState().toggleDrawer(),
+      "roster.toggle": () => {
+        const { activeViewId, toggleRoster } = useAppStore.getState();
+        if (activeViewId) toggleRoster(activeViewId);
+      },
       "pane.splitVertical": () => useAppStore.getState().splitActiveView("row"),
       "pane.splitHorizontal": () => useAppStore.getState().splitActiveView("column"),
       "pane.close": () => {

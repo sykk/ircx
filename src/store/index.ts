@@ -7,7 +7,6 @@ import type {
   ActiveTarget,
   AppState,
   ChatView,
-  ContextMode,
   SplitDirection,
   TimelineState,
   ViewId,
@@ -54,10 +53,8 @@ export interface AppActions {
   closeView: (view: ViewId) => void;
   focusView: (view: ViewId) => void;
 
-  toggleDrawer: (open?: boolean) => void;
-  /** Moves the panel between the three modes, attaching it to whichever pane it
-   * is already showing. */
-  setContextMode: (mode: ContextMode) => void;
+  /** Hides or shows one pane's member list, leaving every other pane alone. */
+  toggleRoster: (view: ViewId, shown?: boolean) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
   /** Opens the network setup form on an existing network, or on a new one for
@@ -85,9 +82,7 @@ const initialState: AppState = {
   activeViewId: null,
   layout: null,
   recent: [],
-  drawerOpen: false,
-  contextMode: "follow",
-  contextPane: null,
+  rosterHidden: {},
   paletteOpen: false,
   searchOpen: false,
   setup: null,
@@ -184,21 +179,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (!layout) return {};
 
       const { [view]: _closed, ...views } = s.views;
+      // Otherwise a later pane handed the same id would open with the closed
+      // pane's roster hidden.
+      const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
       const at = s.viewOrder.indexOf(view);
-      // A panel pinned to the pane that just closed would have nothing to point
-      // at and no header left to switch modes from, so it goes back to
-      // following focus.
-      const stranded = s.contextPane === view;
       return {
         layout,
         views,
+        rosterHidden,
         viewOrder: paneOrder(layout),
         activeViewId:
           s.activeViewId === view
             ? (s.viewOrder[at + 1] ?? s.viewOrder[at - 1] ?? null)
             : s.activeViewId,
-        contextMode: stranded ? "follow" : s.contextMode,
-        contextPane: stranded ? null : s.contextPane,
       };
     }),
 
@@ -238,18 +231,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { timelines: { ...s.timelines, [key]: { ...timeline, unreadFrom: null } } };
     }),
 
-  toggleDrawer: (open) => set((s) => ({ drawerOpen: open ?? !s.drawerOpen })),
-
-  setContextMode: (mode) =>
-    set((s) => ({
-      contextMode: mode,
-      contextPane:
-        mode === "follow"
-          ? null
-          : s.contextMode === "follow"
-            ? s.activeViewId
-            : s.contextPane,
-    })),
+  toggleRoster: (view, shown) =>
+    set((s) => {
+      const hidden = s.rosterHidden[view] === true;
+      return {
+        rosterHidden: {
+          ...s.rosterHidden,
+          [view]: shown === undefined ? !hidden : !shown,
+        },
+      };
+    }),
 
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
   toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),

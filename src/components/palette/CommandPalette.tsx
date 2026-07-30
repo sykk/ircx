@@ -126,8 +126,8 @@ function Palette() {
           close();
         }, report);
         return;
-      case "toggleDrawer":
-        store.toggleDrawer();
+      case "toggleRoster":
+        if (store.activeViewId) store.toggleRoster(store.activeViewId);
         break;
       case "search":
         store.toggleSearch(true);

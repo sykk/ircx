@@ -19,7 +19,7 @@ beforeEach(() => {
       },
     },
     ...oneView({ network: "libera", target: CTF_OPS.name }),
-    drawerOpen: false,
+    rosterHidden: {},
     searchOpen: false,
     setup: null,
   });
@@ -43,13 +43,17 @@ describe("ChannelHeader", () => {
     expect(screen.queryByText(TOPIC)).toBeNull();
   });
 
-  it("toggles the drawer", () => {
+  it("hides and shows this pane's member list", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
-    const toggle = screen.getByRole("button", { name: "Toggle member drawer" });
+    const toggle = screen.getByRole("button", { name: "Toggle member list" });
+    // Shown to begin with: a roster is part of the conversation, not something
+    // the user has to ask for.
+    expect(useAppStore.getState().rosterHidden[TEST_VIEW]).not.toBe(true);
+
     fireEvent.click(toggle);
-    expect(useAppStore.getState().drawerOpen).toBe(true);
+    expect(useAppStore.getState().rosterHidden[TEST_VIEW]).toBe(true);
     fireEvent.click(toggle);
-    expect(useAppStore.getState().drawerOpen).toBe(false);
+    expect(useAppStore.getState().rosterHidden[TEST_VIEW]).toBe(false);
   });
 
   it("opens search for the channel", () => {

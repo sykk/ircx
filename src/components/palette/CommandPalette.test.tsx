@@ -59,7 +59,7 @@ beforeEach(() => {
     recent: [],
     paletteOpen: true,
     searchOpen: false,
-    drawerOpen: false,
+    rosterHidden: {},
   });
 });
 
@@ -261,11 +261,14 @@ describe("CommandPalette", () => {
   });
 
   it("runs a settings action", () => {
+    // The action acts on the focused pane, so there has to be one.
+    act(() => useAppStore.getState().setActive({ network: "libera", target: "#linux" }));
     render(<CommandPalette />);
-    type("member drawer");
+    type("member list");
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(useAppStore.getState().drawerOpen).toBe(true);
+    const focused = useAppStore.getState().activeViewId!;
+    expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
   it("closes on Escape without letting it reach the global layer", () => {

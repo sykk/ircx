@@ -26,13 +26,24 @@ Clicking back into #ctf-ops changes the member list back to #ctf-ops.
 
 Recommended behavior
 
-The context panel should have three modes:
+This section originally specified three modes for the context panel — follow the
+active pane, pin it to one pane, embed it in one pane. All three answered the
+same question: which single pane gets the member list. #95 replaced them with
+the answer that question was avoiding.
 
-Follow active pane — default. One shared right sidebar follows whichever chat split has focus.
+**Every pane on a channel draws its own member list, inside the pane.** A roster
+belongs to the conversation it lists, the way the timeline and the composer do.
+Two channels side by side means two rosters. A pane on a query or a server
+console has nobody to list and draws no column at all, rather than an empty one
+standing in for a roster.
 
-Pinned to pane — the user can pin the sidebar to a particular split, useful while comparing two channels.
+`Ctrl+Shift+M` hides the focused pane's roster and leaves every other pane
+alone; `rosterHidden` records the panes the user has hidden rather than the ones
+they have shown, because shown is the rule. Closing a pane forgets its entry, so
+a later pane handed the same id does not inherit it.
 
-Embedded — optionally attach a narrow member list directly inside one split for large monitors.
+The user inspector lives in the same panel and follows it: clicking a nick in
+one pane inspects inside that pane.
 
 I would make the default interaction:
 
@@ -69,4 +80,8 @@ const context = views[activeViewId];
 
 This also means two splits can show the same channel while retaining separate scroll positions—one following live chat and another reading older history.
 
-Visually, I would place the context panel divider inside the active split’s header alignment so it feels connected to that conversation rather than like a global application sidebar.
+Visually, the roster's own header is empty and carries the same height and rule
+as the pane header beside it, so the line under that header runs on into the
+roster and the two read as one conversation rather than as a global application
+sidebar. The pane header already names the channel and counts its members, so
+the roster repeats neither.

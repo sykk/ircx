@@ -10,6 +10,7 @@ ircx-proto.workspace = true
 ircx-net.workspace = true
 ircx-ipc.workspace = true
 ircx-store.workspace = true
+ircx-plugin.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -17,3 +18,7 @@ time.workspace = true
 uuid.workspace = true
 serde.workspace = true
 base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+serde_json.workspace = true

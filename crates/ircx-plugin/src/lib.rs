@@ -1,213 +1,170 @@
-//! Design spike for issue #13. Three isolation mechanisms behind one trait, so
-//! the same trivial plugin and the same four failure modes can be run against
-//! each and timed.
+//! Sandboxed plugins.
 //!
-//! Nothing here is wired into the app. `ircx-plugin` is a workspace member so
-//! it is built and linted, but no crate depends on it, so the shipped binary
-//! and its startup are untouched. Deleting the directory and its workspace
-//! entry abandons the spike.
+//! A plugin is JavaScript with a manifest. It runs in its own QuickJS runtime,
+//! on its own thread, and reaches the client only through the host functions
+//! its grants allow — there is no filesystem, no socket and no clock beyond
+//! what `sandbox.rs` installs. `docs/plugin-isolation.md` is why QuickJS and
+//! not a subprocess or wasm: a subprocess enforces two of the seven
+//! permissions the spec names, and this enforces all seven.
 //!
-//! The write-up is `docs/plugin-isolation.md`.
+//! The one extension point built here is the custom slash command. Message
+//! renderers, link and attachment providers, notification rules and protocol
+//! adapters are the same shape — the host hands a value over, the plugin
+//! returns one, the host applies a deadline — and are follow-up work.
+//!
+//! What a broken plugin costs the host is asserted in `tests/failure_modes.rs`
+//! rather than described: it panics, loops, allocates and backtracks, and the
+//! host keeps running each time.
 
 use std::fmt;
 use std::time::Duration;
 
-#[cfg(feature = "js")]
-pub mod js;
-#[cfg(feature = "proc")]
-pub mod proc;
-#[cfg(feature = "wasm")]
-pub mod wasm;
+use serde::{Deserialize, Serialize};
 
-/// The permission set the product spec names, one variant per line of it.
-///
-/// A permission is only real if the mechanism can refuse the capability when
-/// the manifest does not ask for it. `docs/plugin-isolation.md` records which
-/// of these each mechanism can actually hold.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Permission {
-    ReadMessages,
-    SendMessages,
-    AddCommands,
-    StoreLocalData,
-    /// Empty means every channel the user is in; otherwise the named ones.
-    AccessChannels(Vec<String>),
-    /// Hosts the plugin may reach. Empty means none.
-    NetworkRequests(Vec<String>),
-    RenderContent,
+mod data;
+pub mod library;
+pub mod manifest;
+pub mod net;
+pub mod runtime;
+pub mod sandbox;
+
+pub use library::{Installed, Library, LibraryError};
+pub use manifest::{CommandSpec, Grants, Manifest, ManifestError, Permission};
+pub use net::{FetchRequest, Fetched, Fetcher};
+pub use runtime::{PluginRuntime, Route};
+pub use sandbox::Sandbox;
+
+/// What the host allows a plugin to cost. Not the plugin's to declare: a
+/// manifest that set its own deadline would be setting how long a misbehaving
+/// plugin gets to misbehave.
+#[derive(Debug, Clone, Copy)]
+pub struct Limits {
+    /// Wall clock for one call, including anything a host function waits for.
+    pub call: Duration,
+    /// Bytes the QuickJS runtime may hold.
+    pub memory: usize,
+    /// How much longer than `call` the host waits before deciding a plugin is
+    /// not coming back at all.
+    pub grace: Duration,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Manifest {
-    pub id: String,
-    pub permissions: Vec<Permission>,
-    /// Wall clock a single hook call may take before the plugin is terminated.
-    #[serde(with = "millis")]
-    pub call_timeout: Duration,
-    /// Bytes the plugin may hold. Not every mechanism can enforce this.
-    pub memory_limit: usize,
-}
-
-impl Manifest {
-    /// A manifest that grants only what a slash command needs.
-    pub fn command_only(id: &str) -> Self {
+impl Default for Limits {
+    fn default() -> Self {
         Self {
-            id: id.to_owned(),
-            permissions: vec![Permission::AddCommands, Permission::SendMessages],
-            call_timeout: Duration::from_millis(100),
-            memory_limit: 8 << 20,
+            // Room for a network request, because one host function makes one.
+            call: Duration::from_millis(2_000),
+            memory: 8 << 20,
+            grace: Duration::from_millis(250),
         }
     }
-
-    pub fn grants(&self, wanted: &Permission) -> bool {
-        self.permissions.contains(wanted)
-    }
 }
 
-mod millis {
-    use std::time::Duration;
-
-    pub fn serialize<S: serde::Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_u64(d.as_millis() as u64)
-    }
-
-    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
-        <u64 as serde::Deserialize>::deserialize(d).map(Duration::from_millis)
-    }
-}
-
-/// The one extension point this spike implements: a custom slash command.
-///
-/// The other four the spec names — message renderers, link and attachment
-/// providers, notification rules, protocol capability adapters — are the same
-/// shape (host hands over a value, plugin returns one, host applies a
-/// deadline), so one of them is enough to measure per-call cost.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CommandCall {
+/// A slash command the user typed, on its way to the plugin that owns it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandRequest {
     pub command: String,
     pub args: String,
-    pub channel: String,
+    /// The conversation it was typed in.
+    pub target: String,
+    /// The user's own nickname on that network.
+    pub nick: String,
+    /// Recent messages in `target`, oldest first. Empty unless the plugin
+    /// holds `read-messages` and `target` is one of its channels — the host
+    /// does not read them otherwise, and the sandbox drops them if it did.
+    #[serde(default)]
+    pub messages: Vec<ContextMessage>,
 }
 
-/// Why a call did not produce an answer. Every variant must leave the host
-/// running and the plugin dead; that is the requirement the spike is testing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextMessage {
+    pub nick: String,
+    pub text: String,
+    /// RFC 3339 UTC, as the archive holds it.
+    pub time: String,
+}
+
+/// A message the plugin asked the host to send, already checked against
+/// `send-messages` and the plugin's channels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Outgoing {
+    pub target: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CommandReply {
+    /// What to show in the conversation. Needs `render-content`, and is
+    /// sanitised by the host, because no isolation mechanism makes returned
+    /// text safe to display.
+    pub content: Option<String>,
+    pub sends: Vec<Outgoing>,
+}
+
+/// Why a call produced no answer. Every one of these leaves the host running
+/// and the plugin either dead or told no.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
-    /// The plugin raised: a JS exception, a wasm trap, a child that exited.
+    /// The plugin threw.
     Raised(String),
-    /// The deadline passed and the plugin was terminated.
+    /// The deadline passed and the runtime was interrupted.
     Timeout,
-    /// The plugin asked for more memory than its manifest allows.
+    /// The plugin asked for more memory than it is allowed.
     OutOfMemory,
-    /// The plugin asked for something its manifest does not grant.
-    Denied(String),
-    /// The mechanism itself broke — could not load, could not spawn.
+    /// The plugin asked for something it was not granted.
+    Denied(Permission),
+    /// One command tried to send more messages than a command may.
+    Flooded,
+    /// Nothing came back at all, so the plugin's thread is parked somewhere
+    /// the deadline cannot reach. It is abandoned rather than waited for.
+    Unresponsive,
+    /// The host could not load or run it: unreadable code, no runtime.
     Host(String),
 }
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Raised(m) => write!(f, "plugin raised: {m}"),
-            Self::Timeout => write!(f, "plugin exceeded its deadline and was terminated"),
-            Self::OutOfMemory => write!(f, "plugin exceeded its memory limit"),
-            Self::Denied(p) => write!(f, "plugin asked for {p}, which it was not granted"),
-            Self::Host(m) => write!(f, "sandbox failed: {m}"),
+            Self::Raised(message) => write!(f, "failed: {message}"),
+            Self::Timeout => write!(f, "took too long and was stopped"),
+            Self::OutOfMemory => write!(f, "used more memory than it is allowed and was stopped"),
+            Self::Denied(permission) => write!(
+                f,
+                "tried to {}, which you have not allowed",
+                denied(*permission)
+            ),
+            Self::Flooded => write!(f, "tried to send more messages than one command may"),
+            Self::Unresponsive => write!(f, "stopped responding and was disconnected"),
+            Self::Host(why) => write!(f, "could not be run: {why}"),
         }
     }
 }
 
-/// What every mechanism has to be able to do to be a candidate: load a plugin,
-/// call one hook, and survive the plugin misbehaving.
-pub trait Sandbox: Sized {
-    /// Source in whatever the mechanism eats: JS text, wat or wasm bytes, a
-    /// path to an executable.
-    fn load(manifest: Manifest, source: &[u8]) -> Result<Self, Failure>;
-
-    fn call_command(&mut self, call: &CommandCall) -> Result<String, Failure>;
-
-    /// Messages the plugin asked the host to send. Populated only if the
-    /// manifest grants `SendMessages`; the point is to show the host function
-    /// is the only way out.
-    fn outbox(&self) -> Vec<String>;
-}
-
-/// The plugins, compiled in so nothing has to find a file at runtime.
-pub mod fixtures {
-    macro_rules! js {
-        ($name:literal) => {
-            include_str!(concat!("../plugins/js/", $name, ".js"))
-        };
-    }
-    macro_rules! wasm {
-        ($name:literal) => {
-            include_bytes!(concat!("../plugins/wasm/", $name, ".wat"))
-        };
-    }
-
-    pub const JS_ECHO: &str = js!("echo");
-    pub const JS_PANIC: &str = js!("panic");
-    pub const JS_LOOP: &str = js!("loop");
-    pub const JS_HANG: &str = js!("hang");
-    pub const JS_MEMORY: &str = js!("memory");
-    pub const JS_REGEX: &str = js!("regex");
-    pub const JS_SENDER: &str = js!("sender");
-    pub const JS_REACH: &str = js!("reach");
-    pub const JS_ATOMICS: &str = js!("atomics");
-
-    pub const WASM_ECHO: &[u8] = wasm!("echo");
-    pub const WASM_PANIC: &[u8] = wasm!("panic");
-    pub const WASM_LOOP: &[u8] = wasm!("loop");
-    pub const WASM_MEMORY: &[u8] = wasm!("memory");
-    pub const WASM_SENDER: &[u8] = wasm!("sender");
-    pub const WASM_WASI: &[u8] = wasm!("wasi");
-
-    /// The call every measurement uses.
-    pub fn call() -> super::CommandCall {
-        super::CommandCall {
-            command: "spike".into(),
-            args: "hello from the composer".into(),
-            channel: "#ircx".into(),
-        }
+/// The permission read back as the thing the plugin was doing, so the sentence
+/// in `Failure` reads as one.
+fn denied(permission: Permission) -> &'static str {
+    match permission {
+        Permission::ReadMessages => "read this conversation",
+        Permission::SendMessages => "send a message",
+        Permission::AddCommands => "add a command",
+        Permission::StoreLocalData => "store data on this computer",
+        Permission::AccessChannels => "act in this conversation",
+        Permission::NetworkRequests => "fetch something from the internet",
+        Permission::RenderContent => "show text in this conversation",
     }
 }
 
-/// The four failure modes the requirement names, plus the one that turned out
-/// to matter. Each has a per-mechanism plugin under `plugins/`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Misbehaviour {
-    /// Uncaught throw, trap, or abort.
-    Panic,
-    /// A tight loop that never yields.
-    InfiniteLoop,
-    /// Control returns to the host but no answer ever arrives: an unresolved
-    /// promise, a child that reads and never writes.
-    Hang,
-    /// Allocate until something says no.
-    MemoryExhaustion,
-    /// A tight loop inside the runtime's own C code rather than in bytecode.
-    /// Catastrophic regex backtracking is the classic one; it is here because
-    /// an interrupt hook that is only checked between bytecodes does not see it.
-    RuntimeLoop,
+/// A failure with the plugin it belongs to. Errors reach the user, so they
+/// name the plugin and what it did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginFailure {
+    pub plugin: String,
+    pub failure: Failure,
 }
 
-impl Misbehaviour {
-    pub const ALL: [Self; 5] = [
-        Self::Panic,
-        Self::InfiniteLoop,
-        Self::Hang,
-        Self::MemoryExhaustion,
-        Self::RuntimeLoop,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Panic => "panic",
-            Self::InfiniteLoop => "infinite-loop",
-            Self::Hang => "hang",
-            Self::MemoryExhaustion => "memory-exhaustion",
-            Self::RuntimeLoop => "runtime-loop",
-        }
+impl fmt::Display for PluginFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "The plugin \"{}\" {}", self.plugin, self.failure)
     }
 }
+
+impl std::error::Error for PluginFailure {}

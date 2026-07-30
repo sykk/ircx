@@ -5,6 +5,11 @@
 //! [`Action`]s come out. `spawn_network` is the only part that touches a
 //! socket, which is what lets the state machine be driven by a script in a
 //! test.
+//!
+//! Plugins hang off the same command path: a network spawned with a
+//! [`PluginRuntime`] routes a slash command no built-in claims to the plugin
+//! that owns it. Without one, nothing about plugins is built, started or paid
+//! for.
 
 mod caps;
 mod casemap;
@@ -12,6 +17,7 @@ mod dispatch;
 mod isupport;
 mod message;
 mod numeric;
+pub mod plugins;
 mod sasl;
 mod session;
 mod task;
@@ -20,5 +26,13 @@ mod text;
 pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;
 pub use isupport::ISupport;
+pub use plugins::{network_for_plugins, run_plugin, PluginCall};
 pub use session::{Action, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET};
-pub use task::{spawn_network, NetworkHandle, SessionCommand};
+pub use task::{spawn_network, spawn_network_with_plugins, NetworkHandle, SessionCommand};
+
+/// The plugin system, re-exported so the application installs and grants
+/// through the same types the session enforces against.
+pub use ircx_plugin::{
+    CommandSpec, Grants, Installed, LibraryError, Limits as PluginLimits, Manifest, Permission,
+    PluginFailure, PluginRuntime,
+};

@@ -35,7 +35,7 @@ figure.
 
 | | |
 |---|---|
-| `ircx` release binary, stripped | 9.25 MiB |
+| `ircx` release binary, stripped | 10.08 MiB |
 
 Rust side only — no frontend bundle embedded, no installer packaging.
 
@@ -46,6 +46,12 @@ makes the previous row's absolute figure a poor baseline — it and a clean
 rebuild of the same commit differ by 18 KiB. The added dependency is `httparse`;
 `http` and `base64` were already linked, and the TLS stack is the one the IRC
 transport already carried.
+
+The plugin runtime (issue #13) added **851 KiB**: 9,698,552 to 10,570,584
+bytes, measured the same way, back to back. Almost all of it is QuickJS, which
+the spike measured on its own at 793 KiB. The `network-requests` permission
+adds nothing to that: plugins fetch through `ircx-net`, which the binary
+already carried. None of it is touched at launch by a user with no plugins.
 
 ## Memory
 
@@ -79,6 +85,34 @@ profile. Full method and the reasoning in `docs/plugin-isolation.md`.
 
 Worst case is 0.37% of the startup budget, which is why the startup constraint
 did not decide that choice. Permission enforcement did.
+
+## Plugin runtime
+
+What the plugin system costs once it is built rather than compared. Medians in
+one process on the release profile, from
+`cargo run --release -p ircx-plugin --bin bench`.
+
+| what | runs | median |
+|---|---|---|
+| open the library, no plugins installed | 200 | 0.0038 ms |
+| look a command up, nothing installed | 10,000 | 0.0014 ms |
+| install one plugin | 50 | 0.066 ms |
+| first call, cold plugin | 50 | 0.338 ms |
+| call, warm plugin | 5,000 | 0.022 ms |
+| build a QuickJS runtime and load one plugin | 200 | 0.200 ms |
+
+**The first row is the load-bearing one.** It is the whole of what a user with
+no plugins pays at runtime: one listing of a directory that is usually not
+there. No QuickJS runtime is built and no thread is spawned until a plugin's
+command is actually typed, which is the third and fourth rows.
+
+**Covers:** in-process work only. **Excludes:** process start, and anything a
+real plugin does with its argument — the fifth row is boundary cost, not the
+cost of a plugin.
+
+What it adds to the binary is under [size](#size). A user with no plugins never
+touches that text; the spike measured the demand-paging cost of unused text at
+around 0.1 ms.
 
 ## Not measured
 

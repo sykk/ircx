@@ -5,9 +5,11 @@ a child process — were built behind one trait in `crates/ircx-plugin` and put
 through the same plugin and the same failure modes. This is the write-up: the
 numbers, the recommendation, and what the recommendation costs.
 
-Nothing here is wired into the app. `ircx-plugin` is a workspace member so it is
-built and linted, but no crate depends on it, so the shipped binary and its
-startup are untouched and abandoning the spike costs a directory deletion.
+Nothing here was wired into the app when it was written, and the code it
+measured is gone: the two mechanisms this document rules out were deleted when
+#13 was built on its recommendation. The numbers stand as taken. See
+[what happened next](#what-happened-next), and `docs/plugins.md` for what
+shipped.
 
 ## Recommendation
 
@@ -439,14 +441,24 @@ software does not keep, which is worse than not offering it.
   value, plugin returns one, host applies a deadline — so per-call cost should
   carry, but nobody has checked.
 
-## What happens to this branch
+## What happened next
 
-It stays unmerged and unreachable from `src-tauri`, which is why the shipped
-binary is unaffected and abandoning this costs nothing. #13 stays open: this
-informs the decision, it does not implement it.
+#13 was implemented on this recommendation. `js.rs` became `sandbox.rs` with the
+permission checks filled in; `wasm.rs`, `proc.rs`, the `Sandbox` trait and their
+fixtures were deleted, because an application with one mechanism does not need
+three behind an interface. The failure-mode measurements above were taken with
+the prototypes and the tests that replaced them assert the same properties
+against the real runtime.
 
-If #13 is picked up, `crates/ircx-plugin/src/js.rs` is the starting point, and
-`wasm.rs` and `proc.rs` should go along with their fixtures and their
-dependencies. The `Sandbox` trait should go with them; it exists so the spike
-could measure three things the same way, and an app with one mechanism does not
-need it.
+Two findings in this document became constraints on that work rather than
+history:
+
+- The `network requests` permission is a host function that waits, so "hang is
+  not expressible" is now bounded by a timeout rather than by construction. It
+  is given what is left of the call's deadline. `docs/plugins.md` says what that
+  costs.
+- `render message content` returns a value the host puts on screen, so the host
+  sanitises it whatever the mechanism. It does.
+
+`docs/plugins.md` is what a plugin is and what each permission means;
+`docs/measurements.md` holds what the runtime costs.

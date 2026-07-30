@@ -396,7 +396,7 @@ impl SessionState {
     }
 
     /// Splits `text` to fit the wire, sends it, and returns the local copies.
-    fn say(&mut self, target: &str, text: &str, kind: MessageKind) -> Vec<ChatMessage> {
+    pub(crate) fn say(&mut self, target: &str, text: &str, kind: MessageKind) -> Vec<ChatMessage> {
         let command = match kind {
             MessageKind::Notice => "NOTICE",
             _ => "PRIVMSG",
@@ -452,6 +452,32 @@ impl SessionState {
                 format!("{marker}{name}")
             }
         }
+    }
+}
+
+/// The commands ircx answers itself. A plugin cannot take one of these over:
+/// the routing in `plugins.rs` looks here first. Every name in the match in
+/// `dispatch` belongs in this list, which `plugin_commands.rs` checks.
+pub(crate) const BUILTIN: &[&str] = &[
+    "join", "j", "part", "leave", "msg", "notice", "me", "query", "nick", "topic", "mode", "kick",
+    "whois", "away", "quit", "raw", "quote", "help",
+];
+
+pub(crate) fn is_builtin(name: &str) -> bool {
+    BUILTIN.contains(&name)
+}
+
+/// The command and arguments in `/name args`, lowercased as `dispatch` reads
+/// them. `None` for ordinary text and for `//` — an escaped leading slash.
+pub(crate) fn slash_command(input: &str) -> Option<(String, &str)> {
+    let rest = input.strip_prefix('/')?;
+    if rest.starts_with('/') {
+        return None;
+    }
+    let (name, args) = rest.split_once(' ').unwrap_or((rest, ""));
+    match name.is_empty() {
+        true => None,
+        false => Some((name.to_ascii_lowercase(), args.trim())),
     }
 }
 

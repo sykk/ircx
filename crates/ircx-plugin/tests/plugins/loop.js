@@ -1,0 +1,3 @@
+ircx.command("loop", () => {
+  for (;;) {}
+});

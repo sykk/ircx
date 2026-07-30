@@ -1,3 +1,0 @@
-globalThis.onCommand = () => {
-  for (;;) {}
-};

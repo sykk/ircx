@@ -213,6 +213,17 @@ impl Manifest {
                 "asks for access-channels without naming a channel",
             ));
         }
+        // Reading and sending are both scoped by `reaches`, so either one
+        // without `access-channels` reaches nothing at all. Refused here rather
+        // than granted and inert, because the install dialogue would otherwise
+        // offer the user a permission that cannot do anything once allowed.
+        let scoped_to_channels = self.requests.holds(Permission::SendMessages)
+            || self.requests.holds(Permission::ReadMessages);
+        if scoped_to_channels && !self.requests.holds(Permission::AccessChannels) {
+            return Err(ManifestError::Undeclared(
+                "asks to send or read messages without asking for access-channels, which is what says where",
+            ));
+        }
         if self.requests.holds(Permission::NetworkRequests) && self.requests.hosts.is_empty() {
             return Err(ManifestError::Undeclared(
                 "asks for network-requests without naming a host",

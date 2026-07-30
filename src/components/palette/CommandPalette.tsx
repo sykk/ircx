@@ -135,6 +135,9 @@ function Palette() {
       case "openSetup":
         store.openSetup(action.network);
         break;
+      case "plugins":
+        store.togglePlugins(true);
+        break;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;

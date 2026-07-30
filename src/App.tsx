@@ -4,9 +4,11 @@ import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
+import { PluginSheet } from "@/components/plugins";
 import { AppShell } from "@/components/shell/AppShell";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
+import { loadPlugins } from "@/lib/plugins";
 import { startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
 
@@ -22,6 +24,7 @@ export function App() {
   useEffect(() => {
     const themes = startThemes();
     const bridge = startBridge();
+    void loadPlugins();
     bridge.then(
       () =>
         setStartup(
@@ -49,6 +52,7 @@ export function App() {
       <CommandPalette />
       <SearchOverlay />
       <NetworkSetup />
+      <PluginSheet />
     </>
   );
 }

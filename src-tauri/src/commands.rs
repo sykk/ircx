@@ -1,7 +1,10 @@
+use std::path::PathBuf;
+
 use ircx_core::SessionCommand;
 use ircx_ipc::{
-    AppSnapshot, Attachment, ChatMessage, CommandOutcome, HistoryRequest, Member, NetworkConfig,
-    NetworkId, Query, SearchHit, SearchRequest, TargetName, ThemeSource,
+    AppSnapshot, Attachment, ChatMessage, CommandOutcome, HistoryRequest, InstalledPlugin, Member,
+    NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query, SearchHit, SearchRequest,
+    TargetName, ThemeSource,
 };
 use tauri::State;
 
@@ -187,4 +190,38 @@ pub async fn set_draft(
 pub async fn list_themes(app: tauri::AppHandle) -> Result<Vec<ThemeSource>, String> {
     let directory = crate::themes::directory(&app)?;
     crate::themes::read(&directory)
+}
+
+#[tauri::command]
+pub async fn list_plugins(app: State<'_, App>) -> Result<Vec<InstalledPlugin>, String> {
+    app.list_plugins()
+}
+
+#[tauri::command]
+pub async fn plugin_permissions() -> Result<Vec<PluginPermissionInfo>, String> {
+    Ok(ircx_core::describe_permissions())
+}
+
+/// `source` is the folder the user picked, which holds the author's
+/// `plugin.json` and its one file of code.
+#[tauri::command]
+pub async fn install_plugin(
+    app: State<'_, App>,
+    source: String,
+) -> Result<InstalledPlugin, String> {
+    app.install_plugin(&PathBuf::from(source))
+}
+
+#[tauri::command]
+pub async fn set_plugin_grants(
+    app: State<'_, App>,
+    plugin: String,
+    grants: PluginGrants,
+) -> Result<InstalledPlugin, String> {
+    app.set_plugin_grants(&plugin, grants)
+}
+
+#[tauri::command]
+pub async fn remove_plugin(app: State<'_, App>, plugin: String) -> Result<(), String> {
+    app.remove_plugin(&plugin)
 }

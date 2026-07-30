@@ -96,13 +96,24 @@ impl Library {
     /// arrives with nothing granted; `set_grants` is the only way to change
     /// that, and it is a separate decision by the user.
     pub fn install(&mut self, source: &Path) -> Result<Installed, LibraryError> {
+        // A folder that holds no manifest is the ordinary mistake once the
+        // source is something a user picked, so it says what it was looking for
+        // rather than repeating the operating system.
         let manifest_bytes =
-            fs::read(source.join(MANIFEST_FILE)).map_err(LibraryError::Unreadable)?;
+            fs::read(source.join(MANIFEST_FILE)).map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => LibraryError::NotAPlugin(display(source)),
+                _ => LibraryError::Unreadable(error),
+            })?;
         let manifest = Manifest::parse(&manifest_bytes).map_err(LibraryError::Rejected)?;
 
         let entry = source.join(&manifest.entry);
         let size = fs::metadata(&entry)
-            .map_err(LibraryError::Unreadable)?
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => {
+                    LibraryError::MissingEntry(manifest.id.clone(), manifest.entry.clone())
+                }
+                _ => LibraryError::Unreadable(error),
+            })?
             .len();
         if size > MAX_SOURCE_BYTES {
             return Err(LibraryError::TooLarge(manifest.id, size));
@@ -118,14 +129,12 @@ impl Library {
             .map_err(LibraryError::Unreadable)?;
         fs::write(directory.join(&manifest.entry), &code).map_err(LibraryError::Unreadable)?;
 
-        let grants = match self.plugins.get(&manifest.id) {
-            // Reinstalling keeps what the user already allowed, but only as
-            // far as the new manifest still asks for it.
-            Some(existing) if existing.grants.within(&manifest.requests).is_ok() => {
-                existing.grants.clone()
-            }
-            _ => Grants::default(),
-        };
+        // Installing over a plugin that is already here grants nothing either,
+        // because the code is not the code the user answered for. An id is a
+        // folder name and a manifest can claim any of them, so keeping the
+        // grants would let a second install inherit the first one's answer and
+        // act on it before anybody was asked again.
+        let grants = Grants::default();
         write_grants(&directory, &grants)?;
 
         let installed = Installed {
@@ -154,12 +163,17 @@ impl Library {
         Ok(installed.clone())
     }
 
+    /// The files go first. Dropping the entry before the removal that can fail
+    /// would leave a plugin the library has forgotten, its routes still
+    /// standing, and its grants on disk to be read back at the next launch.
     pub fn remove(&mut self, id: &str) -> Result<(), LibraryError> {
         let installed = self
             .plugins
-            .remove(id)
+            .get(id)
             .ok_or_else(|| LibraryError::Unknown(id.to_owned()))?;
-        fs::remove_dir_all(&installed.directory).map_err(LibraryError::Unreadable)
+        fs::remove_dir_all(&installed.directory).map_err(LibraryError::Unreadable)?;
+        self.plugins.remove(id);
+        Ok(())
     }
 }
 
@@ -199,10 +213,18 @@ fn write_grants(directory: &Path, grants: &Grants) -> Result<(), LibraryError> {
     fs::write(directory.join(GRANTS_FILE), json).map_err(LibraryError::Unreadable)
 }
 
+fn display(path: &Path) -> String {
+    path.display().to_string()
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
     #[error("the plugin folder could not be read: {0}")]
     Unreadable(#[source] std::io::Error),
+    #[error("{0} holds no plugin.json, so there is no plugin in it to install")]
+    NotAPlugin(String),
+    #[error("the plugin \"{0}\" names {1} as its code, and there is no such file beside its plugin.json")]
+    MissingEntry(String, String),
     #[error("the plugin's permissions could not be written: {0}")]
     Unwritable(#[source] serde_json::Error),
     #[error("that plugin cannot be installed: {0}")]

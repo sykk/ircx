@@ -26,6 +26,7 @@ export type CandidateAction =
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
+  | { type: "plugins" }
   | { type: "theme"; id: string }
   /** A theme that failed to load. Running it prints why, which is the only
    * place the reasons can reach the person holding the file. */
@@ -282,5 +283,10 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Search this conversation",
     detail: "Search the current target's history",
     action: { type: "search" },
+  },
+  {
+    label: "Plugins",
+    detail: "Install a plugin, or change what one is allowed to do",
+    action: { type: "plugins" },
   },
 ];

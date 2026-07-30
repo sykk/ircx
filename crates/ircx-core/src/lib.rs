@@ -26,7 +26,10 @@ mod text;
 pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;
 pub use isupport::ISupport;
-pub use plugins::{network_for_plugins, run_plugin, PluginCall};
+pub use plugins::{
+    chosen_grants, describe_permissions, describe_plugin, network_for_plugins, run_plugin,
+    PluginCall,
+};
 pub use session::{Action, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET};
 pub use task::{spawn_network, spawn_network_with_plugins, NetworkHandle, SessionCommand};
 

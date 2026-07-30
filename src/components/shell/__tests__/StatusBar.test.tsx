@@ -1,8 +1,21 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionStatus } from "@/types";
+import { useAppStore } from "@/store";
+import type { ConnectionStatus, InstalledPlugin } from "@/types";
 import { StatusBar } from "../StatusBar";
 import { makeNetwork, resetStore, seedStore } from "../fixtures";
+
+function plugin(name: string, granted: boolean): InstalledPlugin {
+  return {
+    id: name.toLowerCase(),
+    name,
+    version: "1.0.0",
+    description: `${name} does something`,
+    commands: [],
+    requests: { permissions: ["add-commands"], channels: [], hosts: [] },
+    grants: { permissions: granted ? ["add-commands"] : [], channels: [], hosts: [] },
+  };
+}
 
 function mount(status: ConnectionStatus, patch: Parameters<typeof makeNetwork>[1] = {}) {
   seedStore([makeNetwork("libera", { host: "irc.libera.chat", status, ...patch })]);
@@ -101,5 +114,76 @@ describe("StatusBar", () => {
   it("carries the SASL failure reason", () => {
     mount({ state: "connected" }, { sasl: { state: "failed", detail: { message: "bad password" } } });
     expect(screen.getByLabelText("SASL failed: bad password")).toBeTruthy();
+  });
+
+  describe("plugins", () => {
+    it("says none are installed rather than nothing at all", () => {
+      const bar = mount({ state: "connected" });
+      expect(bar.textContent).toContain("Plugins 0");
+      expect(screen.getByLabelText("Plugins 0: No plugins installed")).toBeTruthy();
+    });
+
+    it("counts and names the plugins that hold a permission", () => {
+      useAppStore.setState({ plugins: [plugin("Greeter", true), plugin("Notes", true)] });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins 2");
+      expect(screen.getByLabelText("Plugins 2: Greeter 1.0.0, Notes 1.0.0")).toBeTruthy();
+    });
+
+    // Installed is not usable. A plugin nobody can invoke does nothing, and a
+    // bare count of what is installed would say otherwise.
+    it("separates the plugins that can be reached from the ones that cannot", () => {
+      useAppStore.setState({ plugins: [plugin("Greeter", true), plugin("Notes", false)] });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins 1 of 2");
+      expect(
+        screen.getByLabelText(
+          "Plugins 1 of 2: Greeter 1.0.0, Notes 1.0.0 · Notes cannot be used until granted a command",
+        ),
+      ).toBeTruthy();
+    });
+
+    /** Holding a permission is not the same as being usable: slash commands are
+     * the only extension point built, so a plugin without `add-commands` has
+     * nothing anyone can type however much else it holds. */
+    it("does not count a plugin that holds permissions but adds no command", () => {
+      const hoarder = plugin("Hoarder", false);
+      useAppStore.setState({
+        plugins: [
+          {
+            ...hoarder,
+            requests: { permissions: ["store-local-data"], channels: [], hosts: [] },
+            grants: { permissions: ["store-local-data"], channels: [], hosts: [] },
+          },
+        ],
+      });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins 0 of 1");
+    });
+
+    it("says the library would not open rather than reporting none installed", () => {
+      useAppStore.setState({
+        plugins: [],
+        pluginsUnavailable: "Your plugins folder could not be opened",
+      });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins —");
+      expect(bar.textContent).not.toContain("Plugins 0");
+      expect(
+        screen.getByLabelText("Plugins unavailable: Your plugins folder could not be opened"),
+      ).toBeTruthy();
+    });
+
+    it("reports plugins with no network configured, because they are not a connection", () => {
+      useAppStore.setState({ plugins: [plugin("Greeter", true)] });
+      render(<StatusBar />);
+
+      expect(screen.getByText("No network")).toBeTruthy();
+      expect(screen.getByText("Plugins 1")).toBeTruthy();
+    });
   });
 });

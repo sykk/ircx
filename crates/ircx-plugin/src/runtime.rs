@@ -147,14 +147,19 @@ impl PluginRuntime {
         }
     }
 
-    /// The library lock is taken and released before the worker map's, and
-    /// never the other way round, so installing while a command runs cannot
-    /// deadlock the two against each other.
+    /// The library lock is taken before the worker map's and never the other
+    /// way round, so installing while a command runs cannot deadlock the two.
+    ///
+    /// It is held across the insert as well: reading what a plugin was allowed
+    /// and spawning the thread that enforces it are one step. A `set_grants`
+    /// landing between them would leave a worker holding withdrawn grants for
+    /// every later call to reuse.
     fn worker(&self, id: &str) -> Result<Arc<Mutex<Worker>>, Failure> {
         if let Some(worker) = hold(&self.workers).get(id) {
             return Ok(Arc::clone(worker));
         }
-        let installed = hold(&self.library)
+        let library = hold(&self.library);
+        let installed = library
             .get(id)
             .cloned()
             .ok_or_else(|| Failure::Host("it is not installed".into()))?;

@@ -1,5 +1,12 @@
 import type { BrokenTheme, Theme } from "@/lib/theme";
-import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
+import type {
+  Channel,
+  ChatMessage,
+  InstalledPlugin,
+  Member,
+  Network,
+  Query,
+} from "@/types";
 import type { TargetKey } from "./keys";
 
 export interface ActiveTarget {
@@ -104,6 +111,14 @@ export interface AppState {
   /** The network setup sheet: null while it is closed, otherwise the id of the
    * network it is editing, or null inside for one that does not exist yet. */
   setup: { network: string | null } | null;
+  pluginsOpen: boolean;
+  /** Every installed plugin, with what it asked for and what it was allowed.
+   * Read once at startup, and kept current by the sheet that changes it — the
+   * status bar reads the same list with no sheet open. */
+  plugins: InstalledPlugin[];
+  /** Why the plugin library could not be read, or null when it was. An empty
+   * list means no plugins; this means the question could not be answered. */
+  pluginsUnavailable: string | null;
   collapsedNetworks: Record<string, boolean>;
   sidebarWidth: number;
   /** Most recent first. Ranks palette results and drives Alt+Left/Right.

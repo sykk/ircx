@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Tooltip } from "@/components/common/Tooltip";
+import { pluginStatus } from "@/components/plugins";
+import { useAppStore } from "@/store";
 import type { ConnectionStatus, Network, SaslStatus } from "@/types";
 import { connectionColor, useDisplayedNetwork } from "./connection";
 
@@ -34,28 +36,33 @@ export function StatusBar() {
       className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 text-[11px] text-[var(--text-secondary)]"
     >
       {network ? (
-        <>
-          <span className="flex min-w-0 items-center gap-2">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ background: connectionColor(network.status) }}
-            />
-            <span className="truncate">
-              <ConnectionSummary network={network} seconds={seconds} />
-            </span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ background: connectionColor(network.status) }}
+          />
+          <span className="truncate">
+            <ConnectionSummary network={network} seconds={seconds} />
           </span>
+        </span>
+      ) : (
+        <span className="text-[var(--text-muted)]">No network</span>
+      )}
 
-          <span className="flex shrink-0 items-center gap-3">
+      {/* Plugins belong to the client rather than to a connection, so they are
+          reported whether or not one is up. */}
+      <span className="flex shrink-0 items-center gap-3">
+        {network && (
+          <>
             <span className="tabular-nums">
               Lag {network.lagMs === null ? "—" : `${network.lagMs}ms`}
             </span>
             <Capabilities caps={network.capsEnabled} />
             <Sasl status={network.sasl} />
-          </span>
-        </>
-      ) : (
-        <span className="text-[var(--text-muted)]">No network</span>
-      )}
+          </>
+        )}
+        <Plugins />
+      </span>
     </footer>
   );
 }
@@ -108,6 +115,38 @@ function Capabilities({ caps }: { caps: string[] }) {
     <Tooltip label={detail} placement="top">
       <span tabIndex={0} aria-label={`Capabilities: ${detail}`} className="tabular-nums">
         Caps {caps.length}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** Installed is not the same as usable: a plugin the user cannot invoke does
+ * nothing, so the count says how many of them can be reached. */
+function Plugins() {
+  const plugins = useAppStore((s) => s.plugins);
+  const unavailable = useAppStore((s) => s.pluginsUnavailable);
+  const { text, detail } = pluginStatus(plugins);
+
+  // A library that would not open is not an empty one. Saying "Plugins 0" here
+  // would hide every plugin the user has behind a number that reads as fine.
+  if (unavailable !== null) {
+    return (
+      <Tooltip label={unavailable} placement="top">
+        <span
+          tabIndex={0}
+          aria-label={`Plugins unavailable: ${unavailable}`}
+          className="text-[var(--warning)]"
+        >
+          Plugins —
+        </span>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip label={detail} placement="top">
+      <span tabIndex={0} aria-label={`${text}: ${detail}`} className="tabular-nums">
+        {text}
       </span>
     </Tooltip>
   );

@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { FALLBACK_THEME_ID, type Catalogue } from "@/lib/theme";
-import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Reaction } from "@/types";
+import {
+  SERVER_TARGET,
+  type ChatMessage,
+  type InstalledPlugin,
+  type IrcxEvent,
+  type Reaction,
+} from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { paneOrder, removeLeaf, splitLeaf } from "./layout";
 import type {
@@ -64,6 +70,15 @@ export interface AppActions {
    * a null id. */
   openSetup: (network: string | null) => void;
   closeSetup: () => void;
+  togglePlugins: (open?: boolean) => void;
+  setPlugins: (plugins: InstalledPlugin[]) => void;
+  /** Records that the library could not be read at all. */
+  setPluginsUnavailable: (reason: string) => void;
+  /** Replaces the entry with this id, or adds it. Both `install_plugin` and
+   * `set_plugin_grants` answer with the whole plugin, so nothing has to be
+   * read back to keep the list right. */
+  upsertPlugin: (plugin: InstalledPlugin) => void;
+  dropPlugin: (plugin: string) => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
 
@@ -91,6 +106,9 @@ const initialState: AppState = {
   paletteOpen: false,
   searchOpen: false,
   setup: null,
+  pluginsOpen: false,
+  plugins: [],
+  pluginsUnavailable: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
   themes: [],
@@ -256,6 +274,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   openSetup: (network) => set({ setup: { network } }),
   closeSetup: () => set({ setup: null }),
+
+  togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
+  setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
+  setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
+  upsertPlugin: (plugin) =>
+    set((s) => {
+      const at = s.plugins.findIndex((held) => held.id === plugin.id);
+      if (at !== -1) {
+        const plugins = s.plugins.slice();
+        plugins[at] = plugin;
+        return { plugins };
+      }
+      // `list_plugins` reads a BTreeMap, so the backend's order is by id. A new
+      // plugin appended would sit last until the next launch and then move.
+      const plugins = [...s.plugins, plugin].sort((a, b) => a.id.localeCompare(b.id));
+      return { plugins };
+    }),
+  dropPlugin: (plugin) =>
+    set((s) => ({ plugins: s.plugins.filter((held) => held.id !== plugin) })),
 
   toggleNetworkCollapsed: (network) =>
     set((s) => ({

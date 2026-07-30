@@ -489,6 +489,12 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { channels };
     }
 
+    case "queryRemoved": {
+      const key = targetKey(event.network, event.nick);
+      const { [key]: _dropped, ...queries } = s.queries;
+      return { queries };
+    }
+
     case "queryUpdated": {
       const key = targetKey(event.query.network, event.query.nick);
       return { queries: { ...s.queries, [key]: event.query } };

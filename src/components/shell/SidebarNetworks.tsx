@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
+import { ipc } from "@/lib/ipc";
 import { Icon } from "@/components/common/Icon";
 import { OverflowIcon } from "@/components/header/icons";
 import { useAppStore } from "@/store";
@@ -156,6 +157,21 @@ export function SidebarNetworks() {
     showTarget({ network, target });
   }
 
+  /** Parts the channel if we are in it, drops it from the sidebar, and takes it
+   * out of the set a restart reopens — all of which `close_target` does. The
+   * events it sends are what remove the row, so nothing is dropped optimistically
+   * and a failure leaves the conversation where it was. */
+  async function closeConversation(at: { network: string; target: string }) {
+    setMenuFor(null);
+    try {
+      await ipc.closeTarget(at.network, at.target);
+    } catch (reason) {
+      // `close_target` answers `Ok` even with no session, so a rejection here is
+      // the bridge rather than the conversation.
+      console.warn("ircx could not close", at.target, reason);
+    }
+  }
+
   function isSelected(row: Row): boolean {
     if (!active) return false;
     if (row.kind === "network") {
@@ -205,15 +221,41 @@ export function SidebarNetworks() {
       );
     }
 
+    const conversation =
+      row.kind === "channel"
+        ? { network: row.channel.network, target: row.channel.name }
+        : { network: row.query.network, target: row.query.nick };
+
     return (
-      <SidebarRow
+      <div
         key={row.id}
-        row={row}
-        selected={selected}
-        tabbable={tabbable}
-        onActivate={() => activate(row)}
-        registerButton={registerButton}
-      />
+        className={clsx(
+          "group flex items-center",
+          selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",
+        )}
+        onContextMenu={(event) => {
+          // Right-click opens the same menu the button does, so the two are one
+          // affordance rather than two behaviours to keep in step.
+          event.preventDefault();
+          setMenuFor(row.id);
+        }}
+      >
+        <SidebarRow
+          row={row}
+          selected={selected}
+          tabbable={tabbable}
+          onActivate={() => activate(row)}
+          registerButton={registerButton}
+        />
+        <ConversationMenu
+          label={row.kind === "channel" ? row.channel.name : row.query.nick}
+          leaves={row.kind === "channel"}
+          tabbable={tabbable}
+          open={menuFor === row.id}
+          onOpenChange={(open) => setMenuFor(open ? row.id : null)}
+          onClose={() => void closeConversation(conversation)}
+        />
+      </div>
     );
   }
 
@@ -476,6 +518,82 @@ function NetworkMenu({
           </MenuItem>
           <MenuItem onClick={choose(onRawLog)}>Raw protocol log</MenuItem>
           <MenuItem onClick={choose(onSettings)}>{network.name} settings</MenuItem>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What can be done to one conversation. Only closing, for now, which is what
+ * #121 found missing: `close_target` was reachable from nowhere, so a channel
+ * joined once stayed in the sidebar and came back on the next launch.
+ *
+ * Hidden until the row is hovered or holds focus, like the network row's menu
+ * and for the reason #80 gave — a sidebar at rest is the flat list #28 asked
+ * for, and an action nobody can find is not an action.
+ */
+function ConversationMenu({
+  label,
+  leaves,
+  tabbable,
+  open,
+  onOpenChange,
+  onClose,
+}: {
+  label: string;
+  /** A channel is parted when it closes, which everyone in it sees. A query is
+   * closed privately, so the two do not read the same. */
+  leaves: boolean;
+  tabbable: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
+}) {
+  const button = useRef<HTMLButtonElement>(null);
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (!open) return;
+        if (event.key === "Escape") {
+          onOpenChange(false);
+          button.current?.focus();
+        } else {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        aria-label={`${label} actions`}
+        title={`${label} actions`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        tabIndex={tabbable ? 0 : -1}
+        onClick={() => onOpenChange(!open)}
+        className={clsx(
+          "mr-1.5 rounded-[var(--radius-sm)] p-1",
+          open
+            ? "text-[var(--accent)]"
+            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+          open ? "block" : "hidden group-hover:block group-focus-within:block",
+        )}
+      >
+        <OverflowIcon size={12} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={`${label} actions`}
+          className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
+        >
+          <MenuItem onClick={onClose}>{leaves ? "Leave and close" : "Close"}</MenuItem>
         </div>
       )}
     </div>

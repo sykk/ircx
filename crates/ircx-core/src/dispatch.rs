@@ -81,7 +81,11 @@ impl SessionState {
             });
         }
         if let Some(query) = self.queries.remove(&key) {
-            self.actions.push(Action::Forget(query.nick));
+            self.actions.push(Action::Forget(query.nick.clone()));
+            self.emit(ircx_ipc::IrcxEvent::QueryRemoved {
+                network: self.network_id().clone(),
+                nick: query.nick,
+            });
         }
         self.drain()
     }

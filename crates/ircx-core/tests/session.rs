@@ -1804,3 +1804,31 @@ fn the_code_and_context_stay_available_on_the_notice() {
     assert!(detail.contains("CHANNEL_FULL"), "{detail}");
     assert!(detail.contains("#ircx"), "{detail}");
 }
+
+/// Closing a query removed it in core and told nobody, so it stayed on screen
+/// until the next launch. Channels always had `ChannelRemoved`; this is its
+/// counterpart, and #121 is where the gap was found.
+#[test]
+fn closing_a_query_says_so_the_way_closing_a_channel_does() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable PRIVMSG sykk :are you there");
+    assert!(!session.state.queries().is_empty(), "the query opened");
+
+    let actions = session.state.close_target("SABLE");
+    session.apply(actions);
+
+    let removed: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::QueryRemoved { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(removed, vec!["sable"], "cased as the server spelled it");
+    assert!(session.state.queries().is_empty());
+    assert!(
+        session.open.is_empty(),
+        "and it is not reopened next launch"
+    );
+}

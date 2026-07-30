@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import { SidebarNetworks } from "../SidebarNetworks";
@@ -12,6 +12,14 @@ import {
   seedMockupWorkspace,
   seedStore,
 } from "../fixtures";
+
+/* Closing reaches the backend, which answers by removing the conversation. The
+ * mock stands in for the command; what the tests assert is what the sidebar
+ * does, not that it was called. */
+vi.mock("@/lib/ipc", () => ({
+  ipc: { closeTarget: vi.fn().mockResolvedValue(undefined) },
+  onIrcxEvent: vi.fn(),
+}));
 
 beforeEach(resetStore);
 
@@ -288,5 +296,72 @@ describe("SidebarNetworks", () => {
         screen.getByRole("treeitem", { name: /^Libera\.Chat,/ }),
       );
     });
+  });
+});
+
+/**
+ * #121: `close_target` was reachable from nowhere, so a channel joined once
+ * stayed in the sidebar and came back on the next launch, and a query opened by
+ * accident was permanent.
+ */
+describe("closing a conversation", () => {
+  function seedOne() {
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#ctf-ops")],
+      [makeQuery("libera", "sable")],
+    );
+    render(<SidebarNetworks />);
+  }
+
+  it("offers the action on a channel and on a query", () => {
+    seedOne();
+
+    fireEvent.click(screen.getByRole("button", { name: "#ctf-ops actions" }));
+    // A channel is parted when it closes, which everyone in it sees. A query is
+    // closed privately, and the wording says which is which.
+    expect(screen.getByRole("menuitem", { name: "Leave and close" })).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "sable actions" }));
+    expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
+  });
+
+  it("opens the same menu on a right-click", () => {
+    seedOne();
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "sable" }));
+
+    expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
+  });
+
+  it("puts the menu away once the action is taken", async () => {
+    seedOne();
+    fireEvent.click(screen.getByRole("button", { name: "sable actions" }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close" }));
+    });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  /** The row goes when the backend says it went, not when the click happened —
+   * so a close that fails leaves the conversation where it was. */
+  it("drops the row when the backend reports the query closed", async () => {
+    seedOne();
+    expect(screen.getByRole("treeitem", { name: "sable" })).toBeTruthy();
+
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "queryRemoved",
+        network: "libera",
+        nick: "sable",
+      });
+    });
+
+    expect(screen.queryByRole("treeitem", { name: "sable" })).toBeNull();
+    expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
   });
 });

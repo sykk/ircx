@@ -89,7 +89,13 @@ function Palette() {
   const preview = highlighted?.type === "theme" ? highlighted.id : themeId;
   useEffect(() => {
     applyTheme(themes.find((theme) => theme.id === preview) ?? null);
-    return () => applyTheme(themes.find((theme) => theme.id === themeId) ?? null);
+    // Read the chosen theme when the preview ends, not when it began. Choosing
+    // one closes the palette, so this cleanup is the last thing to touch the
+    // root — restoring the captured id would undo the choice that closed it.
+    return () => {
+      const chosen = useAppStore.getState().themeId;
+      applyTheme(themes.find((theme) => theme.id === chosen) ?? null);
+    };
   }, [preview, themeId, themes]);
 
   const close = () => useAppStore.getState().togglePalette(false);

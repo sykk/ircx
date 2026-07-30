@@ -56,15 +56,45 @@ What is left:
   has been watched under a burst. Whoever is next in a channel when one happens
   should look at those two rather than at the membership, which is settled.
 
-- **Reactions on the wire.** `+draft/react` is a work-in-progress tag and no
-  run has carried one. The scripted tests in `crates/ircx-core/tests/session.rs`
-  are written from the IRCv3 `react` client tag specification, not off a
-  server, and the specification's own examples are what they replay. What
-  nobody has seen: whether Libera relays a `TAGMSG` carrying the tag at all,
-  and whether the `msgid` a `+reply` names survives the relay unchanged. Send
-  one from a client that supports it — IRCCloud does — and watch the raw log.
-  The timeline now sends one as well as drawing it, and neither direction has
-  met a server. Nobody has watched a chip appear on the other client.
+- **Reactions on the wire are verified, and they do not work on Libera.** Run
+  by the owner against `cadmium.libera.chat` on 2026-07-30, with `message-tags`
+  and `echo-message` both negotiated — confirmed by `CAP LIST` rather than
+  assumed. See #108.
+
+  ircx sends the line the specification describes:
+
+  ```text
+  >> @+reply=<msgid>;+draft/react=😄 TAGMSG #omgwtf
+  ```
+
+  Libera relays `TAGMSG` and relays client-only tags: a `+typing=done` TAGMSG
+  came back echoed, carrying a server `msgid`. So neither the message type nor
+  the client-tag mechanism is the problem. The reaction lines simply never came
+  back, with no error and no `FAIL`.
+
+  Bisected with `/raw` on the same connection, minutes apart:
+
+  | sent | echoed |
+  |---|---|
+  | `@+typing=done TAGMSG #omgwtf` | yes |
+  | `@+draft/react=x TAGMSG #omgwtf` | no |
+  | `@+reply=<real msgid> TAGMSG #omgwtf` | no |
+
+  Libera appears to relay only the client tags it knows. A reaction sent from
+  ircx therefore reaches nobody, including the sender — the chip that appears is
+  the local copy `SessionState::react` emits without waiting, which is why this
+  looked like it worked for as long as it did.
+
+  What that leaves:
+
+  - **Whether `+reply` survives on a `PRIVMSG`.** The bisect used `TAGMSG`. It
+    matters separately, because `reply_to` reads `+reply` on the way in, so if
+    Libera drops it there too then a reply quote never appears from any client.
+  - **Another network.** Nothing has tried a server whose client-tag policy is
+    more permissive, which is what would show the ircx side is correct.
+  - **A second client rendering one**, which needs both a server that relays and
+    a client that draws it. IRCCloud does not implement the tag; the entry here
+    used to say it did, and that was wrong.
 
 ## The preview fetch over TLS
 

@@ -104,6 +104,8 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     layout: null,
     recent: [],
     drawerOpen: false,
+    contextMode: "follow",
+    contextPane: null,
     paletteOpen: false,
     searchOpen: false,
     collapsedNetworks: {},

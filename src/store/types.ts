@@ -29,6 +29,15 @@ export interface ChatView {
 export type SplitDirection = "row" | "column";
 
 /**
+ * Where the context panel points, per docs/multiwindow.md.
+ *
+ * `follow` — the shared sidebar tracks whichever pane has focus. The default.
+ * `pinned` — it holds one pane while focus moves, for comparing two channels.
+ * `embedded` — it moves inside that pane instead of the shared sidebar.
+ */
+export type ContextMode = "follow" | "pinned" | "embedded";
+
+/**
  * How the panes divide the window. A tree rather than a list of panes with one
  * direction: splitting one pane must not rearrange the others, and only nesting
  * expresses a side-by-side pair with one half stacked.
@@ -80,6 +89,11 @@ export interface AppState {
   /** One shared context panel that follows focus, so its open state is global
    * while its contents come from the active view. */
   drawerOpen: boolean;
+  contextMode: ContextMode;
+  /** The pane the panel is attached to, null while it follows focus. This is
+   * panel state, not view state: there is one panel, and which pane it points
+   * at is a fact about the panel rather than about any pane. */
+  contextPane: ViewId | null;
   paletteOpen: boolean;
   searchOpen: boolean;
   collapsedNetworks: Record<string, boolean>;

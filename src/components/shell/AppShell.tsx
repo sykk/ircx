@@ -14,6 +14,7 @@ export function AppShell({ children, drawer }: { children?: ReactNode; drawer?: 
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const drawerOpen = useAppStore((s) => s.drawerOpen);
+  const embedded = useAppStore((s) => s.contextMode === "embedded");
 
   const [narrow, setNarrow] = useState(() => window.innerWidth < NARROW_PX);
   const [sidebarOverlay, setSidebarOverlay] = useState(false);
@@ -51,7 +52,9 @@ export function AppShell({ children, drawer }: { children?: ReactNode; drawer?: 
     });
   }, [sidebarWidth, collapsedNetworks]);
 
-  const showDrawer = drawerOpen && !narrow;
+  // Embedded, the panel is inside a pane and this column would be an empty
+  // 264px of sidebar.
+  const showDrawer = drawerOpen && !narrow && !embedded;
   const columns = narrow
     ? "1fr"
     : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)${showDrawer ? ` ${DRAWER_PX}px` : ""}`;

@@ -6,14 +6,20 @@ use crate::{from_json_column, to_json, StoreError};
 pub(crate) const COLUMNS: &str = "m.message_id, m.network, m.target, m.kind, m.sender_nick, \
      m.sender_user, m.sender_host, m.sender_account, m.sender_is_self, m.timestamp, \
      m.timestamp_is_local, m.text, m.tags, m.reply_to, m.batch, m.delivery, m.attachments, \
-     m.encryption, m.raw, m.server_msgid";
+     m.encryption, m.raw, m.server_msgid, m.via";
+
+/// How many columns `COLUMNS` selects. A query that appends its own column
+/// reads it at this index; hardcoding the number instead means the next column
+/// added above silently hands that query the wrong one.
+pub(crate) const COLUMN_COUNT: usize = 21;
 
 const INSERT: &str = "INSERT OR IGNORE INTO messages (
         message_id, server_msgid, network, target, kind, sender_nick, sender_user, sender_host,
         sender_account, sender_is_self, timestamp, timestamp_is_local, text, tags, reply_to,
-        batch, delivery, attachments, encryption, raw
+        batch, delivery, attachments, encryption, raw, via
      ) VALUES (
-        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
+        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
+        ?21
      )";
 
 pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), StoreError> {
@@ -40,6 +46,7 @@ pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), Stor
             to_json(&message.attachments)?,
             to_json(&message.encryption)?,
             message.raw,
+            message.via,
         ],
     )?;
     Ok(())
@@ -105,6 +112,7 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         encryption: from_json_column(row, 17)?,
         raw: row.get(18)?,
         source: MessageSource::LocalArchive,
+        via: row.get(20)?,
     })
 }
 
@@ -183,4 +191,17 @@ fn server_msgid(message: &ChatMessage) -> Option<&str> {
         .find(|(name, _)| name == "msgid")
         .and_then(|(_, value)| value.as_deref())
         .filter(|msgid| !msgid.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{COLUMNS, COLUMN_COUNT};
+
+    /// The number and the list have to agree, because a query that appends its
+    /// own column reads it at `COLUMN_COUNT` and would otherwise be handed the
+    /// last column of this list instead.
+    #[test]
+    fn the_column_count_matches_the_columns() {
+        assert_eq!(COLUMNS.split(',').count(), COLUMN_COUNT);
+    }
 }

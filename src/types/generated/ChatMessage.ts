@@ -35,4 +35,10 @@ reactions?: Array<Reaction>, attachments: Array<Attachment>,
 /**
  * Always `Plaintext` this milestone; the field is the extension point.
  */
-encryption: EncryptionState, raw: string, source: MessageSource, };
+encryption: EncryptionState, raw: string, source: MessageSource, 
+/**
+ * The plugin that produced this message, by its id. `None` for everything
+ * the client or the server said, which is almost everything — a plugin's
+ * answer is the only text in a conversation that came from neither.
+ */
+via: string | null, };

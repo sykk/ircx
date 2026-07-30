@@ -189,7 +189,7 @@ impl Store {
         let mut snippets: Vec<String> = Vec::new();
         while let Some(row) = rows.next().map_err(search_error)? {
             found.push(message::from_row(row)?);
-            snippets.push(row.get(20)?);
+            snippets.push(row.get(message::COLUMN_COUNT)?);
         }
         message::attach_reactions(&conn, &mut found)?;
 

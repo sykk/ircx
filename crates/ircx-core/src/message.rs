@@ -56,6 +56,7 @@ impl SessionState {
             delivery: Delivery::Delivered,
             encryption: EncryptionState::Plaintext,
             raw: source.raw.clone(),
+            via: None,
         }
     }
 
@@ -90,8 +91,21 @@ impl SessionState {
             batch: None,
             delivery: Delivery::Delivered,
             source: MessageSource::Live,
+            via: None,
             encryption: EncryptionState::Plaintext,
             raw: String::new(),
+        }
+    }
+
+    /// Nobody on the network said this. Used for a plugin's own output, which
+    /// would otherwise be archived as having been sent by the user.
+    fn nobody(&self) -> Sender {
+        Sender {
+            nick: self.config.name.clone(),
+            user: None,
+            host: None,
+            account: None,
+            is_self: false,
         }
     }
 
@@ -154,9 +168,24 @@ impl SessionState {
     /// Client output of more than one line. The timeline draws a message as a
     /// line, so each line is its own message; they arrive together.
     pub(crate) fn note_block(&mut self, target: &str, text: &str) {
+        self.note_block_via(target, text, None);
+    }
+
+    /// The same, naming the plugin that produced it. A plugin's answer is the
+    /// only text in a conversation that neither the client nor the server said,
+    /// and the sender it would otherwise inherit is the user's own — so the
+    /// name goes on and the sender comes off.
+    pub(crate) fn note_block_via(&mut self, target: &str, text: &str, via: Option<&str>) {
         let messages: Vec<ChatMessage> = text
             .lines()
-            .map(|line| self.local_message(target, MessageKind::Client, line.to_string()))
+            .map(|line| {
+                let mut message = self.local_message(target, MessageKind::Client, line.to_string());
+                if let Some(plugin) = via {
+                    message.sender = self.nobody();
+                    message.via = Some(plugin.to_owned());
+                }
+                message
+            })
             .collect();
         if messages.is_empty() {
             return;

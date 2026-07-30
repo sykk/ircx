@@ -112,7 +112,7 @@ impl SessionState {
                     }
                 }
                 if let Some(content) = reply.content {
-                    self.note_block(&call.request.target, &content);
+                    self.note_block_via(&call.request.target, &content, Some(&call.route.plugin));
                 }
                 CommandOutcome::Handled
             }

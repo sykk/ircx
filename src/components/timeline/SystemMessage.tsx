@@ -72,11 +72,42 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
       )}
 
       {expanded && presence.map((message) => <SystemLine key={message.id} message={message} />)}
-      {plain.map((message) => (
-        <SystemLine key={message.id} message={message} />
+      {runsOf(plain).map((run) => (
+        <div key={run.messages[0]!.id}>
+          {run.via !== null && (
+            <div
+              className="text-[11px] font-[family-name:var(--font-mono)]"
+              style={{ color: "var(--text-faint)" }}
+            >
+              {run.via}
+            </div>
+          )}
+          {run.messages.map((message) => (
+            <SystemLine key={message.id} message={message} />
+          ))}
+        </div>
       ))}
     </Block>
   );
+}
+
+/**
+ * Consecutive lines from the same place. A plugin answering in five lines is
+ * named once above them rather than five times beside them, and the client's
+ * own output is one run named not at all.
+ *
+ * Naming it matters because a plugin's answer is otherwise set exactly like
+ * `/help`'s: the reader cannot tell what the client said from what somebody
+ * else's code said in their conversation.
+ */
+function runsOf(messages: ChatMessage[]): { via: string | null; messages: ChatMessage[] }[] {
+  const runs: { via: string | null; messages: ChatMessage[] }[] = [];
+  for (const message of messages) {
+    const last = runs.at(-1);
+    if (last && last.via === message.via) last.messages.push(message);
+    else runs.push({ via: message.via, messages: [message] });
+  }
+  return runs;
 }
 
 const LAID_OUT = "font-[family-name:var(--font-mono)] whitespace-pre-wrap";

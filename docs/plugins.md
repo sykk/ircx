@@ -91,6 +91,13 @@ A handler is given `{ command, args, target, nick, messages }` and answers with
 text, or nothing. **Now**, not later: a promise is refused rather than waited
 for, which is what keeps the deadline meaningful.
 
+A plugin's answer is drawn as a client note, named with the plugin's id above
+it. That name is the only thing separating it from `/help`'s output, which is
+set identically, so it is not decoration: it is how a reader tells what the
+client said from what somebody else's code said in their conversation. The
+message carries the id in `ChatMessage.via`, which is archived, so a restart
+does not turn a plugin's answer back into the client's.
+
 A refusal is thrown into the plugin, so it can catch it and do less rather than
 die — the same shape the client uses when a server is missing an IRCv3
 capability. It is an `Error`, so a plugin that degrades can say why it did:
@@ -173,8 +180,11 @@ constraints on future work, not things already banked.
   install dialogue offers the channels the manifest named, and lets the user
   type one when the manifest asked for `*`. Neither is a list of the channels
   they are actually in, so naming one is spelling rather than picking.
-- **Attribution in the timeline.** A plugin's answer arrives as a client note
-  like `/help` output does, so the timeline does not say which plugin said it.
-  That wants the message renderer seam.
+- **A renderer that transforms somebody else's message.** A plugin's own answer
+  is now named (below), but nothing lets a plugin change how a message it did
+  not write is drawn. That runs per message rather than per command, so the
+  0.022 ms figure in `docs/measurements.md` does not carry, and it lets a plugin
+  change what somebody appears to have said — which wants its own thinking about
+  trust rather than the permission it would otherwise reuse.
 - **A second plugin's marginal cost.** Every figure in `docs/measurements.md` is
   one plugin.

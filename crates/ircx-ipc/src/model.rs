@@ -37,6 +37,10 @@ pub struct ChatMessage {
     pub encryption: EncryptionState,
     pub raw: String,
     pub source: MessageSource,
+    /// The plugin that produced this message, by its id. `None` for everything
+    /// the client or the server said, which is almost everything — a plugin's
+    /// answer is the only text in a conversation that came from neither.
+    pub via: Option<String>,
 }
 
 /// One `+draft/react` value and everyone who sent it. The readability studies

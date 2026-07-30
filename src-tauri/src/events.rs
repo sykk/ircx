@@ -264,6 +264,7 @@ mod tests {
             delivery: Delivery::Sent,
             attachments: vec![],
             encryption: EncryptionState::Plaintext,
+            via: None,
             raw: String::new(),
             source: MessageSource::Live,
         }

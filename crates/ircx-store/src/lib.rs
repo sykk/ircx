@@ -14,6 +14,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ircx_ipc::{
     ChatMessage, HistoryRequest, NetworkConfig, NetworkId, SaslConfig, SearchHit, SearchRequest,
+    TargetName,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::de::DeserializeOwned;
@@ -30,6 +31,30 @@ const DEFAULT_TARGET: &str = "";
 pub struct Store {
     conn: Mutex<Connection>,
     credentials: Box<dyn CredentialStore>,
+}
+
+/// A conversation that was open when the app last ran. The kind travels with
+/// the name because a name on its own cannot be read as one or the other
+/// before the server has said what a channel looks like.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenTarget {
+    Channel(TargetName),
+    Query(TargetName),
+}
+
+impl OpenTarget {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Channel(name) | Self::Query(name) => name,
+        }
+    }
+
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Channel(_) => "channel",
+            Self::Query(_) => "query",
+        }
+    }
 }
 
 impl Store {
@@ -115,7 +140,15 @@ impl Store {
         Ok(page)
     }
 
+    /// `req.query` is text a person typed, not an FTS5 expression: it is
+    /// quoted term by term before it reaches MATCH, so a hyphen, a colon or a
+    /// bare `OR` is searched for rather than obeyed.
     pub fn search(&self, req: &SearchRequest) -> Result<Vec<SearchHit>, StoreError> {
+        let query = fts_phrases(&req.query);
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let sql = format!(
             "SELECT {columns}, snippet(messages_fts, 0, '<mark>', '</mark>', '…', 12)
              FROM messages_fts
@@ -131,7 +164,7 @@ impl Store {
         let conn = self.conn();
         let mut stmt = conn.prepare(&sql).map_err(search_error)?;
         let mut rows = stmt
-            .query(params![req.query, req.network, req.target, req.limit])
+            .query(params![query, req.network, req.target, req.limit])
             .map_err(search_error)?;
         let mut hits = Vec::new();
         while let Some(row) = rows.next().map_err(search_error)? {
@@ -225,13 +258,55 @@ impl Store {
         Ok(id)
     }
 
-    /// Drops the config and its password. Messages from the network stay;
-    /// `delete_target` is how an archive is thrown away.
+    /// Drops the config, its password and the conversations it had open.
+    /// Messages from the network stay; `delete_target` is how an archive is
+    /// thrown away.
     pub fn remove_network(&self, id: &NetworkId) -> Result<(), StoreError> {
         self.credentials.delete(id)?;
-        self.conn()
-            .execute("DELETE FROM networks WHERE id = ?1", params![id])?;
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM networks WHERE id = ?1", params![id])?;
+        tx.execute("DELETE FROM open_targets WHERE network = ?1", params![id])?;
+        tx.commit()?;
         Ok(())
+    }
+
+    /// Records a conversation as open, so the next launch comes back to it.
+    /// Idempotent: joining a channel again is not a second row.
+    pub fn remember_target(&self, network: &str, target: &OpenTarget) -> Result<(), StoreError> {
+        self.conn().execute(
+            "INSERT INTO open_targets (network, target, kind) VALUES (?1, ?2, ?3)
+             ON CONFLICT (network, target) DO UPDATE SET kind = excluded.kind",
+            params![network, target.name(), target.kind()],
+        )?;
+        Ok(())
+    }
+
+    /// Drops a conversation from the set the next launch reopens. The messages
+    /// stay; `delete_target` is how an archive is thrown away.
+    pub fn forget_target(&self, network: &str, target: &str) -> Result<(), StoreError> {
+        self.conn().execute(
+            "DELETE FROM open_targets WHERE network = ?1 AND target = ?2",
+            params![network, target],
+        )?;
+        Ok(())
+    }
+
+    pub fn open_targets(&self, network: &str) -> Result<Vec<OpenTarget>, StoreError> {
+        let conn = self.conn();
+        let mut stmt = conn
+            .prepare("SELECT target, kind FROM open_targets WHERE network = ?1 ORDER BY target")?;
+        let mut rows = stmt.query(params![network])?;
+        let mut targets = Vec::new();
+        while let Some(row) = rows.next()? {
+            let name: TargetName = row.get(0)?;
+            let kind: String = row.get(1)?;
+            targets.push(match kind.as_str() {
+                "channel" => OpenTarget::Channel(name),
+                _ => OpenTarget::Query(name),
+            });
+        }
+        Ok(targets)
     }
 
     pub fn sasl_password(&self, network: &NetworkId) -> Result<Option<String>, StoreError> {
@@ -379,6 +454,18 @@ fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {
         autojoin: from_json_column(row, 13)?,
         auto_connect: row.get(14)?,
     })
+}
+
+/// Turns what the user typed into an FTS5 expression that means it literally.
+/// Each whitespace-separated run becomes a quoted phrase — FTS5 reads no
+/// operator inside quotes — and a typed quote is doubled, which is how FTS5
+/// escapes one. Phrases side by side are ANDed, so every word has to appear.
+fn fts_phrases(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// SQLite reports a malformed FTS5 query as a plain error whose message names

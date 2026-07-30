@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use crate::StoreError;
 
-const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX];
+const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
 /// database at any earlier version, including an empty one.
@@ -134,6 +134,18 @@ CREATE TABLE retention (
 /// which is the one lookup the timeline index cannot serve.
 const MESSAGE_ID_INDEX: &str = r#"
 CREATE INDEX idx_messages_message_id ON messages (network, message_id);
+"#;
+
+/// The conversations that were open when the app last ran. Separate from
+/// `networks.autojoin`, which is a preference only the user edits: this is a
+/// record of where they were, and closing a conversation deletes its row.
+const OPEN_TARGETS: &str = r#"
+CREATE TABLE open_targets (
+    network TEXT NOT NULL,
+    target  TEXT NOT NULL,
+    kind    TEXT NOT NULL,
+    PRIMARY KEY (network, target)
+);
 "#;
 
 #[cfg(test)]

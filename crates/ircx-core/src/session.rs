@@ -8,6 +8,7 @@ use ircx_ipc::{
 };
 use ircx_net::TlsInfo;
 use ircx_proto::{Command, Message, MessageBuilder, Prefix};
+use ircx_store::OpenTarget;
 use tracing::debug;
 
 use crate::caps::Caps;
@@ -25,6 +26,11 @@ pub enum Action {
     Send(String),
     /// Boxed so an action is the size of a line, not of the largest event.
     Emit(Box<IrcxEvent>),
+    /// The user is in this conversation. Kept across restarts so the next
+    /// launch reopens it.
+    Remember(OpenTarget),
+    /// The user left this conversation or closed it; drop it from that set.
+    Forget(TargetName),
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -182,6 +188,24 @@ impl SessionState {
 
     pub fn network_id(&self) -> &NetworkId {
         &self.config.network
+    }
+
+    /// Puts back the conversations the last run had open, before the socket is
+    /// dialled, so they are in the sidebar while the network is still
+    /// connecting. Channels come back unjoined and marked to rejoin, which is
+    /// the path a reconnect already takes.
+    pub fn restore(&mut self, targets: Vec<OpenTarget>) -> Vec<Action> {
+        for target in targets {
+            match target {
+                OpenTarget::Channel(name) => {
+                    let key = self.fold(&name);
+                    self.channel_entry(&key, &name).rejoin = true;
+                    self.emit_channel(&key);
+                }
+                OpenTarget::Query(nick) => self.touch_query(&nick, None),
+            }
+        }
+        self.drain()
     }
 
     pub fn snapshot(&self) -> Network {
@@ -964,6 +988,8 @@ impl SessionState {
             channel.rejoin = true;
             channel.members.clear();
             self.send_command("MODE", &[&name]);
+            self.actions
+                .push(Action::Remember(OpenTarget::Channel(name.clone())));
         } else {
             let nick = sender.nick.clone();
             let member = MemberState {
@@ -1005,6 +1031,9 @@ impl SessionState {
                 channel.rejoin = false;
                 channel.members.clear();
             }
+            // The tab stays for this session, but a channel the user walked
+            // out of is not one to walk back into on the next launch.
+            self.actions.push(Action::Forget(name.clone()));
             self.emit_channel(&key);
         } else {
             self.remove_member(&key, &sender.nick);
@@ -1065,6 +1094,7 @@ impl SessionState {
                 channel.rejoin = false;
                 channel.members.clear();
             }
+            self.actions.push(Action::Forget(name.clone()));
         } else {
             self.remove_member(&key, &nick);
         }
@@ -1314,6 +1344,8 @@ impl SessionState {
             query.account = account;
         }
         if fresh {
+            self.actions
+                .push(Action::Remember(OpenTarget::Query(nick.to_string())));
             self.emit_query(&key);
         }
     }

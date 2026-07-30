@@ -152,7 +152,23 @@ async fn run(
     );
     let mut session = SessionState::new(config);
     let mut backoff = Backoff::new(BackoffPolicy::default());
-    let context = Context { store, events };
+    let context = Context {
+        network: session.network_id().clone(),
+        store,
+        events,
+    };
+
+    let remembered = match context.store.open_targets(&context.network) {
+        Ok(targets) => targets,
+        Err(error) => {
+            warn!(%error, "could not read the conversations that were open");
+            Vec::new()
+        }
+    };
+    let actions = session.restore(remembered);
+    if context.deliver(actions, None).await {
+        return;
+    }
 
     loop {
         let actions = session.on_connecting();
@@ -295,6 +311,7 @@ fn apply(command: SessionCommand, session: &mut SessionState, context: &Context)
 }
 
 struct Context {
+    network: NetworkId,
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
 }
@@ -320,6 +337,16 @@ impl Context {
                     }
                     if self.events.send(*event).await.is_err() {
                         close = true;
+                    }
+                }
+                Action::Remember(target) => {
+                    if let Err(error) = self.store.remember_target(&self.network, &target) {
+                        warn!(%error, "could not record an open conversation");
+                    }
+                }
+                Action::Forget(target) => {
+                    if let Err(error) = self.store.forget_target(&self.network, &target) {
+                        warn!(%error, "could not forget a closed conversation");
                     }
                 }
                 Action::Close => close = true,

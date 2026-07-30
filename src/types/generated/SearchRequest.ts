@@ -2,6 +2,7 @@
 
 export type SearchRequest = { 
 /**
- * SQLite FTS5 syntax.
+ * What the user typed, taken literally. Words are ANDed; punctuation and
+ * FTS5 operators are searched for rather than obeyed.
  */
 query: string, network: string | null, target: string | null, limit: number, };

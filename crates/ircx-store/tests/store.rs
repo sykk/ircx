@@ -2,7 +2,7 @@ use ircx_ipc::{
     Attachment, AttachmentPreview, ChatMessage, Delivery, EncryptionState, HistoryRequest,
     MessageKind, MessageSource, NetworkConfig, SaslConfig, SaslMechanism, SearchRequest, Sender,
 };
-use ircx_store::Store;
+use ircx_store::{OpenTarget, Store};
 
 /// Old enough to fall outside any retention window used here.
 const ANCIENT: &str = "2000-01-01T00:00:00Z";
@@ -446,22 +446,77 @@ fn search_does_not_see_deleted_messages() {
     assert!(hits.is_empty());
 }
 
+/// Before the fix each of these was either an error where the results belong
+/// or a search for something the user did not ask for.
 #[test]
-fn a_malformed_search_is_reported_as_a_query_error() {
+fn punctuation_and_operators_are_searched_for_rather_than_obeyed() {
     let store = Store::open_in_memory().unwrap();
-    let err = store
+    store
+        .append_messages(&[
+            message(
+                "a",
+                "#ircx",
+                "2026-01-01T00:00:00Z",
+                "ircx end-to-end run, please ignore",
+            ),
+            message(
+                "b",
+                "#ircx",
+                "2026-01-01T00:00:01Z",
+                "she said \"hello\" and left",
+            ),
+            message("c", "#ircx", "2026-01-01T00:00:02Z", "end of the story"),
+        ])
+        .unwrap();
+
+    let found = |query: &str| {
+        store
+            .search(&SearchRequest {
+                query: query.into(),
+                network: None,
+                target: None,
+                limit: 10,
+            })
+            .unwrap_or_else(|err| panic!("searching for {query:?} failed: {err}"))
+            .into_iter()
+            .map(|hit| hit.message.id)
+            .collect::<Vec<_>>()
+    };
+
+    // The search from the live run: FTS5 read the hyphens as NOT and `to` as
+    // a column name, and the archive answered "no such column: to".
+    assert_eq!(found("end-to-end"), ["a"]);
+    // Quotes, matched or not, are characters in the text being looked for.
+    assert_eq!(found("\"hello\""), ["b"]);
+    assert_eq!(found("said \"hello"), ["b"]);
+    assert!(found("\"").is_empty());
+    // A bare operator is a word: `AND` used to be a syntax error.
+    assert_eq!(found("AND"), ["b"]);
+    // A column filter and a prefix star are neither.
+    assert!(found("text:end").is_empty());
+    assert!(found("ign*").is_empty());
+    // Every word has to appear, in any order.
+    assert_eq!(found("ignore run"), ["a"]);
+    assert!(found("ignore missing").is_empty());
+}
+
+#[test]
+fn an_empty_search_finds_nothing_rather_than_failing() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message("a", "#ircx", "2026-01-01T00:00:00Z", "something")])
+        .unwrap();
+
+    let hits = store
         .search(&SearchRequest {
-            query: "AND".into(),
+            query: "   ".into(),
             network: None,
             target: None,
             limit: 10,
         })
-        .unwrap_err();
+        .unwrap();
 
-    assert!(
-        matches!(err, ircx_store::StoreError::Search(_)),
-        "expected a search error, got {err:?}"
-    );
+    assert!(hits.is_empty());
 }
 
 #[test]
@@ -628,6 +683,55 @@ fn dropping_sasl_deletes_the_password() {
 
     assert_eq!(store.sasl_password(&id).unwrap(), None);
     assert!(store.list_networks().unwrap()[0].sasl.is_none());
+}
+
+#[test]
+fn a_remembered_conversation_is_kept_per_network_until_it_is_forgotten() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .remember_target("libera", &OpenTarget::Channel("##test".into()))
+        .unwrap();
+    store
+        .remember_target("libera", &OpenTarget::Query("NickServ".into()))
+        .unwrap();
+    // Joining a channel again is the same channel, not a second row.
+    store
+        .remember_target("libera", &OpenTarget::Channel("##test".into()))
+        .unwrap();
+    store
+        .remember_target("oftc", &OpenTarget::Channel("#debian".into()))
+        .unwrap();
+
+    assert_eq!(
+        store.open_targets("libera").unwrap(),
+        vec![
+            OpenTarget::Channel("##test".into()),
+            OpenTarget::Query("NickServ".into()),
+        ]
+    );
+    assert_eq!(
+        store.open_targets("oftc").unwrap(),
+        vec![OpenTarget::Channel("#debian".into())]
+    );
+
+    store.forget_target("libera", "##test").unwrap();
+    assert_eq!(
+        store.open_targets("libera").unwrap(),
+        vec![OpenTarget::Query("NickServ".into())]
+    );
+}
+
+#[test]
+fn removing_a_network_forgets_the_conversations_it_had_open() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera")).unwrap();
+    store
+        .remember_target(&id, &OpenTarget::Channel("#ircx".into()))
+        .unwrap();
+
+    store.remove_network(&id).unwrap();
+
+    assert!(store.open_targets(&id).unwrap().is_empty());
 }
 
 #[test]

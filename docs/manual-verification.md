@@ -73,3 +73,11 @@ not produce the conditions for them:
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
+- **The restart itself (#52).** `SessionState` records and restores the open
+  conversations under test, and `Store` keeps them under test, but the seam
+  between them — `spawn_network` reading `open_targets` on launch and the
+  connection task writing the set as it changes — is fifteen lines that only a
+  real relaunch runs. Join a channel, open a query, close the app, reopen it:
+  both should be in the sidebar before the network finishes connecting, the
+  channel should be rejoined, and a conversation closed before quitting should
+  stay gone.

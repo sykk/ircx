@@ -4,4 +4,4 @@ import type { ChatMessage } from "./ChatMessage";
 /**
  * Result of dispatching composer input.
  */
-export type CommandOutcome = { "kind": "sent", "value": ChatMessage } | { "kind": "handled" } | { "kind": "output", "value": string } | { "kind": "rejected", "value": string };
+export type CommandOutcome = { "kind": "sent", "value": ChatMessage } | { "kind": "handled" } | { "kind": "rejected", "value": string };

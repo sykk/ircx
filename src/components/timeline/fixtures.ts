@@ -49,6 +49,7 @@ export function makeMessage({ nick, ...overrides }: MessageOverrides = {}): Chat
   };
   return {
     id: "m0",
+    idIsLocal: false,
     network: "libera",
     target: "#ctf-ops",
     kind: "privmsg",

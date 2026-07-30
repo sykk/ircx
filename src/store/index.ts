@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { FALLBACK_THEME_ID, type Catalogue } from "@/lib/theme";
 import type { ChatMessage, IrcxEvent } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { paneOrder, removeLeaf, splitLeaf } from "./layout";
@@ -61,6 +62,9 @@ export interface AppActions {
   closeSetup: () => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
+
+  setThemeCatalogue: (catalogue: Catalogue) => void;
+  setThemeId: (id: string) => void;
 }
 
 const initialState: AppState = {
@@ -85,6 +89,9 @@ const initialState: AppState = {
   setup: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
+  themes: [],
+  brokenThemes: [],
+  themeId: FALLBACK_THEME_ID,
 };
 
 export const useAppStore = create<AppState & AppActions>((set) => ({
@@ -242,6 +249,9 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
     })),
 
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
+
+  setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
+  setThemeId: (id) => set({ themeId: id }),
 }));
 
 function newView(network: string, target: string): ChatView {

@@ -6,6 +6,11 @@ use crate::{NetworkId, TargetName};
 
 pub const EVENT_CHANNEL: &str = "ircx://event";
 
+/// Themes are files on disk, not IRC, so they get their own channel rather
+/// than a variant the reducer would have to carry. The payload is the whole
+/// themes directory, re-read: the frontend validates it and keeps what parses.
+pub const THEMES_CHANNEL: &str = "ircx://themes";
+
 /// One channel for every backend push, so the frontend reducer stays a single
 /// exhaustive match and ordering holds across kinds. Ordering matters:
 /// `MemberJoined` must not land before the `ChannelUpdated` that created it.

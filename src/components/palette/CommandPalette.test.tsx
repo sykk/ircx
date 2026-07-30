@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { catalogue } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { activeTarget, oneView } from "@/components/shell/fixtures";
@@ -270,5 +271,71 @@ describe("CommandPalette", () => {
     type("zzzzq");
     expect(screen.getByText(/nothing matches/i)).toBeTruthy();
     expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
+  describe("choosing a theme", () => {
+    const root = document.documentElement;
+
+    beforeEach(() => {
+      useAppStore.setState({
+        themes: catalogue().themes,
+        brokenThemes: [{ id: "solarized", problems: ["theme.css has no --scrim."] }],
+        themeId: "ircx-dark",
+      });
+    });
+
+    afterEach(() => {
+      root.removeAttribute("style");
+      localStorage.clear();
+    });
+
+    it("lists every theme that loaded, and says which is in use", () => {
+      render(<CommandPalette />);
+      type("theme");
+
+      expect(optionLabels()).toEqual([
+        expect.stringContaining("ircx Dark"),
+        expect.stringContaining("ircx Light"),
+        expect.stringContaining("solarized"),
+      ]);
+      expect(optionLabels()[0]).toContain("in use");
+    });
+
+    it("puts the highlighted theme on the window before it is chosen", () => {
+      render(<CommandPalette />);
+      type("ircx Light");
+
+      expect(root.style.getPropertyValue("--surface-base")).toBe("#ffffff");
+      expect(useAppStore.getState().themeId).toBe("ircx-dark");
+    });
+
+    it("puts the chosen theme back when the palette closes without choosing", () => {
+      const { unmount } = render(<CommandPalette />);
+      type("ircx Light");
+      unmount();
+
+      expect(root.style.getPropertyValue("--surface-base")).toBe("#0a0d12");
+      expect(root.dataset.theme).toBe("ircx-dark");
+    });
+
+    it("keeps the theme, and remembers it, on Enter", () => {
+      render(<CommandPalette />);
+      type("ircx Light");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(useAppStore.getState().themeId).toBe("ircx-light");
+      expect(localStorage.getItem("ircx.theme")).toBe("ircx-light");
+      expect(useAppStore.getState().paletteOpen).toBe(false);
+    });
+
+    it("reads out why a theme will not load rather than applying it", () => {
+      render(<CommandPalette />);
+      type("solarized");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(screen.getByRole("alert").textContent).toContain("theme.css has no --scrim.");
+      expect(useAppStore.getState().themeId).toBe("ircx-dark");
+      expect(useAppStore.getState().paletteOpen).toBe(true);
+    });
   });
 });

@@ -55,8 +55,10 @@ Frontend code imports types from `@/types` and calls the backend through
 
 ## Conventions
 
-- Colours come from `src/styles/tokens.css`. A hardcoded hex in a component is
-  a bug: themes are stylesheets that redefine those properties.
+- Colours come from the theme in force. `src/styles/tokens.css` states the
+  contract, `src/styles/themes/<id>/` holds the values, and `src/lib/theme`
+  loads them. A hardcoded colour, shadow, scrim or opacity in a component is a
+  bug: a theme is a set of token values and cannot patch anything else.
 - Every Tauri command returns `Result<T, String>` where the error is written for
   a user, not a log. "Nickname already in use on irc.libera.chat" — not
   "ERR_NICKNAMEINUSE (433)".

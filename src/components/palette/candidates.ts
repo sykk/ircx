@@ -1,9 +1,17 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
+import type { Theme } from "@/lib/theme";
 import { targetKey, type TargetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 
-export type CandidateKind = "run" | "channel" | "query" | "network" | "command" | "action";
+export type CandidateKind =
+  | "run"
+  | "channel"
+  | "query"
+  | "network"
+  | "command"
+  | "action"
+  | "theme";
 
 /** What Enter does. Kept as data so a result row is comparable and testable
  * without a React tree. */
@@ -16,7 +24,11 @@ export type CandidateAction =
   | { type: "toggleDrawer" }
   | { type: "search" }
   | { type: "connect"; network: string }
-  | { type: "disconnect"; network: string };
+  | { type: "disconnect"; network: string }
+  | { type: "theme"; id: string }
+  /** A theme that failed to load. Running it prints why, which is the only
+   * place the reasons can reach the person holding the file. */
+  | { type: "themeProblem"; id: string; problems: string[] };
 
 export interface Candidate {
   id: string;
@@ -38,6 +50,7 @@ export const KIND_LABELS: Record<CandidateKind, string> = {
   network: "Networks",
   command: "Commands",
   action: "Actions",
+  theme: "Themes",
 };
 
 /** Group order when two groups tie on their best result. */
@@ -48,6 +61,7 @@ export const KIND_ORDER: Record<CandidateKind, number> = {
   network: 2,
   command: 3,
   action: 4,
+  theme: 5,
 };
 
 interface SlashCommand {
@@ -123,7 +137,7 @@ export function commandLineCandidate(
  * the palette can memoise on exactly these and nothing else. */
 export type CandidateSources = Pick<
   AppState,
-  "channels" | "queries" | "networks" | "networkOrder"
+  "channels" | "queries" | "networks" | "networkOrder" | "themes" | "brokenThemes" | "themeId"
 >;
 
 /** Rebuilt when the store's channel, query, or network maps change — not per
@@ -199,6 +213,32 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
     });
   }
 
+  for (const theme of state.themes) {
+    candidates.push({
+      id: `theme:${theme.id}`,
+      kind: "theme",
+      label: `Theme: ${theme.manifest.name}`,
+      detail: describeTheme(theme, theme.id === state.themeId),
+      hay: prepare(`Theme: ${theme.manifest.name}`),
+      key: null,
+      action: { type: "theme", id: theme.id },
+      unread: 0,
+    });
+  }
+
+  for (const broken of state.brokenThemes) {
+    candidates.push({
+      id: `theme:${broken.id}`,
+      kind: "theme",
+      label: `Theme: ${broken.id} will not load`,
+      detail: `${broken.problems.length === 1 ? "One problem" : `${broken.problems.length} problems`} — press Enter to read them`,
+      hay: prepare(`Theme: ${broken.id} will not load`),
+      key: null,
+      action: { type: "themeProblem", id: broken.id, problems: broken.problems },
+      unread: 0,
+    });
+  }
+
   for (const action of STATIC_ACTIONS) {
     candidates.push({
       id: `action:${action.label}`,
@@ -213,6 +253,11 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
   }
 
   return candidates;
+}
+
+function describeTheme(theme: Theme, inUse: boolean): string {
+  const { author, version, appearance } = theme.manifest;
+  return `${appearance} · ${author} · ${version}${inUse ? " · in use" : ""}`;
 }
 
 const STATIC_ACTIONS: readonly { label: string; detail: string; action: CandidateAction }[] = [

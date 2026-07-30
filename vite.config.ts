@@ -19,6 +19,10 @@ export default defineConfig({
   build: { target: "esnext", sourcemap: true },
   test: {
     environment: "jsdom",
+    // Vitest blanks CSS imports by default, including `?raw` ones. The theme
+    // loader reads the built-in stylesheets that way, so those files — and no
+    // others — have to survive the trip.
+    css: { include: [/src\/styles\/themes\//] },
     globals: true,
     passWithNoTests: true,
     // Agent worktrees under .claude hold full checkouts; without this vitest

@@ -1,28 +1,41 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 // readability/READABILITY.md finding 1: an unconstrained nick palette collides
 // with the security and connection colours, and a nick rendered in the colour
 // that means "error" is a lie the user cannot see. These assert the constraint
 // rather than the specific values, so retuning a hue stays cheap and stepping
 // outside the band does not.
+//
+// Every theme shipped is held to it, not just the two that were here first: a
+// theme is the one thing that can put a nick back on top of --danger.
 
 // Relative to the vitest root, which is the project root.
-const css = readFileSync("src/styles/tokens.css", "utf8");
+const THEMES_DIR = "src/styles/themes";
 
 const COOL_MIN = 180;
 const COOL_MAX = 350;
 const AA_BODY = 4.5;
 
-function blockFor(selector: string): string {
-  const at = css.indexOf(selector);
-  if (at === -1) throw new Error(`tokens.css has no ${selector} block`);
-  const open = css.indexOf("{", at);
-  return css.slice(open, css.indexOf("}", open));
-}
+/** The surfaces a nickname can be drawn on. Contrast is checked against all of
+ * them, so a hue only has to clear the worst one. */
+const SURFACES = [
+  "surface-base",
+  "surface-sidebar",
+  "surface-raised",
+  "surface-hover",
+  "surface-active",
+];
 
-function readVars(block: string, prefix: string): Record<string, string> {
+const THEMES = readdirSync(THEMES_DIR, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => ({
+    id: entry.name,
+    css: readFileSync(`${THEMES_DIR}/${entry.name}/theme.css`, "utf8"),
+  }));
+
+function readVars(css: string, prefix: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [, name, value] of block.matchAll(
+  for (const [, name, value] of css.matchAll(
     /--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g,
   )) {
     if (name!.startsWith(prefix)) out[name!] = value!;
@@ -61,27 +74,19 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const THEMES = [
-  {
-    name: "dark",
-    selector: ':root[data-theme="ircx-dark"]',
-    surfaces: ["surface-base", "surface-sidebar", "surface-raised", "surface-hover", "surface-active"],
-  },
-  {
-    name: "light",
-    selector: ':root[data-theme="ircx-light"]',
-    surfaces: ["surface-base", "surface-sidebar", "surface-raised", "surface-hover", "surface-active"],
-  },
-];
+it("ships the two built-in themes", () => {
+  expect(THEMES.map((theme) => theme.id)).toEqual(
+    expect.arrayContaining(["ircx-dark", "ircx-light"]),
+  );
+});
 
-describe.each(THEMES)("$name nick palette", ({ selector, surfaces }) => {
-  const block = blockFor(selector);
-  const nicks = readVars(block, "nick-");
-  const all = readVars(block, "");
-  const surfaceValues = surfaces.map((s) => {
-    const v = all[s];
-    if (!v) throw new Error(`missing --${s}`);
-    return v;
+describe.each(THEMES)("$id nick palette", ({ css }) => {
+  const nicks = readVars(css, "nick-");
+  const all = readVars(css, "");
+  const surfaceValues = SURFACES.map((surface) => {
+    const value = all[surface];
+    if (!value) throw new Error(`missing --${surface}`);
+    return value;
   });
 
   it("defines all ten entries", () => {

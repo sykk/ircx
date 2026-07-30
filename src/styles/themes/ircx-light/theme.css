@@ -1,0 +1,64 @@
+:root {
+  --surface-base: #ffffff;
+  --surface-sidebar: #f6f8fa;
+  --surface-raised: #f6f8fa;
+  --surface-overlay: #ffffff;
+  --surface-hover: #eef1f4;
+  --surface-active: #e4e8ed;
+
+  --border-subtle: #e6eaef;
+  --border-default: #d0d7de;
+  --border-strong: #b6bfc9;
+
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --text-muted: #818b98;
+  --text-faint: #a3acb6;
+  --text-inverse: #ffffff;
+
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-muted: #0969da1a;
+
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --danger: #cf222e;
+
+  --state-connected: #1a7f37;
+  --state-connecting: #9a6700;
+  --state-disconnected: #818b98;
+  --state-error: #cf222e;
+
+  --badge-bg: #eaeef2;
+  --badge-text: #59636e;
+  --badge-highlight-bg: #0969da;
+  --badge-highlight-text: #ffffff;
+
+  --divider-unread: #cf222e;
+  --mention-bg: #0969da14;
+
+  /* Same 186-335deg band as the dark palette, solved against white rather than
+   * against #0a0d12. See readability/READABILITY.md, finding 1. */
+  --nick-1: #1e6f79;
+  --nick-2: #256b96;
+  --nick-3: #3062bf;
+  --nick-4: #4e57d3;
+  --nick-5: #694dd3;
+  --nick-6: #8440cf;
+  --nick-7: #9d30c1;
+  --nick-8: #ab2ba6;
+  --nick-9: #b22d89;
+  --nick-10: #b82e68;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --scrim: rgb(31 35 40 / 0.42);
+
+  /* A shadow tuned for a dark window reads as a smudge on a white one: less
+   * spread, less opacity, and a tint of the border colour rather than black. */
+  --shadow-overlay: 0 12px 32px -12px rgb(31 35 40 / 0.24);
+
+  --font-smoothing: auto;
+}

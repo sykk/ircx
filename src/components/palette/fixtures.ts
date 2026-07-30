@@ -110,6 +110,9 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     searchOpen: false,
     setup: null,
     collapsedNetworks: {},
+    themes: [],
+    brokenThemes: [],
+    themeId: "ircx-dark",
     sidebarWidth: 240,
     rawLog: {},
   };

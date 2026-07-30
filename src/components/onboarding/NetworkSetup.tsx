@@ -58,8 +58,7 @@ function Sheet({ network }: { network: string | null }) {
       className="fixed inset-0 z-50 flex items-center justify-center"
       onMouseDown={closeSetup}
     >
-      {/* No scrim token exists; --surface-base is the nearest colour. */}
-      <div className="absolute inset-0 bg-[var(--surface-base)] opacity-60" />
+      <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
         role="dialog"
         aria-modal="true"

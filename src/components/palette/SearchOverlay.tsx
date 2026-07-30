@@ -111,7 +111,7 @@ function Search({ onJump }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center pt-[10vh]" onMouseDown={close}>
-      <div className="absolute inset-0 bg-[var(--surface-base)] opacity-60" />
+      <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
         role="dialog"
         aria-modal="true"

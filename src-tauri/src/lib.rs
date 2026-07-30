@@ -1,6 +1,7 @@
 mod commands;
 mod events;
 mod state;
+mod themes;
 
 use std::sync::Arc;
 
@@ -45,11 +46,13 @@ pub fn run() {
             commands::load_preview,
             commands::get_draft,
             commands::set_draft,
+            commands::list_themes,
         ])
         .setup(|app| {
             let store = Arc::new(open_store(app.handle())?);
             let (events, inbox) = mpsc::channel(EVENT_QUEUE);
             events::pump(app.handle().clone(), inbox);
+            themes::watch(app.handle().clone());
             app.manage(App::new(store, events));
 
             let handle = app.handle().clone();

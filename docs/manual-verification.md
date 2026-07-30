@@ -86,3 +86,23 @@ What is still open:
   cap of 2,000, and re-renders per arriving line while it is open. It held the
   ~200 lines of a quiet session comfortably. Nobody has watched it during a
   netsplit or a `LIST`.
+
+## Themes installed on disk
+
+The two built-in themes are exercised by every test run and by every render, so
+the loader, the validator and the picker are covered. What is not:
+
+- **The themes directory.** `list_themes` resolves `app_data_dir()/themes` and
+  reads each subdirectory's `theme.json` and `theme.css`. No test creates that
+  directory, because no test has an app data dir. Copy
+  `src/styles/themes/ircx-light` into it under another name, relaunch, and it
+  should appear in the palette under "theme".
+- **Hot reload.** A task polls the directory's metadata every two seconds and
+  re-emits the whole directory when anything changes. Edit a colour in an
+  installed theme with the app running: the window should follow within a couple
+  of seconds, without a relaunch. Deleting the theme that is in force should
+  drop the window back to the built-in dark one rather than leaving it
+  half-styled.
+- **`color-scheme` on a real window.** The manifest's `appearance` is written to
+  the root element, which is what makes native scrollbars and form controls flip.
+  Headless Chrome does not draw either, so nobody has seen it take effect.

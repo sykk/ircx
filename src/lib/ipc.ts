@@ -12,10 +12,12 @@ import type {
   Query,
   SearchHit,
   SearchRequest,
+  ThemeSource,
 } from "@/types";
 import { SERVER_TARGET } from "@/types";
 
 const EVENT_CHANNEL = "ircx://event";
+const THEMES_CHANNEL = "ircx://themes";
 
 /** A channel or a nick — something the server will accept as a recipient. */
 function isConversation(target: string): boolean {
@@ -66,9 +68,16 @@ export const ipc = {
     invoke<string | null>("get_draft", { network, target }),
   setDraft: (network: string, target: string, text: string) =>
     invoke<void>("set_draft", { network, target, text }),
+
+  listThemes: () => invoke<ThemeSource[]>("list_themes"),
 };
 
 /** Resolves to an unsubscribe function. */
 export function onIrcxEvent(handler: (event: IrcxEvent) => void) {
   return listen<IrcxEvent>(EVENT_CHANNEL, (e) => handler(e.payload));
+}
+
+/** Fires with the whole themes directory whenever a file in it changes. */
+export function onThemesChanged(handler: (themes: ThemeSource[]) => void) {
+  return listen<ThemeSource[]>(THEMES_CHANNEL, (e) => handler(e.payload));
 }

@@ -20,32 +20,55 @@ describe("SidebarNetworks", () => {
     expect(screen.queryByRole("tree")).toBeNull();
   });
 
-  it("renders one group per network with its channels and queries", () => {
+  it("renders one group per network with its channels", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);
 
     expect(screen.getByRole("treeitem", { name: /^Libera\.Chat,/ })).toBeTruthy();
     expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
-    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
     expect(screen.getByRole("treeitem", { name: "#linux" })).toBeTruthy();
+  });
+
+  it("gathers every network's queries into one section at the bottom", () => {
+    seedMockupWorkspace();
+    render(<SidebarNetworks />);
+
+    const queries = screen.getByRole("tree", { name: "Queries" });
+    expect(
+      within(queries)
+        .getAllByRole("treeitem")
+        .map((row) => row.textContent),
+    ).toEqual(["phrack2", "guest", "nyx"]);
+
+    const networks = screen.getByRole("tree", { name: "Networks and channels" });
+    expect(within(networks).queryByRole("treeitem", { name: "phrack" })).toBeNull();
+  });
+
+  it("draws no queries section when nobody has an open conversation", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<SidebarNetworks />);
+    expect(screen.queryByRole("tree", { name: "Queries" })).toBeNull();
   });
 
   it("keeps the network order the store gives it", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);
 
-    const groups = screen
+    const groups = within(screen.getByRole("tree", { name: "Networks and channels" }))
       .getAllByRole("treeitem")
       .filter((row) => row.getAttribute("aria-level") === "1")
       .map((row) => row.textContent);
     expect(groups).toEqual(["Libera.Chat", "OFTC", "Rizon"]);
   });
 
-  it("collapsing hides the group's rows and surfaces its unread total", () => {
+  it("collapsing hides the group's channels and surfaces their unread total", () => {
     seedStore(
       [makeNetwork("libera", { name: "Libera.Chat" })],
-      [makeChannel("libera", "#ctf-ops", { unread: 4 })],
-      [makeQuery("libera", "phrack", { unread: 3 })],
+      [
+        makeChannel("libera", "#ctf-ops", { unread: 4 }),
+        makeChannel("libera", "#hackint", { unread: 3 }),
+      ],
+      [makeQuery("libera", "phrack", { unread: 2 })],
     );
     render(<SidebarNetworks />);
 
@@ -56,8 +79,9 @@ describe("SidebarNetworks", () => {
 
     expect(group.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
-    expect(screen.queryByRole("treeitem", { name: "phrack" })).toBeNull();
     expect(within(group).getByText("7")).toBeTruthy();
+    // Queries have their own section, so collapsing a network leaves them be.
+    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
   });
 
   it("marks unread with the muted badge and highlights with the highlight badge", () => {

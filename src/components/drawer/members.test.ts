@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groupOf } from "@/store/selectors";
 import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
-import { actionsFor, filterMembers, groupMembers, rankOf, toRows } from "./members";
+import { GROUP_PREVIEW, actionsFor, groupMembers, rankOf, toRows } from "./members";
 
 describe("groupMembers", () => {
   it("splits every prefix a server can send into three groups", () => {
@@ -81,24 +81,28 @@ describe("toRows", () => {
     ]);
     expect(rows.length).toBe(CTF_OPS_MEMBERS.length + headers.length);
   });
-});
 
-describe("filterMembers", () => {
-  it("matches part of a nick, ignoring case", () => {
-    const found = filterMembers(CTF_OPS_MEMBERS, "AR");
-    expect(found.map((m) => m.nick)).toEqual(["Ariel", "marrow"]);
+  it("stops a long group at the preview and counts what it withheld", () => {
+    const rows = toRows(groupMembers(crowd(500)));
+    const shown = rows.filter((row) => row.kind === "member");
+    const more = rows.filter((row) => row.kind === "more");
+
+    expect(shown.length).toBe(GROUP_PREVIEW * 3);
+    expect(more.map((row) => row.group)).toEqual(["operators", "voiced", "members"]);
+    expect(
+      more.reduce((sum, row) => sum + row.hidden, 0) + shown.length,
+    ).toBe(500);
   });
 
-  it("matches the account when the nick does not", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "vulpes").map((m) => m.nick)).toEqual(["fox"]);
-  });
+  it("shows the whole of a group named as expanded", () => {
+    const sections = groupMembers(crowd(500));
+    const rows = toRows(sections, new Set(["members"]));
+    const members = sections.find((s) => s.group === "members")!.members.length;
 
-  it("returns everyone for a blank query", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "   ")).toBe(CTF_OPS_MEMBERS);
-  });
-
-  it("returns nobody when nothing matches", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "nobodyhere")).toEqual([]);
+    expect(rows.filter((row) => row.kind === "member").length).toBe(
+      members + GROUP_PREVIEW * 2,
+    );
+    expect(rows.some((row) => row.kind === "more" && row.group === "members")).toBe(false);
   });
 });
 

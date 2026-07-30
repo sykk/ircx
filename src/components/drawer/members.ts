@@ -39,26 +39,29 @@ function byNick(a: Member, b: Member): number {
   return a.nick < b.nick ? -1 : a.nick > b.nick ? 1 : 0;
 }
 
-export function filterMembers(members: Member[], query: string): Member[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return members;
-  return members.filter(
-    (m) =>
-      m.nick.toLowerCase().includes(needle) ||
-      (m.account !== null && m.account.toLowerCase().includes(needle)),
-  );
-}
-
 export type MemberRow =
   | { kind: "header"; group: MemberGroup; count: number }
-  | { kind: "member"; member: Member };
+  | { kind: "member"; member: Member }
+  | { kind: "more"; group: MemberGroup; hidden: number };
 
-/** Sections to a flat row list, which is what the virtualiser indexes into. */
-export function toRows(sections: MemberSection[]): MemberRow[] {
+/** How much of a group is shown before the `… and n more` row takes over. */
+export const GROUP_PREVIEW = 10;
+
+/** Sections to a flat row list, which is what the virtualiser indexes into.
+ * Groups not named in `expanded` stop after `GROUP_PREVIEW` members. */
+export function toRows(
+  sections: MemberSection[],
+  expanded: ReadonlySet<MemberGroup> = new Set(),
+): MemberRow[] {
   const rows: MemberRow[] = [];
   for (const section of sections) {
     rows.push({ kind: "header", group: section.group, count: section.members.length });
-    for (const member of section.members) rows.push({ kind: "member", member });
+    const hidden = expanded.has(section.group)
+      ? 0
+      : Math.max(0, section.members.length - GROUP_PREVIEW);
+    const shown = hidden === 0 ? section.members : section.members.slice(0, GROUP_PREVIEW);
+    for (const member of shown) rows.push({ kind: "member", member });
+    if (hidden > 0) rows.push({ kind: "more", group: section.group, hidden });
   }
   return rows;
 }

@@ -35,10 +35,6 @@ beforeEach(() => {
   });
 });
 
-function openTab(label: string) {
-  fireEvent.click(screen.getByRole("tab", { name: label }));
-}
-
 describe("Drawer", () => {
   it("renders nothing while closed", () => {
     useAppStore.setState({ drawerOpen: false });
@@ -55,14 +51,20 @@ describe("Drawer", () => {
     expect(useAppStore.getState().drawerOpen).toBe(false);
   });
 
+  it("shows the member list and nothing else", () => {
+    render(<Drawer />);
+    expect(screen.getByRole("heading", { name: /operators/i })).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
   it("opens the inspector for the member that was clicked, and comes back", () => {
     render(<Drawer />);
     fireEvent.click(screen.getByRole("button", { name: /marrow/ }));
     expect(screen.getByRole("heading", { name: "marrow" })).toBeTruthy();
-    expect(screen.queryByLabelText("Filter members")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Members/ }));
-    expect(screen.getByLabelText("Filter members")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /operators/i })).toBeTruthy();
   });
 
   it("closes the inspector on Escape before closing itself", () => {
@@ -71,46 +73,10 @@ describe("Drawer", () => {
     const panel = screen.getByRole("complementary");
 
     fireEvent.keyDown(panel, { key: "Escape" });
-    expect(screen.getByLabelText("Filter members")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /operators/i })).toBeTruthy();
     expect(useAppStore.getState().drawerOpen).toBe(true);
 
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(useAppStore.getState().drawerOpen).toBe(false);
-  });
-
-  it("shows the topic, who set it, and the modes in plain words", () => {
-    render(<Drawer />);
-    openTab("Channel info");
-    expect(screen.getByText(CTF_OPS.topic!.text)).toBeTruthy();
-    expect(screen.getByText(/Set by sable/)).toBeTruthy();
-    expect(screen.getByText("no external messages, topic locked by ops")).toBeTruthy();
-    expect(screen.getByText("ircs://irc.libera.chat:6697/#ctf-ops")).toBeTruthy();
-  });
-
-  it("keeps the notification level per channel", () => {
-    const { unmount } = render(<Drawer />);
-    openTab("Notifications");
-    fireEvent.click(screen.getByRole("radio", { name: /Highlights only/ }));
-    unmount();
-
-    render(<Drawer />);
-    openTab("Notifications");
-    expect(screen.getByRole("radio", { name: /Highlights only/ })).toHaveProperty(
-      "checked",
-      true,
-    );
-  });
-
-  it("keeps the retention override per channel", () => {
-    const { unmount } = render(<Drawer />);
-    openTab("Channel settings");
-    fireEvent.change(screen.getByLabelText(/Local history/), {
-      target: { value: "30" },
-    });
-    unmount();
-
-    render(<Drawer />);
-    openTab("Channel settings");
-    expect(screen.getByLabelText(/Local history/)).toHaveProperty("value", "30");
   });
 });

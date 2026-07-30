@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { MemberGroup } from "@/store/selectors";
 import type { Member } from "@/types";
 import { MemberRow } from "./MemberRow";
-import { SearchIcon } from "./icons";
-import { GROUP_LABEL, filterMembers, groupMembers, toRows } from "./members";
+import { GROUP_LABEL, groupMembers, toRows } from "./members";
 
-const HEADER_HEIGHT = 28;
+const HEADER_HEIGHT = 34;
 const ROW_HEIGHT = 26;
 
 interface MemberListProps {
@@ -15,10 +15,10 @@ interface MemberListProps {
 }
 
 export function MemberList({ members, selected, onSelect }: MemberListProps) {
-  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<MemberGroup>>(() => new Set());
   const rows = useMemo(
-    () => toRows(groupMembers(filterMembers(members, query))),
-    [members, query],
+    () => toRows(groupMembers(members), expanded),
+    [members, expanded],
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -34,57 +34,46 @@ export function MemberList({ members, selected, onSelect }: MemberListProps) {
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative px-2 py-2">
-        <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[var(--text-muted)]">
-          <SearchIcon />
-        </span>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search members"
-          aria-label="Filter members"
-          className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-raised)] py-1 pr-2 pl-7 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-        />
-      </div>
-
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-        {rows.length === 0 ? (
-          <p className="px-2 py-4 text-[var(--text-muted)]">
-            {query ? `No member matches "${query}"` : "No members"}
-          </p>
-        ) : (
-          <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
-            {virtualizer.getVirtualItems().map((item) => {
-              const row = rows[item.index];
-              if (!row) return null;
-              return (
-                <div
-                  key={item.key}
-                  className="absolute top-0 left-0 w-full"
-                  style={{ height: item.size, transform: `translateY(${item.start}px)` }}
-                >
-                  {row.kind === "header" ? (
-                    <h3 className="flex items-end gap-1.5 px-2 pt-2 text-[11px] tracking-wide text-[var(--text-muted)] uppercase">
-                      {GROUP_LABEL[row.group]}
-                      <span className="text-[var(--text-faint)] normal-case">
-                        — {row.count}
-                      </span>
-                    </h3>
-                  ) : (
-                    <MemberRow
-                      member={row.member}
-                      selected={row.member.nick === selected}
-                      onSelect={onSelect}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-3">
+      {rows.length === 0 ? (
+        <p className="px-1 py-4 text-[var(--text-muted)]">No members</p>
+      ) : (
+        <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index];
+            if (!row) return null;
+            return (
+              <div
+                key={item.key}
+                className="absolute top-0 left-0 w-full"
+                style={{ height: item.size, transform: `translateY(${item.start}px)` }}
+              >
+                {row.kind === "header" ? (
+                  <h3 className="flex h-full items-end px-2 pb-1 text-[11px] tracking-wide text-[var(--text-muted)] uppercase">
+                    {GROUP_LABEL[row.group]} — {row.count}
+                  </h3>
+                ) : row.kind === "more" ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded((groups) => new Set(groups).add(row.group))
+                    }
+                    className="flex h-full w-full items-center px-2 text-left font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    … and {row.hidden} more
+                  </button>
+                ) : (
+                  <MemberRow
+                    member={row.member}
+                    selected={row.member.nick === selected}
+                    onSelect={onSelect}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

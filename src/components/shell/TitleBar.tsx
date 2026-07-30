@@ -56,7 +56,7 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
         <Tooltip
           label={`${connectionLabel(network.status)} — ${network.host}:${network.port}`}
         >
-          <span className="flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] px-2 py-1 text-[11px] text-[var(--text-secondary)]">
+          <span className="flex items-center gap-2 px-2 text-[11px] text-[var(--text-secondary)]">
             <span
               className="h-2 w-2 rounded-full"
               style={{ background: connectionColor(network.status) }}

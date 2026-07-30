@@ -1714,3 +1714,93 @@ fn a_rejoin_that_overtakes_its_own_quit_does_not_double_a_member() {
     assert_eq!(members.iter().filter(|m| m.nick == "ash").count(), 1);
     assert_eq!(members.len(), 3);
 }
+
+/// IRCv3 standard replies. `ircclient.md` lists them among the capabilities to
+/// support, and until now `FAIL`, `WARN` and `NOTE` fell through to a debug
+/// line — a server explaining why something did not work, discarded.
+#[test]
+fn a_standard_reply_reaches_the_user_with_the_server_s_own_words() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat FAIL JOIN CHANNEL_FULL #ircx :Channel is full");
+
+    assert_eq!(
+        session.notices(),
+        vec![(Severity::Error, "Channel is full")],
+        "the description is the part written for a person"
+    );
+    // And it lands in the console, where server chatter is findable later.
+    let lines: Vec<&str> = session.messages().iter().map(|m| m.text.as_str()).collect();
+    assert!(lines.contains(&"Channel is full"), "{lines:?}");
+}
+
+#[test]
+fn the_three_kinds_carry_their_own_weight() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat FAIL * ACCOUNT_REQUIRED :You must be registered");
+    session.feed(":irc.libera.chat WARN REHASH CERTS_EXPIRED :A certificate has expired");
+    session.feed(":irc.libera.chat NOTE * CONNECTION_AGE :You have been here a while");
+
+    assert_eq!(
+        session.notices(),
+        vec![
+            (Severity::Error, "You must be registered"),
+            (Severity::Warning, "A certificate has expired"),
+            (Severity::Info, "You have been here a while"),
+        ]
+    );
+}
+
+/// The context between the code and the description is variable in length and
+/// machine-readable, so the description is found from the end rather than by
+/// counting forwards.
+#[test]
+fn context_between_the_code_and_the_description_does_not_displace_it() {
+    let mut session = registered("");
+    session.feed(
+        ":irc.libera.chat FAIL BOX BOXES_INVALID STACK CLOTHES :Given boxes are not supported",
+    );
+
+    assert_eq!(
+        session.notices(),
+        vec![(Severity::Error, "Given boxes are not supported")]
+    );
+}
+
+/// A reply with no description is malformed. The code is machine-readable and
+/// not a sentence, but passing it on beats saying nothing at all.
+#[test]
+fn a_reply_with_no_description_still_says_something() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat FAIL * NEED_REGISTRATION");
+    session.feed(":irc.libera.chat FAIL JOIN BAD_CHANNEL");
+
+    assert_eq!(
+        session.notices(),
+        vec![
+            // `network_name` is what the server advertised in `005`, not the
+            // label the user typed when they added the network.
+            (Severity::Error, "Libera.Chat sent NEED_REGISTRATION"),
+            (Severity::Error, "Libera.Chat sent BAD_CHANNEL about JOIN"),
+        ]
+    );
+}
+
+/// The raw line carries the command, the code and the context, so nothing is
+/// lost by showing only the sentence.
+#[test]
+fn the_code_and_context_stay_available_on_the_notice() {
+    let mut session = registered("");
+    let raw = ":irc.libera.chat FAIL JOIN CHANNEL_FULL #ircx :Channel is full";
+    session.feed(raw);
+
+    let detail = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::Notice { detail, .. } => detail.clone(),
+            _ => None,
+        })
+        .expect("the notice carries its raw line");
+    assert!(detail.contains("CHANNEL_FULL"), "{detail}");
+    assert!(detail.contains("#ircx"), "{detail}");
+}

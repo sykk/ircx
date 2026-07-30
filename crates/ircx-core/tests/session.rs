@@ -10,6 +10,7 @@ use ircx_ipc::{
     MessageSource, SaslMechanism, SaslStatus, Severity,
 };
 use ircx_net::TlsInfo;
+use ircx_store::OpenTarget;
 
 /// What `cadmium.libera.chat` offered on 2026-07-30, copied off the wire rather
 /// than guessed. Notably it does not offer `userhost-in-names`, and six of the
@@ -46,6 +47,9 @@ struct Harness {
     state: SessionState,
     sent: Vec<String>,
     events: Vec<IrcxEvent>,
+    /// Stands in for the archive's `open_targets` table, which is where these
+    /// actions land in the running app.
+    open: Vec<OpenTarget>,
     closed: bool,
 }
 
@@ -55,6 +59,7 @@ impl Harness {
             state: SessionState::new(config),
             sent: Vec::new(),
             events: Vec::new(),
+            open: Vec::new(),
             closed: false,
         }
     }
@@ -68,6 +73,11 @@ impl Harness {
                     IrcxEvent::RawLine { .. } => {}
                     event => self.events.push(event),
                 },
+                Action::Remember(target) => {
+                    self.open.retain(|held| held.name() != target.name());
+                    self.open.push(target);
+                }
+                Action::Forget(target) => self.open.retain(|held| held.name() != target),
                 Action::Close => self.closed = true,
             }
         }
@@ -641,6 +651,40 @@ fn an_unknown_command_is_refused_in_words() {
     assert!(session.sent().is_empty());
 }
 
+/// `/help` is written to be read, so it has to arrive somewhere: the tab it
+/// was typed in, one client note per line, whether or not we are registered.
+#[test]
+fn help_is_printed_into_the_tab_it_was_asked_for() {
+    let mut session = registered("");
+    let outcome = session.submit("#ircx", "/help");
+
+    assert!(
+        matches!(outcome, CommandOutcome::Handled),
+        "expected the help to be handled locally, got {outcome:?}"
+    );
+    assert!(session.sent().is_empty(), "help never reaches the server");
+
+    let appends = session.appended();
+    assert_eq!(appends.len(), 1, "one arrival, not one per line");
+    let lines: Vec<&str> = appends[0].iter().map(|note| note.text.as_str()).collect();
+    assert!(lines.len() > 10, "the whole list arrived: {lines:?}");
+    assert!(appends[0]
+        .iter()
+        .all(|note| note.target == "#ircx" && note.kind == MessageKind::Client));
+    assert!(
+        lines.iter().any(|line| line.starts_with("/join")),
+        "{lines:?}"
+    );
+    assert!(
+        lines.iter().any(|line| line.starts_with("/help")),
+        "{lines:?}"
+    );
+
+    let mut before_registration = Harness::new(config());
+    before_registration.submit("*", "/help");
+    assert!(!before_registration.messages().is_empty());
+}
+
 #[test]
 fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
     let mut session = registered("");
@@ -1173,6 +1217,72 @@ fn an_autojoin_channel_is_not_joined_twice_after_a_reconnect() {
 
     session.feed(":cadmium.libera.chat 001 sykk :Welcome");
     assert_eq!(session.sent_starting("JOIN"), vec!["JOIN #ircx"]);
+}
+
+/// The set is written by being somewhere and unwritten by closing the tab,
+/// which is what makes it different from the `autojoin` preference.
+#[test]
+fn a_channel_and_a_query_are_remembered_until_they_are_closed() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":sable!~s@user/sable PRIVMSG sykk :are you there");
+
+    assert_eq!(
+        session.open,
+        vec![
+            OpenTarget::Channel("#ircx".into()),
+            OpenTarget::Query("sable".into()),
+        ]
+    );
+
+    let actions = session.state.close_target("#IRCX");
+    session.apply(actions);
+    assert_eq!(session.open, vec![OpenTarget::Query("sable".into())]);
+
+    let actions = session.state.close_target("sable");
+    session.apply(actions);
+    assert!(session.open.is_empty(), "{:?}", session.open);
+}
+
+#[test]
+fn a_channel_the_user_left_or_was_thrown_out_of_is_not_remembered() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx-dev");
+    session.feed(":sykk!~sykk@user/sykk PART #ircx :bye");
+    session.feed(":sable!~s@user/sable KICK #ircx-dev sykk :take a break");
+
+    assert!(session.open.is_empty(), "{:?}", session.open);
+}
+
+/// The restart case. The user closed nothing, so what was open comes back —
+/// out of the archive's own record, not out of `autojoin`.
+#[test]
+fn the_conversations_from_the_last_run_come_back_and_are_rejoined() {
+    let mut session = Harness::new(config());
+    let actions = session.state.restore(vec![
+        OpenTarget::Channel("##test".into()),
+        OpenTarget::Query("NickServ".into()),
+    ]);
+    session.apply(actions);
+
+    // In the sidebar before the socket is dialled, so there is something to
+    // click on while the network is still connecting.
+    let channels = session.state.channels();
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].name, "##test");
+    assert!(!channels[0].joined);
+    assert_eq!(session.state.queries().len(), 1);
+    assert!(session.events.iter().any(
+        |event| matches!(event, IrcxEvent::ChannelUpdated { channel } if channel.name == "##test")
+    ));
+
+    session.connect();
+    session.feed(":cadmium.libera.chat CAP * LS :");
+    session.sent();
+    session.feed(":cadmium.libera.chat 001 sykk :Welcome");
+
+    assert_eq!(session.sent_starting("JOIN"), vec!["JOIN ##test"]);
 }
 
 /// What the handshake negotiated is the only honest answer to "is this

@@ -63,19 +63,23 @@ impl SessionState {
         self.actions.push(Action::Close);
     }
 
-    /// Leaves the channel if we are still in it and drops what we held for it.
+    /// Leaves the channel if we are still in it and drops what we held for it,
+    /// including its place in the set of conversations a restart reopens.
     pub fn close_target(&mut self, target: &str) -> Vec<Action> {
         let key = self.fold(target);
         if let Some(channel) = self.channels.remove(&key) {
             if channel.joined {
                 self.send_command("PART", &[&channel.name]);
             }
+            self.actions.push(Action::Forget(channel.name.clone()));
             self.emit(ircx_ipc::IrcxEvent::ChannelRemoved {
                 network: self.network_id().clone(),
                 name: channel.name,
             });
         }
-        self.queries.remove(&key);
+        if let Some(query) = self.queries.remove(&key) {
+            self.actions.push(Action::Forget(query.nick));
+        }
         self.drain()
     }
 
@@ -141,11 +145,18 @@ impl SessionState {
                 CommandOutcome::Handled
             }
             "raw" | "quote" => self.cmd_raw(args),
-            "help" => CommandOutcome::Output(HELP.to_string()),
+            "help" => self.cmd_help(target),
             other => CommandOutcome::Rejected(format!(
                 "`/{other}` is not a command ircx knows. `/help` lists the ones it does."
             )),
         }
+    }
+
+    /// The list goes into the tab it was asked for, as client notes, so it
+    /// lands where the user is looking and scrolls like everything else there.
+    fn cmd_help(&mut self, target: &str) -> CommandOutcome {
+        self.note_block(target, HELP);
+        CommandOutcome::Handled
     }
 
     fn cmd_join(&mut self, args: &str) -> CommandOutcome {

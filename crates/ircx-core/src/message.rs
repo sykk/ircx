@@ -149,6 +149,23 @@ impl SessionState {
         self.append(message);
     }
 
+    /// Client output of more than one line. The timeline draws a message as a
+    /// line, so each line is its own message; they arrive together.
+    pub(crate) fn note_block(&mut self, target: &str, text: &str) {
+        let messages: Vec<ChatMessage> = text
+            .lines()
+            .map(|line| self.local_message(target, MessageKind::Client, line.to_string()))
+            .collect();
+        if messages.is_empty() {
+            return;
+        }
+        self.emit(IrcxEvent::MessagesAppended {
+            network: self.config.network.clone(),
+            target: target.to_string(),
+            messages,
+        });
+    }
+
     pub(crate) fn open_batch(&mut self, reference: &str, kind: &str) {
         let source = match kind {
             "chathistory" | "draft/chathistory" => MessageSource::ServerHistory,

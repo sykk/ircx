@@ -92,7 +92,8 @@ pub struct HistoryRequest {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRequest {
-    /// SQLite FTS5 syntax.
+    /// What the user typed, taken literally. Words are ANDed; punctuation and
+    /// FTS5 operators are searched for rather than obeyed.
     pub query: String,
     pub network: Option<NetworkId>,
     pub target: Option<TargetName>,
@@ -116,10 +117,9 @@ pub enum CommandOutcome {
     /// Plain text, sent as PRIVMSG. Carries the optimistic local copy. Boxed so
     /// the enum is not the size of its largest variant; serialises unchanged.
     Sent(Box<ChatMessage>),
-    /// A slash command ran and produced nothing to render.
+    /// A slash command ran. Anything it had to show the user was appended to
+    /// the target it was run in, so there is nothing to return.
     Handled,
-    /// A slash command produced output for the timeline.
-    Output(String),
     /// Unknown command or bad arguments, phrased for the user.
     Rejected(String),
 }

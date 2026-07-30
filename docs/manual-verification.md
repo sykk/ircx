@@ -205,6 +205,43 @@ neither direction is a message anything could miss.
 which is #93 seen from the other side: the refusal is an `Error` and a plugin
 that degrades can say why it did.
 
+## Schema migrations
+
+`migrations.rs` is covered by two tests — that migrating is idempotent on
+reopen, and that a database from a later version is refused — and both run
+against a database created moments earlier. Nothing in the suite migrates a
+database that has anything in it.
+
+**The fifth migration is verified** against the owner's own profile on
+2026-07-30. It went from version 4 to 5 with 840 messages of history already
+archived: the row count only went up as the session reconnected, the history
+rendered as it had before, and search worked over the migrated archive. Search
+is the one that mattered — appending `via` to `message::COLUMNS` moved the index
+`search` read its snippet from, and the tests that caught it were the reason the
+index is now derived. A restart kept a plugin's attribution, which is the whole
+claim behind archiving `via` rather than deriving it.
+
+The profile was copied first. That is worth keeping as the habit: a migration
+raises `schema_version`, and `migrate` refuses a database whose version is
+higher than the build supports, so it is a one-way step per install.
+
+What that leaves:
+
+- **Going back.** A profile at version 5 makes `migrate` answer
+  `StoreError::SchemaTooNew` for any earlier build. Nobody has run an older
+  ircx against a migrated profile to see what that failure does to a launch, or
+  what the user is told. It is the one path where a user with a working client
+  ends up with one that will not open their history.
+- **The first four migrations.** Only the fifth has been recorded as run against
+  real data. The others presumably were, at some point, by whoever was running
+  the client at the time; nothing says so.
+- **A migration that is not free.** `ALTER TABLE ADD COLUMN` writes no rows, so
+  this one costs the same on 840 messages as on 840,000, and 840 proves nothing
+  about the next one. Retention is a window in days per target rather than a cap
+  on rows, so an archive is however much a busy channel says inside it; a
+  migration that rewrites or backfills would be the first to care, and nothing
+  has timed one.
+
 ## Themes installed on disk
 
 The two built-in themes are exercised by every test run and by every render, so

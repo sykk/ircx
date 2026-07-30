@@ -3,11 +3,21 @@
 Desktop IRCv3 client. Rust core, Tauri 2 shell, React 19 frontend.
 Product spec: `ircclient.md`. Visual reference: `docs/mockup.png`.
 
-Anything that renders the conversation — messages, grouping, nick colour,
-presence, the unread seam, typography — follows `readability/READABILITY.md`.
-It supersedes the mockup where the two disagree. Its studies assume an
-encryption layer this milestone does not build; take the structural findings
-and leave the verdict machinery.
+`docs/mockup.png` is the visual authority and is deliberately minimal: flat
+sidebar, icon-only header actions, members-only context panel, no chrome that
+does not earn its space. When adding UI, the question is whether the mockup
+would have drawn it.
+
+How the conversation *reads* — grouping, gutter timestamps, nick colour,
+presence digests, the unread seam, typography — follows
+`readability/READABILITY.md`, which supersedes the mockup on those points. Its
+studies assume an encryption layer this milestone does not build; take the
+structural findings and leave the verdict machinery. Two deliberate departures
+from it: typography stays semantic (prose in the text face, data in mono) and
+the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`.
+
+`docs/multiwindow.md` describes split panes and per-pane context. Not built
+yet; it will move `active` and the context panel out of global store state.
 
 ## Layer boundaries
 

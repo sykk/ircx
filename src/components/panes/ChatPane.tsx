@@ -7,6 +7,8 @@ import { Timeline } from "@/components/timeline/Timeline";
 import { useAppStore } from "@/store";
 import { useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
+import { SERVER_TARGET } from "@/types";
+import { ServerConsole } from "./ServerConsole";
 
 /** One split: its own target, scroll position, and draft. */
 export function ChatPane({ view }: { view: ViewId | null }) {
@@ -33,11 +35,16 @@ export function ChatPane({ view }: { view: ViewId | null }) {
     if (view) focusView(view);
   };
 
+  // The console is a pane on the network rather than on a conversation: no
+  // members, no drafts, nobody to report typing to.
+  const consoleFor = pane?.network && pane.target === SERVER_TARGET ? pane.network : null;
+  const name = consoleFor ? `${consoleFor} console` : pane?.target || pane?.network || "Empty";
+
   return (
     <section
       ref={ref}
       data-view={view ?? undefined}
-      aria-label={`${pane?.target || pane?.network || "Empty"} pane`}
+      aria-label={`${name} pane`}
       onPointerDownCapture={focus}
       onFocusCapture={focus}
       className={clsx(
@@ -51,11 +58,17 @@ export function ChatPane({ view }: { view: ViewId | null }) {
       )}
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ChannelHeader view={view} />
-        <div className="min-h-0 flex-1">
-          <Timeline view={view} />
-        </div>
-        <Composer view={view} />
+        {consoleFor ? (
+          <ServerConsole view={view} network={consoleFor} />
+        ) : (
+          <>
+            <ChannelHeader view={view} />
+            <div className="min-h-0 flex-1">
+              <Timeline view={view} />
+            </div>
+            <Composer view={view} />
+          </>
+        )}
       </div>
 
       {/* Beside the whole column rather than under the header, so the panel's

@@ -81,3 +81,18 @@ not produce the conditions for them:
   both should be in the sidebar before the network finishes connecting, the
   channel should be rejoined, and a conversation closed before quitting should
   stay gone.
+
+The server console and the raw log (#53, #54, #57, #58) are covered by unit
+tests against seeded state. What no test can show:
+
+- **That the console fills up on its own.** The tests seed the timeline core
+  files under `*`. Whether a live connection puts the MOTD there, and whether
+  the pane is scrolled to the end of it when you open it, wants one connection
+  to see.
+- **That no `TAGMSG` leaves for the console.** `ipc.setTyping` returns without
+  invoking, and the console's input never calls it, so the only remaining way to
+  earn a `411` is a caller nobody has written yet. Reading the raw log while
+  typing in the console is now the way to confirm that from inside the app.
+- **The raw log under load.** It renders every line it holds, up to the store's
+  cap of 2,000, and re-renders per arriving line while it is open. Nobody has
+  watched it during a netsplit or a `LIST`.

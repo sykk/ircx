@@ -1,12 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { activeTarget, oneView } from "@/components/shell/fixtures";
-import type { Channel, Network, Query } from "@/types";
+import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { CommandPalette } from "./CommandPalette";
 
-vi.mock("@/lib/ipc", () => ({ ipc: {} }));
+const { ipcMock } = vi.hoisted(() => ({ ipcMock: { submitInput: vi.fn() } }));
+vi.mock("@/lib/ipc", () => ({ ipc: ipcMock }));
 
 const network: Network = {
   id: "libera",
@@ -39,6 +40,9 @@ function query(nick: string): Query {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+
   useAppStore.setState({
     networks: { libera: network },
     networkOrder: ["libera"],
@@ -161,14 +165,84 @@ describe("CommandPalette", () => {
     expect(activeTarget()).toEqual({ network: "libera", target: "phrack" });
   });
 
-  it("hands a slash command to the composer", () => {
-    const insert = vi.fn();
-    render(<CommandPalette onInsertCommand={insert} />);
-    type("/join");
+  it("opens the network's console, which is where the server files what it says", () => {
+    render(<CommandPalette />);
+    type("Libera");
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(insert).toHaveBeenCalledWith("/join ");
-    expect(useAppStore.getState().paletteOpen).toBe(false);
+    expect(activeTarget()).toEqual({ network: "libera", target: SERVER_TARGET });
+  });
+
+  describe("running a command", () => {
+    it("fills a command's name in and waits for its argument", () => {
+      render(<CommandPalette />);
+      type("/join");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect((input() as HTMLInputElement).value).toBe("/join ");
+      expect(useAppStore.getState().paletteOpen).toBe(true);
+      expect(optionLabels().some((label) => label.startsWith("/join "))).toBe(false);
+    });
+
+    // Onboarding without autojoin leaves no conversation and so no composer.
+    // The palette's own input is the one place a /join can be typed.
+    it("runs the command against the network when nothing is open", async () => {
+      render(<CommandPalette />);
+      type("/join ##test");
+
+      expect(selectedLabel()).toContain("/join ##test");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(ipcMock.submitInput).toHaveBeenCalledWith("libera", SERVER_TARGET, "/join ##test");
+      expect(useAppStore.getState().paletteOpen).toBe(false);
+    });
+
+    // Otherwise the first join of a session ends on "No conversation open".
+    it("leaves the pane in the channel a join opened", async () => {
+      render(<CommandPalette />);
+      type("/join ##test");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(activeTarget()).toEqual({ network: "libera", target: "##test" });
+    });
+
+    it("stays where it is for any other command", async () => {
+      useAppStore.setState(oneView({ network: "libera", target: "#ctf-ops" }));
+      render(<CommandPalette />);
+      type("/whois phrack");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
+    });
+
+    it("runs it in the conversation in focus when there is one", async () => {
+      useAppStore.setState(oneView({ network: "libera", target: "#ctf-ops" }));
+      render(<CommandPalette />);
+      type("/topic something");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(ipcMock.submitInput).toHaveBeenCalledWith("libera", "#ctf-ops", "/topic something");
+    });
+
+    it("holds the palette open with the reason when the command is refused", async () => {
+      ipcMock.submitInput.mockResolvedValue({ kind: "rejected", value: "No such channel" });
+      render(<CommandPalette />);
+      type("/join ##test");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(screen.getByRole("alert").textContent).toBe("No such channel");
+      expect(useAppStore.getState().paletteOpen).toBe(true);
+    });
   });
 
   it("runs a settings action", () => {

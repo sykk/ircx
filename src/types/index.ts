@@ -1,5 +1,15 @@
 // Re-exports the ts-rs output so application code imports from one place and
 // never reaches into ./generated directly. Regenerate with `npm run bindings`.
+
+/**
+ * Where core files what the server says to you rather than to a channel: the
+ * connection line, notices, the MOTD, your own umode, unhandled numerics.
+ *
+ * ts-rs generates types, not values, so this mirrors `SERVER_TARGET` in
+ * `crates/ircx-core/src/session.rs`; `contract.test.ts` asserts they agree.
+ */
+export const SERVER_TARGET = "*";
+
 export type { AppSnapshot } from "./generated/AppSnapshot";
 export type { Attachment } from "./generated/Attachment";
 export type { AttachmentPreview } from "./generated/AttachmentPreview";

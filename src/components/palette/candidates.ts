@@ -1,14 +1,18 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
 import { targetKey, type TargetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
+import { SERVER_TARGET } from "@/types";
 
-export type CandidateKind = "channel" | "query" | "network" | "command" | "action";
+export type CandidateKind = "run" | "channel" | "query" | "network" | "command" | "action";
 
 /** What Enter does. Kept as data so a result row is comparable and testable
  * without a React tree. */
 export type CandidateAction =
   | { type: "activate"; network: string; target: string }
-  | { type: "insertCommand"; text: string }
+  /** Puts the command in the palette's own input so its arguments can be typed
+   * there. Nothing else in the app owns an input the palette can reach. */
+  | { type: "refine"; text: string }
+  | { type: "run"; network: string; target: string; input: string }
   | { type: "toggleDrawer" }
   | { type: "search" }
   | { type: "connect"; network: string }
@@ -27,11 +31,8 @@ export interface Candidate {
   unread: number;
 }
 
-/** The network's own view, used by the sidebar's server row. Any target string
- * that cannot be an IRC target works; this one is the empty string. */
-export const NETWORK_CONSOLE = "";
-
 export const KIND_LABELS: Record<CandidateKind, string> = {
+  run: "Run",
   channel: "Channels",
   query: "Queries",
   network: "Networks",
@@ -41,6 +42,7 @@ export const KIND_LABELS: Record<CandidateKind, string> = {
 
 /** Group order when two groups tie on their best result. */
 export const KIND_ORDER: Record<CandidateKind, number> = {
+  run: -1,
   channel: 0,
   query: 1,
   network: 2,
@@ -74,6 +76,48 @@ const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: "raw", args: "<line>", detail: "Send a raw protocol line" },
   { name: "close", args: "", detail: "Close the current target" },
 ];
+
+/** Where a command line typed into the palette is dispatched. */
+export interface CommandContext {
+  network: string;
+  networkName: string;
+  /** The conversation in focus, or the server console when none is open. */
+  target: string;
+}
+
+/**
+ * The command the query already is, ready to run.
+ *
+ * Before the first channel is joined the palette's input is the only one the
+ * app has, so `/join #x` typed there has to go somewhere. Null when the query
+ * is not a command, or is a command still short of a required argument — that
+ * case belongs to the `command` candidate, which fills the name in and waits.
+ */
+export function commandLineCandidate(
+  query: string,
+  where: CommandContext | null,
+): Candidate | null {
+  const input = query.trim();
+  if (!where || !input.startsWith("/") || input.length < 2) return null;
+
+  const [name = "", ...rest] = input.slice(1).split(" ");
+  const known = SLASH_COMMANDS.find((command) => command.name === name.toLowerCase());
+  if (known?.args.includes("<") && rest.join("").trim() === "") return null;
+
+  const inConversation = where.target !== SERVER_TARGET;
+  return {
+    id: "run",
+    kind: "run",
+    label: input,
+    detail: inConversation
+      ? `In ${where.target} on ${where.networkName}`
+      : `On ${where.networkName}`,
+    hay: prepare(input),
+    key: null,
+    action: { type: "run", network: where.network, target: where.target, input },
+    unread: 0,
+  };
+}
 
 /** The slices of the store the list is built from. Narrower than `AppState` so
  * the palette can memoise on exactly these and nothing else. */
@@ -124,8 +168,8 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       label: network.name,
       detail: `${network.host}:${network.port}`,
       hay: prepare(network.name),
-      key: targetKey(id, NETWORK_CONSOLE),
-      action: { type: "activate", network: id, target: NETWORK_CONSOLE },
+      key: targetKey(id, SERVER_TARGET),
+      action: { type: "activate", network: id, target: SERVER_TARGET },
       unread: 0,
     });
 
@@ -150,7 +194,7 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       detail: command.args ? `${command.args} — ${command.detail}` : command.detail,
       hay: prepare(`/${command.name}`),
       key: null,
-      action: { type: "insertCommand", text: `/${command.name} ` },
+      action: { type: "refine", text: `/${command.name} ` },
       unread: 0,
     });
   }

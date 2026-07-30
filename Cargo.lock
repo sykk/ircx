@@ -2072,8 +2072,10 @@ checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 name = "ircx"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "ircx-core",
  "ircx-ipc",
+ "ircx-net",
  "ircx-store",
  "serde",
  "serde_json",
@@ -2115,6 +2117,8 @@ dependencies = [
 name = "ircx-net"
 version = "0.1.0"
 dependencies = [
+ "http",
+ "httparse",
  "rustls",
  "rustls-pki-types",
  "thiserror 2.0.19",

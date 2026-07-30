@@ -153,14 +153,11 @@ pub async fn set_typing(
     Ok(())
 }
 
-/// Previews need an HTTP client, which this milestone does not ship. The
-/// handler exists so the card can say so instead of hanging on a call that
-/// never resolves.
+/// The only outbound request ircx makes that is not an IRC connection, and the
+/// only one a user has to ask for by name.
 #[tauri::command]
 pub async fn load_preview(url: String) -> Result<Attachment, String> {
-    Err(format!(
-        "ircx cannot preview {url} yet — open it in your browser instead"
-    ))
+    crate::preview::load(&url).await
 }
 
 #[tauri::command]

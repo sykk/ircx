@@ -16,7 +16,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 ircx-ipc.workspace = true
 ircx-core.workspace = true
+ircx-net.workspace = true
 ircx-store.workspace = true
+base64 = "0.22"
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde.workspace = true

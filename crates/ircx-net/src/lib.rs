@@ -1,9 +1,13 @@
 //! TLS transport, line framing, and reconnect policy. Knows nothing about IRC
 //! semantics beyond where a line ends.
+//!
+//! `http` is here rather than in the command layer so every outbound socket
+//! ircx opens is in one crate, sharing one rustls configuration.
 
 mod backoff;
 mod error;
 mod framing;
+pub mod http;
 mod rate_limit;
 mod tls;
 mod transport;

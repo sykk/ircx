@@ -61,6 +61,19 @@ What is left:
   and whether the `msgid` a `+reply` names survives the relay unchanged. Send
   one from a client that supports it — IRCCloud does — and watch the raw log.
 
+## The preview fetch over TLS
+
+`crates/ircx-net/tests/http_loopback.rs` drives the whole fetch — framing,
+redirects, caps, timeouts — over plaintext loopback, for the same reason
+`tests/loopback.rs` does: TLS needs a certificate fixture. So nothing has
+watched the preview fetch complete an actual handshake, and `ircx-net::http`
+sets `alpn_protocols` where the IRC transport does not.
+
+Paste an `https://` link to a PNG into a channel, click fetch, and watch the
+image appear. Then check that a link to a host that redirects across origins
+(`https://imgur.com/<id>.png` does) refuses and names the host it would have
+gone to, rather than following it.
+
 ## Assembled-application testing
 
 Driven end to end on 2026-07-30 and written up in `docs/end-to-end-run.md`:

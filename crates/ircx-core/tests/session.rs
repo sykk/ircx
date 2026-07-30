@@ -1528,3 +1528,85 @@ fn a_server_without_message_tags_carries_no_reaction_and_reports_no_failure() {
     assert!(session.sent().is_empty());
     assert!(session.events.is_empty());
 }
+
+/// The timeline's chips send through `/react`, which is why the click and the
+/// typed line have to reach the same wire.
+#[test]
+fn the_react_command_sends_what_the_react_call_does() {
+    let mut clicked = registered("message-tags");
+    clicked.react("#channel", "123", "lol", true);
+
+    let mut typed = registered("message-tags");
+    let outcome = typed.submit("#channel", "/react 123 lol");
+
+    assert!(
+        matches!(outcome, CommandOutcome::Handled),
+        "expected the reaction to be handled, got {outcome:?}"
+    );
+    assert_eq!(typed.sent(), clicked.sent());
+    assert_eq!(typed.reactions(), vec![("123", "sykk", "lol", true)]);
+}
+
+#[test]
+fn the_unreact_command_takes_the_reaction_back() {
+    let mut session = registered("message-tags");
+    session.submit("#channel", "/unreact 123 🇦🇷");
+
+    assert_eq!(
+        session.sent(),
+        vec!["@+reply=123;+draft/unreact=🇦🇷 TAGMSG #channel"]
+    );
+    assert_eq!(session.reactions(), vec![("123", "sykk", "🇦🇷", false)]);
+}
+
+/// The value is the rest of the line: the tag puts no restriction on it, and a
+/// reaction is not always one glyph.
+#[test]
+fn a_reaction_typed_with_spaces_in_it_keeps_them() {
+    let mut session = registered("message-tags");
+    session.submit("#channel", "/react 123 hear hear");
+
+    assert_eq!(
+        session.sent(),
+        vec![r"@+reply=123;+draft/react=hear\shear TAGMSG #channel"]
+    );
+}
+
+#[test]
+fn a_react_command_missing_half_its_arguments_says_so() {
+    let mut session = registered("message-tags");
+
+    for input in ["/react", "/react 123", "/react 123    "] {
+        let outcome = session.submit("#channel", input);
+        assert!(
+            matches!(&outcome, CommandOutcome::Rejected(reason) if reason.contains("<msgid>")),
+            "`{input}` should have been rejected, got {outcome:?}"
+        );
+    }
+    assert!(session.sent().is_empty());
+}
+
+/// The chips are not drawn where reactions cannot be sent, so this is the typed
+/// route only — and someone who typed it is owed the reason.
+#[test]
+fn a_react_command_on_a_server_without_message_tags_names_the_reason() {
+    let mut session = registered("");
+    let outcome = session.submit("#channel", "/react 123 lol");
+
+    assert!(
+        matches!(&outcome, CommandOutcome::Rejected(reason) if reason.contains("message-tags")),
+        "{outcome:?}"
+    );
+    assert!(session.sent().is_empty());
+    assert!(session.events.is_empty());
+}
+
+/// A `TAGMSG` needs a recipient, and the server console has none.
+#[test]
+fn a_react_command_in_the_server_tab_has_nothing_to_address() {
+    let mut session = registered("message-tags");
+    let outcome = session.submit("*", "/react 123 lol");
+
+    assert!(matches!(outcome, CommandOutcome::Rejected(_)), "{outcome:?}");
+    assert!(session.sent().is_empty());
+}

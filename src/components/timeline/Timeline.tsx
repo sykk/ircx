@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
@@ -20,32 +19,6 @@ const LOAD_OLDER_PX = 400;
 /** Slack below the bottom that still counts as following the conversation. */
 const STUCK_PX = 48;
 const FLASH_MS = 1_200;
-
-/**
- * The density knob. Every vertical measure in the timeline reads one of these,
- * so compact and read modes are this object plus somewhere to store the choice.
- */
-const DENSITY = {
-  "--row-pad-y": "1px",
-  "--block-gap": "14px",
-  "--body-leading": "1.7",
-} as CSSProperties;
-
-/**
- * The horizontal ladder, measured off `docs/chat-output.png`: the clock ends at
- * x=71, the spine sits at x=98, the nick column opens at x=120, and text runs
- * to a bounded measure. Every row reads these, so the columns hold whatever a
- * row turns out to contain.
- */
-const LADDER = {
-  "--rail-pad": "35px",
-  "--clock-col": "36px",
-  "--spine-gap": "27px",
-  "--spine-w": "2px",
-  "--nick-gap": "20px",
-  "--text-gap": "16px",
-  "--measure": "595px",
-} as CSSProperties;
 
 export function Timeline({ view }: { view: ViewId | null }) {
   const pane = useView(view);
@@ -80,6 +53,9 @@ interface TimelineForProps {
 function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
+  const canReact = useAppStore(
+    (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
+  );
   const [flashId, setFlashId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -202,10 +178,22 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   const parentOf = useCallback((msgid: string) => byId.get(msgid), [byId]);
 
+  // Nothing is drawn optimistically. A chip changes when the backend emits the
+  // reaction back, which it does for our own copy as well as everyone else's,
+  // so a send that never reaches the server leaves the chips where they were.
+  // That is the report the rejection is swallowed in favour of: a reaction is
+  // not worth interrupting the reader for.
+  const react = useCallback(
+    (msgid: string, emoji: string, active: boolean) => {
+      void ipc.react(network, target, msgid, emoji, active).catch(() => undefined);
+    },
+    [network, target],
+  );
+
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex h-full min-h-0 flex-col" style={{ ...DENSITY, ...LADDER }}>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1">
         <div
           ref={scrollRef}
@@ -237,7 +225,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${item.start - headPx}px)` }}
               >
-                {renderRow(rows[item.index]!, { ownNick, parentOf, onJump: jump, flashId })}
+                {renderRow(rows[item.index]!, {
+                  ownNick,
+                  parentOf,
+                  onJump: jump,
+                  canReact,
+                  onReact: react,
+                  flashId,
+                })}
               </div>
             ))}
           </div>
@@ -273,6 +268,8 @@ interface RowContext {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
+  canReact: boolean;
+  onReact: (msgid: string, emoji: string, active: boolean) => void;
   flashId: string | null;
 }
 

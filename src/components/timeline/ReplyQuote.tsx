@@ -14,7 +14,7 @@ interface Props {
  * connector is solid. Nothing here infers a strand; a guess would have to be
  * drawn differently from a fact, and this milestone makes no guesses.
  */
-const CONNECTOR = "2px solid var(--border-strong)";
+const CONNECTOR = "var(--timeline-quote-width) solid var(--border-strong)";
 
 export function ReplyQuote({ msgid, parent, onJump }: Props) {
   const excerpt = parent ? plainText(parent.text) : "";

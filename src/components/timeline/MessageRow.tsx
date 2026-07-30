@@ -3,9 +3,11 @@ import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
+import { serverMsgid } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
 import { Markdown } from "./Markdown";
+import { Reactions } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
 import { writesOwnNick } from "./rows";
 
@@ -14,15 +16,31 @@ interface MessageRowProps {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
+  /** False on a server without `message-tags`: reactions arrive as a `TAGMSG`
+   * client tag or not at all, so there is nothing to offer. */
+  canReact: boolean;
+  onReact: (msgid: string, emoji: string, active: boolean) => void;
   flashing: boolean;
 }
 
 /** Indent that puts anything without a nick under the text column. */
-const TEXT_INDENT = "calc(var(--nick-col) + var(--text-gap))";
+const TEXT_INDENT = "calc(var(--nick-col) + var(--timeline-text-gap))";
 
-export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: MessageRowProps) {
+export function MessageRow({
+  message,
+  ownNick,
+  parentOf,
+  onJump,
+  canReact,
+  onReact,
+  flashing,
+}: MessageRowProps) {
   const highlight = isHighlight(message, ownNick);
   const failed = message.delivery.state === "failed";
+  // A reaction travels as a `+reply` naming a msgid. Until the server has given
+  // this message one there is nothing to name it by, so it cannot be reacted to
+  // — which is the window between sending a line and its echo arriving.
+  const msgid = canReact ? serverMsgid(message) : null;
 
   return (
     <div
@@ -30,9 +48,9 @@ export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: Mes
       data-highlight={highlight || undefined}
       // Monospace here so `--nick-col`, which is stated in `ch`, resolves
       // against the face the nick is actually set in.
-      className="font-[family-name:var(--font-mono)] text-[13px]"
+      className="group font-[family-name:var(--font-mono)] text-[13px]"
       style={{
-        paddingBlock: "var(--row-pad-y)",
+        paddingBlock: "var(--timeline-row-pad-y)",
         background: flashing
           ? "var(--surface-active)"
           : highlight
@@ -43,7 +61,7 @@ export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: Mes
       }}
     >
       {message.replyTo && (
-        <div style={{ marginLeft: TEXT_INDENT, maxWidth: "var(--measure)" }}>
+        <div style={{ marginLeft: TEXT_INDENT, maxWidth: "var(--timeline-measure)" }}>
           <ReplyQuote
             msgid={message.replyTo}
             parent={parentOf(message.replyTo)}
@@ -55,8 +73,8 @@ export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: Mes
       <div
         className="grid items-baseline"
         style={{
-          gridTemplateColumns: "var(--nick-col) minmax(0, var(--measure))",
-          columnGap: "var(--text-gap)",
+          gridTemplateColumns: "var(--nick-col) minmax(0, var(--timeline-measure))",
+          columnGap: "var(--timeline-text-gap)",
         }}
       >
         {/* The nickname is the identifier; colour only reinforces it, so the
@@ -65,11 +83,13 @@ export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: Mes
           {writesOwnNick(message.kind) ? "" : message.sender.nick}
         </span>
 
-        <div>
+        {/* Relative so the hover-only add control can sit at the far end of the
+            measure without taking room from the message. */}
+        <div className="relative">
           {/* Prose gets the text face; code and identifiers keep monospace. */}
           <div
             className="selectable font-[family-name:var(--font-ui)]"
-            style={{ lineHeight: "var(--body-leading)" }}
+            style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
             <Body message={message} />
           </div>
@@ -77,6 +97,16 @@ export function MessageRow({ message, ownNick, parentOf, onJump, flashing }: Mes
           {message.attachments.map((attachment) => (
             <AttachmentLine key={attachment.url} attachment={attachment} />
           ))}
+
+          <Reactions
+            reactions={message.reactions ?? []}
+            ownNick={ownNick}
+            onToggle={
+              msgid === null
+                ? null
+                : (emoji, active) => onReact(msgid, emoji, active)
+            }
+          />
 
           {failed && <FailureNotice message={message} />}
         </div>

@@ -100,7 +100,7 @@ function SystemLine({ message }: { message: ChatMessage }) {
       data-msgid={message.id}
       className={clsx("selectable text-[12px] break-words", FACE[message.kind])}
       style={{
-        maxWidth: "var(--measure)",
+        maxWidth: "var(--timeline-measure)",
         color: message.kind === "server" ? "var(--text-faint)" : "var(--text-muted)",
       }}
     >

@@ -11,6 +11,8 @@ const HELP: &str = "\
 /query <nick> [text]      open a tab for one person
 /me <action>              speak in the third person
 /notice <target> <text>   send a notice
+/react <msgid> <value>    react to a message
+/unreact <msgid> <value>  take that reaction back
 /nick <nick>              change your nickname
 /topic [text]             read or set the topic
 /mode [target] <modes>    read or set modes
@@ -116,29 +118,39 @@ impl SessionState {
     /// bring one back, and a reaction everyone sees except the person who sent
     /// it is worse than none.
     pub fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) -> Vec<Action> {
-        if self.caps.is_enabled("message-tags") && !message.is_empty() && !emoji.is_empty() {
-            let tag = match active {
-                true => "+draft/react",
-                false => "+draft/unreact",
-            };
-            if let Ok(line) = MessageBuilder::new("TAGMSG")
-                .tag("+reply", Some(message.to_string()))
-                .tag(tag, Some(emoji.to_string()))
-                .param(target)
-                .build()
-            {
-                self.send_line(line.to_line());
-                self.emit(ircx_ipc::IrcxEvent::ReactionChanged {
-                    network: self.network_id().clone(),
-                    target: target.to_string(),
-                    message: message.to_string(),
-                    nick: self.nick.clone(),
-                    emoji: emoji.to_string(),
-                    active,
-                });
-            }
+        if self.caps.is_enabled("message-tags") {
+            self.send_react(target, message, emoji, active);
         }
         self.drain()
+    }
+
+    /// The capability check belongs to the callers: `react` above is silent
+    /// without `message-tags` because nothing asked for it, while `/react`
+    /// below says why, because someone typed it.
+    fn send_react(&mut self, target: &str, message: &str, emoji: &str, active: bool) {
+        if message.is_empty() || emoji.is_empty() {
+            return;
+        }
+        let tag = match active {
+            true => "+draft/react",
+            false => "+draft/unreact",
+        };
+        if let Ok(line) = MessageBuilder::new("TAGMSG")
+            .tag("+reply", Some(message.to_string()))
+            .tag(tag, Some(emoji.to_string()))
+            .param(target)
+            .build()
+        {
+            self.send_line(line.to_line());
+            self.emit(ircx_ipc::IrcxEvent::ReactionChanged {
+                network: self.network_id().clone(),
+                target: target.to_string(),
+                message: message.to_string(),
+                nick: self.nick.clone(),
+                emoji: emoji.to_string(),
+                active,
+            });
+        }
     }
 
     fn dispatch(&mut self, target: &str, input: &str) -> CommandOutcome {
@@ -165,6 +177,8 @@ impl SessionState {
             "part" | "leave" => self.cmd_part(target, args),
             "msg" => self.cmd_msg(args, MessageKind::Privmsg),
             "notice" => self.cmd_msg(args, MessageKind::Notice),
+            "react" => self.cmd_react(target, args, true),
+            "unreact" => self.cmd_react(target, args, false),
             "me" => self.cmd_me(target, args),
             "query" => self.cmd_query(args),
             "nick" => self.one_argument("NICK", args, "/nick <nickname>"),
@@ -228,6 +242,37 @@ impl SessionState {
         for message in self.say(target, text, kind) {
             self.append(message);
         }
+        CommandOutcome::Handled
+    }
+
+    /// The timeline sends every reaction through here, spelling the msgid it
+    /// already holds, so a click and a typed line take one path. The value is
+    /// the rest of the line rather than one word: the `react` tag puts no
+    /// restriction on it, and `hear hear` is a reaction.
+    fn cmd_react(&mut self, target: &str, args: &str, active: bool) -> CommandOutcome {
+        let verb = if active { "react" } else { "unreact" };
+        let usage = format!("`/{verb} <msgid> <value>` needs both");
+
+        let Some((message, value)) = args.split_once(' ') else {
+            return CommandOutcome::Rejected(usage);
+        };
+        let value = value.trim();
+        if message.is_empty() || value.is_empty() {
+            return CommandOutcome::Rejected(usage);
+        }
+        if target == SERVER_TARGET {
+            return CommandOutcome::Rejected(
+                "This tab is the server's, not a conversation. A reaction is addressed to the channel or person the message was in.".into(),
+            );
+        }
+        if !self.caps.is_enabled("message-tags") {
+            return CommandOutcome::Rejected(format!(
+                "{} does not offer message-tags, so reactions cannot be sent here.",
+                self.network_name()
+            ));
+        }
+
+        self.send_react(target, message, value, active);
         CommandOutcome::Handled
     }
 

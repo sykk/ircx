@@ -17,6 +17,7 @@ const HELP: &str = "\
 /topic [text]             read or set the topic
 /mode [target] <modes>    read or set modes
 /kick <nick> [reason]     remove someone from the channel
+/list [pattern]           find channels, filtered by the server
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
 /away [reason]            mark yourself away, or back
@@ -191,6 +192,7 @@ impl SessionState {
             "mode" => self.cmd_mode(target, args),
             "kick" => self.cmd_kick(target, args),
             "invite" => self.cmd_invite(target, args),
+            "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
             "away" => self.cmd_away(args),
             "quit" => {
@@ -361,6 +363,17 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// A pattern is worth passing on: it is the difference between the handful
+    /// of channels somebody is looking for and the twenty thousand a network
+    /// has. What comes back is collected rather than printed — see #125.
+    fn cmd_list(&mut self, args: &str) -> CommandOutcome {
+        match args.is_empty() {
+            true => self.send_command("LIST", &[]),
+            false => self.send_command("LIST", &[args]),
+        }
+        CommandOutcome::Handled
+    }
+
     fn cmd_away(&mut self, args: &str) -> CommandOutcome {
         match args.is_empty() {
             true => self.send_command("AWAY", &[]),
@@ -483,7 +496,7 @@ impl SessionState {
 /// `dispatch` belongs in this list, which `plugin_commands.rs` checks.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "react", "unreact", "me", "query", "nick",
-    "topic", "mode", "kick", "invite", "whois", "away", "quit", "raw", "quote", "help",
+    "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

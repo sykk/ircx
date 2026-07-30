@@ -3,6 +3,7 @@ import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
+import { ChannelList } from "@/components/channels";
 import { PluginSheet } from "@/components/plugins";
 import { AppShell } from "@/components/shell/AppShell";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
@@ -52,6 +53,7 @@ export function App() {
       <SearchOverlay />
       <NetworkSetup />
       <PluginSheet />
+      <ChannelList />
     </>
   );
 }

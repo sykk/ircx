@@ -113,6 +113,7 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         IrcxEvent::QueryRemoved { network, nick } => {
             Some(Lane::Query(network.clone(), nick.clone()))
         }
+
         IrcxEvent::MembersReplaced {
             network, channel, ..
         }
@@ -133,6 +134,9 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         IrcxEvent::TypingChanged { .. }
         | IrcxEvent::ReactionChanged { .. }
         | IrcxEvent::RawLine { .. }
+        // A finished list arrives once for a `LIST` and writes where nothing
+        // else does, so it shares a lane with nothing.
+        | IrcxEvent::ChannelsListed { .. }
         | IrcxEvent::Notice { .. } => None,
     }
 }

@@ -7,6 +7,9 @@ pub use ircx_proto::numeric::{
 };
 
 pub const RPL_AWAY: u16 = 301;
+pub const RPL_LISTSTART: u16 = 321;
+pub const RPL_LIST: u16 = 322;
+pub const RPL_LISTEND: u16 = 323;
 pub const RPL_CHANNELMODEIS: u16 = 324;
 pub const RPL_NOTOPIC: u16 = 331;
 pub const RPL_TOPICWHOTIME: u16 = 333;

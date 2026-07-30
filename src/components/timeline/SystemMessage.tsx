@@ -1,4 +1,5 @@
 import { useState } from "react";
+import clsx from "clsx";
 import type { ChatMessage } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { Block } from "./MessageBlock";
@@ -78,11 +79,18 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
   );
 }
 
+/**
+ * Client output is data, not speech: `/help` and anything else the client
+ * writes itself arrives already laid out in columns, so it keeps its own
+ * spacing and is set in the face those columns were measured against.
+ */
+const CLIENT_FACE = "font-[family-name:var(--font-mono)] whitespace-pre-wrap";
+
 function SystemLine({ message }: { message: ChatMessage }) {
   return (
     <div
       data-msgid={message.id}
-      className="selectable text-[12px] break-words"
+      className={clsx("selectable text-[12px] break-words", message.kind === "client" && CLIENT_FACE)}
       style={{
         maxWidth: "var(--measure)",
         color: message.kind === "server" ? "var(--text-faint)" : "var(--text-muted)",

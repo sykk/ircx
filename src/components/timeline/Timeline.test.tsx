@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import type { AppState } from "@/store/types";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
 import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
@@ -47,7 +48,7 @@ beforeAll(() => {
   });
 });
 
-function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
+function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     networks: {
@@ -64,10 +65,12 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
         lagMs: null,
       },
     },
-    timelines: {
-      [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false },
-    },
+    timelines,
   });
+}
+
+function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
+  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false } });
 }
 
 /** A second pane on the same channel, as a split would open, parked at
@@ -377,6 +380,26 @@ describe("Timeline", () => {
     expect(screen.queryByText("Nothing here yet")).toBe(null);
   });
 
+  it("reads it for a channel restored with no timeline entry at all", async () => {
+    // How a channel arrives after a restart: `channelUpdated` with no messages,
+    // so the store holds no entry for it — not an empty one.
+    const stored = makeConversation({ count: 30, seed: 4 });
+    ipcMock.loadHistory.mockResolvedValue(stored);
+    seedTimelines({});
+    render(<Timeline view={TEST_VIEW} />);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(30),
+    );
+    expect(ipcMock.loadHistory).toHaveBeenCalledWith({
+      network: "libera",
+      target: "#ctf-ops",
+      before: null,
+      limit: 200,
+    });
+    expect(screen.queryByText("Nothing here yet")).toBe(null);
+  });
+
   it("reads it for a pane holding only the note it was opened by", async () => {
     const note = makeMessage({ id: "j", kind: "join", nick: "sable", text: "" });
     ipcMock.loadHistory.mockResolvedValue([]);
@@ -442,6 +465,22 @@ describe("Timeline", () => {
     expect(drawn).toContain("red on yellow and back");
     expect(drawn).toContain("underlined motd");
     expect([...drawn].filter((ch) => ch.charCodeAt(0) < 0x20)).toEqual([]);
+  });
+
+  it("keeps a client line's own spacing, in the face its columns were measured for", () => {
+    seed([
+      makeMessage({
+        id: "h",
+        kind: "client",
+        nick: "libera",
+        text: "/join #channel [key]      join a channel",
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const line = document.querySelector('[data-msgid="h"]')!;
+    expect(line.className).toContain("--font-mono");
+    expect(line.className).toContain("whitespace-pre-wrap");
   });
 
   it("dims a pending message and offers a retry on a failed one", () => {

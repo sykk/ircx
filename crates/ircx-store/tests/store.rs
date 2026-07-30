@@ -35,6 +35,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
         delivery: Delivery::Delivered,
         attachments: vec![],
         encryption: EncryptionState::Plaintext,
+        via: None,
         raw: String::new(),
         source: MessageSource::Live,
     }
@@ -123,6 +124,7 @@ fn a_round_trip_preserves_every_field() {
             }),
         }],
         encryption: EncryptionState::Plaintext,
+        via: None,
         raw: "@msgid=vDBRR1KcZTFf9pfJn5tsZQ :sykk!~sykk@user/sykk PRIVMSG #ircx :\u{1}ACTION waves\u{1}"
             .into(),
         source: MessageSource::Live,

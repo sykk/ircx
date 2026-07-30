@@ -589,6 +589,39 @@ describe("Timeline", () => {
     expect(line.className).toContain("whitespace-pre-wrap");
   });
 
+  /** A plugin's answer is set exactly like `/help`'s. Without the name the
+   * reader cannot tell what the client said from what somebody else's code said
+   * in their conversation. */
+  it("names the plugin an answer came from, once for the whole answer", () => {
+    seed([
+      makeMessage({ id: "p1", kind: "client", text: "first line", via: "roster" }),
+      makeMessage({ id: "p2", kind: "client", text: "second line", via: "roster" }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getAllByText("roster")).toHaveLength(1);
+    expect(document.querySelector('[data-msgid="p2"]')!.textContent).toBe("second line");
+  });
+
+  it("says nothing about a plugin on the client's own output", () => {
+    seed([makeMessage({ id: "h", kind: "client", text: "/help output", via: null })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(document.querySelector('[data-msgid="h"]')!.textContent).toBe("/help output");
+    expect(screen.queryByText("roster")).toBeNull();
+  });
+
+  it("separates two plugins answering into runs of their own", () => {
+    seed([
+      makeMessage({ id: "a", kind: "client", text: "from one", via: "greet" }),
+      makeMessage({ id: "b", kind: "client", text: "from the other", via: "roster" }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("greet")).toBeTruthy();
+    expect(screen.getByText("roster")).toBeTruthy();
+  });
+
   it("dims a pending message and offers a retry on a failed one", () => {
     seed([
       makeMessage({ id: "a", text: "in flight", delivery: { state: "pending" } }),

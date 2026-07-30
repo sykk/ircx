@@ -12,6 +12,7 @@ function message(id: string, text: string): ChatMessage {
   return {
     id,
     idIsLocal: false,
+  via: null,
     network: "libera",
     target: "#ctf-ops",
     kind: "privmsg",

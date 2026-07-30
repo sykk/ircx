@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use crate::StoreError;
 
-const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS, REACTIONS];
+const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS, REACTIONS, VIA];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
 /// database at any earlier version, including an empty one.
@@ -166,6 +166,12 @@ CREATE TABLE reactions (
 );
 
 CREATE UNIQUE INDEX idx_reactions_one_each ON reactions (network, msgid, nick, emoji);
+"#;
+
+/// Which plugin produced a message, by its id. Null for everything the client
+/// or the server said, which is every row written before this.
+const VIA: &str = r#"
+ALTER TABLE messages ADD COLUMN via TEXT;
 "#;
 
 #[cfg(test)]

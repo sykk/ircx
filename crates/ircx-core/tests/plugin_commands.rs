@@ -139,6 +139,27 @@ fn lines(actions: &[Action]) -> Vec<String> {
         .collect()
 }
 
+/// The client notes an action produced, with the plugin each was attributed to.
+fn attributed(actions: &[Action]) -> Vec<(String, Option<String>)> {
+    client_notes(actions)
+        .map(|message| (message.text, message.via))
+        .collect()
+}
+
+fn client_notes(actions: &[Action]) -> impl Iterator<Item = ircx_ipc::ChatMessage> + '_ {
+    actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Emit(event) => match event.as_ref() {
+                IrcxEvent::MessagesAppended { messages, .. } => Some(messages.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .filter(|message| message.kind == MessageKind::Client)
+}
+
 fn notes(actions: &[Action]) -> Vec<String> {
     actions
         .iter()
@@ -183,6 +204,42 @@ async fn a_plugin_command_sends_as_the_user_and_answers_in_the_conversation() {
         vec![format!("PRIVMSG {CHANNEL} :hello #ircx")]
     );
     assert_eq!(notes(&actions), vec!["greeted #ircx".to_string()]);
+}
+
+/// A plugin's answer is the only text in a conversation that neither the client
+/// nor the server said. Without a name on it, it reads as `/help` output; and
+/// the sender it inherits from `local_message` is the user's own, so an
+/// unnamed one is archived as something the user said.
+#[tokio::test]
+async fn a_plugin_answer_is_attributed_to_the_plugin_and_not_to_the_user() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = runtime(root.path(), &[("greeter", "greet", GREETER, speaks())]);
+    let mut session = session();
+
+    let (_, actions) = submit(&runtime, &mut session, "/greet #ircx").await;
+
+    assert_eq!(
+        attributed(&actions),
+        vec![("greeted #ircx".to_string(), Some("greeter".to_string()))]
+    );
+    let note = client_notes(&actions).next().expect("the answer");
+    assert!(!note.sender.is_self, "the user did not say this");
+    assert_ne!(note.sender.nick, "sykk", "nor is it under their nick");
+}
+
+/// The client's own output keeps saying nothing about a plugin, so the field
+/// means "a plugin produced this" rather than "this is a note".
+#[tokio::test]
+async fn the_clients_own_output_names_no_plugin() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = runtime(root.path(), &[("greeter", "greet", GREETER, speaks())]);
+    let mut session = session();
+
+    let (_, actions) = submit(&runtime, &mut session, "/help").await;
+
+    let named: Vec<Option<String>> = client_notes(&actions).map(|note| note.via).collect();
+    assert!(!named.is_empty(), "/help prints something");
+    assert!(named.iter().all(Option::is_none), "{named:?}");
 }
 
 #[tokio::test]
@@ -355,6 +412,7 @@ fn message(nick: &str, text: &str) -> ircx_ipc::ChatMessage {
         reactions: Vec::new(),
         attachments: Vec::new(),
         encryption: ircx_ipc::EncryptionState::Plaintext,
+        via: None,
         raw: String::new(),
         source: ircx_ipc::MessageSource::Live,
     }

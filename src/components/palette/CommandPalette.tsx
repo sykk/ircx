@@ -2,7 +2,13 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
-import { buildCandidates, type Candidate } from "./candidates";
+import { SERVER_TARGET } from "@/types";
+import {
+  buildCandidates,
+  commandLineCandidate,
+  type Candidate,
+  type CommandContext,
+} from "./candidates";
 import { PaletteGroup } from "./PaletteGroup";
 import { filterMatches, flatten, rankMatches, type FilterState, type RankedResult } from "./ranking";
 
@@ -12,20 +18,14 @@ const RESULT_LIMIT = 60;
  * so a rebuilt list never inherits indices that pointed into the old one. */
 const narrowing = new WeakMap<Candidate[], FilterState>();
 
-interface Props {
-  /** Called when a slash command is chosen, with the command and a trailing
-   * space. The composer owns the input, so it does the inserting. */
-  onInsertCommand?: (text: string) => void;
-}
-
-export function CommandPalette(props: Props) {
+export function CommandPalette() {
   const open = useAppStore((s) => s.paletteOpen);
-  return open ? <Palette {...props} /> : null;
+  return open ? <Palette /> : null;
 }
 
 /** Mounted only while open, so the candidate list is built on open and the
  * palette costs nothing while the user is reading. */
-function Palette({ onInsertCommand }: Props) {
+function Palette() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -35,17 +35,36 @@ function Palette({ onInsertCommand }: Props) {
   const networks = useAppStore((s) => s.networks);
   const networkOrder = useAppStore((s) => s.networkOrder);
   const recent = useAppStore((s) => s.recent);
+  const views = useAppStore((s) => s.views);
+  const activeViewId = useAppStore((s) => s.activeViewId);
 
   const candidates = useMemo(
     () => buildCandidates({ channels, queries, networks, networkOrder }),
     [channels, queries, networks, networkOrder],
   );
 
+  const where = useMemo<CommandContext | null>(() => {
+    const view = activeViewId ? views[activeViewId] : undefined;
+    const id = view?.network && networks[view.network] ? view.network : networkOrder[0];
+    if (!id) return null;
+    return {
+      network: id,
+      networkName: networks[id]?.name ?? id,
+      target: view?.network === id ? view.target : SERVER_TARGET,
+    };
+  }, [activeViewId, views, networks, networkOrder]);
+
   const groups = useMemo(() => {
     const state = filterMatches(candidates, query, narrowing.get(candidates) ?? null);
     narrowing.set(candidates, state);
-    return rankMatches(candidates, state, recent, RESULT_LIMIT);
-  }, [candidates, query, recent]);
+    const ranked = rankMatches(candidates, state, recent, RESULT_LIMIT);
+
+    // Above the ranked list rather than in it: it is the query itself, so it
+    // never competes with a name match and never needs a score.
+    const line = commandLineCandidate(query, where);
+    if (!line) return ranked;
+    return [{ kind: line.kind, results: [{ candidate: line, score: 0, positions: [] }] }, ...ranked];
+  }, [candidates, query, recent, where]);
 
   const results = useMemo(() => flatten(groups), [groups]);
   const at = Math.min(selected, Math.max(0, results.length - 1));
@@ -62,9 +81,22 @@ function Palette({ onInsertCommand }: Props) {
       case "activate":
         store.setActive({ network: action.network, target: action.target });
         break;
-      case "insertCommand":
-        onInsertCommand?.(action.text);
-        break;
+      case "refine":
+        setQuery(action.text);
+        setSelected(0);
+        setError(null);
+        return;
+      case "run":
+        ipc.submitInput(action.network, action.target, action.input).then((outcome) => {
+          if (outcome.kind === "rejected") {
+            setError(outcome.value);
+            return;
+          }
+          const joined = channelJoinedBy(action.input);
+          if (joined) store.setActive({ network: action.network, target: joined });
+          close();
+        }, report);
+        return;
       case "toggleDrawer":
         store.toggleDrawer();
         break;
@@ -84,7 +116,11 @@ function Palette({ onInsertCommand }: Props) {
   /** A network command that fails leaves the palette open with the reason,
    * which is the only place to show it before the shell has a toast. */
   function attempt(call: Promise<void>) {
-    call.then(close, (reason: unknown) => setError(String(reason)));
+    call.then(close, report);
+  }
+
+  function report(reason: unknown) {
+    setError(String(reason));
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -179,13 +215,26 @@ function Palette({ onInsertCommand }: Props) {
 
         <footer className="flex gap-4 border-t border-[var(--border-subtle)] px-4 py-2 text-[11px] text-[var(--text-faint)]">
           <Hint keys="↑↓" label="Move" />
-          <Hint keys="↵" label="Open" />
+          <Hint keys="↵" label={results[at]?.candidate.kind === "run" ? "Run" : "Open"} />
           <Hint keys={displayChord("Escape")} label="Close" />
           <span className="ml-auto">{summarise(results)}</span>
         </footer>
       </div>
     </div>
   );
+}
+
+/**
+ * The one channel `input` joins, if it joins exactly one.
+ *
+ * A join run from the palette should leave the pane in the channel: the palette
+ * is the only route to a join before any conversation is open, and that is
+ * exactly when the pane behind it reads "No conversation open".
+ */
+function channelJoinedBy(input: string): string | null {
+  const [name = "", channel = ""] = input.slice(1).split(/\s+/);
+  if (name.toLowerCase() !== "join") return null;
+  return /^[#&!+][^,]*$/.test(channel) ? channel : null;
 }
 
 function offsetOf(groups: { results: RankedResult[] }[], index: number): number {

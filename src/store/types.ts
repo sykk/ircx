@@ -16,7 +16,7 @@ export type ViewId = string;
 export interface ChatView {
   id: ViewId;
   network: string;
-  /** Channel or query. Empty string is the network console. */
+  /** Channel or query, or `SERVER_TARGET` for the network's console. */
   target: string;
   /** Scroller offset, restored when the view regains focus. Two views on one
    * channel scroll independently, which is the whole point of the split. */
@@ -73,7 +73,7 @@ export interface AppState {
   timelines: Record<TargetKey, TimelineState>;
   /** nick -> epoch ms when the indicator expires. */
   typing: Record<TargetKey, Record<string, number>>;
-  /** Raw protocol log per network, capped; the `raw log` sidebar entry. */
+  /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
 
   // View.

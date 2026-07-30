@@ -35,6 +35,15 @@ export function SearchIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function WireIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M3.5 4.5 6.5 8l-3 3.5" />
+      <path d="M8.5 11.5h4" />
+    </svg>
+  );
+}
+
 export function OverflowIcon({ size = 14 }: IconProps) {
   return (
     <svg {...svgProps(size)} fill="currentColor" stroke="none">

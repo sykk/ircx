@@ -79,6 +79,11 @@ export function useActiveChannel(): Channel | undefined {
   return useChannelForView(useAppStore((s) => s.activeViewId));
 }
 
+/** One network's protocol transcript, oldest first, as the store capped it. */
+export function useRawLog(network: string): string[] {
+  return useAppStore((s) => s.rawLog[network] ?? EMPTY);
+}
+
 export function useMembers(network: string, channel: string): Member[] {
   return useAppStore((s) => s.members[targetKey(network, channel)] ?? EMPTY);
 }

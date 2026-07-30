@@ -13,8 +13,14 @@ import type {
   SearchHit,
   SearchRequest,
 } from "@/types";
+import { SERVER_TARGET } from "@/types";
 
 const EVENT_CHANNEL = "ircx://event";
+
+/** A channel or a nick — something the server will accept as a recipient. */
+function isConversation(target: string): boolean {
+  return target !== "" && target !== SERVER_TARGET;
+}
 
 /** Mirrors the Rust handlers in `src-tauri/src/commands.rs`. */
 export const ipc = {
@@ -47,8 +53,13 @@ export const ipc = {
   searchHistory: (req: SearchRequest) => invoke<SearchHit[]>("search_history", { req }),
   markRead: (network: string, target: string) =>
     invoke<void>("mark_read", { network, target }),
+  /** Silent for anything that is not a conversation. A typing notification is a
+   * `TAGMSG` addressed to the target, and the server console has no recipient
+   * to address: sending one earns a `411` per keystroke. */
   setTyping: (network: string, target: string, active: boolean) =>
-    invoke<void>("set_typing", { network, target, active }),
+    isConversation(target)
+      ? invoke<void>("set_typing", { network, target, active })
+      : Promise.resolve(),
 
   loadPreview: (url: string) => invoke<Attachment>("load_preview", { url }),
   getDraft: (network: string, target: string) =>

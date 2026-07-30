@@ -101,17 +101,17 @@ What is still open:
 - **A conversation closed before quitting staying closed.** The restart in the
   second run restored a channel and a query, both of which were open when the
   app was closed. Nobody has closed one first and checked that it stays gone.
-- **The header's invite control.** Core now answers `/invite`, and
-  `crates/ircx-core/tests/session.rs` asserts the line it puts on the wire. What
-  no test reaches is a server acting on it: whether the invitee is told, and
-  what a channel you lack `+o` on answers. `ChannelHeader`'s test mocks the IPC
-  boundary, which is why the missing dispatch arm survived to #83 in the first
-  place. Invite someone to a channel you hold and watch both ends.
-
 - **The raw log under load.** It renders every line it holds, up to the store's
   cap of 2,000, and re-renders per arriving line while it is open. It held the
   ~200 lines of a quiet session comfortably. Nobody has watched it during a
   netsplit or a `LIST`.
+
+**The header's invite control is verified** by the owner against Libera on
+2026-07-30. The invite arrived at the other client, and a channel without `+o`
+answered `That needs channel operator status in #omgwtf` — a numeric turned into
+a sentence, which is what the convention asks for. That closes the gap #83 left:
+`ChannelHeader`'s test mocks the IPC boundary, so nothing in the suite could see
+core refuse the command, which is how the missing dispatch arm survived at all.
 
 ## The member list in a split
 
@@ -119,10 +119,9 @@ Every pane on a channel draws its own roster (#95). `PaneTree.test.tsx` asserts
 which panes hold one, but jsdom draws nothing, so what the tests cannot answer
 is whether it looks like one conversation or like two things sharing a box.
 
-- **Two rosters at once.** Split two channels and check both are listed, each
-  inside its own pane. Then hide one with `Ctrl+Shift+M` and confirm the other
-  stays — the chord acts on the focused pane, so which pane has focus decides
-  which roster goes.
+**Two rosters at once is verified** by the owner against Libera on 2026-07-30:
+`#omgwtf` and `#test1233` open side by side, each listing its own members, and
+`Ctrl+Shift+M` hid one while the other stayed. What that run did not settle:
 
 - **The seam between the pane header and the roster.** The roster's own header
   is empty and carries the same height and rule as the pane header beside it, so
@@ -158,21 +157,28 @@ which asserts that the host survives each one. What no test reaches:
   sandbox a fetcher that answers without a network, so what they cover is the
   grant, the host list and the budget. The socket underneath is `ircx-net`'s and
   is covered by its own tests, but nothing exercises the two together.
-- **The folder picker.** `install_plugin` takes a path, and every test hands it
-  one directly. Nothing has watched `chooseFolder` open a native dialogue,
-  which is the one step of installing that no headless test reaches. Cancelling
-  it should leave the library alone rather than installing nothing under a
-  blank name.
+- **Cancelling the folder picker.** Installing through the native dialogue is
+  verified — two plugins went in that way on 2026-07-30 — but nobody has
+  cancelled one. It should leave the library alone rather than installing
+  nothing under a blank name.
 - **Whether the grant dialogue reads as plain terms.** `Permission::summary` is
   written for someone who has never heard the word capability, and the tests
   only assert that the string arrives — no test can say whether it lands.
   Install a plugin asking for all seven and read the seven lines cold: the
   question is whether you would know what you were agreeing to.
-- **A plugin's command appearing without a reconnect.** Granting `add-commands`
-  rebuilds the route table on a runtime a live session already holds, so
-  `/greet` should work in an open channel the moment the grant is saved. The
-  path is shared state rather than a message, so nothing in the test suite
-  watches a connected session pick it up.
+- **Picking a folder that is not a plugin.** The likeliest mistake with a
+  picker, and the one whose message was rewritten for #89. Choosing a folder
+  with no `plugin.json` should say which file it went looking for.
+
+**A grant reaching a live session is verified** on the same day. `/greet` and
+`/roster` both answered in an open channel the moment their grants were saved,
+with no reconnect, and revoking `add-commands` took the command back out of the
+client — the route table is rebuilt on a runtime the session already holds, so
+neither direction is a message anything could miss.
+
+`/roster` also reported `no fetch (ircx: network-requests was not granted)`,
+which is #93 seen from the other side: the refusal is an `Error` and a plugin
+that degrades can say why it did.
 
 ## Themes installed on disk
 

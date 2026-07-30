@@ -44,24 +44,52 @@ async fn a_fetch_completes_a_real_tls_handshake() {
     assert!(fetched.url.starts_with("https://"), "{}", fetched.url);
 }
 
-/// A redirect that leaves the host is refused rather than followed, and the
-/// refusal names where it would have gone. `http_loopback.rs` asserts this
-/// against a server it controls; this asserts a real one still trips it.
+/// The URL that found #106: `www.rust-lang.org` answers by redirecting to its
+/// apex, which used to be refused as crossing hosts. It is the same site, and
+/// this is the shape most of the web takes.
 #[tokio::test]
-#[ignore = "follows a real redirect on http://neverssl.com"]
-async fn a_redirect_off_the_host_is_refused_by_name() {
-    // A plain-http host that redirects to somewhere else entirely is the
-    // shape this refuses; which host does it is not the point, so the failure
-    // prints what happened rather than asserting a particular target.
-    let outcome = fetch("http://google.com/", &policy()).await;
+#[ignore = "fetches https://www.rust-lang.org over the real network"]
+async fn a_redirect_that_only_drops_www_is_followed() {
+    let fetched = fetch("https://www.rust-lang.org/", &policy())
+        .await
+        .expect("www redirecting to the apex is the same site");
 
-    match outcome {
+    println!("followed to {} — {} bytes", fetched.url, fetched.body.len());
+    assert!(!fetched.body.is_empty());
+}
+
+/// Whatever a real server does today, the request must not end up on a site
+/// the user did not choose.
+///
+/// The deterministic version of this lives in `http_loopback.rs`, against a
+/// server the test controls. This one cannot make a stranger redirect on
+/// demand, so it asserts the invariant rather than the path: if a cross-site
+/// redirect happens it is refused, and if none happens the body came from the
+/// site that was asked.
+#[tokio::test]
+#[ignore = "follows real redirects on http://google.com"]
+async fn a_request_never_lands_on_a_site_that_was_not_asked_for() {
+    let asked = "google.com";
+    match fetch("http://google.com/", &policy()).await {
         Err(HttpError::CrossHostRedirect { url, target }) => {
             println!("refused: {url} would have gone to {target}");
-            assert!(!target.is_empty(), "the refusal names the target");
         }
-        Err(other) => println!("did not redirect across hosts today: {other}"),
-        Ok(fetched) => println!("did not redirect at all today: {}", fetched.url),
+        Err(other) => println!("no cross-site redirect today: {other}"),
+        Ok(fetched) => {
+            let host = fetched
+                .url
+                .split("://")
+                .nth(1)
+                .and_then(|rest| rest.split('/').next())
+                .unwrap_or_default()
+                .trim_start_matches("www.")
+                .to_owned();
+            println!("answered from {host}");
+            assert_eq!(
+                host, asked,
+                "the body came from {host}, which was not asked for"
+            );
+        }
     }
 }
 

@@ -180,10 +180,17 @@ What is still open:
   It still lagged after both, and the cause turned out to be neither: every
   `LIST` reply also fell through to `server_words` and became a console message,
   so twenty-two thousand of them poured into a timeline that caps at ten
-  thousand. #125 collects them instead and shows them as something searchable.
+  thousand. #125 collects them instead.
 
-  What is left to watch is a `LIST` after that, and a netsplit — the other burst
-  this entry was written for, which nothing has yet seen.
+  **`/list` is verified** by the owner against Libera on 2026-07-30: no lag, and
+  the channel list comes up. Three changes were needed and the first two, while
+  both real improvements, missed the cause — the measurement after each is what
+  said keep going.
+
+  What is left is a netsplit, which is the other burst this entry was written
+  for and which nothing has yet seen. It differs from a `LIST` in a way that
+  matters: a `LIST` is one numeric that now bypasses the timeline, where a split
+  is thousands of QUITs and JOINs that each legitimately belong there.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

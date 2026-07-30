@@ -129,10 +129,16 @@ It also turned up #106, since fixed: `www.host` redirecting to `host` counted as
 crossing hosts, which refused most of the web. The probe now follows
 `https://www.rust-lang.org/` to its apex, which is the URL that found it.
 
-What that leaves is the path through the application. Paste an `https://` link
-to a PNG into a channel, click fetch, and watch the image appear — the probe
-proves `ircx-net` can fetch it, not that the click reaches the fetch or that
-what comes back is drawn.
+**The path through the application is verified** by the owner on 2026-07-30: a
+posted image, fetch clicked, and the preview drawn. The probe only ever proved
+`ircx-net` could fetch — not that the click reaches the fetch or that what comes
+back is rendered.
+
+What that leaves is the refusal seen from inside the window rather than from a
+test. A link that redirects across sites should say where it would have gone and
+not go there; `http_loopback.rs` asserts that against a server it controls and
+nobody has watched the sentence land in a conversation. The same goes for a link
+too large for the cap, and for what the timeline does with a fetch that fails.
 
 ## Assembled-application testing
 

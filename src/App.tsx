@@ -7,6 +7,7 @@ import { PaneTree } from "@/components/panes/PaneTree";
 import { AppShell } from "@/components/shell/AppShell";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
+import { startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
 
 /** Onboarding is decided once, when the snapshot lands: saving the first
@@ -19,6 +20,7 @@ export function App() {
   const [startup, setStartup] = useState<Startup>("loading");
 
   useEffect(() => {
+    const themes = startThemes();
     const bridge = startBridge();
     bridge.then(
       () =>
@@ -32,6 +34,7 @@ export function App() {
     );
     return () => {
       void bridge.then((stop) => stop()).catch(() => {});
+      void themes.then((stop) => stop());
     };
   }, []);
 

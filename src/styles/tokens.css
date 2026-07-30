@@ -1,10 +1,21 @@
-/* Design tokens for ircx.
+/* The token contract for ircx.
  *
- * Every colour the UI uses is declared here as a custom property. Components
- * must not hardcode hex values: a theme is a stylesheet that redefines this
- * block, and a hardcoded colour is a hole a theme cannot patch.
+ * Every colour, radius and shadow the UI uses is a custom property, and the
+ * values live in themes, not here: `src/styles/themes/<id>/theme.css` declares
+ * them and `src/styles/themes/<id>/theme.json` says who wrote it and whether
+ * it is light or dark. The built-in dark and light themes are ordinary themes
+ * loaded through `src/lib/theme`, not special cases.
  *
- * Palette sampled from the mockup in docs/mockup.png. */
+ * Components must not hardcode a value a theme needs to reach. A hardcoded
+ * colour, border, shadow or scrim is a hole a theme cannot patch.
+ *
+ * The full list of required properties is `REQUIRED_TOKENS` in
+ * `src/lib/theme/tokens.ts`, which is derived from the dark theme's stylesheet
+ * so the two cannot drift. A theme that leaves any of them undefined is
+ * rejected by name.
+ *
+ * The dark theme is also imported statically by global.css so the window is
+ * legible before any script runs. */
 
 @theme {
   --font-ui:
@@ -13,139 +24,7 @@
     "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
 }
 
-:root,
-:root[data-theme="ircx-dark"] {
+:root {
+  /* Overwritten from the active theme's manifest by the loader. */
   color-scheme: dark;
-
-  /* Surfaces, darkest to lightest. */
-  --surface-base: #0a0d12;
-  --surface-sidebar: #0d1117;
-  --surface-raised: #12161d;
-  --surface-overlay: #171c24;
-  --surface-hover: #1a1f28;
-  --surface-active: #1f2733;
-
-  --border-subtle: #1a1f27;
-  --border-default: #232a34;
-  --border-strong: #313a46;
-
-  --text-primary: #d4dae3;
-  --text-secondary: #9aa4b0;
-  --text-muted: #6e7781;
-  --text-faint: #4d555f;
-  --text-inverse: #0a0d12;
-
-  --accent: #4493f8;
-  --accent-hover: #58a6ff;
-  --accent-muted: #1f6feb33;
-
-  --success: #3fb950;
-  --warning: #d29922;
-  --danger: #f85149;
-
-  /* Connection and security indicators in the status bar. */
-  --state-connected: #3fb950;
-  --state-connecting: #d29922;
-  --state-disconnected: #6e7781;
-  --state-error: #f85149;
-
-  --badge-bg: #21262d;
-  --badge-text: #9aa4b0;
-  --badge-highlight-bg: #1f6feb;
-  --badge-highlight-text: #ffffff;
-
-  --divider-unread: #f85149;
-  --mention-bg: #1f6feb1a;
-
-  /* Deterministic nickname colours, hashed from the nick so a person keeps the
-   * same one everywhere.
-   *
-   * Warm hues are reserved for security and connection state. An
-   * unconstrained palette collides with them: the previous values put a nick
-   * on --danger at 4deg and on --success at 125deg, so a nickname could render
-   * in the colour that means "connection error". See
-   * readability/READABILITY.md, finding 1.
-   *
-   * Hues are spread evenly across 186-335deg, which keeps every entry more
-   * than 20deg from --danger, --warning and --success in both themes. Each is
-   * then solved for the lightness clearing 4.7:1 against the worst surface it
-   * can land on. tokens.test.ts asserts both constraints.
-   *
-   * Colour is reinforcement, never a carrier. The nickname string is the
-   * identifier and is written out in full; turning these off costs speed and
-   * nothing else, which is also why ten is enough. */
-  --nick-1: #319eaa;
-  --nick-2: #4598c9;
-  --nick-3: #6b90d4;
-  --nick-4: #8389db;
-  --nick-5: #9584db;
-  --nick-6: #a97cd9;
-  --nick-7: #be72d6;
-  --nick-8: #d366cf;
-  --nick-9: #d46cb4;
-  --nick-10: #d56f99;
-
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-
-  /* Behind the palette and other modal overlays. */
-  --scrim: rgb(2 4 8 / 0.66);
-
-  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
-}
-
-:root[data-theme="ircx-light"] {
-  color-scheme: light;
-
-  --surface-base: #ffffff;
-  --surface-sidebar: #f6f8fa;
-  --surface-raised: #f6f8fa;
-  --surface-overlay: #ffffff;
-  --surface-hover: #eef1f4;
-  --surface-active: #e4e8ed;
-
-  --border-subtle: #e6eaef;
-  --border-default: #d0d7de;
-  --border-strong: #b6bfc9;
-
-  --text-primary: #1f2328;
-  --text-secondary: #59636e;
-  --text-muted: #818b98;
-  --text-faint: #a3acb6;
-  --text-inverse: #ffffff;
-
-  --accent: #0969da;
-  --accent-hover: #0550ae;
-  --accent-muted: #0969da1a;
-
-  --success: #1a7f37;
-  --warning: #9a6700;
-  --danger: #cf222e;
-
-  --state-connected: #1a7f37;
-  --state-connecting: #9a6700;
-  --state-disconnected: #818b98;
-  --state-error: #cf222e;
-
-  --badge-bg: #eaeef2;
-  --badge-text: #59636e;
-  --badge-highlight-bg: #0969da;
-  --badge-highlight-text: #ffffff;
-
-  --divider-unread: #cf222e;
-  --mention-bg: #0969da14;
-
-  --nick-1: #1e6f79;
-  --nick-2: #256b96;
-  --nick-3: #3062bf;
-  --nick-4: #4e57d3;
-  --nick-5: #694dd3;
-  --nick-6: #8440cf;
-  --nick-7: #9d30c1;
-  --nick-8: #ab2ba6;
-  --nick-9: #b22d89;
-  --nick-10: #b82e68;
-
-  --scrim: rgb(31 35 40 / 0.42);
 }

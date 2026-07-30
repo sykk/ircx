@@ -34,4 +34,5 @@ export type { SearchHit } from "./generated/SearchHit";
 export type { SearchRequest } from "./generated/SearchRequest";
 export type { Sender } from "./generated/Sender";
 export type { Severity } from "./generated/Severity";
+export type { ThemeSource } from "./generated/ThemeSource";
 export type { Topic } from "./generated/Topic";

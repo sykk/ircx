@@ -24,6 +24,7 @@
 //! load_preview(url)                           -> Attachment
 //! get_draft(network, target)                  -> Option<String>
 //! set_draft(network, target, text)            -> ()
+//! list_themes()                               -> Vec<ThemeSource>
 //! ```
 //!
 //! Every handler returns `Result<T, String>`; the error string is user-facing.
@@ -131,4 +132,19 @@ pub struct AppSnapshot {
     pub networks: Vec<Network>,
     pub channels: Vec<Channel>,
     pub queries: Vec<Query>,
+}
+
+/// One theme directory, read but not understood: the backend does not parse
+/// either file. Validation is the frontend's, because it is the frontend that
+/// knows which custom properties the UI reads.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSource {
+    /// The directory name.
+    pub id: String,
+    /// Contents of `theme.json`.
+    pub manifest: String,
+    /// Contents of `theme.css`.
+    pub stylesheet: String,
 }

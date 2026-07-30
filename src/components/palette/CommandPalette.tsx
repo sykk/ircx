@@ -1,6 +1,7 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
+import { applyTheme, storeThemeId } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import {
@@ -37,10 +38,22 @@ function Palette() {
   const recent = useAppStore((s) => s.recent);
   const views = useAppStore((s) => s.views);
   const activeViewId = useAppStore((s) => s.activeViewId);
+  const themes = useAppStore((s) => s.themes);
+  const brokenThemes = useAppStore((s) => s.brokenThemes);
+  const themeId = useAppStore((s) => s.themeId);
 
   const candidates = useMemo(
-    () => buildCandidates({ channels, queries, networks, networkOrder }),
-    [channels, queries, networks, networkOrder],
+    () =>
+      buildCandidates({
+        channels,
+        queries,
+        networks,
+        networkOrder,
+        themes,
+        brokenThemes,
+        themeId,
+      }),
+    [channels, queries, networks, networkOrder, themes, brokenThemes, themeId],
   );
 
   const where = useMemo<CommandContext | null>(() => {
@@ -68,6 +81,16 @@ function Palette() {
 
   const results = useMemo(() => flatten(groups), [groups]);
   const at = Math.min(selected, Math.max(0, results.length - 1));
+
+  // Live preview: moving onto a theme puts it on the window, and moving off it
+  // — or closing the palette — puts the chosen one back. A swatch would have to
+  // lie about what a theme looks like; the window cannot.
+  const highlighted = results[at]?.candidate.action;
+  const preview = highlighted?.type === "theme" ? highlighted.id : themeId;
+  useEffect(() => {
+    applyTheme(themes.find((theme) => theme.id === preview) ?? null);
+    return () => applyTheme(themes.find((theme) => theme.id === themeId) ?? null);
+  }, [preview, themeId, themes]);
 
   const close = () => useAppStore.getState().togglePalette(false);
 
@@ -108,6 +131,13 @@ function Palette() {
         return;
       case "disconnect":
         attempt(ipc.disconnectNetwork(action.network));
+        return;
+      case "theme":
+        store.setThemeId(action.id);
+        storeThemeId(action.id);
+        break;
+      case "themeProblem":
+        setError(`${action.id}: ${action.problems.join(" ")}`);
         return;
     }
     close();
@@ -161,8 +191,7 @@ function Palette() {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center pt-[12vh]" onMouseDown={close}>
-      {/* No scrim token exists; --surface-base is the nearest colour. */}
-      <div className="absolute inset-0 bg-[var(--surface-base)] opacity-60" />
+      <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
         role="dialog"
         aria-modal="true"

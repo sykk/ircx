@@ -1,7 +1,7 @@
 use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, Attachment, ChatMessage, CommandOutcome, HistoryRequest, Member, NetworkConfig,
-    NetworkId, Query, SearchHit, SearchRequest, TargetName,
+    NetworkId, Query, SearchHit, SearchRequest, TargetName, ThemeSource,
 };
 use tauri::State;
 
@@ -182,4 +182,12 @@ pub async fn set_draft(
     app.store()
         .set_draft(&network, &target, &text)
         .map_err(describe)
+}
+
+/// The themes directory, read whole. Themes install by being copied in, so
+/// there is nothing to register and nothing to keep in sync.
+#[tauri::command]
+pub async fn list_themes(app: tauri::AppHandle) -> Result<Vec<ThemeSource>, String> {
+    let directory = crate::themes::directory(&app)?;
+    crate::themes::read(&directory)
 }

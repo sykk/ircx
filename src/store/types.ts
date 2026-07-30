@@ -1,3 +1,4 @@
+import type { BrokenTheme, Theme } from "@/lib/theme";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import type { TargetKey } from "./keys";
 
@@ -104,4 +105,12 @@ export interface AppState {
   /** Most recent first. Ranks palette results and drives Alt+Left/Right.
    * Recency is a property of the person, not of a pane. */
   recent: TargetKey[];
+  /** Every theme that loaded, the two built-ins first. */
+  themes: Theme[];
+  /** Directories that did not load, and why. Listed rather than dropped so the
+   * picker can say what is wrong instead of the theme not appearing. */
+  brokenThemes: BrokenTheme[];
+  /** The theme in force. Falls back to the built-in dark theme when it names
+   * one that is not installed. */
+  themeId: string;
 }

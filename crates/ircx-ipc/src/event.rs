@@ -47,9 +47,10 @@ pub enum IrcxEvent {
         target: TargetName,
         messages: Vec<ChatMessage>,
     },
-    /// Delivery confirmed by echo, or a preview finished loading.
+    /// Delivery confirmed by echo, or a preview finished loading. Boxed so the
+    /// enum is not the size of one message; serialises unchanged.
     MessageUpdated {
-        message: ChatMessage,
+        message: Box<ChatMessage>,
     },
     ChannelUpdated {
         channel: Channel,
@@ -81,6 +82,20 @@ pub enum IrcxEvent {
         network: NetworkId,
         target: TargetName,
         nick: String,
+        active: bool,
+    },
+    /// One person reacting to one message, or taking that reaction back. A
+    /// delta rather than the whole set, because a reaction can name a message
+    /// nothing here holds. Applying one twice has to land where applying it
+    /// once did: an echo of our own reaction follows the local copy.
+    ReactionChanged {
+        network: NetworkId,
+        target: TargetName,
+        /// The `msgid` the reaction named.
+        message: String,
+        nick: String,
+        emoji: String,
+        /// `false` when the tag was `+draft/unreact`.
         active: bool,
     },
     LagChanged {

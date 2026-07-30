@@ -46,6 +46,7 @@ impl SessionState {
             },
             text,
             tags: source.tags.clone(),
+            reactions: Vec::new(),
             reply_to: reply_to(source),
             source: batch
                 .as_deref()
@@ -84,6 +85,7 @@ impl SessionState {
             attachments: text::attachments(&text),
             text,
             tags: Vec::new(),
+            reactions: Vec::new(),
             reply_to: None,
             batch: None,
             delivery: Delivery::Delivered,
@@ -238,10 +240,29 @@ impl SessionState {
     }
 }
 
-fn reply_to(source: &Message) -> Option<String> {
-    ["+draft/reply", "+reply"]
+/// The `msgid` a `+reply` names. Both spellings are read: the tag is ratified
+/// unprefixed, and clients written against the draft still send `+draft/reply`.
+pub(crate) fn reply_to(source: &Message) -> Option<String> {
+    tag_value(source, &["+draft/reply", "+reply"])
+}
+
+/// The `+draft/react` value and whether it is being added. `None` when the
+/// message carries neither tag, or carries both: the specification forbids
+/// that pairing, and a line doing it says nothing that can be acted on.
+pub(crate) fn reaction(source: &Message) -> Option<(String, bool)> {
+    let added = tag_value(source, &["+draft/react", "+react"]);
+    let removed = tag_value(source, &["+draft/unreact", "+unreact"]);
+    match (added, removed) {
+        (Some(emoji), None) => Some((emoji, true)),
+        (None, Some(emoji)) => Some((emoji, false)),
+        _ => None,
+    }
+}
+
+fn tag_value(source: &Message, names: &[&str]) -> Option<String> {
+    names
         .iter()
-        .find_map(|tag| source.tag(tag))
+        .find_map(|name| source.tag(name))
         .filter(|value| !value.is_empty())
         .map(str::to_string)
 }

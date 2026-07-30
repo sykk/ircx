@@ -53,6 +53,14 @@ What is left:
   after it. Whoever is next in a channel when a split happens should watch what
   the member list and the timeline do.
 
+- **Reactions on the wire.** `+draft/react` is a work-in-progress tag and no
+  run has carried one. The scripted tests in `crates/ircx-core/tests/session.rs`
+  are written from the IRCv3 `react` client tag specification, not off a
+  server, and the specification's own examples are what they replay. What
+  nobody has seen: whether Libera relays a `TAGMSG` carrying the tag at all,
+  and whether the `msgid` a `+reply` names survives the relay unchanged. Send
+  one from a client that supports it — IRCCloud does — and watch the raw log.
+
 ## Assembled-application testing
 
 Driven end to end on 2026-07-30 and written up in `docs/end-to-end-run.md`:

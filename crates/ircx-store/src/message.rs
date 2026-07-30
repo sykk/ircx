@@ -1,4 +1,4 @@
-use ircx_ipc::{ChatMessage, MessageSource, Sender};
+use ircx_ipc::{ChatMessage, MessageSource, Reaction, Sender};
 use rusqlite::{params, Connection, Row, Transaction};
 
 use crate::{from_json_column, to_json, StoreError};
@@ -94,6 +94,10 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         timestamp_is_local: row.get(10)?,
         text: row.get(11)?,
         tags: from_json_column(row, 12)?,
+        // Reactions live in their own table, keyed by msgid rather than by a
+        // row here; `attach_reactions` fills them in for a page that has been
+        // read.
+        reactions: Vec::new(),
         reply_to: row.get(13)?,
         batch: row.get(14)?,
         delivery: from_json_column(row, 15)?,
@@ -102,6 +106,66 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         raw: row.get(18)?,
         source: MessageSource::LocalArchive,
     })
+}
+
+const SET_REACTION: &str = "INSERT OR IGNORE INTO reactions (network, msgid, nick, emoji)
+     VALUES (?1, ?2, ?3, ?4)";
+
+const UNSET_REACTION: &str =
+    "DELETE FROM reactions WHERE network = ?1 AND msgid = ?2 AND nick = ?3 AND emoji = ?4";
+
+pub(crate) fn set_reaction(
+    conn: &Connection,
+    network: &str,
+    msgid: &str,
+    nick: &str,
+    emoji: &str,
+    active: bool,
+) -> Result<(), StoreError> {
+    let sql = match active {
+        true => SET_REACTION,
+        false => UNSET_REACTION,
+    };
+    conn.execute(sql, params![network, msgid, nick, emoji])?;
+    Ok(())
+}
+
+const REACTIONS: &str =
+    "SELECT nick, emoji FROM reactions WHERE network = ?1 AND msgid = ?2 ORDER BY id";
+
+/// Fills in the reactions for messages already read. Grouped by value in the
+/// order the first of each arrived, and the nicks within a value likewise, so
+/// the chips a reader sees do not reshuffle between one page load and the next.
+pub(crate) fn attach_reactions(
+    conn: &Connection,
+    messages: &mut [ChatMessage],
+) -> Result<(), StoreError> {
+    let mut stmt = conn.prepare_cached(REACTIONS)?;
+    for message in messages {
+        let (network, key) = (message.network.clone(), reaction_key(message).to_string());
+        let mut rows = stmt.query(params![network, key])?;
+        let mut reactions: Vec<Reaction> = Vec::new();
+        while let Some(row) = rows.next()? {
+            let nick: String = row.get(0)?;
+            let emoji: String = row.get(1)?;
+            match reactions.iter_mut().find(|held| held.emoji == emoji) {
+                Some(held) => held.nicks.push(nick),
+                None => reactions.push(Reaction {
+                    emoji,
+                    nicks: vec![nick],
+                }),
+            }
+        }
+        message.reactions = reactions;
+    }
+    Ok(())
+}
+
+/// What a `+reply` can name this message by. Only a server msgid reaches
+/// another client, so a message that has one is found by it; one that does not
+/// falls back to its local id, which nothing remote will ever ask for.
+fn reaction_key(message: &ChatMessage) -> &str {
+    server_msgid(message).unwrap_or(&message.id)
 }
 
 /// Only a server msgid identifies a message across a replay. A locally minted

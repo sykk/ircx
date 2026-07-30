@@ -29,6 +29,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
         timestamp_is_local: false,
         text: text.into(),
         tags: vec![],
+        reactions: vec![],
         reply_to: None,
         batch: None,
         delivery: Delivery::Delivered,
@@ -104,6 +105,9 @@ fn a_round_trip_preserves_every_field() {
             ("typing".into(), None),
             ("+draft/reply".into(), Some("other".into())),
         ],
+        // Reactions are not part of the row: they are written by
+        // `set_reaction` and read back from their own table.
+        reactions: vec![],
         reply_to: Some("earlier".into()),
         batch: Some("batch-1".into()),
         delivery: Delivery::Failed("no such channel".into()),
@@ -151,6 +155,7 @@ fn a_round_trip_preserves_every_field() {
     assert_eq!(read.encryption, original.encryption);
     assert_eq!(read.raw, original.raw);
     assert_eq!(read.source, MessageSource::LocalArchive);
+    assert!(read.reactions.is_empty());
 
     assert_eq!(read.attachments.len(), 1);
     let (read_attachment, original_attachment) = (&read.attachments[0], &original.attachments[0]);
@@ -759,6 +764,167 @@ fn removing_a_network_drops_the_password_and_keeps_the_archive() {
             .len(),
         1
     );
+}
+
+/// Reactions key on the msgid they named, not on a row in `messages`, so one
+/// can arrive for a message the archive has never held — reacting to something
+/// said before this client connected does exactly that. The row waits, and the
+/// message finds it whenever a backfill brings it in.
+#[test]
+fn a_reaction_for_a_message_not_yet_archived_is_waiting_when_it_arrives() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_reaction("libera", "123", "nick2", "lol", true)
+        .unwrap();
+    assert!(store
+        .load_history(&history("#ircx", None, 10))
+        .unwrap()
+        .is_empty());
+
+    store
+        .append_messages(&[with_msgid(
+            message("x", "#ircx", "2026-01-01T00:00:00Z", "Hello!"),
+            "123",
+        )])
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].reactions.len(), 1);
+    assert_eq!(read[0].reactions[0].emoji, "lol");
+    assert_eq!(read[0].reactions[0].nicks, vec!["nick2".to_string()]);
+}
+
+#[test]
+fn reactions_group_by_value_in_the_order_they_arrived() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[with_msgid(
+            message("x", "#ircx", "2026-01-01T00:00:00Z", "They won!"),
+            "123",
+        )])
+        .unwrap();
+    for (nick, emoji) in [
+        ("nick2", "🇦🇷"),
+        ("nick3", "🇩🇪"),
+        ("nick4", "🇦🇷"),
+        // One person sending the same reaction twice holds one of it.
+        ("nick2", "🇦🇷"),
+    ] {
+        store
+            .set_reaction("libera", "123", nick, emoji, true)
+            .unwrap();
+    }
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    let shown: Vec<(&str, Vec<&str>)> = read[0]
+        .reactions
+        .iter()
+        .map(|held| {
+            (
+                held.emoji.as_str(),
+                held.nicks.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        vec![("🇦🇷", vec!["nick2", "nick4"]), ("🇩🇪", vec!["nick3"])]
+    );
+}
+
+#[test]
+fn taking_a_reaction_back_removes_only_the_person_who_sent_it() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[with_msgid(
+            message("x", "#ircx", "2026-01-01T00:00:00Z", "They won!"),
+            "123",
+        )])
+        .unwrap();
+    store
+        .set_reaction("libera", "123", "nick2", "🇦🇷", true)
+        .unwrap();
+    store
+        .set_reaction("libera", "123", "nick3", "🇦🇷", true)
+        .unwrap();
+    store
+        .set_reaction("libera", "123", "nick2", "🇦🇷", false)
+        .unwrap();
+    // Taking back one that was never sent is a line a server can repeat, not
+    // a failure.
+    store
+        .set_reaction("libera", "123", "nick4", "🇦🇷", false)
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].reactions[0].nicks, vec!["nick3".to_string()]);
+}
+
+/// A message this client sent keeps the local id the UI drew it with, so a
+/// reaction to it names the msgid the echo carried instead.
+#[test]
+fn a_reaction_to_our_own_message_finds_it_by_the_msgid_the_echo_carried() {
+    let store = Store::open_in_memory().unwrap();
+    let mut ours = message("local-uuid", "#ircx", "2026-01-01T00:00:00Z", "Hello!");
+    ours.tags.push(("msgid".into(), Some("456".into())));
+    store.append_messages(&[ours]).unwrap();
+    store
+        .set_reaction("libera", "456", "nick2", "lol", true)
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].reactions[0].nicks, vec!["nick2".to_string()]);
+}
+
+/// A reaction on one network is not a reaction on another that happened to
+/// hand out the same msgid.
+#[test]
+fn reactions_do_not_cross_networks() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[with_msgid(
+            message("x", "#ircx", "2026-01-01T00:00:00Z", "Hello!"),
+            "123",
+        )])
+        .unwrap();
+    store
+        .set_reaction("oftc", "123", "nick2", "lol", true)
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert!(read[0].reactions.is_empty());
+}
+
+#[test]
+fn an_exported_message_carries_the_reactions_it_collected() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[with_msgid(
+            message("x", "#ircx", "2026-01-01T00:00:00Z", "Hello!"),
+            "123",
+        )])
+        .unwrap();
+    store
+        .set_reaction("libera", "123", "nick2", "lol", true)
+        .unwrap();
+
+    let mut out = Vec::new();
+    store.export_target("libera", "#ircx", &mut out).unwrap();
+    let exported: ChatMessage =
+        serde_json::from_str(String::from_utf8(out).unwrap().trim()).unwrap();
+    assert_eq!(exported.reactions[0].nicks, vec!["nick2".to_string()]);
+}
+
+/// An export written before reactions existed has no field for them, and it
+/// still has to read back.
+#[test]
+fn an_export_from_before_reactions_still_reads() {
+    let mut line =
+        serde_json::to_value(message("x", "#ircx", "2026-01-01T00:00:00Z", "Hello!")).unwrap();
+    line.as_object_mut().unwrap().remove("reactions");
+
+    let read: ChatMessage = serde_json::from_value(line).unwrap();
+    assert!(read.reactions.is_empty());
 }
 
 #[test]

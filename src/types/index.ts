@@ -27,6 +27,7 @@ export type { MessageSource } from "./generated/MessageSource";
 export type { Network } from "./generated/Network";
 export type { NetworkConfig } from "./generated/NetworkConfig";
 export type { Query } from "./generated/Query";
+export type { Reaction } from "./generated/Reaction";
 export type { SaslConfig } from "./generated/SaslConfig";
 export type { SaslMechanism } from "./generated/SaslMechanism";
 export type { SaslStatus } from "./generated/SaslStatus";

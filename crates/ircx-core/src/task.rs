@@ -47,6 +47,14 @@ pub enum SessionCommand {
         target: TargetName,
         active: bool,
     },
+    /// `message` is the server `msgid` being reacted to; `active` is false to
+    /// take the reaction back.
+    React {
+        target: TargetName,
+        message: String,
+        emoji: String,
+        active: bool,
+    },
     Raw {
         line: String,
     },
@@ -297,6 +305,12 @@ fn apply(command: SessionCommand, session: &mut SessionState, context: &Context)
         SessionCommand::CloseTarget { target } => session.close_target(&target),
         SessionCommand::MarkRead { target } => session.mark_read(&target),
         SessionCommand::SetTyping { target, active } => session.set_typing(&target, active),
+        SessionCommand::React {
+            target,
+            message,
+            emoji,
+            active,
+        } => session.react(&target, &message, &emoji, active),
         SessionCommand::Raw { line } => session.raw(&line),
         SessionCommand::Members { channel, reply } => {
             let _ = reply.send(session.members(&channel));
@@ -333,6 +347,13 @@ impl Context {
                     match event.as_ref() {
                         IrcxEvent::MessagesAppended { messages, .. } => self.persist(messages),
                         IrcxEvent::MessageUpdated { message } => self.update(message),
+                        IrcxEvent::ReactionChanged {
+                            message,
+                            nick,
+                            emoji,
+                            active,
+                            ..
+                        } => self.record_reaction(message, nick, emoji, *active),
                         _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
@@ -358,6 +379,17 @@ impl Context {
     fn persist(&self, messages: &[ChatMessage]) {
         if let Err(error) = self.store.append_messages(messages) {
             warn!(%error, "could not write messages to the archive");
+        }
+    }
+
+    /// The archive is the only place a reaction outside the open window
+    /// survives, so it is written whether or not the message it names is here.
+    fn record_reaction(&self, message: &str, nick: &str, emoji: &str, active: bool) {
+        let stored = self
+            .store
+            .set_reaction(&self.network, message, nick, emoji, active);
+        if let Err(error) = stored {
+            warn!(%error, "could not write a reaction to the archive");
         }
     }
 

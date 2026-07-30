@@ -120,9 +120,12 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         | IrcxEvent::SaslChanged { network, .. }
         | IrcxEvent::CapsChanged { network, .. }
         | IrcxEvent::LagChanged { network, .. } => Some(Lane::Network(network.clone())),
-        IrcxEvent::TypingChanged { .. } | IrcxEvent::RawLine { .. } | IrcxEvent::Notice { .. } => {
-            None
-        }
+        // A reaction is a delta, not a state: coalescing two of them would
+        // drop one, and the second does not carry what the first said.
+        IrcxEvent::TypingChanged { .. }
+        | IrcxEvent::ReactionChanged { .. }
+        | IrcxEvent::RawLine { .. }
+        | IrcxEvent::Notice { .. } => None,
     }
 }
 
@@ -255,6 +258,7 @@ mod tests {
             timestamp_is_local: false,
             text: "hello".into(),
             tags: vec![],
+            reactions: vec![],
             reply_to: None,
             batch: None,
             delivery: Delivery::Sent,

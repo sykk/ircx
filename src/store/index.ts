@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { FALLBACK_THEME_ID, type Catalogue } from "@/lib/theme";
-import type { ChatMessage, IrcxEvent } from "@/types";
+import type { ChatMessage, IrcxEvent, Reaction } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { paneOrder, removeLeaf, splitLeaf } from "./layout";
 import type {
@@ -364,6 +364,22 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
     }
 
+    case "reactionChanged": {
+      const key = targetKey(event.network, event.target);
+      const timeline = s.timelines[key];
+      // A reaction can name a message that scrolled out of this window, or one
+      // said before the client connected. The archive keeps it either way and
+      // hands it back with the message, so there is nothing to hold here.
+      if (!timeline) return {};
+      const at = timeline.messages.findIndex((m) => serverMsgid(m) === event.message);
+      if (at === -1) return {};
+
+      const held = timeline.messages[at]!;
+      const messages = timeline.messages.slice();
+      messages[at] = { ...held, reactions: applyReaction(held.reactions ?? [], event) };
+      return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
+    }
+
     case "channelUpdated": {
       const key = targetKey(event.channel.network, event.channel.name);
       return { channels: { ...s.channels, [key]: event.channel } };
@@ -435,6 +451,40 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       // target; nothing to hold in the store.
       return {};
   }
+}
+
+/** What a `+reply` can name a message by. A message this client sent keeps the
+ * local id the UI drew it with, so the server's name for it is the `msgid` tag
+ * its echo carried. */
+function serverMsgid(message: ChatMessage): string {
+  if (!message.idIsLocal) return message.id;
+  return message.tags.find(([name]) => name === "msgid")?.[1] ?? message.id;
+}
+
+/** Adding a reaction someone already holds changes nothing, and taking back one
+ * they never sent changes nothing either — a server can deliver either line
+ * twice, and the sender's own copy is followed by its echo. */
+function applyReaction(
+  held: readonly Reaction[],
+  event: Extract<IrcxEvent, { type: "reactionChanged" }>,
+): Reaction[] {
+  const at = held.findIndex((r) => r.emoji === event.emoji);
+  if (at === -1) {
+    if (!event.active) return [...held];
+    return [...held, { emoji: event.emoji, nicks: [event.nick] }];
+  }
+
+  const nicks = held[at]!.nicks;
+  const next = event.active
+    ? nicks.includes(event.nick)
+      ? nicks
+      : [...nicks, event.nick]
+    : nicks.filter((nick) => nick !== event.nick);
+
+  const reactions = held.slice();
+  if (next.length === 0) reactions.splice(at, 1);
+  else reactions[at] = { emoji: event.emoji, nicks: next };
+  return reactions;
 }
 
 /** A timeline is held in the order the conversation happened, so a message that

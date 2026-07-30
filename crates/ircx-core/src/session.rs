@@ -942,7 +942,9 @@ impl SessionState {
             message.timestamp = time.to_string();
             message.timestamp_is_local = false;
         }
-        self.emit(IrcxEvent::MessageUpdated { message });
+        self.emit(IrcxEvent::MessageUpdated {
+            message: Box::new(message),
+        });
         true
     }
 
@@ -960,10 +962,26 @@ impl SessionState {
         if let Some(state) = message.tag("+typing").or_else(|| message.tag("typing")) {
             self.emit(IrcxEvent::TypingChanged {
                 network: self.config.network.clone(),
-                target,
-                nick: sender.nick,
+                target: target.clone(),
+                nick: sender.nick.clone(),
                 active: state.eq_ignore_ascii_case("active"),
             });
+        }
+
+        // A reaction means nothing apart from the message it answers, which is
+        // why the specification makes `+reply` mandatory alongside it. A line
+        // without one names nothing and is dropped.
+        if let Some((emoji, active)) = crate::message::reaction(message) {
+            if let Some(id) = crate::message::reply_to(message) {
+                self.emit(IrcxEvent::ReactionChanged {
+                    network: self.config.network.clone(),
+                    target,
+                    message: id,
+                    nick: sender.nick,
+                    emoji,
+                    active,
+                });
+            }
         }
     }
 

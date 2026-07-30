@@ -26,11 +26,31 @@ pub struct ChatMessage {
     pub reply_to: Option<String>,
     pub batch: Option<String>,
     pub delivery: Delivery,
+    /// Reactions against this message's `msgid`, oldest first. Anything
+    /// archived or exported before reactions existed has no such field, which
+    /// is why it defaults rather than being required.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<Reaction>>", optional)]
+    pub reactions: Vec<Reaction>,
     pub attachments: Vec<Attachment>,
     /// Always `Plaintext` this milestone; the field is the extension point.
     pub encryption: EncryptionState,
     pub raw: String,
     pub source: MessageSource,
+}
+
+/// One `+draft/react` value and everyone who sent it. The readability studies
+/// ask for names rather than counts, so the nicks travel and a count is
+/// whatever the frontend makes of their number.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Reaction {
+    /// The tag's value. Emoji in practice; the specification puts no
+    /// restriction on it, so `lol` and `:)` are as valid as `👋`.
+    pub emoji: String,
+    /// Oldest first, cased as each reactor's nick was at the time.
+    pub nicks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

@@ -9,17 +9,21 @@ export function resetStore() {
   useAppStore.setState(PRISTINE, true);
 }
 
-type ViewSlice = Pick<AppState, "views" | "viewOrder" | "activeViewId">;
+type ViewSlice = Pick<AppState, "views" | "viewOrder" | "activeViewId" | "layout">;
+
+/** The id `oneView` gives its pane, for a test that renders a pane component. */
+export const TEST_VIEW = "test-view";
 
 /** One focused pane on `target`, or none. Spread into a `setState` literal —
- * the three view fields only make sense set together. */
+ * the view fields only make sense set together. */
 export function oneView(target: ActiveTarget | null): ViewSlice {
-  if (!target) return { views: {}, viewOrder: [], activeViewId: null };
-  const id = "test-view";
+  if (!target) return { views: {}, viewOrder: [], activeViewId: null, layout: null };
+  const id = TEST_VIEW;
   return {
     views: { [id]: { id, ...target, scrollPosition: 0, selectedUser: null } },
     viewOrder: [id],
     activeViewId: id,
+    layout: { type: "view", id },
   };
 }
 

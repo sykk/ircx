@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import { targetKey, useActiveTarget, useActiveTimeline } from "@/store/selectors";
+import { targetKey, useTimelineForView, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
 import { MessageBlock } from "./MessageBlock";
@@ -47,11 +47,10 @@ const LADDER = {
   "--measure": "595px",
 } as CSSProperties;
 
-export function Timeline() {
-  const active = useActiveTarget();
-  const viewId = useAppStore((s) => s.activeViewId);
+export function Timeline({ view }: { view: ViewId | null }) {
+  const pane = useView(view);
 
-  if (!active || !viewId) {
+  if (!pane || !pane.network) {
     return (
       <div className="grid h-full place-items-center text-[12px]" style={{ color: "var(--text-muted)" }}>
         No conversation open
@@ -61,13 +60,13 @@ export function Timeline() {
 
   // Remounting on target switch drops the measurement cache and fold state,
   // both of which belong to the conversation being left.
-  const conversation = targetKey(active.network, active.target);
+  const conversation = targetKey(pane.network, pane.target);
   return (
     <TimelineFor
       key={conversation}
-      view={viewId}
-      network={active.network}
-      target={active.target}
+      view={pane.id}
+      network={pane.network}
+      target={pane.target}
     />
   );
 }
@@ -79,7 +78,7 @@ interface TimelineForProps {
 }
 
 function TimelineFor({ view, network, target }: TimelineForProps) {
-  const timeline = useActiveTimeline();
+  const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);

@@ -16,8 +16,9 @@ structural findings and leave the verdict machinery. Two deliberate departures
 from it: typography stays semantic (prose in the text face, data in mono) and
 the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`.
 
-`docs/multiwindow.md` describes split panes and per-pane context. Not built
-yet; it will move `active` and the context panel out of global store state.
+`docs/multiwindow.md` describes split panes and per-pane context. The layout
+tree and the context panel that follows focus are built. Pinning the panel to a
+pane and embedding it inside one are not.
 
 ## Layer boundaries
 

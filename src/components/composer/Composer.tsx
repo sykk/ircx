@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
-import { targetKey, useActiveTarget, useMembers } from "@/store/selectors";
+import { targetKey, useMembers, useView } from "@/store/selectors";
+import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
 import { matchCommands } from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
@@ -12,11 +13,11 @@ const DRAFT_DEBOUNCE_MS = 400;
 const TYPING_INTERVAL_MS = 3_000;
 const CHANNEL_PREFIX = /^[#&!+]/;
 
-export function Composer() {
-  const active = useActiveTarget();
-  if (!active) return null;
-  const conversation = targetKey(active.network, active.target);
-  return <ComposerFor key={conversation} network={active.network} target={active.target} />;
+export function Composer({ view }: { view: ViewId | null }) {
+  const pane = useView(view);
+  if (!pane || !pane.network) return null;
+  const conversation = targetKey(pane.network, pane.target);
+  return <ComposerFor key={conversation} network={pane.network} target={pane.target} />;
 }
 
 function ComposerFor({ network, target }: { network: string; target: string }) {

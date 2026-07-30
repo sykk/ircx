@@ -50,6 +50,7 @@ function seedViews(...views: ChatView[]) {
     views: Object.fromEntries(views.map((v) => [v.id, v])),
     viewOrder: views.map((v) => v.id),
     activeViewId: views[0]?.id ?? null,
+    layout: views[0] ? { type: "view", id: views[0].id } : null,
   });
 }
 
@@ -64,6 +65,7 @@ beforeEach(() => {
     views: {},
     viewOrder: [],
     activeViewId: null,
+    layout: null,
     recent: [],
   });
 });
@@ -205,6 +207,96 @@ describe("view state", () => {
     expect(views.a).toEqual(view("a", "", ""));
     expect(views.b).toEqual(view("b", "oftc", "#linux"));
     expect(result.current).toBeNull();
+  });
+});
+
+describe("splitting", () => {
+  it("opens a second pane on the same target and focuses it", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+
+    useAppStore.getState().splitActiveView("row");
+
+    const { views, viewOrder, activeViewId, layout } = useAppStore.getState();
+    expect(viewOrder).toHaveLength(2);
+    expect(activeViewId).toBe(viewOrder[1]);
+    expect(views[activeViewId!]).toMatchObject({
+      network: "libera",
+      target: "#ctf-ops",
+      scrollPosition: 0,
+    });
+    expect(layout).toEqual({
+      type: "split",
+      direction: "row",
+      children: [
+        { type: "view", id: "a" },
+        { type: "view", id: viewOrder[1] },
+      ],
+    });
+  });
+
+  it("splits the focused pane without rearranging the others", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+    const store = useAppStore.getState();
+
+    store.splitActiveView("row");
+    const second = useAppStore.getState().activeViewId!;
+    store.focusView("a");
+    store.splitActiveView("column");
+
+    const { viewOrder, layout } = useAppStore.getState();
+    expect(viewOrder).toEqual(["a", viewOrder[1], second]);
+    expect(layout).toMatchObject({
+      direction: "row",
+      children: [{ direction: "column" }, { type: "view", id: second }],
+    });
+  });
+
+  it("collapses the split when a pane closes and focuses a neighbour", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+    useAppStore.getState().splitActiveView("row");
+    const second = useAppStore.getState().activeViewId!;
+
+    useAppStore.getState().closeView(second);
+
+    const { views, viewOrder, activeViewId, layout } = useAppStore.getState();
+    expect(Object.keys(views)).toEqual(["a"]);
+    expect(viewOrder).toEqual(["a"]);
+    expect(activeViewId).toBe("a");
+    expect(layout).toEqual({ type: "view", id: "a" });
+  });
+
+  it("leaves focus alone when the pane that closed was not the focused one", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+    useAppStore.getState().splitActiveView("row");
+    const second = useAppStore.getState().activeViewId!;
+
+    useAppStore.getState().closeView("a");
+
+    expect(useAppStore.getState().activeViewId).toBe(second);
+  });
+
+  it("refuses to close the last pane", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+
+    useAppStore.getState().closeView("a");
+
+    const { views, viewOrder, activeViewId } = useAppStore.getState();
+    expect(viewOrder).toEqual(["a"]);
+    expect(activeViewId).toBe("a");
+    expect(views.a).toBeTruthy();
+  });
+
+  it("points one pane somewhere else without moving the other", () => {
+    seedViews(view("a", "libera", "#ctf-ops"));
+    const store = useAppStore.getState();
+    store.splitActiveView("row");
+    const second = useAppStore.getState().activeViewId!;
+
+    store.setActive({ network: "libera", target: "#hackint" });
+
+    const { views } = useAppStore.getState();
+    expect(views[second]).toMatchObject({ target: "#hackint" });
+    expect(views.a).toMatchObject({ target: "#ctf-ops" });
   });
 });
 

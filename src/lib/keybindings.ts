@@ -11,8 +11,11 @@ export type ActionId =
   | "palette.toggle"
   | "search.open"
   | "drawer.toggle"
-  | "target.previous"
-  | "target.next"
+  | "pane.splitVertical"
+  | "pane.splitHorizontal"
+  | "pane.close"
+  | "pane.previous"
+  | "pane.next"
   | "target.previousUnread"
   | "target.nextUnread"
   | "target.jump"
@@ -34,10 +37,18 @@ export interface Binding {
 export const DEFAULT_BINDINGS: readonly Binding[] = [
   { chord: "Mod+K", action: "palette.toggle", whenTyping: true, description: "Command palette" },
   { chord: "Mod+F", action: "search.open", whenTyping: true, description: "Search current target" },
-  { chord: "Mod+Shift+M", action: "drawer.toggle", description: "Toggle member drawer" },
+  { chord: "Mod+Shift+M", action: "drawer.toggle", description: "Toggle context panel" },
 
-  { chord: "Alt+ArrowUp", action: "target.previous", whenTyping: true, description: "Previous target" },
-  { chord: "Alt+ArrowDown", action: "target.next", whenTyping: true, description: "Next target" },
+  { chord: "Mod+\\", action: "pane.splitVertical", whenTyping: true, description: "Split pane side by side" },
+  { chord: "Mod+Shift+\\", action: "pane.splitHorizontal", whenTyping: true, description: "Split pane top and bottom" },
+  { chord: "Mod+W", action: "pane.close", whenTyping: true, description: "Close pane" },
+
+  // These two walked the target list before there were panes, and still do
+  // while there is one pane. Once the window is split, moving between the panes
+  // is the more immediate need; target walking keeps the numbered jumps, the
+  // unread chords and the palette.
+  { chord: "Alt+ArrowUp", action: "pane.previous", whenTyping: true, description: "Previous pane, or previous target when unsplit" },
+  { chord: "Alt+ArrowDown", action: "pane.next", whenTyping: true, description: "Next pane, or next target when unsplit" },
   { chord: "Alt+Shift+ArrowUp", action: "target.previousUnread", whenTyping: true, description: "Previous unread" },
   { chord: "Alt+Shift+ArrowDown", action: "target.nextUnread", whenTyping: true, description: "Next unread" },
   // Not while typing: Alt+Left and Alt+Right move the caret by word in every
@@ -95,8 +106,12 @@ function eventKey(event: KeyboardEvent): string {
   const code = event.code;
   if (code.startsWith("Key")) return code.slice(3);
   if (code.startsWith("Digit")) return code.slice(5);
-  return canonicalKey(event.key);
+  return CODE_KEYS[code] ?? canonicalKey(event.key);
 }
+
+/** Punctuation whose `event.key` Shift rewrites: Shift+Backslash arrives as
+ * `|`, and `Mod+Shift+\` names the key, not the character it produced. */
+const CODE_KEYS: Record<string, string> = { Backslash: "\\" };
 
 function canonicalKey(key: string): string {
   if (key.length === 1) return key.toUpperCase();

@@ -2,7 +2,7 @@ import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-l
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
-import { oneView } from "@/components/shell/fixtures";
+import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { Composer } from "./Composer";
 
 const { ipcMock } = vi.hoisted(() => ({
@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 
 async function mount() {
-  render(<Composer />);
+  render(<Composer view={TEST_VIEW} />);
   const box = screen.getByLabelText("Message #ctf-ops") as HTMLTextAreaElement;
   await waitFor(() => expect(ipcMock.getDraft).toHaveBeenCalled());
   await act(async () => {});

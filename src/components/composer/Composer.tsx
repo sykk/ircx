@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
-import { useAppStore } from "@/store";
-import { targetKey, useMembers } from "@/store/selectors";
+import { targetKey, useActiveTarget, useMembers } from "@/store/selectors";
 import { CommandHint } from "./CommandHint";
 import { matchCommands } from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
@@ -14,7 +13,7 @@ const TYPING_INTERVAL_MS = 3_000;
 const CHANNEL_PREFIX = /^[#&!+]/;
 
 export function Composer() {
-  const active = useAppStore((s) => s.active);
+  const active = useActiveTarget();
   if (!active) return null;
   const conversation = targetKey(active.network, active.target);
   return <ComposerFor key={conversation} network={active.network} target={active.target} />;

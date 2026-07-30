@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
+import { oneView } from "@/components/shell/fixtures";
 import { ChannelHeader } from "./ChannelHeader";
 
 const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
@@ -17,7 +18,7 @@ beforeEach(() => {
         topic: { text: TOPIC, setBy: "sable", setAt: null },
       },
     },
-    active: { network: "libera", target: CTF_OPS.name },
+    ...oneView({ network: "libera", target: CTF_OPS.name }),
     drawerOpen: false,
     searchOpen: false,
   });
@@ -29,7 +30,7 @@ function openMenu() {
 
 describe("ChannelHeader", () => {
   it("renders nothing when no channel is active", () => {
-    useAppStore.setState({ active: null });
+    useAppStore.setState(oneView(null));
     const { container } = render(<ChannelHeader />);
     expect(container.firstChild).toBeNull();
   });

@@ -4,6 +4,7 @@ import { Badge } from "@/components/common/Badge";
 import { Icon } from "@/components/common/Icon";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
+import { useActiveTarget } from "@/store/selectors";
 import type { Channel, Network, Query } from "@/types";
 import { connectionColor, connectionLabel } from "./connection";
 
@@ -37,7 +38,7 @@ export function SidebarNetworks() {
   const channels = useAppStore((s) => s.channels);
   const queries = useAppStore((s) => s.queries);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
-  const active = useAppStore((s) => s.active);
+  const active = useActiveTarget();
   const setActive = useAppStore((s) => s.setActive);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
 

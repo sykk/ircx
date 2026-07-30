@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ChatMessage, IrcxEvent } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import type { ActiveTarget, AppState, TimelineState } from "./types";
+import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
 
 /** Older messages stay in SQLite; the window is what the timeline can scroll. */
 const TIMELINE_CAP = 10_000;
@@ -15,13 +15,24 @@ const EMPTY_TIMELINE: TimelineState = {
   loadingOlder: false,
 };
 
+/** Sequential rather than random so a test can name the view it just opened. */
+let nextViewId = 0;
+function mintViewId(): ViewId {
+  nextViewId += 1;
+  return `view-${nextViewId}`;
+}
+
 export interface AppActions {
   applyEvent: (event: IrcxEvent) => void;
 
+  /** Points the focused view at a target, opening a view if none exists. */
   setActive: (target: ActiveTarget | null) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   clearUnreadMarker: (key: TargetKey) => void;
+
+  setViewScroll: (view: ViewId, position: number) => void;
+  setViewSelectedUser: (view: ViewId, nick: string | null) => void;
 
   toggleDrawer: (open?: boolean) => void;
   togglePalette: (open?: boolean) => void;
@@ -38,14 +49,16 @@ const initialState: AppState = {
   members: {},
   timelines: {},
   typing: {},
-  active: null,
+  rawLog: {},
+  views: {},
+  viewOrder: [],
+  activeViewId: null,
   recent: [],
   drawerOpen: false,
   paletteOpen: false,
   searchOpen: false,
   collapsedNetworks: {},
   sidebarWidth: 240,
-  rawLog: {},
 };
 
 export const useAppStore = create<AppState & AppActions>((set) => ({
@@ -55,18 +68,47 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
 
   setActive: (target) =>
     set((s) => {
-      if (!target) return { active: null };
+      const id = s.activeViewId;
+      if (!target) {
+        if (!id) return {};
+        return { views: retarget(s.views, id, "", "") };
+      }
+
       const key = targetKey(target.network, target.target);
       const timeline = s.timelines[key];
-      return {
-        active: target,
-        recent: [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP),
-        // The rule is placed on switch, not on scroll, so it holds still while
-        // the user reads.
-        timelines: timeline
-          ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
-          : s.timelines,
-      };
+      // The unread rule is placed on switch, not on scroll, so it holds still
+      // while the user reads. It lives beside the target rather than the view:
+      // having read a channel in one pane means having read it.
+      const timelines = timeline
+        ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
+        : s.timelines;
+      const recent = [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP);
+
+      if (!id) {
+        const view = newView(target.network, target.target);
+        return {
+          views: { [view.id]: view },
+          viewOrder: [view.id],
+          activeViewId: view.id,
+          recent,
+          timelines,
+        };
+      }
+      return { views: retarget(s.views, id, target.network, target.target), recent, timelines };
+    }),
+
+  setViewScroll: (view, position) =>
+    set((s) => {
+      const current = s.views[view];
+      if (!current || current.scrollPosition === position) return {};
+      return { views: { ...s.views, [view]: { ...current, scrollPosition: position } } };
+    }),
+
+  setViewSelectedUser: (view, nick) =>
+    set((s) => {
+      const current = s.views[view];
+      if (!current || current.selectedUser === nick) return {};
+      return { views: { ...s.views, [view]: { ...current, selectedUser: nick } } };
     }),
 
   prependHistory: (key, older, hasMore) =>
@@ -117,6 +159,24 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
 }));
 
+function newView(network: string, target: string): ChatView {
+  return { id: mintViewId(), network, target, scrollPosition: 0, selectedUser: null };
+}
+
+/** Retargeting resets the view's own position — the scroll and the inspector
+ * belonged to the conversation it was showing, not to the pane. */
+function retarget(
+  views: Record<ViewId, ChatView>,
+  id: ViewId,
+  network: string,
+  target: string,
+): Record<ViewId, ChatView> {
+  const view = views[id];
+  if (!view) return views;
+  if (view.network === network && view.target === target) return views;
+  return { ...views, [id]: { ...view, network, target, scrollPosition: 0, selectedUser: null } };
+}
+
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
   switch (event.type) {
     case "networkUpdated": {
@@ -131,6 +191,22 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
 
     case "networkRemoved": {
       const { [event.network]: _dropped, ...networks } = s.networks;
+      // A view left pointing at a deleted network would render an empty pane
+      // with a live-looking header, so blank it instead of dropping the view —
+      // closing the last pane is not a thing the layout can express.
+      const stale = Object.values(s.views).filter((v) => v.network === event.network);
+      const views = stale.length
+        ? {
+            ...s.views,
+            ...Object.fromEntries(
+              stale.map((v) => [
+                v.id,
+                { ...v, network: "", target: "", scrollPosition: 0, selectedUser: null },
+              ]),
+            ),
+          }
+        : s.views;
+
       return {
         networks,
         networkOrder: s.networkOrder.filter((n) => n !== event.network),
@@ -138,6 +214,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         queries: dropByNetwork(s.queries, event.network),
         timelines: dropByNetwork(s.timelines, event.network),
         members: dropByNetwork(s.members, event.network),
+        views,
       };
     }
 
@@ -161,8 +238,9 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       if (fresh.length === 0) return {};
 
       const merged = [...timeline.messages, ...fresh];
+      const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
       const isActive =
-        s.active?.network === event.network && s.active.target === event.target;
+        focused?.network === event.network && focused.target === event.target;
 
       return {
         timelines: {

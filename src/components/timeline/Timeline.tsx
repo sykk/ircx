@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import { targetKey, useActiveTimeline } from "@/store/selectors";
+import { targetKey, useActiveTarget, useActiveTimeline } from "@/store/selectors";
+import type { ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
 import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
@@ -47,9 +48,10 @@ const LADDER = {
 } as CSSProperties;
 
 export function Timeline() {
-  const active = useAppStore((s) => s.active);
+  const active = useActiveTarget();
+  const viewId = useAppStore((s) => s.activeViewId);
 
-  if (!active) {
+  if (!active || !viewId) {
     return (
       <div className="grid h-full place-items-center text-[12px]" style={{ color: "var(--text-muted)" }}>
         No conversation open
@@ -57,19 +59,35 @@ export function Timeline() {
     );
   }
 
-  // Remounting on target switch drops scroll position, measurement cache and
-  // fold state, all of which belong to the conversation being left.
+  // Remounting on target switch drops the measurement cache and fold state,
+  // both of which belong to the conversation being left.
   const conversation = targetKey(active.network, active.target);
-  return <TimelineFor key={conversation} network={active.network} target={active.target} />;
+  return (
+    <TimelineFor
+      key={conversation}
+      view={viewId}
+      network={active.network}
+      target={active.target}
+    />
+  );
 }
 
-function TimelineFor({ network, target }: { network: string; target: string }) {
+interface TimelineForProps {
+  view: ViewId;
+  network: string;
+  target: string;
+}
+
+function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useActiveTimeline();
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const followingRef = useRef(true);
+  // Read once: after the restore the scroller owns the position, and reading it
+  // as a subscription would fight every scroll event with a stale value.
+  const restoreTo = useRef(useAppStore.getState().views[view]?.scrollPosition ?? 0);
+  const followingRef = useRef(restoreTo.current === 0);
 
   const { messages, unreadFrom, hasMore, loadingOlder } = timeline;
 
@@ -98,6 +116,15 @@ function TimelineFor({ network, target }: { network: string; target: string }) {
     }
   }, [rows.length, virtualizer]);
 
+  // Deferred until there is something to scroll: an empty scroller clamps any
+  // offset back to zero and the position would be lost.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || restoreTo.current === 0 || rows.length === 0) return;
+    el.scrollTop = restoreTo.current;
+    restoreTo.current = 0;
+  }, [rows.length]);
+
   const loadOlder = useCallback(async () => {
     const key = targetKey(network, target);
     const store = useAppStore.getState();
@@ -124,8 +151,9 @@ function TimelineFor({ network, target }: { network: string; target: string }) {
     const el = scrollRef.current;
     if (!el) return;
     followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
+    useAppStore.getState().setViewScroll(view, el.scrollTop);
     if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder]);
+  }, [loadOlder, view]);
 
   const jump = useCallback(
     (msgid: string) => {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
-import { useActiveChannel, useNetwork } from "@/store/selectors";
+import { useActiveChannel, useActiveView, useNetwork } from "@/store/selectors";
 import type { Member } from "@/types";
 import { MemberList } from "./MemberList";
 import { UserInspector } from "./UserInspector";
@@ -19,7 +19,18 @@ export function Drawer() {
   const network = useNetwork(channel?.network);
   const membersByTarget = useAppStore((s) => s.members);
 
-  const [selectedNick, setSelectedNick] = useState<string | null>(null);
+  // The inspector belongs to the pane, not to the drawer: retargeting the view
+  // clears it in the store, so nothing here has to notice the channel changed.
+  const view = useActiveView();
+  const viewId = view?.id;
+  const selectedNick = view?.selectedUser ?? null;
+  const setViewSelectedUser = useAppStore((s) => s.setViewSelectedUser);
+  const setSelectedNick = useCallback(
+    (nick: string | null) => {
+      if (viewId) setViewSelectedUser(viewId, nick);
+    },
+    [viewId, setViewSelectedUser],
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -40,13 +51,6 @@ export function Drawer() {
     channel === undefined ? null : targetKey(channel.network, channel.name);
   const members =
     activeKey === null ? NO_MEMBERS : (membersByTarget[activeKey] ?? NO_MEMBERS);
-
-  // The selected nick belongs to a channel; switching channel drops it.
-  const [selectionFrom, setSelectionFrom] = useState(activeKey);
-  if (selectionFrom !== activeKey) {
-    setSelectionFrom(activeKey);
-    setSelectedNick(null);
-  }
 
   if (!open || channel === undefined || activeKey === null) return null;
 

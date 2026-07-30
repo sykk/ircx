@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import { oneView } from "@/components/shell/fixtures";
 import { Drawer } from "./Drawer";
 import { CTF_OPS, CTF_OPS_MEMBERS, LIBERA } from "./fixtures";
 
@@ -30,7 +31,7 @@ beforeEach(() => {
     networkOrder: ["libera"],
     channels: { [targetKey("libera", CTF_OPS.name)]: CTF_OPS },
     members: { [targetKey("libera", CTF_OPS.name)]: CTF_OPS_MEMBERS },
-    active: { network: "libera", target: CTF_OPS.name },
+    ...oneView({ network: "libera", target: CTF_OPS.name }),
     drawerOpen: true,
   });
 });
@@ -65,6 +66,14 @@ describe("Drawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Members/ }));
     expect(screen.getByRole("heading", { name: /operators/i })).toBeTruthy();
+  });
+
+  it("records the open inspector on the view, not in the drawer", () => {
+    render(<Drawer />);
+    fireEvent.click(screen.getByRole("button", { name: /marrow/ }));
+
+    const { views, activeViewId } = useAppStore.getState();
+    expect(views[activeViewId!]!.selectedUser).toBe("marrow");
   });
 
   it("closes the inspector on Escape before closing itself", () => {

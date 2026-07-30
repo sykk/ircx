@@ -1,13 +1,13 @@
 import { useAppStore } from "@/store";
+import { useActiveTarget, useNetwork } from "@/store/selectors";
 import type { ConnectionStatus, Network } from "@/types";
 
 /** The network the window chrome and status bar describe: whichever one the
  * active target belongs to, falling back to the first in sidebar order. */
 export function useDisplayedNetwork(): Network | undefined {
-  return useAppStore((s) => {
-    const id = s.active?.network ?? s.networkOrder[0];
-    return id ? s.networks[id] : undefined;
-  });
+  const active = useActiveTarget();
+  const first = useAppStore((s) => s.networkOrder[0]);
+  return useNetwork(active?.network ?? first);
 }
 
 export function connectionColor(status: ConnectionStatus): string {

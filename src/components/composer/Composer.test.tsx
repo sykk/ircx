@@ -2,6 +2,7 @@ import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-l
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import { oneView } from "@/components/shell/fixtures";
 import { Composer } from "./Composer";
 
 const { ipcMock } = vi.hoisted(() => ({
@@ -25,7 +26,7 @@ beforeEach(() => {
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
 
   useAppStore.setState({
-    active: { network: "libera", target: "#ctf-ops" },
+    ...oneView({ network: "libera", target: "#ctf-ops" }),
     members: {
       [KEY]: ["sable", "sableton", "phrack", "nyx"].map((nick) => ({
         nick,

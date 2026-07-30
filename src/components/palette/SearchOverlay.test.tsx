@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
+import { activeTarget, oneView } from "@/components/shell/fixtures";
 import type { ChatMessage, SearchHit } from "@/types";
 import { SearchOverlay, snippetSegments } from "./SearchOverlay";
 
@@ -44,7 +45,7 @@ beforeEach(() => {
   searchHistory.mockReset();
   searchHistory.mockResolvedValue(hits);
   useAppStore.setState({
-    active: { network: "libera", target: "#ctf-ops" },
+    ...oneView({ network: "libera", target: "#ctf-ops" }),
     searchOpen: true,
   });
 });
@@ -104,7 +105,7 @@ describe("SearchOverlay", () => {
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
 
     expect(onJump).toHaveBeenCalledWith(hits[1]);
-    expect(useAppStore.getState().active).toEqual({ network: "libera", target: "#ctf-ops" });
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
     expect(useAppStore.getState().searchOpen).toBe(false);
   });
 

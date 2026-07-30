@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import { activeTarget, oneView } from "@/components/shell/fixtures";
 import type { Channel, Network, Query } from "@/types";
 import { CommandPalette } from "./CommandPalette";
 
@@ -48,7 +49,7 @@ beforeEach(() => {
       [targetKey("libera", "#linux")]: channel("#linux"),
     },
     queries: { [targetKey("libera", "phrack")]: query("phrack") },
-    active: null,
+    ...oneView(null),
     recent: [],
     paletteOpen: true,
     searchOpen: false,
@@ -148,7 +149,7 @@ describe("CommandPalette", () => {
     type("ctfo");
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(useAppStore.getState().active).toEqual({ network: "libera", target: "#ctf-ops" });
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
@@ -157,7 +158,7 @@ describe("CommandPalette", () => {
     type("phra");
     fireEvent.click(screen.getAllByRole("option")[0]!);
 
-    expect(useAppStore.getState().active).toEqual({ network: "libera", target: "phrack" });
+    expect(activeTarget()).toEqual({ network: "libera", target: "phrack" });
   });
 
   it("hands a slash command to the composer", () => {

@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import { oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
 import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
 import { formatClock } from "./rows";
@@ -48,7 +49,7 @@ beforeAll(() => {
 
 function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
   useAppStore.setState({
-    active: { network: "libera", target: "#ctf-ops" },
+    ...oneView({ network: "libera", target: "#ctf-ops" }),
     networks: {
       libera: {
         id: "libera",
@@ -72,7 +73,7 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
 beforeEach(() => {
   vi.clearAllMocks();
   ipcMock.loadHistory.mockResolvedValue([]);
-  useAppStore.setState({ active: null, networks: {}, timelines: {}, typing: {} });
+  useAppStore.setState({ ...oneView(null), networks: {}, timelines: {}, typing: {} });
 });
 
 describe("Timeline", () => {

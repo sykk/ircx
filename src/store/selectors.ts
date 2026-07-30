@@ -2,10 +2,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { EMPTY_TIMELINE, useAppStore } from "./index";
-import type { AppState, TimelineState } from "./types";
-
-/** Operator, voiced, then everyone else — the grouping the member list renders. */
-export type MemberGroup = "operators" | "voiced" | "members";
+import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
 const EMPTY: never[] = [];
@@ -33,17 +30,51 @@ export function useQueriesFor(network: string): Query[] {
   return useAppStore(useShallow((s) => selectQueriesFor(s, network)));
 }
 
-export function useActiveTimeline(): TimelineState {
+/**
+ * The focused pane. Components that will become pane-aware should take a
+ * `ViewId` and use the `…ForView` selectors below; these read through
+ * `activeViewId` for the ones that only ever want whatever has focus.
+ */
+export function useActiveView(): ChatView | undefined {
+  return useAppStore((s) => (s.activeViewId ? s.views[s.activeViewId] : undefined));
+}
+
+export function useActiveTarget(): ActiveTarget | null {
+  return useAppStore(
+    useShallow((s) => {
+      const view = s.activeViewId ? s.views[s.activeViewId] : undefined;
+      if (!view || !view.network) return null;
+      return { network: view.network, target: view.target };
+    }),
+  );
+}
+
+export function useView(id: ViewId | null | undefined): ChatView | undefined {
+  return useAppStore((s) => (id ? s.views[id] : undefined));
+}
+
+export function useTimelineForView(id: ViewId | null | undefined): TimelineState {
   return useAppStore((s) => {
-    if (!s.active) return EMPTY_TIMELINE;
-    return s.timelines[targetKey(s.active.network, s.active.target)] ?? EMPTY_TIMELINE;
+    const view = id ? s.views[id] : undefined;
+    if (!view || !view.network) return EMPTY_TIMELINE;
+    return s.timelines[targetKey(view.network, view.target)] ?? EMPTY_TIMELINE;
+  });
+}
+
+export function useActiveTimeline(): TimelineState {
+  return useTimelineForView(useAppStore((s) => s.activeViewId));
+}
+
+export function useChannelForView(id: ViewId | null | undefined): Channel | undefined {
+  return useAppStore((s) => {
+    const view = id ? s.views[id] : undefined;
+    if (!view || !view.network) return undefined;
+    return s.channels[targetKey(view.network, view.target)];
   });
 }
 
 export function useActiveChannel(): Channel | undefined {
-  return useAppStore((s) =>
-    s.active ? s.channels[targetKey(s.active.network, s.active.target)] : undefined,
-  );
+  return useChannelForView(useAppStore((s) => s.activeViewId));
 }
 
 export function useMembers(network: string, channel: string): Member[] {
@@ -73,12 +104,6 @@ export function selectQueriesFor(s: AppState, network: string): Query[] {
   return Object.values(s.queries).filter((q) => q.network === network);
 }
 
-export function groupOf(member: Member): MemberGroup {
-  const top = member.prefixes[0];
-  if (top === "~" || top === "&" || top === "@") return "operators";
-  if (top === "%" || top === "+") return "voiced";
-  return "members";
-}
 
 /** Whether `text` mentions `nick` on a word boundary: `sable` matches, `sableton` does not. */
 export function mentions(text: string, nick: string): boolean {

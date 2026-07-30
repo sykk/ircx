@@ -106,6 +106,36 @@ What is still open:
   ~200 lines of a quiet session comfortably. Nobody has watched it during a
   netsplit or a `LIST`.
 
+## The member list in a split
+
+Every pane on a channel draws its own roster (#95). `PaneTree.test.tsx` asserts
+which panes hold one, but jsdom draws nothing, so what the tests cannot answer
+is whether it looks like one conversation or like two things sharing a box.
+
+- **Two rosters at once.** Split two channels and check both are listed, each
+  inside its own pane. Then hide one with `Ctrl+Shift+M` and confirm the other
+  stays — the chord acts on the focused pane, so which pane has focus decides
+  which roster goes.
+
+- **The seam between the pane header and the roster.** The roster's own header
+  is empty and carries the same height and rule as the pane header beside it, so
+  the line under that header should run straight on into the roster. Nothing
+  measures that. If the two rules are a pixel apart the roster reads as
+  application furniture parked next to the conversation, which is the thing this
+  replaced.
+
+- **A narrow window.** The roster is a fixed 208px and there is no longer a
+  width below which it is withheld — the shared sidebar had one at 900px, and
+  the embedded mode this replaced ignored it anyway. A half-width pane on a
+  small window now spends 208px of whatever it has on the roster. Nobody has
+  watched what is left of the conversation at, say, 1000px split in two.
+
+- **A large channel.** The second Libera run read `#libera`'s member list across
+  31 replies, so it is the size of channel worth trying. `MemberList` renders
+  the list it is given, and one roster per pane means two of those rendering at
+  once, each re-rendering as members come and go. Both end-to-end runs split
+  panes on quiet channels, so nothing has drawn two busy rosters together.
+
 ## Plugins
 
 The failure modes are covered by `crates/ircx-plugin/tests/failure_modes.rs`,

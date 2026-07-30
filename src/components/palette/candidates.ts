@@ -21,7 +21,7 @@ export type CandidateAction =
    * there. Nothing else in the app owns an input the palette can reach. */
   | { type: "refine"; text: string }
   | { type: "run"; network: string; target: string; input: string }
-  | { type: "toggleDrawer" }
+  | { type: "toggleRoster" }
   | { type: "search" }
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
@@ -275,9 +275,9 @@ function describeTheme(theme: Theme, inUse: boolean): string {
 
 const STATIC_ACTIONS: readonly { label: string; detail: string; action: CandidateAction }[] = [
   {
-    label: "Toggle member drawer",
-    detail: "Show or hide the member list",
-    action: { type: "toggleDrawer" },
+    label: "Toggle member list",
+    detail: "Show or hide this pane's member list",
+    action: { type: "toggleRoster" },
   },
   {
     label: "Search this conversation",

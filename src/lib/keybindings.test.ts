@@ -84,7 +84,7 @@ describe("the shipped table", () => {
     ["Alt+Shift+ArrowDown", "target.nextUnread"],
     ["Alt+ArrowLeft", "history.back"],
     ["Alt+ArrowRight", "history.forward"],
-    ["Mod+Shift+M", "drawer.toggle"],
+    ["Mod+Shift+M", "roster.toggle"],
     ["Mod+F", "search.open"],
     ["Escape", "overlay.dismiss"],
   ])("binds %s to %s", (chord, action) => {

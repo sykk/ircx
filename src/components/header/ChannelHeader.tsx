@@ -13,8 +13,8 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
   // The channel name carries the focus indicator, so an unfocused pane reads a
   // step quieter. With one pane there is nothing to tell apart.
   const focused = useAppStore((s) => s.viewOrder.length < 2 || s.activeViewId === view);
-  const drawerOpen = useAppStore((s) => s.drawerOpen);
-  const toggleDrawer = useAppStore((s) => s.toggleDrawer);
+  const rosterShown = useAppStore((s) => (view ? s.rosterHidden[view] !== true : false));
+  const toggleRoster = useAppStore((s) => s.toggleRoster);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
   const openSetup = useAppStore((s) => s.openSetup);
 
@@ -69,10 +69,10 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <HeaderButton
-          label="Toggle member drawer"
-          title="Member drawer (Ctrl+Shift+M)"
-          pressed={drawerOpen}
-          onClick={() => toggleDrawer()}
+          label="Toggle member list"
+          title="Member list (Ctrl+Shift+M)"
+          pressed={rosterShown}
+          onClick={() => view && toggleRoster(view)}
         >
           <MembersIcon size={16} />
         </HeaderButton>

@@ -5,16 +5,13 @@ import { StatusBar } from "./StatusBar";
 import { TitleBar } from "./TitleBar";
 import { loadViewState, saveViewState } from "./viewState";
 
-/** Below this the sidebar becomes an overlay and the drawer is withheld. */
+/** Below this the sidebar becomes an overlay rather than a column. */
 const NARROW_PX = 900;
 const HANDLE_PX = 4;
-const DRAWER_PX = 264;
 
-export function AppShell({ children, drawer }: { children?: ReactNode; drawer?: ReactNode }) {
+export function AppShell({ children }: { children?: ReactNode }) {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
-  const drawerOpen = useAppStore((s) => s.drawerOpen);
-  const embedded = useAppStore((s) => s.contextMode === "embedded");
 
   const [narrow, setNarrow] = useState(() => window.innerWidth < NARROW_PX);
   const [sidebarOverlay, setSidebarOverlay] = useState(false);
@@ -52,12 +49,7 @@ export function AppShell({ children, drawer }: { children?: ReactNode; drawer?: 
     });
   }, [sidebarWidth, collapsedNetworks]);
 
-  // Embedded, the panel is inside a pane and this column would be an empty
-  // 264px of sidebar.
-  const showDrawer = drawerOpen && !narrow && !embedded;
-  const columns = narrow
-    ? "1fr"
-    : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)${showDrawer ? ` ${DRAWER_PX}px` : ""}`;
+  const columns = narrow ? "1fr" : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)`;
 
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--surface-base)]">
@@ -85,12 +77,6 @@ export function AppShell({ children, drawer }: { children?: ReactNode; drawer?: 
         {!narrow && <SidebarHandle />}
 
         <main className="min-w-0 overflow-hidden">{children}</main>
-
-        {showDrawer && (
-          <aside className="min-w-0 overflow-hidden border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)]">
-            {drawer}
-          </aside>
-        )}
       </div>
 
       <StatusBar />

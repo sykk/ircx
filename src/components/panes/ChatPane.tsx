@@ -16,9 +16,10 @@ export function ChatPane({ view }: { view: ViewId | null }) {
   const focusView = useAppStore((s) => s.focusView);
   const split = useAppStore((s) => s.viewOrder.length > 1);
   const active = useAppStore((s) => s.activeViewId === view);
-  const embedded = useAppStore(
-    (s) => s.drawerOpen && s.contextMode === "embedded" && s.contextPane === view,
-  );
+  // The roster belongs to this conversation, so it is drawn here rather than
+  // in a shared sidebar deciding which pane to point at. A pane on a console or
+  // a query has nobody to list and draws no column at all.
+  const hidden = useAppStore((s) => (view ? s.rosterHidden[view] === true : true));
   const ref = useRef<HTMLElement>(null);
 
   // A pane opened by a split arrives focused, so the caret follows into it.
@@ -73,7 +74,7 @@ export function ChatPane({ view }: { view: ViewId | null }) {
 
       {/* Beside the whole column rather than under the header, so the panel's
           own header lands on the same rule as this pane's. */}
-      {embedded && <ContextPanel view={view} embedded />}
+      {!hidden && !consoleFor && <ContextPanel view={view} />}
     </section>
   );
 }

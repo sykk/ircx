@@ -1,6 +1,5 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { Drawer } from "@/components/drawer/Drawer";
 import { CTF_OPS, CTF_OPS_MEMBERS, LIBERA } from "@/components/drawer/fixtures";
 import { makeConversation } from "@/components/timeline/fixtures";
 import { ESTIMATED_ROW_PX } from "@/components/timeline/Timeline";
@@ -73,9 +72,7 @@ beforeEach(() => {
     viewOrder: [],
     activeViewId: null,
     layout: null,
-    drawerOpen: true,
-    contextMode: "follow",
-    contextPane: null,
+    rosterHidden: {},
   });
   useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
 });
@@ -161,99 +158,61 @@ describe("PaneTree", () => {
     expect(panes()[0]!.className).not.toContain("border-t");
   });
 
-  it("moves the context panel to the pane that takes focus", async () => {
+  it("gives every pane on a channel its own member list", async () => {
+    split("row");
+    act(() => useAppStore.getState().setActive({ network: "libera", target: "#hackint" }));
+    render(<PaneTree />);
+    await settle();
+
+    // Two channels open side by side means two rosters, each inside its own
+    // pane. One shared panel pointed at one of them is the thing this replaced.
+    const rosters = screen.getAllByRole("complementary");
+    expect(rosters.map((roster) => roster.getAttribute("aria-label")).sort()).toEqual([
+      "#ctf-ops members",
+      "#hackint members",
+    ]);
+    for (const roster of rosters) {
+      expect(panes().some((pane) => pane.contains(roster))).toBe(true);
+    }
+  });
+
+  it("draws no member list for a pane that has nobody to list", async () => {
+    split("row");
+    act(() => useAppStore.getState().openConsole("libera"));
+    render(<PaneTree />);
+    await settle();
+
+    // No empty column standing in for a roster: the console pane gives the
+    // space back to the conversation.
+    const rosters = screen.getAllByRole("complementary");
+    expect(rosters).toHaveLength(1);
+    expect(rosters[0]!.getAttribute("aria-label")).toBe("#ctf-ops members");
+  });
+
+  it("hides one pane's member list and leaves the other's alone", async () => {
     const [first] = split("row");
     act(() => useAppStore.getState().setActive({ network: "libera", target: "#hackint" }));
-    render(
-      <>
-        <PaneTree />
-        <Drawer />
-      </>,
-    );
+    render(<PaneTree />);
     await settle();
 
-    expect(screen.getByRole("complementary").getAttribute("aria-label")).toBe(
-      "#hackint members",
-    );
-
-    fireEvent.pointerDown(screen.getAllByTestId("timeline-scroller")[0]!);
-
-    expect(useAppStore.getState().activeViewId).toBe(first);
-    expect(screen.getByRole("complementary").getAttribute("aria-label")).toBe(
-      "#ctf-ops members",
-    );
-  });
-});
-
-describe("context panel modes", () => {
-  /** Two panes on different channels, focus on the second, panel and all. */
-  async function twoPanes(): Promise<[string, string]> {
-    const ids = split("row");
-    act(() => useAppStore.getState().setActive({ network: "libera", target: "#hackint" }));
-    render(
-      <>
-        <PaneTree />
-        <Drawer />
-      </>,
-    );
+    act(() => useAppStore.getState().toggleRoster(first));
     await settle();
-    return ids;
-  }
 
-  function chooseMode(label: string) {
-    fireEvent.click(screen.getByRole("button", { name: "Panel placement" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: label }));
-  }
-
-  function panelLabel(): string | null {
-    return screen.getByRole("complementary").getAttribute("aria-label");
-  }
-
-  it("holds the panel on the pinned pane while focus moves away", async () => {
-    const [first] = await twoPanes();
-    expect(panelLabel()).toBe("#hackint members");
-
-    chooseMode("Pin to this pane");
-    fireEvent.pointerDown(screen.getAllByTestId("timeline-scroller")[0]!);
-
-    expect(useAppStore.getState().activeViewId).toBe(first);
-    expect(panelLabel()).toBe("#hackint members");
+    const rosters = screen.getAllByRole("complementary");
+    expect(rosters).toHaveLength(1);
+    expect(rosters[0]!.getAttribute("aria-label")).toBe("#hackint members");
   });
 
-  it("says which pane it is holding, so a stale roster does not read as a bug", async () => {
-    await twoPanes();
-    chooseMode("Pin to this pane");
-
-    expect(within(screen.getByRole("complementary")).getByText("Pinned")).toBeTruthy();
-  });
-
-  it("moves the panel inside its pane when embedded, and out of the sidebar", async () => {
-    const [, second] = await twoPanes();
-    chooseMode("Show inside this pane");
-
-    const panel = screen.getByRole("complementary");
-    expect(screen.getAllByRole("complementary")).toHaveLength(1);
-    expect(panes().find((pane) => pane.contains(panel))?.dataset["view"]).toBe(second);
-  });
-
-  it("comes back to the sidebar from the panel's own header", async () => {
-    await twoPanes();
-    chooseMode("Show inside this pane");
-    chooseMode("Follow the focused pane");
-
-    const panel = screen.getByRole("complementary");
-    expect(panes().some((pane) => pane.contains(panel))).toBe(false);
-  });
-
-  it("goes back to following when the pane it was pinned to closes", async () => {
-    const [, second] = await twoPanes();
-    chooseMode("Pin to this pane");
+  it("does not hand a closed pane's hidden roster to the next pane", async () => {
+    const [, second] = split("row");
+    render(<PaneTree />);
+    await settle();
+    act(() => useAppStore.getState().toggleRoster(second));
 
     act(() => useAppStore.getState().closeView(second));
     await settle();
 
-    expect(useAppStore.getState().contextMode).toBe("follow");
-    expect(useAppStore.getState().contextPane).toBeNull();
+    expect(useAppStore.getState().rosterHidden[second]).toBeUndefined();
   });
 });
 

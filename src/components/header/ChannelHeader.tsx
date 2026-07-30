@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useActiveChannel } from "@/store/selectors";
-import { InviteIcon, MembersIcon, PanelIcon, SearchIcon } from "./icons";
+import { MembersIcon, OverflowIcon, SearchIcon } from "./icons";
 
 export function ChannelHeader() {
   const channel = useActiveChannel();
@@ -10,13 +11,18 @@ export function ChannelHeader() {
   const toggleDrawer = useAppStore((s) => s.toggleDrawer);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
 
+  const [menuOpen, setMenuOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [invitee, setInvitee] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   if (channel === undefined) return null;
 
-  const topic = channel.topic?.text ?? "";
+  function closeMenu() {
+    setMenuOpen(false);
+    setInviting(false);
+    setError(null);
+  }
 
   const invite = async (event: FormEvent) => {
     event.preventDefault();
@@ -34,7 +40,7 @@ export function ChannelHeader() {
         return;
       }
       setInvitee("");
-      setInviting(false);
+      closeMenu();
     } catch (reason) {
       setError(typeof reason === "string" ? reason : "The invite could not be sent.");
     }
@@ -45,93 +51,127 @@ export function ChannelHeader() {
       <h1 className="shrink-0 text-[15px] font-medium text-[var(--text-primary)]">
         {channel.name}
       </h1>
-      {topic !== "" && (
-        <p
-          title={topic}
-          className="selectable min-w-0 flex-1 truncate text-[var(--text-secondary)]"
-        >
-          {topic}
-        </p>
-      )}
+      <span className="shrink-0 text-[var(--text-muted)]">
+        {channel.memberCount} {channel.memberCount === 1 ? "member" : "members"}
+      </span>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <span
-          title={`${channel.memberCount} members in ${channel.name}`}
-          className="flex items-center gap-1.5 text-[var(--text-secondary)]"
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <HeaderButton
+          label="Toggle member drawer"
+          title="Member drawer (Ctrl+Shift+M)"
+          pressed={drawerOpen}
+          onClick={() => toggleDrawer()}
         >
-          <MembersIcon />
-          {channel.memberCount}
-        </span>
+          <MembersIcon size={16} />
+        </HeaderButton>
 
-        <div className="relative">
-          <button
-            type="button"
-            aria-expanded={inviting}
-            onClick={() => setInviting((open) => !open)}
-            className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--border-default)] px-2 py-1 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+        <HeaderButton
+          label={`Search ${channel.name}`}
+          onClick={() => toggleSearch(true)}
+        >
+          <SearchIcon size={16} />
+        </HeaderButton>
+
+        <div
+          className="relative"
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.stopPropagation();
+            closeMenu();
+          }}
+        >
+          <HeaderButton
+            label="More actions"
+            expanded={menuOpen}
+            onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
           >
-            <InviteIcon />
-            Invite
-          </button>
-          {inviting && (
-            <form
-              onSubmit={invite}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  setInviting(false);
-                }
-              }}
-              className="absolute top-full right-0 z-10 mt-1 w-64 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-2 shadow-[var(--shadow-overlay)]"
+            <OverflowIcon size={16} />
+          </HeaderButton>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label={`${channel.name} actions`}
+              className="absolute top-full right-0 z-10 mt-1 w-64 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
             >
-              <div className="flex gap-1">
-                <input
-                  autoFocus
-                  value={invitee}
-                  onChange={(event) => setInvitee(event.target.value)}
-                  aria-label={`Nick to invite to ${channel.name}`}
-                  placeholder="nick"
-                  className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-2 py-1 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-                />
+              {inviting ? (
+                <form onSubmit={invite} className="p-1">
+                  <div className="flex gap-1">
+                    <input
+                      autoFocus
+                      value={invitee}
+                      onChange={(event) => setInvitee(event.target.value)}
+                      aria-label={`Nick to invite to ${channel.name}`}
+                      placeholder="nick"
+                      className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-2 py-1 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-[var(--radius-sm)] bg-[var(--accent)] px-2 py-1 text-[var(--text-inverse)] hover:bg-[var(--accent-hover)]"
+                    >
+                      Send
+                    </button>
+                  </div>
+                  {error !== null && (
+                    <p role="alert" className="pt-1 text-[var(--danger)]">
+                      {error}
+                    </p>
+                  )}
+                </form>
+              ) : (
                 <button
-                  type="submit"
-                  className="rounded-[var(--radius-sm)] bg-[var(--accent)] px-2 py-1 text-[var(--text-inverse)] hover:bg-[var(--accent-hover)]"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setInviting(true)}
+                  className="w-full rounded-[var(--radius-sm)] px-2 py-1 text-left text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
                 >
-                  Send
+                  Invite
                 </button>
-              </div>
-              {error !== null && (
-                <p role="alert" className="pt-1 text-[var(--danger)]">
-                  {error}
-                </p>
               )}
-            </form>
+            </div>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={() => toggleSearch(true)}
-          aria-label={`Search ${channel.name}`}
-          className="flex w-44 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-2 py-1 text-[var(--text-muted)] hover:border-[var(--border-strong)]"
-        >
-          <SearchIcon />
-          Search
-        </button>
-
-        <button
-          type="button"
-          onClick={() => toggleDrawer()}
-          aria-pressed={drawerOpen}
-          aria-label="Toggle member drawer"
-          title="Member drawer (Ctrl+Shift+M)"
-          className={`rounded-[var(--radius-md)] p-1.5 hover:bg-[var(--surface-hover)] ${
-            drawerOpen ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
-          }`}
-        >
-          <PanelIcon size={16} />
-        </button>
       </div>
     </header>
+  );
+}
+
+interface HeaderButtonProps {
+  label: string;
+  title?: string;
+  /** A toggle rather than a plain action; also drives the accent colour. */
+  pressed?: boolean;
+  /** A menu button rather than a plain action; also drives the accent colour. */
+  expanded?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}
+
+function HeaderButton({
+  label,
+  title,
+  pressed,
+  expanded,
+  onClick,
+  children,
+}: HeaderButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      aria-expanded={expanded}
+      aria-haspopup={expanded === undefined ? undefined : "menu"}
+      title={title ?? label}
+      onClick={onClick}
+      className={clsx(
+        "rounded-[var(--radius-md)] p-1.5 hover:bg-[var(--surface-hover)]",
+        pressed === true || expanded === true
+          ? "text-[var(--accent)]"
+          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+      )}
+    >
+      {children}
+    </button>
   );
 }

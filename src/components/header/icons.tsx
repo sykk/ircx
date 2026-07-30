@@ -26,16 +26,6 @@ export function MembersIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function InviteIcon({ size = 14 }: IconProps) {
-  return (
-    <svg {...svgProps(size)}>
-      <circle cx="6.5" cy="5.5" r="2.5" />
-      <path d="M2 13c0-2.2 2-3.5 4.5-3.5 .7 0 1.4.1 2 .3" />
-      <path d="M12 8.5v5M9.5 11h5" />
-    </svg>
-  );
-}
-
 export function SearchIcon({ size = 14 }: IconProps) {
   return (
     <svg {...svgProps(size)}>
@@ -45,11 +35,12 @@ export function SearchIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function PanelIcon({ size = 14 }: IconProps) {
+export function OverflowIcon({ size = 14 }: IconProps) {
   return (
-    <svg {...svgProps(size)}>
-      <rect x="2" y="3" width="12" height="10" rx="1.6" />
-      <path d="M10 3v10" />
+    <svg {...svgProps(size)} fill="currentColor" stroke="none">
+      <circle cx="8" cy="3.4" r="1.2" />
+      <circle cx="8" cy="8" r="1.2" />
+      <circle cx="8" cy="12.6" r="1.2" />
     </svg>
   );
 }

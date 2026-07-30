@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemberList } from "./MemberList";
-import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
+import { CTF_OPS_MEMBERS, member } from "./fixtures";
 
 /* The virtualiser sizes itself from the scroll container, which jsdom reports
  * as zero high. Without a height it renders no rows at all. */
@@ -31,31 +31,48 @@ function memberButtons() {
   return screen.queryAllByRole("button");
 }
 
+/** One group of `count` unprivileged nicks, so the truncation row lands in a
+ * predictable place. */
+function plain(count: number) {
+  return Array.from({ length: count }, (_, i) => member(`nick${i}`));
+}
+
 describe("MemberList", () => {
-  it("heads each group with its count", () => {
+  it("heads two groups with their counts, folding voice into members", () => {
     show();
     expect(screen.getByRole("heading", { name: /operators/i }).textContent).toContain(
       "4",
     );
-    expect(screen.getByRole("heading", { name: /voiced/i }).textContent).toContain("3");
-    expect(screen.getByRole("heading", { name: /members/i }).textContent).toContain("9");
+    expect(screen.getByRole("heading", { name: /members/i }).textContent).toContain("12");
+    expect(screen.queryByRole("heading", { name: /voiced/i })).toBeNull();
+
+    // A voiced member sits in members and still carries its sigil.
+    expect(
+      within(screen.getByRole("button", { name: /phrack/ })).getByText("+"),
+    ).toBeTruthy();
   });
 
-  it("shows the prefixes the server sent, however many arrived", () => {
+  it("shows the top prefix as the row's sigil", () => {
     show([
       member("Ariel", { prefixes: ["~", "@", "+"] }),
       member("sable", { prefixes: ["@"] }),
+      member("guest41"),
     ]);
     expect(
-      within(screen.getByRole("button", { name: /Ariel/ })).getByText("~@+"),
+      within(screen.getByRole("button", { name: /Ariel/ })).getByText("~"),
     ).toBeTruthy();
     expect(
       within(screen.getByRole("button", { name: /sable/ })).getByText("@"),
     ).toBeTruthy();
+    expect(
+      within(screen.getByRole("button", { name: /guest41/ })).queryByText("+"),
+    ).toBeNull();
   });
 
   it("puts the away reason on the row and dims the nick", () => {
     show();
+    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
+
     const wren = screen.getByRole("button", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
     expect(within(wren).getByText("wren").className).toContain("--text-muted");
@@ -69,39 +86,27 @@ describe("MemberList", () => {
     );
   });
 
-  it("badges an account and names it when it differs from the nick", () => {
-    show();
-    expect(
-      within(screen.getByRole("button", { name: /fox/ })).getByText("vulpes"),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("button", { name: /kade/ })).getByText("account"),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("button", { name: /guest41/ })).queryByText("account"),
-    ).toBeNull();
+  it("truncates the members group and reveals the rest on demand", () => {
+    show(plain(15));
+    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(10);
+
+    fireEvent.click(screen.getByRole("button", { name: "… and 5 more" }));
+
+    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
-  it("narrows to the filter, matching nick or account", () => {
-    show();
-    fireEvent.change(screen.getByLabelText("Filter members"), {
-      target: { value: "vulpes" },
-    });
-    expect(memberButtons()).toHaveLength(1);
-    expect(screen.getByRole("button", { name: /fox/ })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: /operators/i })).toBeNull();
-  });
+  it("never hides an operator behind the truncation", () => {
+    show(plain(15).map((m) => ({ ...m, prefixes: ["@"] })));
 
-  it("says so when the filter matches nobody", () => {
-    show();
-    fireEvent.change(screen.getByLabelText("Filter members"), {
-      target: { value: "nobodyhere" },
-    });
-    expect(screen.getByText('No member matches "nobodyhere"')).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
   it("renders a window of a several-thousand member channel", () => {
-    show(crowd(3000));
+    show(plain(3000));
+    fireEvent.click(screen.getByRole("button", { name: "… and 2990 more" }));
+
     expect(memberButtons().length).toBeLessThan(100);
     expect(memberButtons().length).toBeGreaterThan(0);
   });

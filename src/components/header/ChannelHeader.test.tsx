@@ -5,9 +5,7 @@ import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
 import { ChannelHeader } from "./ChannelHeader";
 
-const LONG_TOPIC =
-  "CTF discussions and operations — pwn-300 heap notes, flag drops, and the " +
-  "rotation for the next qualifier weekend";
+const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
 
 beforeEach(() => {
   useAppStore.setState({
@@ -16,7 +14,7 @@ beforeEach(() => {
     channels: {
       [targetKey("libera", CTF_OPS.name)]: {
         ...CTF_OPS,
-        topic: { text: LONG_TOPIC, setBy: "sable", setAt: null },
+        topic: { text: TOPIC, setBy: "sable", setAt: null },
       },
     },
     active: { network: "libera", target: CTF_OPS.name },
@@ -25,6 +23,10 @@ beforeEach(() => {
   });
 });
 
+function openMenu() {
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+}
+
 describe("ChannelHeader", () => {
   it("renders nothing when no channel is active", () => {
     useAppStore.setState({ active: null });
@@ -32,18 +34,11 @@ describe("ChannelHeader", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("keeps the topic to one line and hands the whole thing to the tooltip", () => {
+  it("names the channel and counts its members, and leaves the topic out", () => {
     render(<ChannelHeader />);
-    const topic = screen.getByText(LONG_TOPIC);
-    expect(topic.className).toContain("truncate");
-    expect(topic).toHaveProperty("title", LONG_TOPIC);
-  });
-
-  it("shows the member count", () => {
-    render(<ChannelHeader />);
-    expect(screen.getByTitle(`16 members in ${CTF_OPS.name}`).textContent).toContain(
-      "16",
-    );
+    expect(screen.getByRole("heading", { name: CTF_OPS.name })).toBeTruthy();
+    expect(screen.getByText("16 members")).toBeTruthy();
+    expect(screen.queryByText(TOPIC)).toBeNull();
   });
 
   it("toggles the drawer", () => {
@@ -61,14 +56,24 @@ describe("ChannelHeader", () => {
     expect(useAppStore.getState().searchOpen).toBe(true);
   });
 
-  it("asks for a nick before inviting, and closes on Escape", () => {
+  it("keeps invite in the overflow menu, and asks for a nick", () => {
     render(<ChannelHeader />);
-    const invite = screen.getByRole("button", { name: "Invite" });
-    expect(screen.queryByLabelText(/Nick to invite/)).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Invite" })).toBeNull();
 
-    fireEvent.click(invite);
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Invite" }));
+    expect(screen.getByLabelText(`Nick to invite to ${CTF_OPS.name}`)).toBeTruthy();
+  });
+
+  it("closes the overflow menu on Escape", () => {
+    render(<ChannelHeader />);
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Invite" }));
+
     const field = screen.getByLabelText(`Nick to invite to ${CTF_OPS.name}`);
     fireEvent.keyDown(field, { key: "Escape" });
+
     expect(screen.queryByLabelText(/Nick to invite/)).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

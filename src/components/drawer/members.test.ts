@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { groupOf } from "@/store/selectors";
 import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
-import { actionsFor, filterMembers, groupMembers, rankOf, toRows } from "./members";
+import {
+  MEMBERS_PREVIEW,
+  actionsFor,
+  groupMembers,
+  groupOf,
+  rankOf,
+  toRows,
+} from "./members";
 
 describe("groupMembers", () => {
-  it("splits every prefix a server can send into three groups", () => {
+  it("splits every prefix a server can send into two groups", () => {
     const sections = groupMembers([
       member("owner", { prefixes: ["~"] }),
       member("admin", { prefixes: ["&"] }),
@@ -16,8 +22,7 @@ describe("groupMembers", () => {
 
     expect(sections.map((s) => [s.group, s.members.length])).toEqual([
       ["operators", 3],
-      ["voiced", 2],
-      ["members", 1],
+      ["members", 3],
     ]);
   });
 
@@ -66,39 +71,51 @@ describe("groupMembers", () => {
     const sections = groupMembers(members);
     const total = sections.reduce((sum, s) => sum + s.members.length, 0);
     expect(total).toBe(4000);
-    expect(sections.map((s) => s.group)).toEqual(["operators", "voiced", "members"]);
+    expect(sections.map((s) => s.group)).toEqual(["operators", "members"]);
   });
 });
 
 describe("toRows", () => {
   it("puts a counted header in front of each group", () => {
-    const rows = toRows(groupMembers(CTF_OPS_MEMBERS));
+    const rows = toRows(groupMembers(CTF_OPS_MEMBERS), true);
     const headers = rows.filter((row) => row.kind === "header");
     expect(headers).toEqual([
       { kind: "header", group: "operators", count: 4 },
-      { kind: "header", group: "voiced", count: 3 },
-      { kind: "header", group: "members", count: 9 },
+      { kind: "header", group: "members", count: 12 },
     ]);
     expect(rows.length).toBe(CTF_OPS_MEMBERS.length + headers.length);
   });
-});
 
-describe("filterMembers", () => {
-  it("matches part of a nick, ignoring case", () => {
-    const found = filterMembers(CTF_OPS_MEMBERS, "AR");
-    expect(found.map((m) => m.nick)).toEqual(["Ariel", "marrow"]);
+  it("enumerates every operator however many there are", () => {
+    const sections = groupMembers(crowd(500));
+    const operators = sections.find((s) => s.group === "operators")!.members;
+    expect(operators.length).toBeGreaterThan(MEMBERS_PREVIEW);
+
+    const rows = toRows(sections);
+    const shownOperators = rows
+      .slice(0, rows.findIndex((row) => row.kind === "header" && row.group === "members"))
+      .filter((row) => row.kind === "member");
+
+    expect(shownOperators.length).toBe(operators.length);
+    expect(rows.filter((row) => row.kind === "more")).toHaveLength(1);
   });
 
-  it("matches the account when the nick does not", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "vulpes").map((m) => m.nick)).toEqual(["fox"]);
+  it("stops the members group at the preview and counts what it withheld", () => {
+    const sections = groupMembers(crowd(500));
+    const members = sections.find((s) => s.group === "members")!.members.length;
+    const rows = toRows(sections);
+    const more = rows.filter((row) => row.kind === "more");
+
+    expect(more).toEqual([{ kind: "more", hidden: members - MEMBERS_PREVIEW }]);
+    expect(rows.filter((row) => row.kind === "member").length).toBe(
+      500 - (members - MEMBERS_PREVIEW),
+    );
   });
 
-  it("returns everyone for a blank query", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "   ")).toBe(CTF_OPS_MEMBERS);
-  });
-
-  it("returns nobody when nothing matches", () => {
-    expect(filterMembers(CTF_OPS_MEMBERS, "nobodyhere")).toEqual([]);
+  it("shows the whole members group once expanded", () => {
+    const rows = toRows(groupMembers(crowd(500)), true);
+    expect(rows.filter((row) => row.kind === "member").length).toBe(500);
+    expect(rows.some((row) => row.kind === "more")).toBe(false);
   });
 });
 

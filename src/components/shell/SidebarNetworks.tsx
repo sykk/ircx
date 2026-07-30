@@ -17,7 +17,7 @@ type Row =
       highlights: number;
     }
   | { id: string; kind: "channel"; channel: Channel }
-  | { id: string; kind: "query"; query: Query };
+  | { id: string; kind: "query"; query: Query; network: Network };
 
 /** Modes that make a channel non-public: key, invite only, secret, private.
  * Only the flag token is inspected — a channel key is a mode parameter and may
@@ -53,9 +53,6 @@ export function SidebarNetworks() {
       const own = Object.values(channels)
         .filter((c) => c.network === id)
         .sort((a, b) => byName(a.name, b.name));
-      const talks = Object.values(queries)
-        .filter((q) => q.network === id)
-        .sort((a, b) => byName(a.nick, b.nick));
 
       const collapsed = collapsedNetworks[id] ?? false;
       out.push({
@@ -63,8 +60,7 @@ export function SidebarNetworks() {
         kind: "network",
         network,
         collapsed,
-        unread:
-          own.reduce((n, c) => n + c.unread, 0) + talks.reduce((n, q) => n + q.unread, 0),
+        unread: own.reduce((n, c) => n + c.unread, 0),
         highlights: own.reduce((n, c) => n + c.highlights, 0),
       });
       if (collapsed) continue;
@@ -72,10 +68,19 @@ export function SidebarNetworks() {
       for (const channel of own) {
         out.push({ id: targetKey(id, channel.name), kind: "channel", channel });
       }
+    }
+
+    for (const id of networkOrder) {
+      const network = networks[id];
+      if (!network) continue;
+      const talks = Object.values(queries)
+        .filter((q) => q.network === id)
+        .sort((a, b) => byName(a.nick, b.nick));
       for (const query of talks) {
-        out.push({ id: targetKey(id, query.nick), kind: "query", query });
+        out.push({ id: targetKey(id, query.nick), kind: "query", query, network });
       }
     }
+
     return out;
   }, [networks, networkOrder, channels, queries, collapsedNetworks]);
 
@@ -83,6 +88,7 @@ export function SidebarNetworks() {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
 
   const tabbableId = rows.some((r) => r.id === focusedId) ? focusedId : rows[0]?.id;
+  const firstQuery = rows.findIndex((r) => r.kind === "query");
 
   function focusRow(index: number) {
     const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
@@ -114,14 +120,14 @@ export function SidebarNetworks() {
         else focusRow(index + 1);
         break;
       case "ArrowLeft":
-        if (row.kind !== "network") {
+        if (row.kind === "channel") {
           for (let i = index - 1; i >= 0; i--) {
             if (rows[i]?.kind === "network") {
               focusRow(i);
               break;
             }
           }
-        } else if (!row.collapsed) {
+        } else if (row.kind === "network" && !row.collapsed) {
           toggleNetworkCollapsed(row.network.id);
         }
         break;
@@ -148,14 +154,28 @@ export function SidebarNetworks() {
     return active.network === network && sameTarget(active.target, target);
   }
 
+  function renderRow(row: Row) {
+    return (
+      <SidebarRow
+        key={row.id}
+        row={row}
+        selected={isSelected(row)}
+        tabbable={row.id === tabbableId}
+        onActivate={() => activate(row)}
+        registerButton={(el) => {
+          if (el) buttons.current.set(row.id, el);
+          else buttons.current.delete(row.id);
+        }}
+      />
+    );
+  }
+
   return (
     <nav
       aria-label="Networks"
       className="flex h-full min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
     >
-      <h2 className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-[0.09em] text-[var(--text-muted)] uppercase">
-        Networks
-      </h2>
+      <SectionLabel className="pt-3">Networks</SectionLabel>
 
       {rows.length === 0 ? (
         <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">
@@ -163,8 +183,6 @@ export function SidebarNetworks() {
         </p>
       ) : (
         <div
-          role="tree"
-          aria-label="Channels and conversations"
           className="min-h-0 flex-1 overflow-y-auto pb-2"
           onKeyDown={onKeyDown}
           onFocus={(event) => {
@@ -172,22 +190,40 @@ export function SidebarNetworks() {
             if (id) setFocusedId(id);
           }}
         >
-          {rows.map((row) => (
-            <SidebarRow
-              key={row.id}
-              row={row}
-              selected={isSelected(row)}
-              tabbable={row.id === tabbableId}
-              onActivate={() => activate(row)}
-              registerButton={(el) => {
-                if (el) buttons.current.set(row.id, el);
-                else buttons.current.delete(row.id);
-              }}
-            />
-          ))}
+          <div role="tree" aria-label="Networks and channels">
+            {rows.slice(0, firstQuery === -1 ? rows.length : firstQuery).map(renderRow)}
+          </div>
+
+          {firstQuery !== -1 && (
+            <>
+              <SectionLabel className="pt-4">Queries</SectionLabel>
+              <div role="tree" aria-label="Queries">
+                {rows.slice(firstQuery).map(renderRow)}
+              </div>
+            </>
+          )}
         </div>
       )}
     </nav>
+  );
+}
+
+function SectionLabel({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
+  return (
+    <h2
+      className={clsx(
+        "px-3 pb-1 text-[10px] font-semibold tracking-[0.09em] text-[var(--text-muted)] uppercase",
+        className,
+      )}
+    >
+      {children}
+    </h2>
   );
 }
 
@@ -220,15 +256,9 @@ function SidebarRow({
         aria-expanded={!row.collapsed}
         aria-level={1}
         aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}`}
-        className="flex h-8 w-full items-center gap-1.5 px-2 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+        className="flex h-8 w-full items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
       >
-        <span className="text-[var(--text-muted)]">
-          <Icon name={row.collapsed ? "chevronRight" : "chevronDown"} size={12} />
-        </span>
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ background: connectionColor(row.network.status) }}
-        />
+        <StatusDot network={row.network} />
         <span className="truncate">{row.network.name}</span>
         <span className="flex-1" />
         {row.collapsed && row.unread > 0 && (
@@ -238,10 +268,25 @@ function SidebarRow({
     );
   }
 
-  const name = row.kind === "channel" ? row.channel.name : row.query.nick;
-  const unread = row.kind === "channel" ? row.channel.unread : row.query.unread;
-  const highlights = row.kind === "channel" ? row.channel.highlights : 0;
-  const restricted = row.kind === "channel" && isRestricted(row.channel);
+  if (row.kind === "query") {
+    return (
+      <button
+        {...shared}
+        aria-level={1}
+        aria-selected={selected}
+        aria-label={row.query.nick}
+        className={rowClass(selected)}
+      >
+        <StatusDot network={row.network} />
+        <span className="truncate">{row.query.nick}</span>
+        <span className="flex-1" />
+        {row.query.unread > 0 && <Badge count={row.query.unread} />}
+      </button>
+    );
+  }
+
+  const name = row.channel.name;
+  const restricted = isRestricted(row.channel);
 
   return (
     <button
@@ -249,28 +294,40 @@ function SidebarRow({
       aria-level={2}
       aria-selected={selected}
       aria-label={restricted ? `${name}, restricted` : name}
-      className={clsx(
-        "flex h-7 w-full items-center gap-1.5 pr-2 pl-5 text-[12px]",
-        selected
-          ? "bg-[var(--surface-active)] text-[var(--text-primary)]"
-          : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]",
-      )}
-      style={selected ? { boxShadow: "inset 2px 0 0 var(--accent)" } : undefined}
+      className={rowClass(selected)}
     >
-      <span className="flex w-3.5 shrink-0 justify-center text-[var(--text-faint)]">
-        {row.kind === "channel" ? channelSigil(row.channel.name) : <Icon name="user" size={12} />}
+      <span className="flex w-2 shrink-0 justify-center text-[var(--text-faint)]">
+        {channelSigil(name)}
       </span>
-      <span className="truncate">
-        {row.kind === "channel" ? stripSigil(name) : name}
-      </span>
+      <span className="truncate">{stripSigil(name)}</span>
       <span className="flex-1" />
       {restricted && (
         <span className="text-[var(--text-faint)]">
           <Icon name="lock" size={12} />
         </span>
       )}
-      {unread > 0 && <Badge count={unread} highlight={highlights > 0} />}
+      {row.channel.unread > 0 && (
+        <Badge count={row.channel.unread} highlight={row.channel.highlights > 0} />
+      )}
     </button>
+  );
+}
+
+function rowClass(selected: boolean): string {
+  return clsx(
+    "flex h-7 w-full items-center gap-2 px-3 text-[12px]",
+    selected
+      ? "bg-[var(--surface-active)] text-[var(--text-primary)]"
+      : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]",
+  );
+}
+
+function StatusDot({ network }: { network: Network }) {
+  return (
+    <span
+      className="h-2 w-2 shrink-0 rounded-full"
+      style={{ background: connectionColor(network.status) }}
+    />
   );
 }
 

@@ -5,10 +5,10 @@ import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { targetKey, useActiveTimeline } from "@/store/selectors";
-import { MessageGroup } from "./MessageGroup";
+import { DateSeparator, UnreadDivider } from "./Divider";
+import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
-import { UnreadDivider } from "./UnreadDivider";
 import { buildRows, rowIndexOfMessage, type TimelineRow } from "./rows";
 import { usePrependAnchor } from "./scrollAnchor";
 
@@ -26,8 +26,24 @@ const FLASH_MS = 1_200;
  */
 const DENSITY = {
   "--row-pad-y": "1px",
-  "--block-gap": "6px",
-  "--body-leading": "1.55",
+  "--block-gap": "14px",
+  "--body-leading": "1.7",
+} as CSSProperties;
+
+/**
+ * The horizontal ladder, measured off `docs/chat-output.png`: the clock ends at
+ * x=71, the spine sits at x=98, the nick column opens at x=120, and text runs
+ * to a bounded measure. Every row reads these, so the columns hold whatever a
+ * row turns out to contain.
+ */
+const LADDER = {
+  "--rail-pad": "35px",
+  "--clock-col": "36px",
+  "--spine-gap": "27px",
+  "--spine-w": "2px",
+  "--nick-gap": "20px",
+  "--text-gap": "16px",
+  "--measure": "595px",
 } as CSSProperties;
 
 export function Timeline() {
@@ -133,7 +149,7 @@ function TimelineFor({ network, target }: { network: string; target: string }) {
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex h-full min-h-0 flex-col" style={DENSITY}>
+    <div className="flex h-full min-h-0 flex-col" style={{ ...DENSITY, ...LADDER }}>
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
@@ -189,6 +205,7 @@ interface RowContext {
 
 function renderRow(row: TimelineRow, context: RowContext) {
   if (row.kind === "unread") return <UnreadDivider seam={row.seam} />;
+  if (row.kind === "date") return <DateSeparator at={row.at} />;
   if (row.kind === "system") return <SystemMessage messages={row.messages} />;
-  return <MessageGroup messages={row.messages} {...context} />;
+  return <MessageBlock messages={row.messages} {...context} />;
 }

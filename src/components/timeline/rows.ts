@@ -1,12 +1,14 @@
 import type { ChatMessage, MessageKind } from "@/types";
 import { isHighlight } from "@/store/selectors";
 
-export const GROUP_WINDOW_MS = 5 * 60 * 1000;
+/** A block is a minute of the conversation, whoever spoke during it. */
+export const BUCKET_MS = 60 * 1000;
 
-/** One virtualised item. Groups and system runs hold several messages each. */
+/** One virtualised item. Blocks and system runs hold several messages each. */
 export type TimelineRow =
-  | { kind: "group"; id: string; messages: ChatMessage[] }
+  | { kind: "block"; id: string; messages: ChatMessage[] }
   | { kind: "system"; id: string; messages: ChatMessage[] }
+  | { kind: "date"; id: string; at: string }
   | { kind: "unread"; id: string; seam: Seam };
 
 /** What the reader missed, stated at the unread rule rather than left to a skim. */
@@ -38,18 +40,39 @@ const PRESENCE_KINDS = new Set<MessageKind>(["join", "part", "quit", "nick"]);
  */
 const LOUD_KINDS = new Set<MessageKind>(["mode", "kick"]);
 
+/** Kinds that print their own nick in the body: `* nick` and `-nick-`. */
+const OWN_NICK_KINDS = new Set<MessageKind>(["action", "notice"]);
+
 function isSystemKind(kind: MessageKind): boolean {
   return SYSTEM_KINDS.has(kind);
 }
 
-/** Kinds that carry their own nick in the rendered line and so never group. */
-const STANDALONE = new Set<MessageKind>(["action", "notice"]);
+export function writesOwnNick(kind: MessageKind): boolean {
+  return OWN_NICK_KINDS.has(kind);
+}
 
-function groupsWith(prev: ChatMessage, next: ChatMessage): boolean {
-  if (STANDALONE.has(prev.kind) || STANDALONE.has(next.kind)) return false;
-  if (prev.sender.nick !== next.sender.nick) return false;
-  const gap = Date.parse(next.timestamp) - Date.parse(prev.timestamp);
-  return Number.isFinite(gap) && gap >= 0 && gap <= GROUP_WINDOW_MS;
+function bucketOf(timestamp: string): number | null {
+  const at = Date.parse(timestamp);
+  return Number.isFinite(at) ? Math.floor(at / BUCKET_MS) : null;
+}
+
+/** Local calendar day, which is what a date separator divides. */
+function dayOf(timestamp: string): string | null {
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`;
+}
+
+/**
+ * A minute can open more than one block — a burst of joins between two
+ * sentences splits it — so the bucket alone is not a key. The suffix keeps
+ * React and the virtualiser's measurement cache on distinct rows while the
+ * first block of a bucket keeps its id when older history merges into it.
+ */
+function uniqueId(taken: Map<string, number>, base: string): string {
+  const n = (taken.get(base) ?? 0) + 1;
+  taken.set(base, n);
+  return n === 1 ? base : `${base}#${n}`;
 }
 
 export function buildRows(
@@ -58,10 +81,20 @@ export function buildRows(
   ownNick: string | null = null,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
-  let open: Extract<TimelineRow, { kind: "group" | "system" }> | null = null;
+  const taken = new Map<string, number>();
+  let open: Extract<TimelineRow, { kind: "block" | "system" }> | null = null;
+  let openBucket: number | null = null;
+  let openDay: string | null = null;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!;
+
+    const day = dayOf(message.timestamp);
+    if (day !== null && day !== openDay) {
+      openDay = day;
+      open = null;
+      rows.push({ kind: "date", id: `d:${day}`, at: message.timestamp });
+    }
 
     if (unreadFrom !== null && message.id === unreadFrom) {
       open = null;
@@ -69,9 +102,10 @@ export function buildRows(
     }
 
     const system = isSystemKind(message.kind);
+    const bucket = bucketOf(message.timestamp);
     const continues = system
       ? open?.kind === "system"
-      : open?.kind === "group" && groupsWith(open.messages[open.messages.length - 1]!, message);
+      : open?.kind === "block" && bucket !== null && bucket === openBucket;
 
     if (continues && open) {
       open.messages.push(message);
@@ -80,11 +114,21 @@ export function buildRows(
 
     open = system
       ? { kind: "system", id: `s:${message.id}`, messages: [message] }
-      : { kind: "group", id: `g:${message.id}`, messages: [message] };
+      : {
+          kind: "block",
+          id: uniqueId(taken, bucket === null ? `b:${message.id}` : `b:${bucket}`),
+          messages: [message],
+        };
+    openBucket = bucket;
     rows.push(open);
   }
 
   return rows;
+}
+
+/** Rows that carry messages. Date rules and the seam carry none. */
+export function rowMessages(row: TimelineRow): readonly ChatMessage[] {
+  return row.kind === "block" || row.kind === "system" ? row.messages : [];
 }
 
 /** Presence is not counted: the seam measures what people said. */
@@ -100,6 +144,27 @@ function measureSeam(unread: readonly ChatMessage[], ownNick: string | null): Se
   };
 }
 
+/** Narrow enough that the ladder still reads as a column under a short nick. */
+const MIN_NICK_CH = 4;
+
+/**
+ * Width of a block's nick column in monospace character advances, sized to the
+ * widest nick the block actually holds. A block of `nyx` and `kade` therefore
+ * sits closer to its text than one containing `phrack`, and the nick never
+ * truncates: the name is the identifier and colour only reinforces it.
+ *
+ * Actions and notices write their nick into the body, so they leave the column
+ * empty and do not widen it.
+ */
+export function nickColumnCh(messages: readonly ChatMessage[]): number {
+  let widest = MIN_NICK_CH;
+  for (const message of messages) {
+    if (writesOwnNick(message.kind)) continue;
+    widest = Math.max(widest, message.sender.nick.length);
+  }
+  return widest;
+}
+
 /** `HH:MM` in the viewer's timezone, without locale-dependent separators. */
 export function formatClock(timestamp: string): string {
   const at = new Date(timestamp);
@@ -107,11 +172,29 @@ export function formatClock(timestamp: string): string {
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }
 
+function startOfDay(at: Date): number {
+  return new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+}
+
+/** The label on a date rule: near days by name, older ones by date. */
+export function describeDay(timestamp: string, now: Date = new Date()): string {
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return "Undated";
+  const days = Math.round((startOfDay(now) - startOfDay(at)) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  const sameYear = at.getFullYear() === now.getFullYear();
+  return at.toLocaleDateString("en-GB", {
+    weekday: sameYear ? "short" : undefined,
+    day: "numeric",
+    month: "long",
+    year: sameYear ? undefined : "numeric",
+  });
+}
+
 /** Row index holding `messageId`, or -1. Drives the jump from a reply quote. */
 export function rowIndexOfMessage(rows: readonly TimelineRow[], messageId: string): number {
-  return rows.findIndex(
-    (row) => row.kind !== "unread" && row.messages.some((m) => m.id === messageId),
-  );
+  return rows.findIndex((row) => rowMessages(row).some((m) => m.id === messageId));
 }
 
 export interface SystemRun {

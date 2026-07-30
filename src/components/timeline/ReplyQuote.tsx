@@ -19,7 +19,7 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
   if (!parent) {
     return (
       <div
-        className="ml-1 truncate pl-2 text-[12px]"
+        className="truncate pl-2 font-[family-name:var(--font-ui)] text-[12px]"
         style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
       >
         in reply to {msgid}
@@ -32,14 +32,17 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
       type="button"
       onClick={() => onJump(msgid)}
       title={parent.text}
-      className="ml-1 flex w-full items-baseline gap-1.5 overflow-hidden pl-2 text-left text-[12px]"
-      style={{ borderLeft: CONNECTOR, color: "var(--text-muted)" }}
+      className="flex w-full items-baseline gap-1.5 overflow-hidden pl-2 text-left font-[family-name:var(--font-ui)] text-[12px]"
+      style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
     >
       <span
         className="shrink-0 font-[family-name:var(--font-mono)]"
         style={{ color: nickColor(parent.sender.nick) }}
       >
         {parent.sender.nick}
+      </span>
+      <span aria-hidden="true" className="shrink-0">
+        —
       </span>
       <span className="truncate">{parent.text}</span>
     </button>

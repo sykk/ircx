@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AttachmentCard, formatSize } from "./AttachmentCard";
+import { AttachmentLine, formatSize } from "./AttachmentLine";
 import { makeAttachment } from "./fixtures";
 
 const { ipcMock } = vi.hoisted(() => ({ ipcMock: { loadPreview: vi.fn() } }));
@@ -21,13 +21,13 @@ describe("formatSize", () => {
   });
 });
 
-describe("AttachmentCard", () => {
+describe("AttachmentLine", () => {
   it("shows the file without touching the network", () => {
-    render(<AttachmentCard attachment={makeAttachment()} />);
+    render(<AttachmentLine attachment={makeAttachment()} />);
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
-    expect(screen.getByText("1.1 MB · png")).toBeTruthy();
-    expect(screen.getByText("Load preview")).toBeTruthy();
+    expect(screen.getByText("1.1 MB")).toBeTruthy();
+    expect(screen.getByText("fetch")).toBeTruthy();
     expect(ipcMock.loadPreview).not.toHaveBeenCalled();
   });
 
@@ -35,20 +35,21 @@ describe("AttachmentCard", () => {
     ipcMock.loadPreview.mockResolvedValue(
       makeAttachment({ preview: { dataUri: "data:image/png;base64,AAAA", width: 4, height: 4 } }),
     );
-    render(<AttachmentCard attachment={makeAttachment()} />);
+    render(<AttachmentLine attachment={makeAttachment()} />);
 
-    fireEvent.click(screen.getByText("Load preview"));
+    fireEvent.click(screen.getByText("fetch"));
 
     await waitFor(() => expect(document.querySelector("img")).toBeTruthy());
     expect(ipcMock.loadPreview).toHaveBeenCalledWith("https://files.example/burp-req.png");
     expect(document.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,AAAA",
     );
+    expect(screen.getByText(/^· fetched \d\d:\d\d$/)).toBeTruthy();
   });
 
   it("renders an already-loaded preview without a control", () => {
     render(
-      <AttachmentCard
+      <AttachmentLine
         attachment={makeAttachment({
           preview: { dataUri: "data:image/png;base64,BBBB", width: 8, height: 8 },
         })}
@@ -56,12 +57,12 @@ describe("AttachmentCard", () => {
     );
 
     expect(document.querySelector("img")).toBeTruthy();
-    expect(screen.queryByText("Load preview")).toBe(null);
+    expect(screen.queryByText("fetch")).toBe(null);
   });
 
   it("falls back to the last path segment when there is no filename", () => {
     render(
-      <AttachmentCard
+      <AttachmentLine
         attachment={makeAttachment({
           filename: null,
           url: "https://files.example/a/b/dump.bin?sig=1",

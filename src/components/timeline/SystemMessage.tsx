@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ChatMessage } from "@/types";
-import { describePresence, formatClock, partitionSystemRun } from "./rows";
+import { Block } from "./MessageBlock";
+import { describePresence, partitionSystemRun } from "./rows";
 
 /**
  * Backends that phrase the event themselves win; the fallback exists so a bare
@@ -33,15 +34,17 @@ function systemText(message: ChatMessage): string {
  * Presence is weather, not speech: comings and goings fold into one line of
  * prose. Anything that changes who can read or speak is named in the first
  * clause and stays on screen whether the fold is open or shut.
+ *
+ * No spine, because a spine is what marks a run of speech.
  */
 export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
   const { loud, presence, plain } = partitionSystemRun(messages);
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div style={{ paddingBlock: "var(--block-gap)" }}>
+    <Block at={messages[0]!.timestamp} spine={false}>
       {(loud.length > 0 || presence.length > 0) && (
-        <div className="flex items-baseline gap-2 px-4 text-[12px]">
+        <div className="flex items-baseline gap-2 text-[12px]">
           {loud.length > 0 && (
             <span style={{ color: "var(--warning)" }}>
               {loud.map(systemText).join(", ")}
@@ -70,7 +73,7 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
       {plain.map((message) => (
         <SystemLine key={message.id} message={message} />
       ))}
-    </div>
+    </Block>
   );
 }
 
@@ -78,18 +81,13 @@ function SystemLine({ message }: { message: ChatMessage }) {
   return (
     <div
       data-msgid={message.id}
-      className="flex items-baseline gap-2 px-4 text-[12px]"
+      className="selectable text-[12px] break-words"
       style={{
+        maxWidth: "var(--measure)",
         color: message.kind === "server" ? "var(--text-faint)" : "var(--text-muted)",
       }}
     >
-      <span className="selectable min-w-0 flex-1 break-words">{systemText(message)}</span>
-      <span
-        className="shrink-0 font-[family-name:var(--font-mono)] text-[11px] tabular-nums"
-        style={{ color: "var(--text-faint)" }}
-      >
-        {formatClock(message.timestamp)}
-      </span>
+      {systemText(message)}
     </div>
   );
 }

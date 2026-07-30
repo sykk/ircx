@@ -5,7 +5,7 @@ import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, useAppStore } from "@/store";
 import { targetKey, useTimelineForView, useView } from "@/store/selectors";
-import type { ViewId } from "@/store/types";
+import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
 import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
@@ -88,13 +88,23 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const restoreTo = useRef(useAppStore.getState().views[view]?.scrollPosition ?? 0);
   const followingRef = useRef(restoreTo.current === 0);
 
-  const { messages, unreadFrom, hasMore, loadingOlder } = timeline;
+  const { messages, unreadFrom } = timeline;
 
   const rows = useMemo(
     () => buildRows(messages, unreadFrom, ownNick),
     [messages, unreadFrom, ownNick],
   );
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+
+  const head = rows.length === 0 ? null : historyHead(timeline, loadError);
+  const headRef = useRef<HTMLDivElement>(null);
+  // The head is the first thing in the scroller, so the list starts that far
+  // down it. The virtualiser needs the offset to place rows and to scroll to
+  // one; the rows themselves subtract it again, being laid out inside the list.
+  const [headPx, setHeadPx] = useState(0);
+  useLayoutEffect(() => {
+    setHeadPx(headRef.current?.offsetHeight ?? 0);
+  }, [head]);
 
   // React Compiler cannot memoize around the virtualiser's mutable instance, so
   // it skips this component. That is the trade for variable-height rows.
@@ -104,16 +114,20 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ESTIMATED_ROW_PX,
     getItemKey: (index) => rows[index]?.id ?? index,
+    scrollMargin: headPx,
     overscan: 10,
   });
 
   usePrependAnchor(scrollRef, messages);
 
+  // On the messages rather than the row count: a message that merges into the
+  // row already open moves the tail without adding a row, and a console's whole
+  // content is the kind of row that merges.
   useLayoutEffect(() => {
     if (followingRef.current && rows.length > 0) {
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
     }
-  }, [rows.length, virtualizer]);
+  }, [messages, rows.length, virtualizer]);
 
   // Deferred until there is something to scroll: an empty scroller clamps any
   // offset back to zero and the position would be lost.
@@ -192,7 +206,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ ...DENSITY, ...LADDER }}>
-      <div className="relative min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <div
           ref={scrollRef}
           onScroll={onScroll}
@@ -200,14 +214,28 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
           className="h-full overflow-x-hidden overflow-y-auto"
           style={{ overflowAnchor: "none" }}
         >
-          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+          {head !== null && (
+            <div
+              ref={headRef}
+              data-testid="timeline-head"
+              className="px-4 py-1 text-center text-[11px]"
+              style={{ color: loadError ? "var(--danger)" : "var(--text-faint)" }}
+            >
+              {head}
+            </div>
+          )}
+          <div
+            data-testid="timeline-sizer"
+            className="relative w-full"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
             {items.map((item) => (
               <div
                 key={item.key}
                 data-index={item.index}
                 ref={virtualizer.measureElement}
                 className="absolute top-0 left-0 w-full"
-                style={{ transform: `translateY(${item.start}px)` }}
+                style={{ transform: `translateY(${item.start - headPx}px)` }}
               >
                 {renderRow(rows[item.index]!, { ownNick, parentOf, onJump: jump, flashId })}
               </div>
@@ -222,20 +250,23 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
             </div>
           )}
         </div>
-
-        {(loadingOlder || loadError || !hasMore) && rows.length > 0 && (
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 px-4 py-1 text-center text-[11px]"
-            style={{ color: loadError ? "var(--danger)" : "var(--text-faint)" }}
-          >
-            {loadError ?? (loadingOlder ? "Loading older messages" : "Beginning of history")}
-          </div>
-        )}
       </div>
 
       <TypingIndicator network={network} target={target} />
     </div>
   );
+}
+
+/**
+ * What the head of the scrolled content says about the history above it. It is
+ * a line of the timeline rather than a layer over one: "Beginning of history"
+ * is permanent for every conversation short enough to hold its whole archive,
+ * and being scrolled to the top is exactly when a layer would cover something.
+ */
+function historyHead(timeline: TimelineState, loadError: string | null): string | null {
+  if (loadError !== null) return loadError;
+  if (timeline.loadingOlder) return "Loading older messages";
+  return timeline.hasMore ? null : "Beginning of history";
 }
 
 interface RowContext {

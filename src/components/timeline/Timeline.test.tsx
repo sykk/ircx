@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
@@ -16,6 +16,10 @@ const { ipcMock } = vi.hoisted(() => ({
 vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn() }));
 
 const KEY = targetKey("libera", "#ctf-ops");
+/** Height the history head reports, so the space it reserves is checkable. */
+const HEAD_PX = 20;
+/** What the scroller reports as its viewport, since jsdom lays nothing out. */
+const VIEWPORT_PX = 600;
 
 beforeAll(() => {
   // The virtualiser sizes the viewport and every row from offsetHeight, which
@@ -29,24 +33,48 @@ beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
     configurable: true,
     get(this: HTMLElement) {
-      return this.hasAttribute("data-index") ? ESTIMATED_ROW_PX : 600;
+      if (this.hasAttribute("data-index")) return ESTIMATED_ROW_PX;
+      if (this.dataset.testid === "timeline-head") return HEAD_PX;
+      return VIEWPORT_PX;
     },
   });
   Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
     configurable: true,
     get: () => 800,
   });
+  // Nothing here has a border or a scrollbar, so the padding box is the border
+  // box. The virtualiser reads it to find how far down a scroller can go.
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.offsetHeight;
+    },
+  });
   // jsdom reports scrollHeight as zero. For the scroller it is the height of
-  // the virtualiser's sizer, which does carry a real inline height.
+  // the virtualiser's sizer, which does carry a real inline height. The sizer
+  // is found by name rather than by position: the history head is a sibling
+  // above it and would otherwise be measured instead.
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
     get(this: HTMLElement) {
-      const sizer = this.firstElementChild as HTMLElement | null;
+      const sizer = this.querySelector<HTMLElement>('[data-testid="timeline-sizer"]');
       const declared = sizer?.style.height;
       return declared ? Number.parseFloat(declared) : this.offsetHeight;
     },
   });
 });
+
+/**
+ * jsdom has no scrolling, so nothing answers the virtualiser's `scrollTo`. On
+ * one scroller, and only from the point it is called, a browser's answer: move
+ * `scrollTop` there. Left off elsewhere — it would also let the virtualiser's
+ * own prepend compensation run, which no test here is about.
+ */
+function letItScroll(scroller: HTMLElement) {
+  scroller.scrollTo = ((options: ScrollToOptions) => {
+    scroller.scrollTop = options.top ?? 0;
+  }) as HTMLElement["scrollTo"];
+}
 
 function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({
@@ -269,6 +297,62 @@ describe("Timeline", () => {
     expect(rendered.length).toBeLessThan(80);
   });
 
+  it("follows the tail when new lines merge into the row that is already open", () => {
+    // A console is nothing but system messages, so a minute of output is a
+    // single row and the fifteen lines a `/help` adds land inside the row
+    // already on screen. Nothing about the row count changes.
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    const line = (id: string, minute: number) =>
+      makeMessage({
+        id,
+        kind: "server",
+        nick: "irc.libera.chat",
+        text: `- ${id}`,
+        timestamp: new Date(base + minute * 60_000).toISOString(),
+      });
+
+    seed(Array.from({ length: 20 }, (_, i) => line(`motd${i}`, i)));
+    render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    letItScroll(scroller);
+    expect(scroller.scrollTop).toBe(0);
+
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        network: "libera",
+        target: "#ctf-ops",
+        messages: Array.from({ length: 15 }, (_, i) => line(`help${i}`, 19)),
+      });
+    });
+
+    const open = document.querySelector('[data-msgid="motd19"]')!.closest("[data-index]")!;
+    expect(open.contains(document.querySelector('[data-msgid="help14"]'))).toBe(true);
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+  });
+
+  it("puts the head of history in the content it labels rather than over it", () => {
+    seedTimelines({
+      [KEY]: {
+        messages: makeConversation({ count: 20, seed: 6 }),
+        unreadFrom: null,
+        hasMore: false,
+        loadingOlder: false,
+      },
+    });
+    render(<Timeline view={TEST_VIEW} />);
+
+    const head = screen.getByText("Beginning of history");
+    expect(head.parentElement).toBe(screen.getByTestId("timeline-scroller"));
+    expect(head.nextElementSibling).toBe(screen.getByTestId("timeline-sizer"));
+    expect(head.className).not.toContain("absolute");
+    // Its height is reserved once, not twice: the list begins at the top of the
+    // sizer, which itself begins below the head.
+    const first = document.querySelector('[data-index="0"]') as HTMLElement;
+    expect(first.style.transform).toBe("translateY(0px)");
+  });
+
   it("keeps the viewport still when a page of history is prepended", async () => {
     const older = makeConversation({
       count: 200,
@@ -465,6 +549,22 @@ describe("Timeline", () => {
     expect(drawn).toContain("red on yellow and back");
     expect(drawn).toContain("underlined motd");
     expect([...drawn].filter((ch) => ch.charCodeAt(0) < 0x20)).toEqual([]);
+  });
+
+  it("keeps a MOTD's own spacing, in the face its rules were drawn against", () => {
+    seed([
+      makeMessage({
+        id: "m",
+        kind: "server",
+        nick: "irc.libera.chat",
+        text: "-  |   |     Welcome to Libera.Chat",
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const line = document.querySelector('[data-msgid="m"]')!;
+    expect(line.className).toContain("--font-mono");
+    expect(line.className).toContain("whitespace-pre-wrap");
   });
 
   it("keeps a client line's own spacing, in the face its columns were measured for", () => {

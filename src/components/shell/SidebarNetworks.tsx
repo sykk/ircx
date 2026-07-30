@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
 import { Icon } from "@/components/common/Icon";
+import { OverflowIcon } from "@/components/header/icons";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useActiveTarget } from "@/store/selectors";
-import type { Channel, Network, Query } from "@/types";
+import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { connectionColor, connectionLabel } from "./connection";
 
 type Row =
@@ -40,6 +41,7 @@ export function SidebarNetworks() {
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const active = useActiveTarget();
   const setActive = useAppStore((s) => s.setActive);
+  const openConsole = useAppStore((s) => s.openConsole);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
 
@@ -87,6 +89,8 @@ export function SidebarNetworks() {
   }, [networks, networkOrder, channels, queries, collapsedNetworks]);
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  /** The one network row showing its menu; only one is ever open. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
 
   const tabbableId = rows.some((r) => r.id === focusedId) ? focusedId : rows[0]?.id;
@@ -139,9 +143,12 @@ export function SidebarNetworks() {
     event.preventDefault();
   }
 
+  // A network row opens that network's console, which is the first place a
+  // person clicks when they want to know what the server said (#80). Collapse
+  // moved into the row's own menu.
   function activate(row: Row) {
     if (row.kind === "network") {
-      toggleNetworkCollapsed(row.network.id);
+      openConsole(row.network.id);
       return;
     }
     const target = row.kind === "channel" ? row.channel.name : row.query.nick;
@@ -150,24 +157,62 @@ export function SidebarNetworks() {
   }
 
   function isSelected(row: Row): boolean {
-    if (!active || row.kind === "network") return false;
+    if (!active) return false;
+    if (row.kind === "network") {
+      return active.network === row.network.id && active.target === SERVER_TARGET;
+    }
     const target = row.kind === "channel" ? row.channel.name : row.query.nick;
     const network = row.kind === "channel" ? row.channel.network : row.query.network;
     return active.network === network && sameTarget(active.target, target);
   }
 
   function renderRow(row: Row) {
+    const selected = isSelected(row);
+    const tabbable = row.id === tabbableId;
+    const registerButton = (el: HTMLButtonElement | null) => {
+      if (el) buttons.current.set(row.id, el);
+      else buttons.current.delete(row.id);
+    };
+
+    if (row.kind === "network") {
+      return (
+        <div
+          key={row.id}
+          className={clsx(
+            "group flex items-center",
+            selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",
+          )}
+        >
+          <NetworkRow
+            row={row}
+            selected={selected}
+            tabbable={tabbable}
+            onActivate={() => activate(row)}
+            registerButton={registerButton}
+          />
+          <NetworkMenu
+            network={row.network}
+            collapsed={row.collapsed}
+            resting={selected}
+            tabbable={tabbable}
+            open={menuFor === row.network.id}
+            onOpenChange={(open) => setMenuFor(open ? row.network.id : null)}
+            onCollapse={() => toggleNetworkCollapsed(row.network.id)}
+            onRawLog={() => openConsole(row.network.id, true)}
+            onSettings={() => openSetup(row.network.id)}
+          />
+        </div>
+      );
+    }
+
     return (
       <SidebarRow
         key={row.id}
         row={row}
-        selected={isSelected(row)}
-        tabbable={row.id === tabbableId}
+        selected={selected}
+        tabbable={tabbable}
         onActivate={() => activate(row)}
-        registerButton={(el) => {
-          if (el) buttons.current.set(row.id, el);
-          else buttons.current.delete(row.id);
-        }}
+        registerButton={registerButton}
       />
     );
   }
@@ -241,19 +286,52 @@ function SectionLabel({
   );
 }
 
+interface RowProps {
+  selected: boolean;
+  tabbable: boolean;
+  onActivate: () => void;
+  registerButton: (el: HTMLButtonElement | null) => void;
+}
+
+function NetworkRow({
+  row,
+  selected,
+  tabbable,
+  onActivate,
+  registerButton,
+}: RowProps & { row: Extract<Row, { kind: "network" }> }) {
+  return (
+    <button
+      data-row-id={row.id}
+      role="treeitem"
+      type="button"
+      tabIndex={tabbable ? 0 : -1}
+      ref={registerButton}
+      onClick={onActivate}
+      aria-expanded={!row.collapsed}
+      aria-level={1}
+      aria-selected={selected}
+      aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}`}
+      title={`Server messages from ${row.network.name}`}
+      className="flex h-8 min-w-0 flex-1 items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)]"
+    >
+      <StatusDot network={row.network} />
+      <span className="truncate">{row.network.name}</span>
+      <span className="flex-1" />
+      {row.collapsed && row.unread > 0 && (
+        <Badge count={row.unread} highlight={row.highlights > 0} />
+      )}
+    </button>
+  );
+}
+
 function SidebarRow({
   row,
   selected,
   tabbable,
   onActivate,
   registerButton,
-}: {
-  row: Row;
-  selected: boolean;
-  tabbable: boolean;
-  onActivate: () => void;
-  registerButton: (el: HTMLButtonElement | null) => void;
-}) {
+}: RowProps & { row: Exclude<Row, { kind: "network" }> }) {
   const shared = {
     "data-row-id": row.id,
     role: "treeitem",
@@ -262,25 +340,6 @@ function SidebarRow({
     ref: registerButton,
     onClick: onActivate,
   };
-
-  if (row.kind === "network") {
-    return (
-      <button
-        {...shared}
-        aria-expanded={!row.collapsed}
-        aria-level={1}
-        aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}`}
-        className="flex h-8 w-full items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-      >
-        <StatusDot network={row.network} />
-        <span className="truncate">{row.network.name}</span>
-        <span className="flex-1" />
-        {row.collapsed && row.unread > 0 && (
-          <Badge count={row.unread} highlight={row.highlights > 0} />
-        )}
-      </button>
-    );
-  }
 
   if (row.kind === "query") {
     return (
@@ -323,6 +382,115 @@ function SidebarRow({
       {row.channel.unread > 0 && (
         <Badge count={row.channel.unread} highlight={row.channel.highlights > 0} />
       )}
+    </button>
+  );
+}
+
+/**
+ * Collapse, the protocol log, and the network's saved settings, all named in
+ * words — #80 is a report that none of the three could be found. Hidden until
+ * the row is hovered or holds focus, so a sidebar at rest stays the flat list
+ * #28 asked for.
+ */
+function NetworkMenu({
+  network,
+  collapsed,
+  resting,
+  tabbable,
+  open,
+  onOpenChange,
+  onCollapse,
+  onRawLog,
+  onSettings,
+}: {
+  network: Network;
+  collapsed: boolean;
+  /** Drawn without a hover, because this network's console is the one on show. */
+  resting: boolean;
+  tabbable: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCollapse: () => void;
+  onRawLog: () => void;
+  onSettings: () => void;
+}) {
+  const button = useRef<HTMLButtonElement>(null);
+
+  const choose = (run: () => void) => () => {
+    onOpenChange(false);
+    run();
+  };
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (!open) return;
+        if (event.key === "Escape") {
+          onOpenChange(false);
+          button.current?.focus();
+        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          // The tree owns the arrow keys everywhere else in the sidebar; while
+          // the menu is open they belong to it.
+          const items = [
+            ...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+          ];
+          const down = event.key === "ArrowDown";
+          const at = items.indexOf(document.activeElement as HTMLElement);
+          // From the button itself, down starts at the first item, up at the last.
+          const next = at === -1 ? (down ? 0 : -1) : at + (down ? 1 : -1);
+          items[((next % items.length) + items.length) % items.length]?.focus();
+        } else {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        aria-label={`${network.name} actions`}
+        title={`${network.name} actions`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        tabIndex={tabbable ? 0 : -1}
+        onClick={() => onOpenChange(!open)}
+        className={clsx(
+          "mr-1.5 rounded-[var(--radius-sm)] p-1",
+          open ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+          open || resting ? "block" : "hidden group-hover:block group-focus-within:block",
+        )}
+      >
+        <OverflowIcon size={12} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={`${network.name} actions`}
+          className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
+        >
+          <MenuItem onClick={choose(onCollapse)}>
+            {collapsed ? "Show channels" : "Hide channels"}
+          </MenuItem>
+          <MenuItem onClick={choose(onRawLog)}>Raw protocol log</MenuItem>
+          <MenuItem onClick={choose(onSettings)}>{network.name} settings</MenuItem>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="w-full truncate rounded-[var(--radius-sm)] px-2 py-1 text-left text-[12px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+    >
+      {children}
     </button>
   );
 }

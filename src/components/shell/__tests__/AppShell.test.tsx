@@ -76,7 +76,8 @@ describe("AppShell", () => {
     fireEvent.keyDown(screen.getByRole("separator", { name: "Sidebar width" }), {
       key: "ArrowRight",
     });
-    fireEvent.click(screen.getByRole("treeitem", { name: /^libera,/ }));
+    fireEvent.click(screen.getByRole("button", { name: "libera actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide channels" }));
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 256,

@@ -126,6 +126,9 @@ function Palette() {
       case "search":
         store.toggleSearch(true);
         break;
+      case "openSetup":
+        store.openSetup(action.network);
+        break;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;

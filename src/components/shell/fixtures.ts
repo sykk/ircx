@@ -20,7 +20,7 @@ export function oneView(target: ActiveTarget | null): ViewSlice {
   if (!target) return { views: {}, viewOrder: [], activeViewId: null, layout: null };
   const id = TEST_VIEW;
   return {
-    views: { [id]: { id, ...target, scrollPosition: 0, selectedUser: null } },
+    views: { [id]: { id, ...target, scrollPosition: 0, selectedUser: null, raw: false } },
     viewOrder: [id],
     activeViewId: id,
     layout: { type: "view", id },

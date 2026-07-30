@@ -40,7 +40,7 @@ function channel(net: string, name: string): Channel {
 }
 
 function view(id: string, network: string, target: string): ChatView {
-  return { id, network, target, scrollPosition: 0, selectedUser: null };
+  return { id, network, target, scrollPosition: 0, selectedUser: null, raw: false };
 }
 
 /** Two panes on one target, which no action opens yet — splits land in the next
@@ -166,6 +166,7 @@ describe("view state", () => {
       target: "#hackint",
       scrollPosition: 0,
       selectedUser: null,
+      raw: false,
     });
   });
 

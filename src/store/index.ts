@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { FALLBACK_THEME_ID, type Catalogue } from "@/lib/theme";
-import type { ChatMessage, IrcxEvent, Reaction } from "@/types";
+import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Reaction } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { paneOrder, removeLeaf, splitLeaf } from "./layout";
 import type {
@@ -37,12 +37,16 @@ export interface AppActions {
 
   /** Points the focused view at a target, opening a view if none exists. */
   setActive: (target: ActiveTarget | null) => void;
+  /** Points the focused view at a network's console, showing either what the
+   * server said or the protocol log. */
+  openConsole: (network: string, raw?: boolean) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   clearUnreadMarker: (key: TargetKey) => void;
 
   setViewScroll: (view: ViewId, position: number) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
+  setViewRaw: (view: ViewId, raw: boolean) => void;
 
   /** Opens a second pane on the focused view's target and focuses it. */
   splitActiveView: (direction: SplitDirection) => void;
@@ -94,7 +98,7 @@ const initialState: AppState = {
   themeId: FALLBACK_THEME_ID,
 };
 
-export const useAppStore = create<AppState & AppActions>((set) => ({
+export const useAppStore = create<AppState & AppActions>((set, get) => ({
   ...initialState,
 
   applyEvent: (event) => set((s) => reduce(s, event)),
@@ -131,6 +135,12 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
       return { views: retarget(s.views, id, target.network, target.target), recent, timelines };
     }),
 
+  openConsole: (network, raw = false) => {
+    get().setActive({ network, target: SERVER_TARGET });
+    const id = get().activeViewId;
+    if (id) get().setViewRaw(id, raw);
+  },
+
   setViewScroll: (view, position) =>
     set((s) => {
       const current = s.views[view];
@@ -143,6 +153,13 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
       const current = s.views[view];
       if (!current || current.selectedUser === nick) return {};
       return { views: { ...s.views, [view]: { ...current, selectedUser: nick } } };
+    }),
+
+  setViewRaw: (view, raw) =>
+    set((s) => {
+      const current = s.views[view];
+      if (!current || current.raw === raw) return {};
+      return { views: { ...s.views, [view]: { ...current, raw } } };
     }),
 
   splitActiveView: (direction) =>
@@ -255,7 +272,7 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
 }));
 
 function newView(network: string, target: string): ChatView {
-  return { id: mintViewId(), network, target, scrollPosition: 0, selectedUser: null };
+  return { id: mintViewId(), network, target, scrollPosition: 0, selectedUser: null, raw: false };
 }
 
 /** Retargeting resets the view's own position — the scroll and the inspector
@@ -269,7 +286,10 @@ function retarget(
   const view = views[id];
   if (!view) return views;
   if (view.network === network && view.target === target) return views;
-  return { ...views, [id]: { ...view, network, target, scrollPosition: 0, selectedUser: null } };
+  return {
+    ...views,
+    [id]: { ...view, network, target, scrollPosition: 0, selectedUser: null, raw: false },
+  };
 }
 
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
@@ -296,7 +316,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
             ...Object.fromEntries(
               stale.map((v) => [
                 v.id,
-                { ...v, network: "", target: "", scrollPosition: 0, selectedUser: null },
+                { ...v, network: "", target: "", scrollPosition: 0, selectedUser: null, raw: false },
               ]),
             ),
           }

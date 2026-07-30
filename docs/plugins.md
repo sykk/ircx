@@ -148,9 +148,25 @@ see: a host function that does not return. See the standing constraints below.
 
 ## Standing constraints
 
-Three properties hold only as long as the host surface keeps them. They are
+Four properties hold only as long as the host surface keeps them. They are
 constraints on future work, not things already banked.
 
+- **A plugin may not change what somebody else said.** It can add to a
+  conversation and its addition is named — `ChatMessage.via` carries the plugin
+  and the timeline draws it — but no host function takes a message the plugin
+  did not write and returns a different one. The text beside a nick is what that
+  person sent.
+
+  This is a decision rather than an accident, and it is what the seven
+  permissions are worth. A plugin that can rewrite a message can make someone
+  appear to have said anything, and no sandbox helps: the isolation is sound and
+  the lie is in what it was legitimately allowed to return. `render-content`
+  governs what a plugin may show **of its own**, and nothing more.
+
+  It bounds the unbuilt work as much as the built. A message renderer may
+  annotate — its own text, attributed, beside what it is about — and may not
+  transform. A protocol adapter handling a capability ircx does not know may
+  produce messages and may not rewrite the ones already there.
 - **Hooks are synchronous.** A promise nobody settles leaves the job queue empty
   with no bytecode running, so nothing trips the deadline. Making hooks
   asynchronous means putting a deadline around the microtask pump.
@@ -180,11 +196,15 @@ constraints on future work, not things already banked.
   install dialogue offers the channels the manifest named, and lets the user
   type one when the manifest asked for `*`. Neither is a list of the channels
   they are actually in, so naming one is spelling rather than picking.
-- **A renderer that transforms somebody else's message.** A plugin's own answer
-  is now named (below), but nothing lets a plugin change how a message it did
-  not write is drawn. That runs per message rather than per command, so the
-  0.022 ms figure in `docs/measurements.md` does not carry, and it lets a plugin
-  change what somebody appears to have said — which wants its own thinking about
-  trust rather than the permission it would otherwise reuse.
+- **A renderer that annotates a message.** A plugin's own answer is named, and
+  nothing yet lets a plugin add anything beside a message it did not write —
+  a link preview under a URL, say. Transforming one is not on this list because
+  it is refused above rather than unbuilt.
+
+  What it would need is the per-message budget. The 0.022 ms in
+  `docs/measurements.md` is per slash command, something a user types; an
+  annotation runs against messages as they arrive, and calling into QuickJS
+  while a timeline scrolls is not an option — it would have to run once on
+  arrival with its result stored, the way `via` is.
 - **A second plugin's marginal cost.** Every figure in `docs/measurements.md` is
   one plugin.

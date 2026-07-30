@@ -5,38 +5,34 @@ the assembled app. Nothing here is covered by `cargo test` or `npm test`.
 
 ## SASL against real services
 
-The only protocol path with unit tests and no live verification. `ircx-core`
-covers the 900-908 numerics and the 400-byte base64 chunking against scripted
-dialogues, but nothing has ever authenticated against actual services.
+**The rejection path is verified.** `crates/ircx-core/tests/sasl_probe.rs` connects
+to Libera with PLAIN credentials for an account nobody has registered, which
+draws the same `904` a wrong password does. Observed on the wire: `904`, then
+`SaslStatus::Failed`, then `ConnectionStatus::Failed`, and `001` never arrives —
+registration is abandoned rather than continuing as a stranger. It needs no
+credentials, so run it whenever the SASL path changes:
 
-You need a registered NickServ account. Run `npm run tauri dev`, add Libera
-through onboarding, and enter the account name and password.
+```text
+cargo test -p ircx-core --test sasl_probe -- --ignored --nocapture
+```
 
-Watch for, in order:
+**The success path is verified** by the owner against a real NickServ account on
+2026-07-30: `903`, the status bar naming the account, and registration
+completing after it.
 
-1. **`CAP ACK` includes `sasl`.** Libera advertises
-   `sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN`; we request and use `PLAIN`.
-   Check the raw log — if `sasl` is missing from the ACK, nothing below happens
-   and the client should say so rather than connecting anonymously.
-2. **`AUTHENTICATE PLAIN`, then a bare `+` from the server, then the base64
-   payload.** The `+` is the server asking for the credential; a client that
-   sends the payload before it is a protocol error.
-3. **`903 RPL_SASLSUCCESS`.** The status bar's SASL indicator should turn from
-   in-progress to authenticated, naming the account.
-4. **Registration completes after SASL, not before.** `CAP END` must follow the
-   903, not race it.
+What that leaves:
 
-Then test the failure path with a deliberately wrong password:
+- **A wrong password on a registered account**, as opposed to a nonexistent one.
+  Libera answers `904` either way and the client cannot tell them apart, so this
+  is thin — but nobody has run it.
+- **Mechanisms other than PLAIN.** Libera also offers `EXTERNAL`,
+  `ECDSA-NIST256P-CHALLENGE` and `SCRAM-SHA-512`. ircx requests PLAIN only.
 
-5. **`904 ERR_SASLFAIL` must abort registration**, not connect you
-   unauthenticated. This is the one most likely to be wrong, and the one that
-   matters: silently connecting without the identity the user asked for is worse
-   than failing. The status bar should show the failure and the error should
-   name what to do.
-
-Also worth a look: whether the password field shows "Saved in your system
-keyring" rather than an empty box when you reopen the network's settings. That
-path has a unit test but has never been seen by a person.
+> Testing a wrong password by sending `/msg NickServ IDENTIFY` does **not**
+> exercise SASL. SASL happens during registration, before you can message
+> anyone; a failed NickServ login afterwards leaves the SASL session it already
+> established untouched. Change the credential in the network's settings and
+> reconnect.
 
 ## Things the Libera runs left unverified
 

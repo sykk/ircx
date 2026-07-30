@@ -381,6 +381,7 @@ impl SessionState {
                     "ACCOUNT" => self.handle_account(message),
                     "CHGHOST" => self.handle_chghost(message),
                     "BATCH" => self.handle_batch(message),
+                    "FAIL" | "WARN" | "NOTE" => self.handle_standard_reply(&name, message),
                     _ => debug!(command = name, "no handler for this command"),
                 }
             }
@@ -1517,6 +1518,39 @@ impl SessionState {
             network: self.config.network.clone(),
             enabled: self.caps.enabled(),
         });
+    }
+
+    /// An IRCv3 standard reply: the server explaining itself in a sentence
+    /// meant for a person, with a machine-readable code beside it.
+    ///
+    /// ```text
+    /// FAIL <command> <code> [<context>...] :<description>
+    /// ```
+    ///
+    /// The description is the only part written for the user, so it is the only
+    /// part shown; the command, the code and any context stay in the raw line,
+    /// which the detail carries. Dropping these — which is what happened before
+    /// this — throws away the one sentence a server wrote to explain itself,
+    /// and leaves a command that did nothing with no reason attached.
+    fn handle_standard_reply(&mut self, kind: &str, message: &Message) {
+        let severity = match kind {
+            "FAIL" => Severity::Error,
+            "WARN" => Severity::Warning,
+            _ => Severity::Info,
+        };
+        let command = message.param(0).unwrap_or("*");
+        let code = message.param(1).unwrap_or_default();
+        // Below three parameters there is no description, only the code: the
+        // reply is malformed, and the code is all there is to pass on.
+        let described = message.params.len() >= 3;
+        let text = match (described, message.params.last()) {
+            (true, Some(description)) if !description.trim().is_empty() => description.clone(),
+            _ if command == "*" => format!("{} sent {code}", self.network_name()),
+            _ => format!("{} sent {code} about {command}", self.network_name()),
+        };
+
+        self.notice(severity, text.clone(), &message.raw);
+        self.note(SERVER_TARGET, MessageKind::Client, text);
     }
 
     pub(crate) fn notice(&mut self, severity: Severity, text: String, detail: &str) {

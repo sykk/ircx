@@ -8,7 +8,7 @@ import {
   type Reaction,
 } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import { paneOrder, removeLeaf, splitLeaf } from "./layout";
+import { paneOrder, removeLeaf, setRatio, splitLeaf, type SplitPath } from "./layout";
 import type {
   ActiveTarget,
   AppState,
@@ -58,6 +58,9 @@ export interface AppActions {
   /** Refused for the last pane; the window always holds at least one. */
   closeView: (view: ViewId) => void;
   focusView: (view: ViewId) => void;
+  /** Moves one split's divider. `path` names the split by the route to it from
+   * the root, which is what the component drawing the divider holds. */
+  setSplitRatio: (path: SplitPath, ratio: number) => void;
 
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
@@ -215,6 +218,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   focusView: (view) =>
     set((s) => (s.views[view] && s.activeViewId !== view ? { activeViewId: view } : {})),
+
+  setSplitRatio: (path, ratio) =>
+    set((s) => {
+      if (!s.layout) return {};
+      const layout = setRatio(s.layout, path, ratio);
+      return layout === s.layout ? {} : { layout };
+    }),
 
   prependHistory: (key, older, hasMore) =>
     set((s) => {

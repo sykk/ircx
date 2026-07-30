@@ -28,7 +28,7 @@ function clauses(seam: Seam): string {
     describeSpan(seam.spanMs),
   ].join(", ");
   if (seam.mentions === 0) return size;
-  return `${size} · ${seam.mentions} mention${seam.mentions === 1 ? "s" : ""} you`;
+  return `${size} · ${seam.mentions} of them mention${seam.mentions === 1 ? "s" : ""} you`;
 }
 
 /** The size of what is about to be read is the part a skim cannot recover. */

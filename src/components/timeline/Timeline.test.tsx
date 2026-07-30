@@ -140,7 +140,9 @@ describe("Timeline", () => {
       "b",
     );
     render(<Timeline />);
-    expect(screen.getByText("2 messages, 2 people, 45 minutes · 1 mentions you")).toBeTruthy();
+    expect(
+      screen.getByText("2 messages, 2 people, 45 minutes · 1 of them mentions you"),
+    ).toBeTruthy();
   });
 
   it("marks a message that mentions the user and leaves a longer nick alone", () => {

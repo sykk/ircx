@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { plainText } from "./Markdown";
 
 interface Props {
   msgid: string;
@@ -16,6 +17,8 @@ interface Props {
 const CONNECTOR = "2px solid var(--border-strong)";
 
 export function ReplyQuote({ msgid, parent, onJump }: Props) {
+  const excerpt = parent ? plainText(parent.text) : "";
+
   if (!parent) {
     return (
       <div
@@ -31,7 +34,7 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
     <button
       type="button"
       onClick={() => onJump(msgid)}
-      title={parent.text}
+      title={excerpt}
       className="flex w-full items-baseline gap-1.5 overflow-hidden pl-2 text-left font-[family-name:var(--font-ui)] text-[12px]"
       style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
     >
@@ -44,7 +47,7 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
       <span aria-hidden="true" className="shrink-0">
         —
       </span>
-      <span className="truncate">{parent.text}</span>
+      <span className="truncate">{excerpt}</span>
     </button>
   );
 }

@@ -164,11 +164,13 @@ What is still open:
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
-- **A conversation closed before quitting staying closed.** Core is covered:
-  `close_target` drops the target from the set a restart reopens, and
-  `session.rs` asserts it for a channel and for a query, case-insensitively.
-  What no test joins up is that set and the archive it is written to, so the
-  check is still worth a minute — close one, quit, relaunch.
+- **A conversation closed before quitting staying closed.** This sat open from
+  the second end-to-end run and nobody could have done it: until #121 there was
+  no way to close a conversation at all. `close_target` was reachable from
+  nothing. Now the sidebar row's menu closes one, so the check is finally
+  possible — close a channel and a query, quit, relaunch, and neither should
+  come back. Core is covered either side of it; what no test joins up is that
+  set and the archive it is written to.
 - **The raw log under load.** It renders every line it holds, up to the store's
   cap of 2,000, and re-renders per arriving line while it is open. It held the
   ~200 lines of a quiet session comfortably. Nobody has watched it during a

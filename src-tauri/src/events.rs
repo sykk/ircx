@@ -105,6 +105,9 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         IrcxEvent::QueryUpdated { query } => {
             Some(Lane::Query(query.network.clone(), query.nick.clone()))
         }
+        IrcxEvent::QueryRemoved { network, nick } => {
+            Some(Lane::Query(network.clone(), nick.clone()))
+        }
         IrcxEvent::MembersReplaced {
             network, channel, ..
         }

@@ -11,9 +11,14 @@ use ircx_ipc::{
 };
 use ircx_net::TlsInfo;
 
-/// What `irc.libera.chat` actually offered on 2026-07-30, copied off the wire
-/// rather than guessed. Notably it does not offer `userhost-in-names`, and six
-/// of the entries are ones ircx has no handling for.
+/// What `cadmium.libera.chat` offered on 2026-07-30, copied off the wire rather
+/// than guessed. Notably it does not offer `userhost-in-names`, and six of the
+/// entries are ones ircx has no handling for.
+///
+/// It is one server's list, not the network's: `irc.libera.chat` is a rotation,
+/// and `calcium` and `iridium` answered the same day with `labeled-response` and
+/// `no-implicit-names` missing. Nothing below asserts on the whole list, because
+/// the next connection may not be handed the same one.
 const LIBERA_CAPS: &str = "account-notify away-notify batch chghost extended-join multi-prefix \
      sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN,SCRAM-SHA-512 tls account-tag cap-notify \
      echo-message invite-notify labeled-response message-tags no-implicit-names server-time \
@@ -885,11 +890,15 @@ fn a_line_the_parser_cannot_read_is_ignored() {
     assert!(session.sent().is_empty());
 }
 
+/// Libera's token is its own server name rather than an opaque cookie, and it
+/// only arrives once the connection has been quiet for a little over two
+/// minutes. This is the line a socket idling on `irc.libera.chat` was sent on
+/// 2026-07-30.
 #[test]
 fn a_ping_is_answered_with_the_token_it_carried() {
     let mut session = registered("");
-    session.feed("PING :libera-1234");
-    assert_eq!(session.sent(), vec!["PONG libera-1234"]);
+    session.feed("PING :iridium.libera.chat");
+    assert_eq!(session.sent(), vec!["PONG iridium.libera.chat"]);
 }
 
 /// The channel, text, msgid and time are the ones off the wire on 2026-07-30,
@@ -988,6 +997,55 @@ fn an_echo_hands_the_confirmed_message_the_servers_msgid_and_time() {
     assert!(
         !confirmed.timestamp_is_local,
         "the server saw it 50 ms after we wrote it, and its clock is the shared one"
+    );
+}
+
+/// The server the second Libera run landed on does not offer
+/// `labeled-response`, so the echo carries nothing tying it to the line we sent
+/// except its text. Matching on text still has to keep the server's msgid and
+/// time. These are the lines above with the label taken out, which is the form
+/// that run saw.
+#[test]
+fn an_echo_matched_on_its_text_still_takes_the_servers_msgid_and_time() {
+    let mut session = probe_session("echo-message message-tags server-time");
+
+    let CommandOutcome::Sent(optimistic) = session.submit(probe::CHANNEL, probe::TEXT) else {
+        panic!("expected a sent message");
+    };
+    assert_eq!(
+        session.sent(),
+        vec![format!("PRIVMSG {} :{}", probe::CHANNEL, probe::TEXT)],
+        "nothing labels the line, because the server cannot answer a label"
+    );
+
+    session.feed(&format!(
+        "@msgid={};time={} :{} PRIVMSG {} :{}",
+        probe::MSGID,
+        probe::TIME,
+        probe::MASK,
+        probe::CHANNEL,
+        probe::TEXT
+    ));
+
+    let confirmed = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::MessageUpdated { message } => Some(message),
+            _ => None,
+        })
+        .expect("the echo confirms the optimistic copy on its text alone");
+    assert_eq!(confirmed.id, optimistic.id);
+    assert_eq!(confirmed.delivery, Delivery::Delivered);
+    assert_eq!(
+        confirmed.tags.iter().find(|(name, _)| name == "msgid"),
+        Some(&("msgid".to_string(), Some(probe::MSGID.to_string())))
+    );
+    assert_eq!(confirmed.timestamp, probe::TIME);
+    assert!(!confirmed.timestamp_is_local);
+    assert!(
+        session.messages().is_empty(),
+        "the echo is not a second message"
     );
 }
 
@@ -1150,11 +1208,16 @@ fn what_tls_negotiated_reaches_the_network_tab() {
 
 /// `NAMES` can be asked about any channel. The answer is not a reason to put
 /// that channel in the user's sidebar, and nothing would ever take it out.
+///
+/// The two channels answer with different visibility flags because they are
+/// different kinds of channel: `##test` is `+Pnst`, so solanum sends `@`, while
+/// `#libera` is public and gets `=`. Both are ignored, and both are what came
+/// back on 2026-07-30.
 #[test]
 fn a_names_reply_for_a_channel_we_are_not_in_creates_nothing() {
     let mut session = registered("");
     session.feed(":sykk!~sykk@user/sykk JOIN ##test");
-    session.feed(":cadmium.libera.chat 353 sykk = ##test :sykk @sable");
+    session.feed(":cadmium.libera.chat 353 sykk @ ##test :sykk @sable");
     session.feed(":cadmium.libera.chat 366 sykk ##test :End of /NAMES list.");
     session.events.clear();
 

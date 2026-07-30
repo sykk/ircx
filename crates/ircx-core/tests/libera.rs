@@ -10,21 +10,26 @@
 //! plus a second brief connection whose only job is to collide with the first
 //! one's nick. This is a diagnostic: a step that fails is printed and the run
 //! carries on, so one broken thing does not hide the next.
+//!
+//! It also visits one busy channel, because a member list that fits in a single
+//! 353 reply never exercises the assembly across replies. That visit is a join,
+//! a read and a part: nothing is ever said in a channel with people in it.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ircx_core::{
-    spawn_network, CaseMapping, ISupport, NetworkHandle, SessionCommand, SessionConfig,
-    SUPPORTED_CAPS,
+    spawn_network, Action, CaseMapping, ISupport, NetworkHandle, SessionCommand, SessionConfig,
+    SessionState, SUPPORTED_CAPS,
 };
 use ircx_ipc::{
     Channel, ChatMessage, CommandOutcome, ConnectionStatus, Delivery, HistoryRequest, IrcxEvent,
     Member, MessageKind, MessageSource, Network, Query, SearchRequest,
 };
 use ircx_net::{ConnectionConfig, Transport, TransportEvent};
-use ircx_proto::{Command, Message};
+use ircx_proto::{Command, Message, Prefix};
 use ircx_store::Store;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
@@ -34,6 +39,17 @@ const HOST: &str = "irc.libera.chat";
 const PORT: u16 = 6697;
 /// The channel Libera keeps for exactly this. Never a project channel.
 const CHANNEL: &str = "##test";
+/// The network's own channel, big enough to split a member list over many
+/// replies and busy enough that its membership moves while we watch. Joined
+/// read-only and left again inside a minute.
+const CROWD: &str = "#libera";
+/// How long we stay in `CROWD` after its member list arrives.
+const CHURN: Duration = Duration::from_secs(45);
+/// Long enough for a registration and then a server ping timeout on top of it.
+const PING_WINDOW: Duration = Duration::from_secs(300);
+/// Every membership prefix any IRC server hands out, not just Libera's `@+`,
+/// so a leak into a nick is caught whatever the server ranks by.
+const PREFIX_CHARS: [char; 5] = ['@', '+', '~', '&', '%'];
 const ARCHIVE_MESSAGES: usize = 3000;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -44,9 +60,6 @@ async fn against_libera() {
     let nick = format!("ircx-t{stamp:05}");
     let marker = format!("ircxprobe{stamp:05}");
     println!("\n=== ircx against Libera.Chat, nick {nick} ===\n");
-
-    tls(&mut report).await;
-    certificate_is_actually_checked(&mut report).await;
 
     let dir = std::env::temp_dir().join(format!("ircx-libera-{}", Uuid::new_v4()));
     let Ok(()) = std::fs::create_dir_all(&dir) else {
@@ -66,6 +79,12 @@ async fn against_libera() {
     report.number("Store::open", &format!("{:?}", opened.elapsed()));
 
     session(&mut report, Arc::clone(&store), &nick, &marker).await;
+
+    // Last, not first: dialling the host twice before the session would warm
+    // the resolver and rustls, and the cold-start figure the session reports is
+    // only worth anything if nothing has connected yet.
+    tls(&mut report).await;
+    certificate_is_actually_checked(&mut report).await;
     archive(&mut report, &db, &marker, Arc::clone(&store)).await;
 
     drop(store);
@@ -165,6 +184,15 @@ async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &st
         "connect to RPL_WELCOME",
         &format!("{:?}", started.elapsed()),
     );
+    // Nothing has dialled anything yet, so this is the whole cold path with no
+    // window on the end of it: exec, the tokio runtime, `Store::open` on a
+    // fresh database, DNS, TCP, the TLS handshake, CAP and registration.
+    report.number(
+        "process exec to RPL_WELCOME, no UI",
+        &since_exec()
+            .map(|elapsed| format!("{elapsed:?}"))
+            .unwrap_or_else(|| "unknown".into()),
+    );
 
     // `Connected` is emitted on 001, so ISUPPORT and the MOTD are still in
     // flight. Read on until the MOTD ends before judging what the server said.
@@ -180,13 +208,24 @@ async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &st
     isupport(report, &live);
 
     join_and_names(report, &mut live).await;
-    names_across_replies(report, &mut live).await;
+    names_for_a_channel_we_are_not_in(report, &mut live).await;
+    a_busy_channel(report, &mut live).await;
     say_something(report, &mut live, marker).await;
     a_query_window(report, &mut live, nick).await;
     part_and_rejoin(report, &mut live).await;
     nick_collision(report, &mut live, Arc::clone(&store), nick).await;
+
+    // Runs alongside the two long waits below rather than after them, so the
+    // idle socket it needs costs no extra minutes on someone else's server.
+    // Never alongside the collision check above: that would be a third
+    // connection from one address.
+    let probe = tokio::spawn(a_server_initiated_ping(format!("{nick}p")));
     ping_and_lag(report, &mut live).await;
     reconnect(report, &mut live).await;
+    match probe.await {
+        Ok(outcome) => outcome.report(report),
+        Err(error) => report.fail("answering the server's own PING", &error.to_string()),
+    }
 
     report.number(
         "resident memory, live session",
@@ -379,7 +418,7 @@ async fn join_and_names(report: &mut Report, live: &mut Live) {
         "no membership prefix leaked into a nick",
         members
             .iter()
-            .all(|member| !member.nick.starts_with(['@', '+', '~', '&', '%'])),
+            .all(|member| !member.nick.starts_with(PREFIX_CHARS)),
         &sample(&members),
     );
     report.check(
@@ -558,8 +597,7 @@ async fn a_query_window(report: &mut Report, live: &mut Live, nick: &str) {
 /// A bare `NAMES` is read-only: it joins nothing, says nothing, and nobody in
 /// the channel sees it. The answer names a channel the user is not in, and none
 /// of it should reach the sidebar.
-async fn names_across_replies(report: &mut Report, live: &mut Live) {
-    const CROWD: &str = "#libera";
+async fn names_for_a_channel_we_are_not_in(report: &mut Report, live: &mut Live) {
     live.send(SessionCommand::Raw {
         line: format!("NAMES {CROWD}"),
     })
@@ -592,11 +630,296 @@ async fn names_across_replies(report: &mut Report, live: &mut Live) {
         !listed,
         &format!("{CROWD} in the channel list: {listed}"),
     );
-    report.unverified(
+}
+
+/// `##test` holds five people, so its member list arrives in one 353 and the
+/// assembly across replies is never touched. A channel with a thousand people
+/// in it splits the list over dozens, and getting one wrong loses a batch
+/// silently. We join, read the list, watch the membership move for a minute,
+/// and leave. Nothing is sent to the channel.
+async fn a_busy_channel(report: &mut Report, live: &mut Live) {
+    // The read-only `NAMES` above answered for this same channel, so counting
+    // 353 replies from the start of the log would count that one too.
+    let before_join = live.incoming.len();
+    live.send(SessionCommand::Join {
+        channel: CROWD.into(),
+        key: None,
+    })
+    .await;
+
+    // Counted as they go past rather than afterwards, so the count is the one
+    // that had arrived at the moment the member list was published.
+    let mut replies = 0usize;
+    let flushed = live
+        .wait(Duration::from_secs(90), |event| match event {
+            IrcxEvent::RawLine {
+                outgoing: false,
+                line,
+                ..
+            } => {
+                if numeric_for(line, 353, CROWD) {
+                    replies += 1;
+                }
+                None
+            }
+            IrcxEvent::MembersReplaced {
+                channel, members, ..
+            } if channel == CROWD => Some((members.clone(), replies)),
+            _ => None,
+        })
+        .await;
+    let Some((members, when_published)) = flushed else {
+        report.fail(
+            "NAMES spanning several 353 replies",
+            &format!("no member list for {CROWD} after {replies} replies"),
+        );
+        live.dump("the last lines after the JOIN");
+        return;
+    };
+    let after_the_list = live.incoming.len();
+
+    let replies: Vec<&String> = live.incoming[before_join..]
+        .iter()
+        .filter(|line| numeric_for(line, 353, CROWD))
+        .collect();
+    let names: Vec<String> = replies
+        .iter()
+        .filter_map(|line| Message::parse(line).ok())
+        .flat_map(|message| {
+            message
+                .params
+                .last()
+                .cloned()
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(|entry| entry.trim_start_matches(PREFIX_CHARS).to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let mut distinct: Vec<String> = names.iter().map(|nick| fold(nick)).collect();
+    distinct.sort();
+    distinct.dedup();
+
+    report.check(
         "NAMES spanning several 353 replies",
-        "the only channel this run is in is ##test, which is too small to split \
-         its member list — covered only by the scripted test",
+        replies.len() > 1,
+        &format!(
+            "{CROWD} answered with {} replies carrying {} names",
+            replies.len(),
+            names.len()
+        ),
     );
+    if let Some(line) = replies.first() {
+        report.raw(line);
+    }
+    report.check(
+        "nothing is published until the last reply lands",
+        when_published == replies.len(),
+        &format!(
+            "{when_published} of {} replies had arrived when the member list went out",
+            replies.len()
+        ),
+    );
+
+    let held: HashSet<String> = members.iter().map(|member| fold(&member.nick)).collect();
+    let lost: Vec<&String> = distinct
+        .iter()
+        .filter(|nick| !held.contains(*nick))
+        .take(8)
+        .collect();
+    report.check(
+        "every name across every reply reaches the member list",
+        members.len() == distinct.len() && lost.is_empty(),
+        &format!(
+            "{} distinct names on the wire, {} members held{}",
+            distinct.len(),
+            members.len(),
+            match lost.is_empty() {
+                true => String::new(),
+                false => format!(", missing {lost:?}"),
+            }
+        ),
+    );
+    report.check(
+        "no membership prefix leaked into a nick",
+        members
+            .iter()
+            .all(|member| !member.nick.starts_with(PREFIX_CHARS)),
+        &sample(&members),
+    );
+    report.note(
+        "members carrying a prefix",
+        &format!(
+            "{} of {}",
+            members
+                .iter()
+                .filter(|member| !member.prefixes.is_empty())
+                .count(),
+            members.len()
+        ),
+    );
+    report.number(
+        &format!("{CROWD} member list"),
+        &format!(
+            "{} members over {} replies, longest reply {} bytes",
+            members.len(),
+            replies.len(),
+            replies.iter().map(|line| line.len()).max().unwrap_or(0)
+        ),
+    );
+
+    membership_under_churn(report, live, after_the_list, &held).await;
+
+    live.send(SessionCommand::Part {
+        channel: CROWD.into(),
+        reason: Some("ircx verification run".into()),
+    })
+    .await;
+    let left = live
+        .wait(Duration::from_secs(30), |event| match event {
+            IrcxEvent::ChannelUpdated { channel } if channel.name == CROWD && !channel.joined => {
+                Some(())
+            }
+            _ => None,
+        })
+        .await;
+    report.check(
+        "leaving the busy channel again",
+        left.is_some(),
+        &format!("parted {CROWD}"),
+    );
+}
+
+/// A channel this size is never still. Every membership change over the next
+/// stretch is replayed by hand off the raw lines and compared with what the
+/// session holds — the same arithmetic a netsplit puts through, only spread
+/// over a minute instead of arriving all at once.
+async fn membership_under_churn(
+    report: &mut Report,
+    live: &mut Live,
+    from: usize,
+    start: &HashSet<String>,
+) {
+    let _: Option<()> = live.wait(CHURN, |_| None).await;
+    let churn: Vec<String> = live.incoming[from..].to_vec();
+
+    let mut expected = start.clone();
+    let (mut joins, mut parts, mut quits, mut kicks, mut renames) = (0, 0, 0, 0, 0);
+    for line in &churn {
+        let Ok(message) = Message::parse(line) else {
+            continue;
+        };
+        let Some(Prefix::User { nick, .. }) = &message.prefix else {
+            continue;
+        };
+        let Command::Named(name) = &message.command else {
+            continue;
+        };
+        let who = fold(nick);
+        let here = message
+            .param(0)
+            .is_some_and(|param| fold(param) == fold(CROWD));
+        match name.to_ascii_uppercase().as_str() {
+            "JOIN" if here => {
+                expected.insert(who);
+                joins += 1;
+            }
+            "PART" if here => {
+                expected.remove(&who);
+                parts += 1;
+            }
+            "QUIT" => {
+                if expected.remove(&who) {
+                    quits += 1;
+                }
+            }
+            "KICK" if here => {
+                if let Some(target) = message.param(1) {
+                    expected.remove(&fold(target));
+                    kicks += 1;
+                }
+            }
+            "NICK" => {
+                if let Some(new) = message.param(0) {
+                    if expected.remove(&who) {
+                        expected.insert(fold(new));
+                        renames += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let now: HashSet<String> = live
+        .members(CROWD)
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|member| fold(&member.nick))
+        .collect();
+    let extra: Vec<&String> = now.difference(&expected).take(8).collect();
+    let gone: Vec<&String> = expected.difference(&now).take(8).collect();
+    report.check(
+        "the member list tracks a live channel's churn",
+        now == expected,
+        &format!(
+            "{joins} joins, {parts} parts, {quits} quits, {kicks} kicks and {renames} nick \
+             changes over {CHURN:?}: the session holds {}, the raw lines say {} \
+             (held but not expected {extra:?}, expected but not held {gone:?})",
+            now.len(),
+            expected.len()
+        ),
+    );
+
+    let all_quits: Vec<&String> = churn
+        .iter()
+        .filter(|line| {
+            Message::parse(line).is_ok_and(|m| m.command == Command::Named("QUIT".into()))
+        })
+        .collect();
+    let split: Vec<&&String> = all_quits
+        .iter()
+        .filter(|line| {
+            Message::parse(line)
+                .ok()
+                .and_then(|m| m.param(0).map(looks_like_a_netsplit))
+                .unwrap_or(false)
+        })
+        .collect();
+    match split.first() {
+        Some(line) => {
+            report.raw(line);
+            report.pass(
+                "netsplit recovery",
+                &format!(
+                    "{} of {} QUITs in {CROWD} carried a netsplit reason",
+                    split.len(),
+                    all_quits.len()
+                ),
+            );
+        }
+        None => report.unverified(
+            "netsplit recovery",
+            &format!(
+                "no netsplit reached {CROWD} in the {CHURN:?} we were there — {} ordinary QUITs \
+                 did, and the client kept the member list right across them, but the burst and \
+                 the rejoin storm were never seen",
+                all_quits.len()
+            ),
+        ),
+    }
+}
+
+/// Two hostnames and nothing else is what a server puts in the QUIT it sends
+/// for everyone on the far side of a split. Libera masks the names as
+/// `*.net *.split`, which has the same shape.
+fn looks_like_a_netsplit(reason: &str) -> bool {
+    let mut halves = reason.split(' ');
+    let (Some(left), Some(right), None) = (halves.next(), halves.next(), halves.next()) else {
+        return false;
+    };
+    left.contains('.') && right.contains('.')
 }
 
 async fn part_and_rejoin(report: &mut Report, live: &mut Live) {
@@ -753,9 +1076,153 @@ async fn ping_and_lag(report: &mut Report, live: &mut Live) {
     );
 }
 
+/// Libera only pings a client that has gone quiet, and `ircx-core` sends its
+/// own keepalive every two minutes, which resets that timer before it can
+/// expire. The live session therefore cannot see an inbound PING however long
+/// it runs. This is a bare socket that registers and then says nothing: the
+/// PING it gets is a real one, and the answer is the one `SessionState`
+/// produces when that exact line is fed to it.
+async fn a_server_initiated_ping(nick: String) -> PingProbe {
+    let attempt = Transport::connect(ConnectionConfig {
+        host: HOST.into(),
+        port: PORT,
+        ..ConnectionConfig::default()
+    })
+    .await;
+    let (mut transport, mut events) = match attempt {
+        Ok(connected) => connected,
+        Err(error) => return PingProbe::Refused(format!("could not connect: {error}")),
+    };
+    let sender = transport.sender();
+    let _ = sender.send(format!("NICK {nick}")).await;
+    let _ = sender
+        .send("USER ircxtest 0 * :ircx verification run")
+        .await;
+
+    let deadline = Instant::now() + PING_WINDOW;
+    let mut registered: Option<Instant> = None;
+    let mut last = String::new();
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let Ok(Some(event)) = timeout(left, events.recv()).await else {
+            transport.shutdown().await;
+            return match registered {
+                Some(at) => PingProbe::Silent { idle: at.elapsed() },
+                None => PingProbe::Refused(format!("never registered; last line {last:?}")),
+            };
+        };
+        let line = match event {
+            TransportEvent::Line(line) => line,
+            TransportEvent::Connected { .. } => continue,
+            TransportEvent::Disconnected { reason } => {
+                return PingProbe::Refused(format!("the server hung up: {reason:?}"))
+            }
+        };
+        let Ok(message) = Message::parse(&line) else {
+            continue;
+        };
+        last = line.clone();
+        match &message.command {
+            Command::Numeric(1) => registered = Some(Instant::now()),
+            Command::Named(name) if name.eq_ignore_ascii_case("ERROR") => {
+                return PingProbe::Refused(line)
+            }
+            Command::Named(name) if name.eq_ignore_ascii_case("PING") => {
+                let idle = registered.map(|at| at.elapsed()).unwrap_or_default();
+                let pong = answer_for(&line);
+                if let Some(pong) = pong.clone() {
+                    let _ = sender.send(pong).await;
+                }
+                let _ = sender.send("QUIT :ircx verification run finished").await;
+                // Let the QUIT reach the wire before the socket goes.
+                let _ = timeout(Duration::from_secs(5), events.recv()).await;
+                transport.shutdown().await;
+                return PingProbe::Answered {
+                    ping: line,
+                    pong,
+                    idle,
+                };
+            }
+            _ => {}
+        }
+    }
+}
+
+/// What the client would reply, produced by the state machine the live session
+/// runs on rather than written out by hand here.
+fn answer_for(ping: &str) -> Option<String> {
+    let nick = "ircx-probe";
+    let mut state = SessionState::new(config("libera-ping", nick, nick));
+    state.on_connected(None);
+    state.on_line(":cadmium.libera.chat CAP * LS :");
+    state.on_line(&format!(":cadmium.libera.chat 001 {nick} :Welcome"));
+    state
+        .on_line(ping)
+        .into_iter()
+        .find_map(|action| match action {
+            Action::Send(line) if line.to_ascii_uppercase().starts_with("PONG") => Some(line),
+            _ => None,
+        })
+}
+
+enum PingProbe {
+    Answered {
+        ping: String,
+        pong: Option<String>,
+        idle: Duration,
+    },
+    Silent {
+        idle: Duration,
+    },
+    Refused(String),
+}
+
+impl PingProbe {
+    fn report(self, report: &mut Report) {
+        match self {
+            PingProbe::Answered { ping, pong, idle } => {
+                report.raw(&ping);
+                let token = Message::parse(&ping)
+                    .ok()
+                    .and_then(|message| message.params.last().cloned())
+                    .unwrap_or_default();
+                let answered = pong
+                    .as_deref()
+                    .and_then(|line| Message::parse(line).ok())
+                    .filter(|message| message.command == Command::Named("PONG".into()))
+                    .and_then(|message| message.params.last().cloned());
+                report.check(
+                    "answering the server's own PING",
+                    !token.is_empty() && answered.as_deref() == Some(token.as_str()),
+                    &format!(
+                        "after {idle:?} of silence the server sent PING {token:?}; the session \
+                         answers {pong:?}"
+                    ),
+                );
+                report.note(
+                    "what that covers",
+                    "the PING is off the wire and the PONG is the one SessionState emits for \
+                     that line — the socket it arrived on is a bare Transport, not a running \
+                     session task",
+                );
+            }
+            PingProbe::Silent { idle } => report.unverified(
+                "answering the server's own PING",
+                &format!("Libera sent nothing to a socket idle for {idle:?} after registering"),
+            ),
+            PingProbe::Refused(why) => report.unverified(
+                "answering the server's own PING",
+                &format!("the probe never got an idle socket to wait on: {why}"),
+            ),
+        }
+    }
+}
+
 /// Kills the socket from the far side by sending a bare `QUIT` that the session
 /// never routed through `/quit`, so nothing asks the task to stop retrying.
 async fn reconnect(report: &mut Report, live: &mut Live) {
+    // Every JOIN after this point is the session's own idea, not this test's.
+    let before_drop = live.outgoing.len();
     live.send(SessionCommand::Raw {
         line: "QUIT :ircx socket drop check".into(),
     })
@@ -797,23 +1264,10 @@ async fn reconnect(report: &mut Report, live: &mut Live) {
         }
     }
 
-    let channels = live.snapshot().await.map(|(_, channels, _)| channels);
-    let rejoined = channels
-        .unwrap_or_default()
-        .iter()
-        .find(|channel| channel.name == CHANNEL)
-        .map(|channel| channel.joined);
-    report.check(
-        "a channel joined by hand comes back after a reconnect",
-        rejoined == Some(true),
-        &format!("{CHANNEL} joined = {rejoined:?}; autojoin was empty"),
-    );
-
-    live.send(SessionCommand::Join {
-        channel: CHANNEL.into(),
-        key: None,
-    })
-    .await;
+    // `Connected` goes out on 001 and the rejoin is sent in answer to it, so
+    // the channel is not joined again until the server echoes that JOIN back.
+    // Waiting for the member list is waiting for exactly that; reading the
+    // snapshot the moment the connection comes up reads it mid-flight.
     let members = live
         .wait(Duration::from_secs(45), |event| match event {
             IrcxEvent::MembersReplaced {
@@ -822,13 +1276,33 @@ async fn reconnect(report: &mut Report, live: &mut Live) {
             _ => None,
         })
         .await;
-    match members {
-        Some(count) => report.pass(
-            "the reconnected session is usable",
-            &format!("rejoined {CHANNEL} with {count} members"),
+    let asked = live.outgoing[before_drop..]
+        .iter()
+        .filter(|line| {
+            line.strip_prefix("JOIN ")
+                .is_some_and(|rest| rest == CHANNEL)
+        })
+        .count();
+    report.check(
+        "a channel joined by hand comes back after a reconnect",
+        members.is_some() && asked == 1,
+        &format!(
+            "{CHANNEL} came back with {members:?} members after {asked} JOIN the session sent \
+             on its own; autojoin was empty and nothing here asked for it"
         ),
-        None => report.fail("the reconnected session is usable", "could not rejoin"),
-    }
+    );
+
+    let rejoined = live.snapshot().await.and_then(|(_, channels, _)| {
+        channels
+            .iter()
+            .find(|channel| channel.name == CHANNEL)
+            .map(|channel| (channel.joined, channel.member_count))
+    });
+    report.check(
+        "the reconnected session is usable",
+        rejoined.map(|(joined, _)| joined) == Some(true),
+        &format!("{CHANNEL} reads back as {rejoined:?}"),
+    );
 }
 
 // ------------------------------------------------------------------ archive
@@ -1138,6 +1612,28 @@ fn sample(members: &[Member]) -> String {
             .map(|member| format!("{}{}", member.prefixes.concat(), member.nick))
             .collect::<Vec<_>>()
     )
+}
+
+/// The run asserts `CASEMAPPING=rfc1459` before any of this, so comparing nicks
+/// the way the server does means folding them the way the server said.
+fn fold(text: &str) -> String {
+    CaseMapping::Rfc1459.fold(text)
+}
+
+/// How long ago this process was exec'd, from the kernel's own record, so a
+/// cold-start figure covers what happened before `main` as well as after it.
+fn since_exec() -> Option<Duration> {
+    /// `/proc` reports process times in these, whatever the kernel's own tick.
+    const USER_HZ: f64 = 100.0;
+
+    let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+    // The command name can hold spaces and brackets, so fields are counted from
+    // its closing bracket. `starttime` is field 22, the twentieth after it.
+    let after_comm = stat.rsplit_once(')')?.1;
+    let ticks: f64 = after_comm.split_whitespace().nth(19)?.parse().ok()?;
+    let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
+    let uptime: f64 = uptime.split_whitespace().next()?.parse().ok()?;
+    Duration::try_from_secs_f64(uptime - ticks / USER_HZ).ok()
 }
 
 fn proc_field(name: &str) -> Option<String> {

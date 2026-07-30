@@ -38,14 +38,20 @@ Also worth a look: whether the password field shows "Saved in your system
 keyring" rather than an empty box when you reopen the network's settings. That
 path has a unit test but has never been seen by a person.
 
-## Things the first Libera run left unverified
+## Things the Libera runs left unverified
 
-Recorded in PR #43 rather than implied to have passed:
+The first run (PR #43) left four gaps. The second (PR #48) closed three of them
+in `crates/ircx-core/tests/libera.rs`: a member list split over 31 replies in
+`#libera`, a server-initiated PING answered after 136 seconds of silence, and a
+cold start timed from process exec to the first frame the compositor was handed.
+What is left:
 
-- NAMES spanning multiple 353 replies (`##test` is too small; needs a busy channel)
-- Answering a server-initiated PING (Libera never pinged during the session)
-- Netsplit recovery
-- Application cold-start time (the run was on a headless machine)
+- **Netsplit recovery.** Nothing can provoke one politely, and none happened
+  during either run. The client held a busy channel's member list correctly
+  across the churn it did see, but that churn was one JOIN in 45 seconds, so it
+  says almost nothing about a burst of hundreds of QUITs and the rejoin storm
+  after it. Whoever is next in a channel when a split happens should watch what
+  the member list and the timeline do.
 
 ## Assembled-application testing
 

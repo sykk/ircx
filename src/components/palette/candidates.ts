@@ -25,6 +25,7 @@ export type CandidateAction =
   | { type: "search" }
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
+  | { type: "openSetup"; network: string }
   | { type: "theme"; id: string }
   /** A theme that failed to load. Running it prints why, which is the only
    * place the reasons can reach the person holding the file. */
@@ -180,10 +181,21 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       id: `network:${id}`,
       kind: "network",
       label: network.name,
-      detail: `${network.host}:${network.port}`,
+      detail: `Server messages · ${network.host}:${network.port}`,
       hay: prepare(network.name),
       key: targetKey(id, SERVER_TARGET),
       action: { type: "activate", network: id, target: SERVER_TARGET },
+      unread: 0,
+    });
+
+    candidates.push({
+      id: `settings:${id}`,
+      kind: "action",
+      label: `${network.name} settings`,
+      detail: "Server, nick, and the saved SASL credentials",
+      hay: prepare(`${network.name} settings`),
+      key: null,
+      action: { type: "openSetup", network: id },
       unread: 0,
     });
 

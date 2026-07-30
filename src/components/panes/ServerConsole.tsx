@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { ConsoleHeader } from "@/components/header/ConsoleHeader";
 import { Timeline } from "@/components/timeline/Timeline";
 import { ipc } from "@/lib/ipc";
-import { useNetwork } from "@/store/selectors";
+import { useAppStore } from "@/store";
+import { useNetwork, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 import { RawLog } from "./RawLog";
@@ -13,7 +14,8 @@ import { RawLog } from "./RawLog";
  * raw transcript underneath it.
  */
 export function ServerConsole({ view, network }: { view: ViewId | null; network: string }) {
-  const [raw, setRaw] = useState(false);
+  const raw = useView(view)?.raw ?? false;
+  const setViewRaw = useAppStore((s) => s.setViewRaw);
   const details = useNetwork(network);
   if (!details) return null;
 
@@ -23,7 +25,9 @@ export function ServerConsole({ view, network }: { view: ViewId | null; network:
         view={view}
         network={details}
         raw={raw}
-        onToggleRaw={() => setRaw((showing) => !showing)}
+        onToggleRaw={() => {
+          if (view) setViewRaw(view, !raw);
+        }}
       />
       <div className="min-h-0 flex-1">
         {raw ? <RawLog network={network} /> : <Timeline view={view} />}

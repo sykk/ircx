@@ -24,6 +24,10 @@ export interface ChatView {
   scrollPosition: number;
   /** Nick whose inspector is open in this view's context panel. */
   selectedUser: string | null;
+  /** On a console target, whether the pane shows the protocol log instead of
+   * what the server said. Per pane so two consoles on one network can show
+   * different things, and so the sidebar can open straight onto the log. */
+  raw: boolean;
 }
 
 /** `row` puts the two panes side by side, `column` stacks them. */

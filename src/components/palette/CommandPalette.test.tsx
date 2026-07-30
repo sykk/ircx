@@ -175,6 +175,19 @@ describe("CommandPalette", () => {
     expect(activeTarget()).toEqual({ network: "libera", target: SERVER_TARGET });
   });
 
+  // #80: "settings" is the word someone types when they want to change a saved
+  // password, and it used to match nothing at all.
+  it("finds a network's saved settings under the word settings", () => {
+    render(<CommandPalette />);
+    type("settings");
+    expect(selectedLabel()).toContain("Libera.Chat settings");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().setup).toEqual({ network: "libera" });
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   describe("running a command", () => {
     it("fills a command's name in and waits for its argument", () => {
       render(<CommandPalette />);

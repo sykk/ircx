@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAppStore } from "@/store";
+import { SERVER_TARGET } from "@/types";
 import { SidebarNetworks } from "../SidebarNetworks";
 import {
   activeTarget,
@@ -13,6 +14,14 @@ import {
 } from "../fixtures";
 
 beforeEach(resetStore);
+
+/** The row's ⋮, which is where collapse, the protocol log and the saved
+ * settings live. Returns it so a test can assert where focus went. */
+function openRowMenu(network: string): HTMLElement {
+  const button = screen.getByRole("button", { name: `${network} actions` });
+  fireEvent.click(button);
+  return button;
+}
 
 describe("SidebarNetworks", () => {
   it("tells the user there is nothing configured yet", () => {
@@ -89,13 +98,86 @@ describe("SidebarNetworks", () => {
     const group = screen.getByRole("treeitem", { name: /^Libera\.Chat,/ });
     expect(group.getAttribute("aria-expanded")).toBe("true");
 
-    fireEvent.click(group);
+    openRowMenu("Libera.Chat");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide channels" }));
 
     expect(group.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
     expect(within(group).getByText("7")).toBeTruthy();
     // Queries have their own section, so collapsing a network leaves them be.
     expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+
+    openRowMenu("Libera.Chat");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show channels" }));
+    expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
+  });
+
+  // #80: the owner could not find the console, the raw log, or the saved
+  // password. All three now start from the row a person clicks first.
+  describe("the network row", () => {
+    beforeEach(() => {
+      seedStore(
+        [makeNetwork("libera", { name: "Libera.Chat" })],
+        [makeChannel("libera", "#ctf-ops")],
+      );
+    });
+
+    it("opens the network's console, not a collapse", () => {
+      render(<SidebarNetworks />);
+      const row = screen.getByRole("treeitem", { name: /^Libera\.Chat,/ });
+
+      fireEvent.click(row);
+
+      expect(activeTarget()).toEqual({ network: "libera", target: SERVER_TARGET });
+      expect(row.getAttribute("aria-selected")).toBe("true");
+      expect(row.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
+    });
+
+    it("opens the console on the protocol log from its menu", () => {
+      render(<SidebarNetworks />);
+
+      openRowMenu("Libera.Chat");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Raw protocol log" }));
+
+      const { views, activeViewId } = useAppStore.getState();
+      expect(activeTarget()).toEqual({ network: "libera", target: SERVER_TARGET });
+      expect(views[activeViewId!]?.raw).toBe(true);
+    });
+
+    it("opens the network's saved settings from its menu", () => {
+      render(<SidebarNetworks />);
+
+      openRowMenu("Libera.Chat");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Libera.Chat settings" }));
+
+      expect(useAppStore.getState().setup).toEqual({ network: "libera" });
+    });
+
+    it("closes the menu on Escape and gives the button its focus back", () => {
+      render(<SidebarNetworks />);
+      const button = openRowMenu("Libera.Chat");
+
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(button);
+    });
+
+    it("shows one network's menu at a time", () => {
+      seedStore([
+        makeNetwork("libera", { name: "Libera.Chat" }),
+        makeNetwork("oftc", { name: "OFTC" }),
+      ]);
+      render(<SidebarNetworks />);
+
+      openRowMenu("Libera.Chat");
+      openRowMenu("OFTC");
+
+      expect(screen.getAllByRole("menu").map((m) => m.getAttribute("aria-label"))).toEqual([
+        "OFTC actions",
+      ]);
+    });
   });
 
   it("marks unread with the muted badge and highlights with the highlight badge", () => {

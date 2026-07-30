@@ -10,9 +10,13 @@ use ircx_ipc::{
     MessageSource, SaslMechanism, SaslStatus, Severity,
 };
 
-const LIBERA_CAPS: &str = "account-notify account-tag away-notify batch chghost echo-message \
-     extended-join invite-notify labeled-response message-tags multi-prefix sasl=PLAIN,EXTERNAL \
-     server-time userhost-in-names";
+/// What `irc.libera.chat` actually offered on 2026-07-30, copied off the wire
+/// rather than guessed. Notably it does not offer `userhost-in-names`, and six
+/// of the entries are ones ircx has no handling for.
+const LIBERA_CAPS: &str = "account-notify away-notify batch chghost extended-join multi-prefix \
+     sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN,SCRAM-SHA-512 tls account-tag cap-notify \
+     echo-message invite-notify labeled-response message-tags no-implicit-names server-time \
+     solanum.chat/identify-msg solanum.chat/oper solanum.chat/realhost";
 
 fn config() -> SessionConfig {
     SessionConfig {
@@ -198,11 +202,15 @@ fn registration_asks_for_the_intersection_and_authenticates_with_sasl() {
     let requests = session.sent();
     assert_eq!(requests.len(), 1, "one REQ line fits: {requests:?}");
     let requested: Vec<&str> = requests[0]["CAP REQ :".len()..].split(' ').collect();
-    assert!(requested.contains(&"sasl"));
-    assert!(requested.contains(&"multi-prefix"));
+    assert!(requested.contains(&"sasl"), "{requested:?}");
+    assert!(requested.contains(&"multi-prefix"), "{requested:?}");
     assert!(
-        !requested.contains(&"account-tag=x"),
-        "values are stripped from the request"
+        !requested.iter().any(|cap| cap.contains('=')),
+        "values are stripped from the request: {requested:?}"
+    );
+    assert!(
+        !requested.iter().any(|cap| cap.starts_with("solanum.chat/")),
+        "a capability ircx cannot act on is left alone: {requested:?}"
     );
 
     session.feed(":irc.libera.chat CAP * ACK :sasl multi-prefix server-time echo-message");
@@ -275,6 +283,33 @@ fn a_server_offering_no_capabilities_still_gives_a_working_client() {
         other => panic!("expected a sent message, got {other:?}"),
     }
     assert!(!session.closed);
+}
+
+/// With `extended-join` every JOIN carries three parameters, which is the only
+/// form Libera sends. Nothing here used to script it.
+#[test]
+fn an_extended_join_reads_the_account_without_it_becoming_the_channel() {
+    let mut session = registered("extended-join multi-prefix");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx * :sykk on ircx");
+    session.feed(":sable!~s@user/sable JOIN #ircx sable :Sable");
+    session.feed(":ash!~a@user/ash JOIN #ircx * :Ash");
+
+    let members = session.members("#ircx");
+    assert_eq!(
+        members
+            .iter()
+            .map(|member| (member.nick.as_str(), member.account.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![("ash", None), ("sable", Some("sable"))],
+        "`*` means no account, and the realname is not one either"
+    );
+    assert!(
+        session
+            .messages()
+            .iter()
+            .all(|message| message.target == "#ircx"),
+        "the second parameter is an account, not a second channel"
+    );
 }
 
 #[test]

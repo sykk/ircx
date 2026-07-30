@@ -243,11 +243,20 @@ which asserts that the host survives each one. What no test reaches:
   verified — two plugins went in that way on 2026-07-30 — but nobody has
   cancelled one. It should leave the library alone rather than installing
   nothing under a blank name.
-- **Whether the grant dialogue reads as plain terms.** `Permission::summary` is
-  written for someone who has never heard the word capability, and the tests
-  only assert that the string arrives — no test can say whether it lands.
-  Install a plugin asking for all seven and read the seven lines cold: the
-  question is whether you would know what you were agreeing to.
+**The grant dialogue was read cold** by the owner on 2026-07-30, against a
+plugin asking for all seven. The verdict was that the set adds up to a decision
+somebody could make — with one line that did not carry its weight.
+
+*Send messages as you* was too mild: it did not convey that other people cannot
+tell the difference. It now reads *"Send messages under your nick, which nobody
+else can tell from your own"*. The two that were checked hardest and held:
+*"Show text in your conversations"* reads as what lets a plugin put its own
+output on screen, and *"Work in the channels you choose, and no others"* reads
+as the qualifier on reading and sending rather than as a capability of its own.
+
+This is the only thing in the plugin system no test can answer, so it is worth
+re-reading whenever a summary changes rather than treating it as settled for
+good. `Permission::summary` is the one place the wording lives.
 - **Picking a folder that is not a plugin.** The likeliest mistake with a
   picker, and the one whose message was rewritten for #89. Choosing a folder
   with no `plugin.json` should say which file it went looking for.

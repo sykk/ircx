@@ -20,10 +20,23 @@ vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, chooseFolder }));
  * are the lines it sends, including for a permission Greeter never asks for. */
 const PERMISSIONS: PluginPermissionInfo[] = [
   { permission: "add-commands", summary: "Add slash commands you can type" },
-  { permission: "send-messages", summary: "Send messages as you" },
-  { permission: "read-messages", summary: "Read the recent messages in the conversation it is used in" },
-  { permission: "access-channels", summary: "Work in the channels you choose, and no others" },
-  { permission: "network-requests", summary: "Fetch data from the websites it names" },
+  {
+    permission: "send-messages",
+    summary:
+      "Send messages under your nick, which nobody else can tell from your own",
+  },
+  {
+    permission: "read-messages",
+    summary: "Read the recent messages in the conversation it is used in",
+  },
+  {
+    permission: "access-channels",
+    summary: "Work in the channels you choose, and no others",
+  },
+  {
+    permission: "network-requests",
+    summary: "Fetch data from the websites it names",
+  },
 ];
 
 const GREETER: InstalledPlugin = {
@@ -33,7 +46,12 @@ const GREETER: InstalledPlugin = {
   description: "Says hello for you",
   commands: [{ name: "greet", summary: "Greet the channel" }],
   requests: {
-    permissions: ["add-commands", "send-messages", "access-channels", "network-requests"],
+    permissions: [
+      "add-commands",
+      "send-messages",
+      "access-channels",
+      "network-requests",
+    ],
     channels: ["#ircx", "*"],
     hosts: ["api.example.com"],
   },
@@ -47,8 +65,9 @@ beforeEach(() => {
   ipcMock.removePlugin.mockResolvedValue(undefined);
   // The backend answers with the plugin as it now stands, which is how the
   // list and the form stay right without reading everything back.
-  ipcMock.setPluginGrants.mockImplementation((plugin: string, grants: unknown) =>
-    Promise.resolve({ ...GREETER, id: plugin, grants }),
+  ipcMock.setPluginGrants.mockImplementation(
+    (plugin: string, grants: unknown) =>
+      Promise.resolve({ ...GREETER, id: plugin, grants }),
   );
 });
 
@@ -101,7 +120,11 @@ describe("PluginSheet", () => {
     await permissionsFor("Greeter");
 
     expect(box(COMMANDS)).toBeTruthy();
-    expect(box("Send messages as you")).toBeTruthy();
+    expect(
+      box(
+        "Send messages under your nick, which nobody else can tell from your own",
+      ),
+    ).toBeTruthy();
     expect(
       screen.queryByLabelText(
         "Read the recent messages in the conversation it is used in",
@@ -226,7 +249,10 @@ describe("PluginSheet", () => {
 
   it("takes a permission back through the same screen", async () => {
     await open([
-      { ...GREETER, grants: { permissions: ["add-commands"], channels: [], hosts: [] } },
+      {
+        ...GREETER,
+        grants: { permissions: ["add-commands"], channels: [], hosts: [] },
+      },
     ]);
     await permissionsFor("Greeter");
     expect(box(COMMANDS).checked).toBe(true);
@@ -274,7 +300,9 @@ describe("PluginSheet", () => {
     });
 
     it("keeps the plugin and says why when the backend refuses", async () => {
-      ipcMock.removePlugin.mockRejectedValue("greeter is in use and could not be removed.");
+      ipcMock.removePlugin.mockRejectedValue(
+        "greeter is in use and could not be removed.",
+      );
       await open();
       fireEvent.click(button("Remove Greeter"));
       await act(async () => {
@@ -298,7 +326,9 @@ describe("PluginSheet", () => {
         fireEvent.click(button("Install from folder"));
       });
 
-      expect(screen.getByRole("heading", { name: "What Greeter may do" })).toBeTruthy();
+      expect(
+        screen.getByRole("heading", { name: "What Greeter may do" }),
+      ).toBeTruthy();
       expect(box(COMMANDS).checked).toBe(false);
       expect(useAppStore.getState().plugins).toHaveLength(1);
     });
@@ -369,19 +399,26 @@ describe("PluginSheet", () => {
     expect(useAppStore.getState().pluginsOpen).toBe(true);
 
     await act(async () => {
-      land({ ...GREETER, grants: { permissions: ["add-commands"], channels: [], hosts: [] } });
+      land({
+        ...GREETER,
+        grants: { permissions: ["add-commands"], channels: [], hosts: [] },
+      });
     });
   });
 
   it("leaves a failure behind on the screen it happened on", async () => {
-    ipcMock.removePlugin.mockRejectedValue("Greeter is in use and could not be removed.");
+    ipcMock.removePlugin.mockRejectedValue(
+      "Greeter is in use and could not be removed.",
+    );
     await open();
 
     fireEvent.click(button("Remove Greeter"));
     await act(async () => {
       fireEvent.click(button("Remove Greeter and its permissions"));
     });
-    expect(screen.getByRole("alert").textContent).toContain("could not be removed");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "could not be removed",
+    );
 
     // The same alert above Save would read as a rejected permission change.
     await permissionsFor("Greeter");

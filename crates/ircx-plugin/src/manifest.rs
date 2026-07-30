@@ -56,7 +56,9 @@ impl Permission {
     pub fn summary(self) -> &'static str {
         match self {
             Self::ReadMessages => "Read the recent messages in the conversation it is used in",
-            Self::SendMessages => "Send messages as you",
+            Self::SendMessages => {
+                "Send messages under your nick, which nobody else can tell from your own"
+            }
             Self::AddCommands => "Add slash commands you can type",
             Self::StoreLocalData => "Keep its own settings and data on this computer",
             Self::AccessChannels => "Work in the channels you choose, and no others",

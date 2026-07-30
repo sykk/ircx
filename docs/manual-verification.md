@@ -142,6 +142,31 @@ is whether it looks like one conversation or like two things sharing a box.
   once, each re-rendering as members come and go. Both end-to-end runs split
   panes on quiet channels, so nothing has drawn two busy rosters together.
 
+## Resizing a split
+
+`PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom
+lays nothing out. So every figure in those tests is one this file supplied, and
+what nobody has done is drag one.
+
+- **Whether the divider can be hit.** It draws a one-pixel rule inside a
+  four-pixel target. Four pixels is a guess at the smallest thing a pointer can
+  reliably catch, checked against nothing.
+
+- **A nested split.** Dragging an outer divider changes the space its children
+  divide, and each child's own ratio then applies to the new width. That falls
+  out of the tree rather than being arranged, so it is worth watching a
+  three-deep layout rather than assuming it.
+
+- **The 15% floor.** It is a share of the split, not a width, so on a narrow
+  window 15% of half a window is a very small pane — and the roster inside it is
+  a fixed 208px that will not shrink. Drag one all the way in on a small window
+  and see what the conversation has left.
+
+- **Where a resize goes when the app closes.** Nowhere: the layout tree is not
+  persisted, so a restart is back to even halves. That is what today's code
+  does, not a decision anybody made — `viewState.ts` persists the sidebar width
+  and the collapsed networks, and the layout could join it.
+
 ## Plugins
 
 The failure modes are covered by `crates/ircx-plugin/tests/failure_modes.rs`,

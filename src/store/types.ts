@@ -47,7 +47,15 @@ export type SplitDirection = "row" | "column";
  */
 export type Layout =
   | { type: "view"; id: ViewId }
-  | { type: "split"; direction: SplitDirection; children: [Layout, Layout] };
+  | {
+      type: "split";
+      direction: SplitDirection;
+      children: [Layout, Layout];
+      /** Share of the split the first child takes, 0 to 1. Absent is an even
+       * half, so a layout written before anything could be dragged reads the
+       * way it always did. */
+      ratio?: number;
+    };
 
 export interface TimelineState {
   messages: ChatMessage[];

@@ -55,6 +55,17 @@ Ctrl+Shift+M    toggle context panel
 
 The active pane needs a very subtle indicator—perhaps a slightly brighter top rule or channel title. Avoid a full highlighted border because that would add too much visual noise.
 
+The rule between two panes is also the handle that moves it: a split carries the
+share its first child takes, and dragging the divider or pressing an arrow key
+on it changes that share. Neither side goes below 15% of the split, which is a
+share rather than a width — on a narrow window that is still a small pane, and
+the roster inside it does not shrink. A split with no share of its own is an
+even half, so a layout made before any of this reads the way it did.
+
+The share is not persisted. `viewState.ts` keeps the sidebar width and the
+collapsed networks across a restart; the layout tree is rebuilt from the
+conversations that were open, so a resize lasts as long as the window does.
+
 Important state rule
 
 Do not store the member list as global UI state:

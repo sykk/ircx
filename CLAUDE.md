@@ -19,7 +19,8 @@ the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts
 `docs/multiwindow.md` describes split panes and per-pane context. The layout
 tree is built, and every pane on a channel draws its own member list inside it —
 the three context-panel modes that doc originally specified are gone, and the
-doc says why. Splits are still a fixed half each; nothing is draggable yet.
+doc says why. A split carries a ratio and its divider moves, by pointer or by
+arrow key; the ratio does not survive a restart.
 
 `docs/measurements.md` holds every figure this project claims, with the method
 behind it. The spec justifies the stack on startup, memory and size, so those

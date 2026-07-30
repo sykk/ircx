@@ -136,8 +136,27 @@ impl Store {
         while let Some(row) = rows.next()? {
             page.push(message::from_row(row)?);
         }
+        message::attach_reactions(&conn, &mut page)?;
         page.reverse();
         Ok(page)
+    }
+
+    /// Records one reaction, or takes it back. `msgid` need not be a message
+    /// the archive holds: the row waits for one, which is what lets a reaction
+    /// to something said before this client connected survive.
+    ///
+    /// Adding a reaction someone already holds changes nothing, and taking
+    /// back one they never sent is not an error. A server can deliver either
+    /// line twice.
+    pub fn set_reaction(
+        &self,
+        network: &str,
+        msgid: &str,
+        nick: &str,
+        emoji: &str,
+        active: bool,
+    ) -> Result<(), StoreError> {
+        message::set_reaction(&self.conn(), network, msgid, nick, emoji, active)
     }
 
     /// `req.query` is text a person typed, not an FTS5 expression: it is
@@ -166,14 +185,19 @@ impl Store {
         let mut rows = stmt
             .query(params![query, req.network, req.target, req.limit])
             .map_err(search_error)?;
-        let mut hits = Vec::new();
+        let mut found = Vec::new();
+        let mut snippets: Vec<String> = Vec::new();
         while let Some(row) = rows.next().map_err(search_error)? {
-            hits.push(SearchHit {
-                message: message::from_row(row)?,
-                snippet: row.get(20)?,
-            });
+            found.push(message::from_row(row)?);
+            snippets.push(row.get(20)?);
         }
-        Ok(hits)
+        message::attach_reactions(&conn, &mut found)?;
+
+        Ok(found
+            .into_iter()
+            .zip(snippets)
+            .map(|(message, snippet)| SearchHit { message, snippet })
+            .collect())
     }
 
     pub fn list_networks(&self) -> Result<Vec<NetworkConfig>, StoreError> {
@@ -403,7 +427,9 @@ impl Store {
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![network, target])?;
         while let Some(row) = rows.next()? {
-            let line = serde_json::to_string(&message::from_row(row)?)?;
+            let mut message = message::from_row(row)?;
+            message::attach_reactions(&conn, std::slice::from_mut(&mut message))?;
+            let line = serde_json::to_string(&message)?;
             out.write_all(line.as_bytes())?;
             out.write_all(b"\n")?;
         }

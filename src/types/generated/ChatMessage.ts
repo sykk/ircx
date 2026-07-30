@@ -4,6 +4,7 @@ import type { Delivery } from "./Delivery";
 import type { EncryptionState } from "./EncryptionState";
 import type { MessageKind } from "./MessageKind";
 import type { MessageSource } from "./MessageSource";
+import type { Reaction } from "./Reaction";
 import type { Sender } from "./Sender";
 
 export type ChatMessage = { 
@@ -24,7 +25,13 @@ timestamp: string, timestampIsLocal: boolean, text: string,
 /**
  * Unescaped tag values, kept whole so plugins reach what the parser dropped.
  */
-tags: Array<[string, string | null]>, replyTo: string | null, batch: string | null, delivery: Delivery, attachments: Array<Attachment>, 
+tags: Array<[string, string | null]>, replyTo: string | null, batch: string | null, delivery: Delivery, 
+/**
+ * Reactions against this message's `msgid`, oldest first. Anything
+ * archived or exported before reactions existed has no such field, which
+ * is why it defaults rather than being required.
+ */
+reactions?: Array<Reaction>, attachments: Array<Attachment>, 
 /**
  * Always `Plaintext` this milestone; the field is the extension point.
  */

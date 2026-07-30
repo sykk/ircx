@@ -108,6 +108,39 @@ impl SessionState {
         self.drain()
     }
 
+    /// Reacts to `message`, or takes that reaction back. `message` is a server
+    /// `msgid`; a locally minted id names nothing anyone else can resolve.
+    ///
+    /// Silent without `message-tags`, like typing above it. The sender's own
+    /// copy is emitted here rather than waited for: only `echo-message` would
+    /// bring one back, and a reaction everyone sees except the person who sent
+    /// it is worse than none.
+    pub fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) -> Vec<Action> {
+        if self.caps.is_enabled("message-tags") && !message.is_empty() && !emoji.is_empty() {
+            let tag = match active {
+                true => "+draft/react",
+                false => "+draft/unreact",
+            };
+            if let Ok(line) = MessageBuilder::new("TAGMSG")
+                .tag("+reply", Some(message.to_string()))
+                .tag(tag, Some(emoji.to_string()))
+                .param(target)
+                .build()
+            {
+                self.send_line(line.to_line());
+                self.emit(ircx_ipc::IrcxEvent::ReactionChanged {
+                    network: self.network_id().clone(),
+                    target: target.to_string(),
+                    message: message.to_string(),
+                    nick: self.nick.clone(),
+                    emoji: emoji.to_string(),
+                    active,
+                });
+            }
+        }
+        self.drain()
+    }
+
     fn dispatch(&mut self, target: &str, input: &str) -> CommandOutcome {
         let Some(rest) = input.strip_prefix('/') else {
             return self.say_here(target, input, MessageKind::Privmsg);

@@ -83,3 +83,86 @@ describe("the echo of a message you sent", () => {
     expect(timeline()?.hasMore).toBe(false);
   });
 });
+
+describe("a reaction", () => {
+  function reaction(nick: string, emoji: string, active: boolean) {
+    return {
+      type: "reactionChanged",
+      network: "libera",
+      target: "#ctf-ops",
+      message: "123",
+      nick,
+      emoji,
+      active,
+    } as const;
+  }
+
+  function reactions() {
+    return timeline()?.messages[0]?.reactions;
+  }
+
+  beforeEach(() => {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [makeMessage({ id: "123" })],
+    });
+  });
+
+  it("collects names under the value they reacted with", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent(reaction("sable", "🇦🇷", true));
+    applyEvent(reaction("phrack", "🇩🇪", true));
+    applyEvent(reaction("nyx", "🇦🇷", true));
+
+    expect(reactions()).toEqual([
+      { emoji: "🇦🇷", nicks: ["sable", "nyx"] },
+      { emoji: "🇩🇪", nicks: ["phrack"] },
+    ]);
+  });
+
+  it("lands where one delta landed when the same one arrives twice", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent(reaction("sable", "lol", true));
+    // The sender's own copy, and then the echo of it.
+    applyEvent(reaction("sable", "lol", true));
+
+    expect(reactions()).toEqual([{ emoji: "lol", nicks: ["sable"] }]);
+  });
+
+  it("takes the chip away with the last person holding it", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent(reaction("sable", "lol", true));
+    applyEvent(reaction("phrack", "lol", true));
+    applyEvent(reaction("sable", "lol", false));
+    expect(reactions()).toEqual([{ emoji: "lol", nicks: ["phrack"] }]);
+
+    applyEvent(reaction("phrack", "lol", false));
+    expect(reactions()).toEqual([]);
+  });
+
+  it("is dropped without complaint when the window does not hold the message", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({ ...reaction("sable", "lol", true), message: "not-in-the-window" });
+    // Nothing was attached to any message here; the archive holds it instead.
+    expect(reactions()).toBeUndefined();
+  });
+
+  it("finds a message you sent by the msgid its echo carried", () => {
+    const ours = makeMessage({
+      id: "local-1",
+      idIsLocal: true,
+      tags: [["msgid", "456"]],
+    });
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [ours],
+    });
+    useAppStore.getState().applyEvent({ ...reaction("sable", "lol", true), message: "456" });
+
+    expect(timeline()?.messages[1]?.reactions).toEqual([{ emoji: "lol", nicks: ["sable"] }]);
+  });
+});

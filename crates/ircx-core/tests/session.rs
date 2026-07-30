@@ -104,6 +104,38 @@ impl Harness {
         outcome
     }
 
+    fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) {
+        let actions = self.state.react(target, message, emoji, active);
+        self.apply(actions);
+    }
+
+    /// The msgid reacted to, who reacted, with what, and whether it was added.
+    fn reactions(&self) -> Vec<(&str, &str, &str, bool)> {
+        self.events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::ReactionChanged {
+                    message,
+                    nick,
+                    emoji,
+                    active,
+                    ..
+                } => Some((message.as_str(), nick.as_str(), emoji.as_str(), *active)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn reaction_targets(&self) -> Vec<&str> {
+        self.events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::ReactionChanged { target, .. } => Some(target.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn sent(&mut self) -> Vec<String> {
         std::mem::take(&mut self.sent)
     }
@@ -492,7 +524,7 @@ fn echo_message_confirms_delivery_against_the_optimistic_copy() {
         .events
         .iter()
         .filter_map(|event| match event {
-            IrcxEvent::MessageUpdated { message } => Some(message),
+            IrcxEvent::MessageUpdated { message } => Some(message.as_ref()),
             _ => None,
         })
         .collect();
@@ -1019,7 +1051,7 @@ fn an_echo_hands_the_confirmed_message_the_servers_msgid_and_time() {
         .events
         .iter()
         .find_map(|event| match event {
-            IrcxEvent::MessageUpdated { message } => Some(message),
+            IrcxEvent::MessageUpdated { message } => Some(message.as_ref()),
             _ => None,
         })
         .expect("the echo confirms the optimistic copy");
@@ -1075,7 +1107,7 @@ fn an_echo_matched_on_its_text_still_takes_the_servers_msgid_and_time() {
         .events
         .iter()
         .find_map(|event| match event {
-            IrcxEvent::MessageUpdated { message } => Some(message),
+            IrcxEvent::MessageUpdated { message } => Some(message.as_ref()),
             _ => None,
         })
         .expect("the echo confirms the optimistic copy on its text alone");
@@ -1374,4 +1406,125 @@ fn a_reconnect_forgets_the_capabilities_the_old_server_had() {
 
     assert!(session.state.snapshot().caps_enabled.is_empty());
     assert_eq!(session.sent()[0], "CAP LS 302");
+}
+
+/// The reaction dialogues below are the example exchanges from the IRCv3
+/// `react` client tag specification, taken verbatim down to the channel names,
+/// msgids and values. Nothing here was copied off a live server: `+draft/react`
+/// is a work-in-progress tag and no Libera run has carried one.
+#[test]
+fn a_react_tagmsg_is_recorded_against_the_message_it_answered() {
+    let mut session = registered("message-tags");
+    session.feed("@msgid=123 :nick!user@host PRIVMSG #channel :Hello!");
+    session.feed("@msgid=456;+reply=123;+draft/react=lol :nick2!user2@host2 TAGMSG #channel");
+
+    assert_eq!(session.reactions(), vec![("123", "nick2", "lol", true)]);
+    assert_eq!(session.reaction_targets(), vec!["#channel"]);
+}
+
+#[test]
+fn an_unreact_takes_one_reaction_back_and_leaves_the_next_standing() {
+    let mut session = registered("message-tags");
+    session.feed("@msgid=123 :nick!user@host PRIVMSG #football :They won!");
+    session.feed("@msgid=124;+reply=123;+draft/react=🇦🇷 :nick2!user2@host2 TAGMSG #football");
+    session.feed("@msgid=125;+reply=123;+draft/unreact=🇦🇷 :nick2!user2@host2 TAGMSG #football");
+    session.feed("@msgid=126;+reply=123;+draft/react=🇩🇪 :nick2!user2@host2 TAGMSG #football");
+
+    assert_eq!(
+        session.reactions(),
+        vec![
+            ("123", "nick2", "🇦🇷", true),
+            ("123", "nick2", "🇦🇷", false),
+            ("123", "nick2", "🇩🇪", true),
+        ]
+    );
+}
+
+/// The specification makes `+reply` mandatory alongside `+draft/react`. A
+/// reaction without one names no message, so there is nothing to attach it to.
+#[test]
+fn a_reaction_naming_no_message_is_dropped() {
+    let mut session = registered("message-tags");
+    session.feed("@msgid=456;+draft/react=lol :nick2!user2@host2 TAGMSG #channel");
+    assert!(session.reactions().is_empty());
+}
+
+/// "The `+draft/react` and `+draft/unreact` tags MUST NOT both be attached to a
+/// single message." A line that does it cannot be read as either one.
+#[test]
+fn a_line_carrying_both_react_and_unreact_is_refused() {
+    let mut session = registered("message-tags");
+    session.feed(
+        "@msgid=456;+reply=123;+draft/react=lol;+draft/unreact=lol \
+         :nick2!user2@host2 TAGMSG #channel",
+    );
+    assert!(session.reactions().is_empty());
+}
+
+/// The session holds no messages — the archive does — so a reaction travels by
+/// the msgid it named whether or not this client ever saw what it answers.
+/// Nothing below feeds the `PRIVMSG` with msgid 123.
+#[test]
+fn a_reaction_to_a_message_this_session_never_saw_is_still_reported() {
+    let mut session = registered("message-tags");
+    session.feed("@msgid=456;+reply=123;+draft/react=lol :nick2!user2@host2 TAGMSG #channel");
+    assert_eq!(session.reactions(), vec![("123", "nick2", "lol", true)]);
+}
+
+#[test]
+fn a_reaction_sent_to_us_directly_belongs_to_the_senders_query() {
+    let mut session = registered("message-tags");
+    session.feed("@msgid=456;+reply=123;+draft/react=lol :nick2!user2@host2 TAGMSG sykk");
+    assert_eq!(session.reaction_targets(), vec!["nick2"]);
+}
+
+#[test]
+fn sending_a_reaction_puts_reply_and_react_on_one_tagmsg() {
+    let mut session = registered("message-tags");
+    session.react("#channel", "123", "lol", true);
+
+    assert_eq!(
+        session.sent(),
+        vec!["@+reply=123;+draft/react=lol TAGMSG #channel"]
+    );
+    // Only `echo-message` would bring it back, so the sender's own copy is
+    // reported here rather than waited for.
+    assert_eq!(session.reactions(), vec![("123", "sykk", "lol", true)]);
+}
+
+#[test]
+fn taking_a_reaction_back_spells_it_as_unreact() {
+    let mut session = registered("message-tags");
+    session.react("#channel", "123", "🇦🇷", false);
+
+    assert_eq!(
+        session.sent(),
+        vec!["@+reply=123;+draft/unreact=🇦🇷 TAGMSG #channel"]
+    );
+    assert_eq!(session.reactions(), vec![("123", "sykk", "🇦🇷", false)]);
+}
+
+/// The tag's value has no restrictions, so it can hold a space — which on the
+/// wire is an escape rather than the end of the tag.
+#[test]
+fn a_reaction_value_holding_a_space_is_escaped_on_the_way_out() {
+    let mut session = registered("message-tags");
+    session.react("#channel", "123", "hear hear", true);
+
+    assert_eq!(
+        session.sent(),
+        vec![r"@+reply=123;+draft/react=hear\shear TAGMSG #channel"]
+    );
+}
+
+/// `irc.libera.chat` is a rotation whose servers do not all advertise the same
+/// capabilities, so a session without `message-tags` is one reconnect away.
+/// Reactions are unavailable there, not broken.
+#[test]
+fn a_server_without_message_tags_carries_no_reaction_and_reports_no_failure() {
+    let mut session = registered("");
+    session.react("#channel", "123", "lol", true);
+
+    assert!(session.sent().is_empty());
+    assert!(session.events.is_empty());
 }

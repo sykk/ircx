@@ -490,7 +490,9 @@ async fn say_something(report: &mut Report, live: &mut Live, marker: &str) {
     let wanted = local.id.clone();
     let confirmed = live
         .wait(Duration::from_secs(30), |event| match event {
-            IrcxEvent::MessageUpdated { message } if message.id == wanted => Some(message.clone()),
+            IrcxEvent::MessageUpdated { message } if message.id == wanted => {
+                Some(message.as_ref().clone())
+            }
             _ => None,
         })
         .await;

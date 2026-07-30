@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use crate::StoreError;
 
-const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS];
+const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS, REACTIONS];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
 /// database at any earlier version, including an empty one.
@@ -146,6 +146,26 @@ CREATE TABLE open_targets (
     kind    TEXT NOT NULL,
     PRIMARY KEY (network, target)
 );
+"#;
+
+/// Reactions key on the `msgid` the `+reply` tag named, not on a row in
+/// `messages`. There is deliberately no foreign key: a reaction can arrive for
+/// a message this archive has never held, and the row has to survive until the
+/// message turns up — from a `chathistory` backfill, or never.
+///
+/// The unique index is the retraction rule as well as a constraint: one person
+/// holds one of each reaction on a message, so sending it twice adds nothing
+/// and `+draft/unreact` has exactly one row to remove.
+const REACTIONS: &str = r#"
+CREATE TABLE reactions (
+    id      INTEGER PRIMARY KEY,
+    network TEXT NOT NULL,
+    msgid   TEXT NOT NULL,
+    nick    TEXT NOT NULL,
+    emoji   TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_reactions_one_each ON reactions (network, msgid, nick, emoji);
 "#;
 
 #[cfg(test)]

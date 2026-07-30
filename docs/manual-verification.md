@@ -40,8 +40,8 @@ path has a unit test but has never been seen by a person.
 
 ## Things the Libera runs left unverified
 
-The first run (PR #43) left four gaps. The second closed three of them in
-`crates/ircx-core/tests/libera.rs`: a member list split over 31 replies in
+The first run (PR #43) left four gaps. The second (PR #48) closed three of them
+in `crates/ircx-core/tests/libera.rs`: a member list split over 31 replies in
 `#libera`, a server-initiated PING answered after 136 seconds of silence, and a
 cold start timed from process exec to the first frame the compositor was handed.
 What is left:

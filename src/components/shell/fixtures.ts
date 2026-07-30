@@ -1,11 +1,34 @@
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import type { ActiveTarget, AppState } from "@/store/types";
 import type { Channel, Network, Query } from "@/types";
 
 const PRISTINE = useAppStore.getState();
 
 export function resetStore() {
   useAppStore.setState(PRISTINE, true);
+}
+
+type ViewSlice = Pick<AppState, "views" | "viewOrder" | "activeViewId">;
+
+/** One focused pane on `target`, or none. Spread into a `setState` literal —
+ * the three view fields only make sense set together. */
+export function oneView(target: ActiveTarget | null): ViewSlice {
+  if (!target) return { views: {}, viewOrder: [], activeViewId: null };
+  const id = "test-view";
+  return {
+    views: { [id]: { id, ...target, scrollPosition: 0, selectedUser: null } },
+    viewOrder: [id],
+    activeViewId: id,
+  };
+}
+
+/** Where the focused pane is looking, for tests that assert a navigation. */
+export function activeTarget(): ActiveTarget | null {
+  const { views, activeViewId } = useAppStore.getState();
+  const view = activeViewId ? views[activeViewId] : undefined;
+  if (!view || !view.network) return null;
+  return { network: view.network, target: view.target };
 }
 
 export function makeNetwork(id: string, patch: Partial<Network> = {}): Network {

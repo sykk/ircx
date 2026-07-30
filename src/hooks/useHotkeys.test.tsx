@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Binding } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
 import { targetKey, type TargetKey } from "@/store/keys";
+import { activeTarget, oneView } from "@/components/shell/fixtures";
 import type { Channel, Network, Query } from "@/types";
 import { useAppHotkeys, useHotkeys, type HotkeyHandlers } from "./useHotkeys";
 
@@ -158,7 +159,7 @@ function seedStore() {
       [targetKey("libera", "#linux")]: channel("#linux"),
     },
     queries: { [targetKey("libera", "phrack")]: query("phrack") },
-    active: null,
+    ...oneView(null),
     recent: [],
     drawerOpen: false,
     paletteOpen: false,
@@ -172,7 +173,7 @@ function AppHost() {
 }
 
 function activeKey(): TargetKey | null {
-  const { active } = useAppStore.getState();
+  const active = activeTarget();
   return active ? targetKey(active.network, active.target) : null;
 }
 

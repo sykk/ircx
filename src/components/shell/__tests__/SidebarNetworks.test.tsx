@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { useAppStore } from "@/store";
 import { SidebarNetworks } from "../SidebarNetworks";
 import {
+  activeTarget,
   makeChannel,
   makeNetwork,
   makeQuery,
@@ -134,7 +134,7 @@ describe("SidebarNetworks", () => {
     const row = screen.getByRole("treeitem", { name: "#ctf-ops" });
     fireEvent.click(row);
 
-    expect(useAppStore.getState().active).toEqual({
+    expect(activeTarget()).toEqual({
       network: "libera",
       target: "#ctf-ops",
     });

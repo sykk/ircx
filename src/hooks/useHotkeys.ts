@@ -9,7 +9,7 @@ import {
 } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
-import type { AppState } from "@/store/types";
+import type { ActiveTarget, AppState } from "@/store/types";
 
 const HISTORY_CAP = 100;
 
@@ -64,12 +64,15 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
   // opened in the same tick produce one render but two history entries.
   useEffect(() => {
     return useAppStore.subscribe((state, previous) => {
-      if (state.active === previous.active || !state.active) return;
+      const now = activeTarget(state);
+      if (!now) return;
+      const before = activeTarget(previous);
+      if (before && before.network === now.network && before.target === now.target) return;
       if (traversing.current) {
         traversing.current = false;
         return;
       }
-      const key = targetKey(state.active.network, state.active.target);
+      const key = targetKey(now.network, now.target);
       const h = history.current;
       if (h.entries[h.index] === key) return;
       h.entries = [...h.entries.slice(0, h.index + 1), key].slice(-HISTORY_CAP);
@@ -156,11 +159,18 @@ function orderedTargets(state: AppState): TargetKey[] {
 /** Position to count from. With nothing active, stepping forward starts before
  * the first target and stepping back starts after the last. */
 function startIndex(state: AppState, order: TargetKey[], delta: number): number {
-  const at = state.active
-    ? order.indexOf(targetKey(state.active.network, state.active.target))
-    : -1;
+  const active = activeTarget(state);
+  const at = active ? order.indexOf(targetKey(active.network, active.target)) : -1;
   if (at !== -1) return at;
   return delta > 0 ? -1 : order.length;
+}
+
+/** Where the focused view is looking. The hook form lives in `@/store/selectors`;
+ * everything here works off a snapshot rather than a subscription. */
+function activeTarget(state: AppState): ActiveTarget | null {
+  const view = state.activeViewId ? state.views[state.activeViewId] : undefined;
+  if (!view || !view.network) return null;
+  return { network: view.network, target: view.target };
 }
 
 function unreadCount(state: AppState, key: TargetKey): number {

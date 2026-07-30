@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import { useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
 
 const HIT_LIMIT = 50;
@@ -20,7 +21,7 @@ export function SearchOverlay(props: Props) {
 }
 
 function Search({ onJump }: Props) {
-  const active = useAppStore((s) => s.active);
+  const active = useActiveTarget();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);

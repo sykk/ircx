@@ -238,8 +238,9 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       if (fresh.length === 0) return {};
 
       const merged = [...timeline.messages, ...fresh];
+      const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
       const isActive =
-        s.active?.network === event.network && s.active.target === event.target;
+        focused?.network === event.network && focused.target === event.target;
 
       return {
         timelines: {

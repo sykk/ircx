@@ -131,17 +131,50 @@ describe("StatusBar", () => {
       expect(screen.getByLabelText("Plugins 2: Greeter 1.0.0, Notes 1.0.0")).toBeTruthy();
     });
 
-    // Installed is not working. A plugin granted nothing does nothing, and a
+    // Installed is not usable. A plugin nobody can invoke does nothing, and a
     // bare count of what is installed would say otherwise.
-    it("separates the plugins that were granted nothing from the ones that run", () => {
+    it("separates the plugins that can be reached from the ones that cannot", () => {
       useAppStore.setState({ plugins: [plugin("Greeter", true), plugin("Notes", false)] });
       const bar = mount({ state: "connected" });
 
       expect(bar.textContent).toContain("Plugins 1 of 2");
       expect(
         screen.getByLabelText(
-          "Plugins 1 of 2: Greeter 1.0.0, Notes 1.0.0 · Notes granted nothing",
+          "Plugins 1 of 2: Greeter 1.0.0, Notes 1.0.0 · Notes cannot be used until granted a command",
         ),
+      ).toBeTruthy();
+    });
+
+    /** Holding a permission is not the same as being usable: slash commands are
+     * the only extension point built, so a plugin without `add-commands` has
+     * nothing anyone can type however much else it holds. */
+    it("does not count a plugin that holds permissions but adds no command", () => {
+      const hoarder = plugin("Hoarder", false);
+      useAppStore.setState({
+        plugins: [
+          {
+            ...hoarder,
+            requests: { permissions: ["store-local-data"], channels: [], hosts: [] },
+            grants: { permissions: ["store-local-data"], channels: [], hosts: [] },
+          },
+        ],
+      });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins 0 of 1");
+    });
+
+    it("says the library would not open rather than reporting none installed", () => {
+      useAppStore.setState({
+        plugins: [],
+        pluginsUnavailable: "Your plugins folder could not be opened",
+      });
+      const bar = mount({ state: "connected" });
+
+      expect(bar.textContent).toContain("Plugins —");
+      expect(bar.textContent).not.toContain("Plugins 0");
+      expect(
+        screen.getByLabelText("Plugins unavailable: Your plugins folder could not be opened"),
       ).toBeTruthy();
     });
 

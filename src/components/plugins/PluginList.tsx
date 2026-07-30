@@ -10,13 +10,18 @@ import { grantLine } from "./grants";
  */
 export function PluginList({
   plugins,
+  unavailable,
   busy,
+  onClose,
   onInstall,
   onPermissions,
   onRemove,
 }: {
   plugins: readonly InstalledPlugin[];
+  /** Why the library could not be read, or null. Different from no plugins. */
+  unavailable: string | null;
   busy: boolean;
+  onClose: () => void;
   onInstall: () => void;
   onPermissions: (plugin: string) => void;
   onRemove: (plugin: string) => void;
@@ -27,12 +32,22 @@ export function PluginList({
     <div className="flex flex-col gap-4 p-6">
       <header className="flex items-center justify-between gap-4">
         <h2 className="text-[15px] font-medium text-[var(--text-primary)]">Plugins</h2>
-        <PrimaryButton type="button" disabled={busy} onClick={onInstall}>
-          Install from folder
-        </PrimaryButton>
+        <div className="flex items-center gap-2">
+          <PrimaryButton type="button" disabled={busy} onClick={onInstall}>
+            Install from folder
+          </PrimaryButton>
+          {/* Escape closes the sheet, but only for someone who knows to try it. */}
+          <SecondaryButton label="Close plugins" disabled={busy} onClick={onClose}>
+            Done
+          </SecondaryButton>
+        </div>
       </header>
 
-      {plugins.length === 0 ? (
+      {unavailable !== null ? (
+        <p role="alert" className="text-[12px] text-[var(--warning)]">
+          {unavailable}
+        </p>
+      ) : plugins.length === 0 ? (
         <p className="text-[12px] text-[var(--text-muted)]">
           Nothing installed. A plugin is a folder holding a plugin.json and the
           script it names.
@@ -89,6 +104,7 @@ export function PluginList({
                     </button>
                     <SecondaryButton
                       label={`Keep ${plugin.name}`}
+                      disabled={busy}
                       onClick={() => setConfirming(null)}
                     >
                       Keep
@@ -98,12 +114,14 @@ export function PluginList({
                   <>
                     <SecondaryButton
                       label={`Permissions for ${plugin.name}`}
+                      disabled={busy}
                       onClick={() => onPermissions(plugin.id)}
                     >
                       Permissions
                     </SecondaryButton>
                     <SecondaryButton
                       label={`Remove ${plugin.name}`}
+                      disabled={busy}
                       onClick={() => setConfirming(plugin.id)}
                     >
                       Remove

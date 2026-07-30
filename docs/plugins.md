@@ -57,8 +57,15 @@ A plugin cannot arrive with its own `grants.json`.
 Installing grants nothing, so the permissions screen follows immediately with
 what the manifest asked for, each line written by `Permission::summary`. The
 two scoped permissions ask where they apply: channels for `access-channels`,
-hosts for `network-requests`, and a permission allowed with an empty scope
-cannot be saved, because it would read as a grant while giving nothing.
+hosts for `network-requests`, and the dialogue will not save a permission that
+reaches nothing — a scope left empty, or sending and reading without a
+conversation to do it in. That rule is the dialogue's; the library's floor is
+`Grants::within`, which refuses anything the manifest never asked for.
+
+**Installing over a plugin that is already there grants nothing either.** The
+grants belong to the code the user was shown, and an id is only a folder name
+that any manifest can claim, so a second install starts the question again
+rather than inheriting the first one's answer.
 
 The same screen is how a grant is taken back — `set_grants` writes exactly what
 it is handed, so revoking is granting less. It takes effect on the next call: a

@@ -120,10 +120,28 @@ function Capabilities({ caps }: { caps: string[] }) {
   );
 }
 
-/** Installed is not the same as working: a plugin holding no permission does
- * nothing, so the count says how many of them can act. */
+/** Installed is not the same as usable: a plugin the user cannot invoke does
+ * nothing, so the count says how many of them can be reached. */
 function Plugins() {
-  const { text, detail } = pluginStatus(useAppStore((s) => s.plugins));
+  const plugins = useAppStore((s) => s.plugins);
+  const unavailable = useAppStore((s) => s.pluginsUnavailable);
+  const { text, detail } = pluginStatus(plugins);
+
+  // A library that would not open is not an empty one. Saying "Plugins 0" here
+  // would hide every plugin the user has behind a number that reads as fine.
+  if (unavailable !== null) {
+    return (
+      <Tooltip label={unavailable} placement="top">
+        <span
+          tabIndex={0}
+          aria-label={`Plugins unavailable: ${unavailable}`}
+          className="text-[var(--warning)]"
+        >
+          Plugins —
+        </span>
+      </Tooltip>
+    );
+  }
 
   return (
     <Tooltip label={detail} placement="top">

@@ -129,14 +129,12 @@ impl Library {
             .map_err(LibraryError::Unreadable)?;
         fs::write(directory.join(&manifest.entry), &code).map_err(LibraryError::Unreadable)?;
 
-        let grants = match self.plugins.get(&manifest.id) {
-            // Reinstalling keeps what the user already allowed, but only as
-            // far as the new manifest still asks for it.
-            Some(existing) if existing.grants.within(&manifest.requests).is_ok() => {
-                existing.grants.clone()
-            }
-            _ => Grants::default(),
-        };
+        // Installing over a plugin that is already here grants nothing either,
+        // because the code is not the code the user answered for. An id is a
+        // folder name and a manifest can claim any of them, so keeping the
+        // grants would let a second install inherit the first one's answer and
+        // act on it before anybody was asked again.
+        let grants = Grants::default();
         write_grants(&directory, &grants)?;
 
         let installed = Installed {
@@ -165,12 +163,17 @@ impl Library {
         Ok(installed.clone())
     }
 
+    /// The files go first. Dropping the entry before the removal that can fail
+    /// would leave a plugin the library has forgotten, its routes still
+    /// standing, and its grants on disk to be read back at the next launch.
     pub fn remove(&mut self, id: &str) -> Result<(), LibraryError> {
         let installed = self
             .plugins
-            .remove(id)
+            .get(id)
             .ok_or_else(|| LibraryError::Unknown(id.to_owned()))?;
-        fs::remove_dir_all(&installed.directory).map_err(LibraryError::Unreadable)
+        fs::remove_dir_all(&installed.directory).map_err(LibraryError::Unreadable)?;
+        self.plugins.remove(id);
+        Ok(())
     }
 }
 

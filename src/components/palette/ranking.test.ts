@@ -58,6 +58,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     setup: null,
     pluginsOpen: false,
     plugins: [],
+    pluginsUnavailable: null,
     collapsedNetworks: {},
     themes: [],
     brokenThemes: [],

@@ -15,7 +15,9 @@ import type {
 import {
   allowsNaming,
   EVERY_CONVERSATION,
+  needsChannels,
   offeredChannels,
+  reachesAnyChannel,
   scopeOf,
   toggleChannel,
   toggleHost,
@@ -71,6 +73,10 @@ export function PermissionsForm({
           {asked.permissions.map((permission) => {
             const allowed = draft.permissions.includes(permission);
             const scope = scopeOf(permission);
+            // Allowed, but there is nowhere for it to happen. Said here rather
+            // than left as a Save button that will not press.
+            const nowhere =
+              allowed && needsChannels(permission) && !reachesAnyChannel(draft);
             return (
               <li key={permission} className="flex flex-col gap-2">
                 <CheckField
@@ -78,6 +84,12 @@ export function PermissionsForm({
                   checked={allowed}
                   onChange={() => setDraft(togglePermission(draft, permission))}
                 />
+                {nowhere && (
+                  <p className="ml-[22px] text-[11px] text-[var(--warning)]">
+                    This reaches nothing until you choose the conversations it
+                    may work in, below.
+                  </p>
+                )}
                 {allowed && scope === "channels" && (
                   <Scope
                     legend="Conversations"
@@ -176,8 +188,14 @@ function Scope({
   );
 }
 
-/** Naming one conversation instead of taking every one. Adding is a button
- * rather than the enclosing form's submit, which would save the grant. */
+/**
+ * Naming one conversation instead of taking every one.
+ *
+ * Enter has to be caught here. A lone text input inside a form submits it,
+ * which would save the grant without the channel that was just typed — and
+ * marking the Add button `type="button"` does nothing about that, because the
+ * submission comes from the input rather than from any button.
+ */
 function NameOne({ legend, onName }: { legend: string; onName: (value: string) => void }) {
   const [typed, setTyped] = useState("");
   const add = () => {
@@ -189,7 +207,14 @@ function NameOne({ legend, onName }: { legend: string; onName: (value: string) =
 
   return (
     <div className="flex items-end gap-2">
-      <div className="min-w-0 flex-1">
+      <div
+        className="min-w-0 flex-1"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          add();
+        }}
+      >
         <TextField
           label="Name one instead"
           value={typed}

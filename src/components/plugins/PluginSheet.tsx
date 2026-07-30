@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SecondaryButton } from "@/components/onboarding/fields";
 import { chooseFolder, ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
@@ -18,8 +18,9 @@ export function PluginSheet() {
 }
 
 function Sheet() {
-  const close = useAppStore((s) => s.togglePlugins);
+  const closeSheet = useAppStore((s) => s.togglePlugins);
   const plugins = useAppStore((s) => s.plugins);
+  const unavailable = useAppStore((s) => s.pluginsUnavailable);
 
   /** The plain-terms lines, read once: they describe the permissions
    * themselves rather than any one plugin. */
@@ -27,6 +28,21 @@ function Sheet() {
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Nothing in the sheet takes focus on its own — the list is buttons and the
+  // form starts on a checkbox — so without this the keydown below fires from
+  // wherever focus was left and Escape never reaches the dialog.
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.focus();
+  }, []);
+
+  /** Closing mid-request loses the answer: an install lands with its
+   * permissions never asked, and a failed save reports into a sheet that has
+   * gone. */
+  function close() {
+    if (!busy) closeSheet(false);
+  }
 
   useEffect(() => {
     let live = true;
@@ -97,18 +113,20 @@ function Sheet() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      onMouseDown={() => close(false)}
+      onMouseDown={close}
     >
       <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Plugins"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.stopPropagation();
-          close(false);
+          close();
         }}
         className="relative flex max-h-[88vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] shadow-[var(--shadow-overlay)]"
       >
@@ -116,9 +134,17 @@ function Sheet() {
           <>
             <PluginList
               plugins={plugins}
+              unavailable={unavailable}
               busy={busy}
+              onClose={close}
               onInstall={() => void install()}
-              onPermissions={setEditing}
+              onPermissions={(id) => {
+                // A failed install or removal belongs to the screen it happened
+                // on. Carried across it would sit exactly where a rejected save
+                // does and read as one.
+                setError(null);
+                setEditing(id);
+              }}
               onRemove={(id) => void remove(id)}
             />
             {error !== null && (

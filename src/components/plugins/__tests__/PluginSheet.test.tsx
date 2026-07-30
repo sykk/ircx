@@ -182,6 +182,26 @@ describe("PluginSheet", () => {
       );
     });
 
+    /** A lone text input in a form submits it on Enter, which would have saved
+     * the grant without the channel just typed. Enter has to add instead. */
+    it("adds the conversation on Enter rather than saving without it", async () => {
+      const eager: InstalledPlugin = {
+        ...GREETER,
+        requests: { ...GREETER.requests, channels: ["*"] },
+      };
+      await open([eager]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+
+      const field = screen.getByLabelText("Name one instead");
+      fireEvent.change(field, { target: { value: "#ircx-dev" } });
+      fireEvent.keyDown(field, { key: "Enter" });
+
+      expect(box("#ircx-dev").checked).toBe(true);
+      expect(ipcMock.setPluginGrants).not.toHaveBeenCalled();
+      expect((field as HTMLInputElement).value).toBe("");
+    });
+
     it("does not offer to name one when the manifest listed the channels itself", async () => {
       const listed: InstalledPlugin = {
         ...GREETER,
@@ -311,10 +331,60 @@ describe("PluginSheet", () => {
     });
   });
 
-  it("closes on Escape", async () => {
+  /** Firing Escape at the dialog element proves nothing on its own: React
+   * listens at the root, so the handler only runs for a keystroke that starts
+   * inside. Nothing in the sheet takes focus by itself, so this asserts the
+   * sheet takes it — otherwise Escape goes wherever focus was left and the only
+   * way out is the mouse. */
+  it("takes focus, so Escape reaches it and closes it", async () => {
     await open();
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    const dialog = screen.getByRole("dialog");
+    expect(document.activeElement).toBe(dialog);
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(useAppStore.getState().pluginsOpen).toBe(false);
+  });
+
+  it("offers a way out that is not a keystroke", async () => {
+    await open();
+    fireEvent.click(button("Close plugins"));
 
     expect(useAppStore.getState().pluginsOpen).toBe(false);
+  });
+
+  it("stays open while a request it started is still running", async () => {
+    let land = (_: InstalledPlugin) => {};
+    ipcMock.setPluginGrants.mockReturnValue(
+      new Promise<InstalledPlugin>((resolve) => {
+        land = resolve;
+      }),
+    );
+    await open();
+    await permissionsFor("Greeter");
+    fireEvent.click(box(COMMANDS));
+    fireEvent.click(button("Save"));
+
+    // Closing here would leave the answer to land on a sheet that is gone.
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(useAppStore.getState().pluginsOpen).toBe(true);
+
+    await act(async () => {
+      land({ ...GREETER, grants: { permissions: ["add-commands"], channels: [], hosts: [] } });
+    });
+  });
+
+  it("leaves a failure behind on the screen it happened on", async () => {
+    ipcMock.removePlugin.mockRejectedValue("Greeter is in use and could not be removed.");
+    await open();
+
+    fireEvent.click(button("Remove Greeter"));
+    await act(async () => {
+      fireEvent.click(button("Remove Greeter and its permissions"));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("could not be removed");
+
+    // The same alert above Save would read as a rejected permission change.
+    await permissionsFor("Greeter");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

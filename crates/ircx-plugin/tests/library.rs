@@ -176,11 +176,12 @@ fn a_manifest_that_asks_for_a_scope_without_naming_one_is_refused() {
     }
 }
 
-/// A plugin that is reinstalled keeps what it was allowed, because the user
-/// already answered that question — but only as far as the new manifest still
-/// asks for the same things.
+/// Reinstalling grants nothing, exactly like a first install. The user answered
+/// for the code they were shown, and an id is only a folder name: a second
+/// install claiming the same one would otherwise inherit that answer and be
+/// able to act on it before anybody was asked again.
 #[test]
-fn an_upgrade_keeps_the_grants_it_still_asks_for() {
+fn an_upgrade_starts_from_no_grants() {
     let root = tempfile::tempdir().expect("a temporary directory");
     let mut library = Library::open(root.path().join("plugins")).expect("open");
     library
@@ -191,16 +192,44 @@ fn an_upgrade_keeps_the_grants_it_still_asks_for() {
     let installed = library
         .install(&author(root.path(), "echo", ECHO, asked()))
         .expect("reinstall the same version");
-    assert!(installed.grants.holds(Permission::SendMessages));
-
-    let narrower = grants(&[Permission::AddCommands]);
-    let installed = library
-        .install(&author(root.path(), "echo", ECHO, narrower))
-        .expect("install a version that asks for less");
     assert_eq!(
         installed.grants,
         Grants::default(),
-        "a grant the new version does not ask for is not carried over"
+        "the grants belong to the code the user was asked about"
+    );
+
+    // And on disk, so a launch after the reinstall reads the same.
+    let library = Library::open(root.path().join("plugins")).expect("reopen");
+    assert_eq!(
+        library.get("echo").expect("still installed").grants,
+        Grants::default()
+    );
+}
+
+/// The same rule seen from the routing table: code installed under a name the
+/// user has already answered for adds no command until they answer again.
+#[test]
+fn code_installed_over_a_granted_plugin_routes_nothing() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let runtime = PluginRuntime::open(
+        root.path().join("plugins"),
+        Limits::default(),
+        net::refuses(),
+    )
+    .expect("open");
+    runtime
+        .install(&author(root.path(), "echo", ECHO, asked()))
+        .expect("install");
+    runtime.set_grants("echo", asked()).expect("grant");
+    assert!(runtime.route("echo").is_some(), "granted, so it routes");
+
+    runtime
+        .install(&author(root.path(), "echo", ECHO, asked()))
+        .expect("install different code under the same id");
+
+    assert!(
+        runtime.route("echo").is_none(),
+        "the new code has no command until the user allows it one"
     );
 }
 

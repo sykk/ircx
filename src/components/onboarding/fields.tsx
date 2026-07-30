@@ -229,20 +229,23 @@ export function PrimaryButton({
 export function SecondaryButton({
   children,
   label,
+  disabled,
   onClick,
 }: {
   children: ReactNode;
   /** For a button whose text repeats down a list, so each one is still named
    * by what it acts on. Must contain the visible text. */
   label?: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      className="h-8 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+      className="h-8 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-[var(--disabled-opacity)]"
     >
       {children}
     </button>

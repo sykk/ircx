@@ -79,13 +79,47 @@ export function toggleHost(grants: PluginGrants, host: string): PluginGrants {
   };
 }
 
-/** True while a scoped permission is allowed without a scope: a grant that
- * gives nothing while reading as though it gives something. */
+/** Sending and reading are scoped by `access-channels` rather than by a list of
+ * their own, so either one without it reaches nothing. A manifest asking for
+ * one without the other is refused, so this is always fixable by ticking it. */
+const NEEDS_CHANNELS: PluginPermission[] = ["send-messages", "read-messages"];
+
+/** Whether this permission is one that `access-channels` says where for. */
+export function needsChannels(permission: PluginPermission): boolean {
+  return NEEDS_CHANNELS.includes(permission);
+}
+
+/** Whether a conversation has actually been chosen for the two permissions
+ * that are scoped by one. */
+export function reachesAnyChannel(grants: PluginGrants): boolean {
+  return grants.permissions.includes("access-channels") && grants.channels.length > 0;
+}
+
+/** True while an allowed permission reaches nothing — a scope left empty, or
+ * sending and reading with no conversation to do it in. Either way it is a
+ * grant that gives nothing while reading as though it gives something. */
 export function unscoped(grants: PluginGrants): boolean {
+  const reaches = reachesAnyChannel(grants);
   return grants.permissions.some((permission) => {
     const scope = scopeOf(permission);
-    return scope !== null && grants[scope].length === 0;
+    if (scope !== null) return grants[scope].length === 0;
+    return needsChannels(permission) && !reaches;
   });
+}
+
+/** Whether the user handed over fewer conversations or websites than the
+ * manifest asked for. Counting permissions alone would call a plugin narrowed
+ * from every conversation to one "granted everything it asked for". */
+function narrowed(plugin: InstalledPlugin): boolean {
+  const { grants, requests } = plugin;
+  const lostWildcard =
+    requests.channels.includes(EVERY_CONVERSATION) &&
+    !grants.channels.includes(EVERY_CONVERSATION);
+  return (
+    lostWildcard ||
+    grants.channels.length < requests.channels.length ||
+    grants.hosts.length < requests.hosts.length
+  );
 }
 
 /** How much of what it asked for a plugin holds, for its row in the list. */
@@ -93,14 +127,19 @@ export function grantLine(plugin: InstalledPlugin): string {
   const held = plugin.grants.permissions.length;
   const asked = plugin.requests.permissions.length;
   if (held === 0) return "Granted nothing";
-  if (held === asked) return "Granted everything it asked for";
-  return `Granted ${held} of ${asked} permissions`;
+  if (held < asked) return `Granted ${held} of ${asked} permissions`;
+  return narrowed(plugin)
+    ? "Granted every permission, in fewer places than it asked for"
+    : "Granted everything it asked for";
 }
 
 /**
- * What the status bar says about the installed plugins. A plugin holding no
- * permission at all cannot do anything, which is a different thing from one
- * that is working, so the count says how many of them are working.
+ * What the status bar says about the installed plugins.
+ *
+ * The count is of plugins the user can actually reach. Custom slash commands
+ * are the one extension point built, so a plugin without `add-commands` has
+ * nothing anyone can invoke however much else it was allowed — counting it
+ * would read as working.
  */
 export function pluginStatus(plugins: readonly InstalledPlugin[]): {
   text: string;
@@ -109,11 +148,15 @@ export function pluginStatus(plugins: readonly InstalledPlugin[]): {
   if (plugins.length === 0) return { text: "Plugins 0", detail: "No plugins installed" };
 
   const named = plugins.map((plugin) => `${plugin.name} ${plugin.version}`).join(", ");
-  const idle = plugins.filter((plugin) => plugin.grants.permissions.length === 0);
+  const idle = plugins.filter(
+    (plugin) => !plugin.grants.permissions.includes("add-commands"),
+  );
   if (idle.length === 0) return { text: `Plugins ${plugins.length}`, detail: named };
 
   return {
     text: `Plugins ${plugins.length - idle.length} of ${plugins.length}`,
-    detail: `${named} · ${idle.map((plugin) => plugin.name).join(", ")} granted nothing`,
+    detail: `${named} · ${idle
+      .map((plugin) => plugin.name)
+      .join(", ")} cannot be used until granted a command`,
   };
 }

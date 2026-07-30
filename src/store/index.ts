@@ -72,6 +72,8 @@ export interface AppActions {
   closeSetup: () => void;
   togglePlugins: (open?: boolean) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
+  /** Records that the library could not be read at all. */
+  setPluginsUnavailable: (reason: string) => void;
   /** Replaces the entry with this id, or adds it. Both `install_plugin` and
    * `set_plugin_grants` answer with the whole plugin, so nothing has to be
    * read back to keep the list right. */
@@ -106,6 +108,7 @@ const initialState: AppState = {
   setup: null,
   pluginsOpen: false,
   plugins: [],
+  pluginsUnavailable: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
   themes: [],
@@ -273,13 +276,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   closeSetup: () => set({ setup: null }),
 
   togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
-  setPlugins: (plugins) => set({ plugins }),
+  setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
+  setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
   upsertPlugin: (plugin) =>
     set((s) => {
       const at = s.plugins.findIndex((held) => held.id === plugin.id);
-      if (at === -1) return { plugins: [...s.plugins, plugin] };
-      const plugins = s.plugins.slice();
-      plugins[at] = plugin;
+      if (at !== -1) {
+        const plugins = s.plugins.slice();
+        plugins[at] = plugin;
+        return { plugins };
+      }
+      // `list_plugins` reads a BTreeMap, so the backend's order is by id. A new
+      // plugin appended would sit last until the next launch and then move.
+      const plugins = [...s.plugins, plugin].sort((a, b) => a.id.localeCompare(b.id));
       return { plugins };
     }),
   dropPlugin: (plugin) =>

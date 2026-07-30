@@ -7,7 +7,7 @@ import {
   type IrcxEvent,
   type Reaction,
 } from "@/types";
-import { targetKey, type TargetKey } from "./keys";
+import { sameTarget, targetKey, type TargetKey } from "./keys";
 import { paneOrder, removeLeaf, setRatio, splitLeaf, type SplitPath } from "./layout";
 import type {
   ActiveTarget,
@@ -42,6 +42,9 @@ export interface AppActions {
 
   /** Points the focused view at a target, opening a view if none exists. */
   setActive: (target: ActiveTarget | null) => void;
+  /** Takes the user to a target: focuses a pane already showing it, and only
+   * retargets the focused pane when none is. */
+  showTarget: (target: ActiveTarget) => void;
   /** Points the focused view at a network's console, showing either what the
    * server said or the protocol log. */
   openConsole: (network: string, raw?: boolean) => void;
@@ -127,16 +130,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         return { views: retarget(s.views, id, "", "") };
       }
 
-      const key = targetKey(target.network, target.target);
-      const timeline = s.timelines[key];
-      // The unread rule is placed on switch, not on scroll, so it holds still
-      // while the user reads. It lives beside the target rather than the view:
-      // having read a channel in one pane means having read it.
-      const timelines = timeline
-        ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
-        : s.timelines;
-      const recent = [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP);
-
+      const read = readingTarget(s, target);
       if (!id) {
         const view = newView(target.network, target.target);
         return {
@@ -144,15 +138,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           viewOrder: [view.id],
           activeViewId: view.id,
           layout: { type: "view", id: view.id },
-          recent,
-          timelines,
+          ...read,
         };
       }
-      return { views: retarget(s.views, id, target.network, target.target), recent, timelines };
+      return { views: retarget(s.views, id, target.network, target.target), ...read };
     }),
 
+  showTarget: (target) => {
+    const showing = paneShowing(get(), target);
+    if (showing === undefined) {
+      get().setActive(target);
+      return;
+    }
+    // Reading it is reading it wherever it was already open, so the unread rule
+    // and the recency list move either way.
+    set((s) => ({ activeViewId: showing, ...readingTarget(s, target) }));
+  },
+
   openConsole: (network, raw = false) => {
-    get().setActive({ network, target: SERVER_TARGET });
+    get().showTarget({ network, target: SERVER_TARGET });
     const id = get().activeViewId;
     if (id) get().setViewRaw(id, raw);
   },
@@ -308,6 +312,42 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
   setThemeId: (id) => set({ themeId: id }),
 }));
+
+/**
+ * The first pane already on `target`, if any. Splitting deliberately opens a
+ * second view on one target, so more than one pane can be showing it; pane
+ * order decides, rather than whichever the map happened to yield.
+ */
+function paneShowing(s: AppState, target: ActiveTarget): ViewId | undefined {
+  return s.viewOrder.find((id) => {
+    const view = s.views[id];
+    return (
+      view !== undefined &&
+      view.network === target.network &&
+      sameTarget(view.target, target.target)
+    );
+  });
+}
+
+/**
+ * What reading a target does whichever pane it is read in. The unread rule is
+ * placed on switch rather than on scroll, so it holds still while the user
+ * reads, and it lives beside the target rather than the view: having read a
+ * channel in one pane means having read it.
+ */
+function readingTarget(
+  s: AppState,
+  target: ActiveTarget,
+): Pick<AppState, "recent" | "timelines"> {
+  const key = targetKey(target.network, target.target);
+  const timeline = s.timelines[key];
+  return {
+    timelines: timeline
+      ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
+      : s.timelines,
+    recent: [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP),
+  };
+}
 
 function newView(network: string, target: string): ChatView {
   return { id: mintViewId(), network, target, scrollPosition: 0, selectedUser: null, raw: false };

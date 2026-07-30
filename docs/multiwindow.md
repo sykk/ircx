@@ -96,3 +96,23 @@ as the pane header beside it, so the line under that header runs on into the
 roster and the two read as one conversation rather than as a global application
 sidebar. The pane header already names the channel and counts its members, so
 the roster repeats neither.
+## Reaching a conversation once there is more than one pane
+
+Two things a user does are easy to confuse, and #98 was the first time they came
+apart.
+
+**Take me to this conversation** — a click in the sidebar, a palette jump, a
+search hit. If a pane is already showing it, that pane takes focus and nothing
+is retargeted; only when no pane is showing it does the focused pane go there.
+Before this, a sidebar click replaced whatever the focused pane held, so
+clicking a channel that was already open beside it left two panes on one channel
+and lost the conversation you were reading. `showTarget` is that rule.
+
+**Walk the target list** — `Ctrl+1..9`, and `Alt+ArrowUp`/`Down` when there is
+only one pane. These move the pane you are in, and stay on `setActive`. Throwing
+focus across the window on the way past a target another pane happens to hold
+would make the list unwalkable.
+
+Splitting deliberately opens a second view on one target, so more than one pane
+can be showing it; the first in pane order takes focus. Targets are matched the
+way a server matches them, case-insensitively, and by network as well as name.

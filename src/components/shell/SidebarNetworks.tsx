@@ -40,7 +40,7 @@ export function SidebarNetworks() {
   const queries = useAppStore((s) => s.queries);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const active = useActiveTarget();
-  const setActive = useAppStore((s) => s.setActive);
+  const showTarget = useAppStore((s) => s.showTarget);
   const openConsole = useAppStore((s) => s.openConsole);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
@@ -153,7 +153,7 @@ export function SidebarNetworks() {
     }
     const target = row.kind === "channel" ? row.channel.name : row.query.nick;
     const network = row.kind === "channel" ? row.channel.network : row.query.network;
-    setActive({ network, target });
+    showTarget({ network, target });
   }
 
   function isSelected(row: Row): boolean {

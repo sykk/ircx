@@ -191,7 +191,7 @@ async fn run(
         loop {
             let actions = tokio::select! {
                 event = incoming.recv() => match event {
-                    Some(TransportEvent::Connected { .. }) => session.on_connected(),
+                    Some(TransportEvent::Connected { tls_info }) => session.on_connected(tls_info),
                     Some(TransportEvent::Line(line)) => session.on_line(&line),
                     Some(TransportEvent::Disconnected { reason: why }) => {
                         reason = why.to_string();
@@ -313,8 +313,10 @@ impl Context {
                     }
                 }
                 Action::Emit(event) => {
-                    if let IrcxEvent::MessagesAppended { messages, .. } = event.as_ref() {
-                        self.persist(messages);
+                    match event.as_ref() {
+                        IrcxEvent::MessagesAppended { messages, .. } => self.persist(messages),
+                        IrcxEvent::MessageUpdated { message } => self.update(message),
+                        _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
                         close = true;
@@ -329,6 +331,14 @@ impl Context {
     fn persist(&self, messages: &[ChatMessage]) {
         if let Err(error) = self.store.append_messages(messages) {
             warn!(%error, "could not write messages to the archive");
+        }
+    }
+
+    /// The archived copy was written while the message was still in flight, so
+    /// a confirmation has to reach the row it left behind.
+    fn update(&self, message: &ChatMessage) {
+        if let Err(error) = self.store.update_message(message) {
+            warn!(%error, "could not update a message in the archive");
         }
     }
 }

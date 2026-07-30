@@ -1,5 +1,5 @@
 use ircx_ipc::{ChatMessage, MessageSource, Sender};
-use rusqlite::{params, Row, Transaction};
+use rusqlite::{params, Connection, Row, Transaction};
 
 use crate::{from_json_column, to_json, StoreError};
 
@@ -45,10 +45,41 @@ pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), Stor
     Ok(())
 }
 
+/// Everything an echo told us about a message that is already a row. It is an
+/// update because `INSERT` above is `INSERT OR IGNORE` and the optimistic copy
+/// was written the moment the user pressed enter.
+const CONFIRM: &str = "UPDATE messages
+        SET server_msgid = ?3, timestamp = ?4, timestamp_is_local = ?5, delivery = ?6,
+            tags = ?7, raw = ?8
+     WHERE network = ?1 AND message_id = ?2";
+
+/// Matching no row means the message was never archived, which is nothing the
+/// caller can act on.
+pub(crate) fn confirm(conn: &Connection, message: &ChatMessage) -> Result<(), StoreError> {
+    conn.execute(
+        CONFIRM,
+        params![
+            message.network,
+            message.id,
+            server_msgid(message),
+            message.timestamp,
+            message.timestamp_is_local,
+            to_json(&message.delivery)?,
+            to_json(&message.tags)?,
+            message.raw,
+        ],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
+    let id: String = row.get(0)?;
+    let msgid: Option<String> = row.get(19)?;
     Ok(ChatMessage {
-        id: row.get(0)?,
-        id_is_local: row.get::<_, Option<String>>(19)?.is_none(),
+        // A confirmed message of our own holds both: the local id the UI drew
+        // it with, and the server's msgid beside it.
+        id_is_local: msgid.as_deref() != Some(id.as_str()),
+        id,
         network: row.get(1)?,
         target: row.get(2)?,
         kind: from_json_column(row, 3)?,
@@ -75,6 +106,17 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
 
 /// Only a server msgid identifies a message across a replay. A locally minted
 /// id is left out so the row falls to content-based dedupe instead.
+///
+/// A message we sent keeps its local id, so for that one the server's name for
+/// it is the `msgid` tag its echo carried.
 fn server_msgid(message: &ChatMessage) -> Option<&str> {
-    (!message.id_is_local).then_some(message.id.as_str())
+    if !message.id_is_local {
+        return Some(message.id.as_str());
+    }
+    message
+        .tags
+        .iter()
+        .find(|(name, _)| name == "msgid")
+        .and_then(|(_, value)| value.as_deref())
+        .filter(|msgid| !msgid.is_empty())
 }

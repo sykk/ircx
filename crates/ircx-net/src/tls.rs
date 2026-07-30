@@ -15,6 +15,17 @@ pub struct TlsInfo {
     pub peer_cert_subject: Option<String>,
 }
 
+/// What a user should be shown about the connection they got, in one line.
+impl std::fmt::Display for TlsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}, {}", self.protocol, self.cipher_suite)?;
+        match &self.peer_cert_subject {
+            Some(subject) => write!(f, ", certificate {subject}"),
+            None => Ok(()),
+        }
+    }
+}
+
 pub(crate) fn client_config(verify: bool) -> ClientConfig {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = ClientConfig::builder_with_provider(provider.clone())

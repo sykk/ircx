@@ -1,7 +1,12 @@
 import type { ChatMessage, MessageKind } from "@/types";
 import { isHighlight } from "@/store/selectors";
 
-/** A block is a minute of the conversation, whoever spoke during it. */
+/**
+ * A minute of the conversation, whoever spoke during it. It bounds a run of
+ * system messages too: a server console holds nothing else, so without it the
+ * console would be a single row for the length of the session — one element for
+ * the virtualiser to measure however long the output ran.
+ */
 export const BUCKET_MS = 60 * 1000;
 
 /** One virtualised item. Blocks and system runs hold several messages each. */
@@ -103,9 +108,8 @@ export function buildRows(
 
     const system = isSystemKind(message.kind);
     const bucket = bucketOf(message.timestamp);
-    const continues = system
-      ? open?.kind === "system"
-      : open?.kind === "block" && bucket !== null && bucket === openBucket;
+    const continues =
+      open?.kind === (system ? "system" : "block") && bucket !== null && bucket === openBucket;
 
     if (continues && open) {
       open.messages.push(message);

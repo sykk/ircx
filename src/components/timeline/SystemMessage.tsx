@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { Block } from "./MessageBlock";
 import { describePresence, partitionSystemRun } from "./rows";
@@ -79,18 +79,26 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
   );
 }
 
+const LAID_OUT = "font-[family-name:var(--font-mono)] whitespace-pre-wrap";
+
 /**
- * Client output is data, not speech: `/help` and anything else the client
- * writes itself arrives already laid out in columns, so it keeps its own
- * spacing and is set in the face those columns were measured against.
+ * The face a system line is set in, chosen by its kind. What the client and the
+ * server write is data, not speech: `/help`'s columns and a MOTD's ASCII rules
+ * arrive already laid out, so they keep their spacing and the face it was
+ * measured against. Every other kind is a sentence.
+ *
+ * The trade is the numerics ircx phrases itself, which arrive as `server` too
+ * and do read as prose. They are a handful of one-line errors, each of which
+ * also reaches the reader through the notice channel; the MOTD is the bulk of
+ * what this kind carries.
  */
-const CLIENT_FACE = "font-[family-name:var(--font-mono)] whitespace-pre-wrap";
+const FACE: Partial<Record<MessageKind, string>> = { client: LAID_OUT, server: LAID_OUT };
 
 function SystemLine({ message }: { message: ChatMessage }) {
   return (
     <div
       data-msgid={message.id}
-      className={clsx("selectable text-[12px] break-words", message.kind === "client" && CLIENT_FACE)}
+      className={clsx("selectable text-[12px] break-words", FACE[message.kind])}
       style={{
         maxWidth: "var(--measure)",
         color: message.kind === "server" ? "var(--text-faint)" : "var(--text-muted)",

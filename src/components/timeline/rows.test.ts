@@ -138,12 +138,23 @@ describe("buildRows system runs", () => {
     expect(rows[1]).toMatchObject({ id: "s:a" });
   });
 
-  it("runs past the minute a block would end on", () => {
+  it("ends on the minute, like a block, so no row grows without bound", () => {
     const rows = buildRows(
       [at(0, { id: "a", kind: "join" }), at(4 * BUCKET_MS, { id: "b", kind: "quit" })],
       null,
     );
-    expect(rows.filter((r) => r.kind === "system")).toHaveLength(1);
+    expect(rows.filter((r) => r.kind === "system").map((r) => r.messages.map((m) => m.id))).toEqual(
+      [["a"], ["b"]],
+    );
+  });
+
+  it("keeps a console's steady output out of one ever-growing row", () => {
+    // A server console holds nothing but system messages, so before the minute
+    // bounded them the whole session was a single row.
+    const lines = Array.from({ length: 4 }, (_, i) =>
+      at(i * BUCKET_MS, { id: `l${i}`, kind: "server", text: `line ${i}` }),
+    );
+    expect(buildRows(lines, null).filter((r) => r.kind === "system")).toHaveLength(4);
   });
 
   it("digests presence but never an access change", () => {

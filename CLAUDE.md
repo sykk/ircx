@@ -20,6 +20,11 @@ the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts
 built: the layout tree, the panel that follows focus, and the pinned and
 embedded modes.
 
+`docs/measurements.md` holds every figure this project claims, with the method
+behind it. The spec justifies the stack on startup, memory and size, so those
+claims live in one place and say what they exclude. Do not cite a number from a
+PR description; if it is load-bearing, put it there.
+
 `docs/manual-verification.md` lists what no test covers — SASL against a real
 account, and the gaps the live Libera runs left open. Add to it rather than
 letting an unverified path pass for a verified one.

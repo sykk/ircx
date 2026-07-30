@@ -41,6 +41,7 @@ export function SidebarNetworks() {
   const active = useActiveTarget();
   const setActive = useAppStore((s) => s.setActive);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
+  const openSetup = useAppStore((s) => s.openSetup);
 
   // The store's list selectors build a fresh array per call, which React's
   // useSyncExternalStore treats as a changed snapshot; deriving here keeps the
@@ -176,7 +177,19 @@ export function SidebarNetworks() {
       aria-label="Networks"
       className="flex h-full min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
     >
-      <SectionLabel className="pt-3">Networks</SectionLabel>
+      <div className="flex items-center pt-3 pr-1.5">
+        <SectionLabel>Networks</SectionLabel>
+        <span className="flex-1" />
+        <button
+          type="button"
+          aria-label="Add a network"
+          title="Add a network"
+          onClick={() => openSetup(null)}
+          className="rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+        >
+          <Icon name="plus" size={12} />
+        </button>
+      </div>
 
       {rows.length === 0 ? (
         <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">

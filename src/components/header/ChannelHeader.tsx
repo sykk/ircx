@@ -2,18 +2,20 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import { useChannelForView } from "@/store/selectors";
+import { useChannelForView, useNetwork } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { MembersIcon, OverflowIcon, SearchIcon } from "./icons";
 
 export function ChannelHeader({ view }: { view: ViewId | null }) {
   const channel = useChannelForView(view);
+  const network = useNetwork(channel?.network);
   // The channel name carries the focus indicator, so an unfocused pane reads a
   // step quieter. With one pane there is nothing to tell apart.
   const focused = useAppStore((s) => s.viewOrder.length < 2 || s.activeViewId === view);
   const drawerOpen = useAppStore((s) => s.drawerOpen);
   const toggleDrawer = useAppStore((s) => s.toggleDrawer);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
+  const openSetup = useAppStore((s) => s.openSetup);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -128,20 +130,36 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
                   )}
                 </form>
               ) : (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => setInviting(true)}
-                  className="w-full rounded-[var(--radius-sm)] px-2 py-1 text-left text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                >
-                  Invite
-                </button>
+                <>
+                  <MenuItem onClick={() => setInviting(true)}>Invite</MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      closeMenu();
+                      openSetup(channel.network);
+                    }}
+                  >
+                    {network ? `${network.name} settings` : "Network settings"}
+                  </MenuItem>
+                </>
               )}
             </div>
           )}
         </div>
       </div>
     </header>
+  );
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="w-full rounded-[var(--radius-sm)] px-2 py-1 text-left text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+    >
+      {children}
+    </button>
   );
 }
 

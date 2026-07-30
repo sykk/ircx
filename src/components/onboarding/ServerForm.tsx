@@ -43,6 +43,9 @@ export function ServerForm({
   error,
 }: Props) {
   const [submitted, setSubmitted] = useState(false);
+  /** An id means the network is already saved, so this is its settings rather
+   * than the last step of adding it (#45). */
+  const editing = draft.id !== null;
   const problems = draftProblems(draft);
   const shown = (field: keyof typeof problems, typed: string) =>
     submitted || typed.length > 0 ? (problems[field] ?? null) : null;
@@ -58,12 +61,18 @@ export function ServerForm({
     <form onSubmit={submit} className="flex flex-col gap-5">
       <header className="flex flex-col gap-1">
         <h1 className="text-[17px] font-medium text-[var(--text-primary)]">
-          {advanced ? "Advanced setup" : "Connect to an IRC server"}
+          {!advanced
+            ? "Connect to an IRC server"
+            : editing
+              ? "Network settings"
+              : "Advanced setup"}
         </h1>
         <p className="text-[var(--text-secondary)]">
-          {advanced
-            ? "Every field ircx stores for a network."
-            : "The address and a nickname are enough. TLS and reconnect are already on."}
+          {!advanced
+            ? "The address and a nickname are enough. TLS and reconnect are already on."
+            : editing
+              ? "Every field ircx stores for this network."
+              : "Every field ircx stores for a network."}
         </p>
       </header>
 

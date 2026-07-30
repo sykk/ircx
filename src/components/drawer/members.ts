@@ -89,11 +89,3 @@ export function actionsFor(self: Member | undefined): MemberActions {
   const rank = rankOf(self);
   return { op: rank >= 3, voice: rank >= 2, kick: rank >= 2, ban: rank >= 3 };
 }
-
-const NICK_COLOUR_COUNT = 10;
-
-export function nickColour(nick: string): string {
-  let hash = 0;
-  for (const char of nick.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return `var(--nick-${(hash % NICK_COLOUR_COUNT) + 1})`;
-}

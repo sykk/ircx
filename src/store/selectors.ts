@@ -49,6 +49,12 @@ export function useActiveTarget(): ActiveTarget | null {
   );
 }
 
+/** Which pane the context panel is showing: the one it is attached to, or
+ * whatever has focus. */
+export function useContextViewId(): ViewId | null {
+  return useAppStore((s) => (s.contextMode === "follow" ? s.activeViewId : s.contextPane));
+}
+
 export function useView(id: ViewId | null | undefined): ChatView | undefined {
   return useAppStore((s) => (id ? s.views[id] : undefined));
 }

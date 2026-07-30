@@ -6,6 +6,7 @@ import type {
   ActiveTarget,
   AppState,
   ChatView,
+  ContextMode,
   SplitDirection,
   TimelineState,
   ViewId,
@@ -49,8 +50,15 @@ export interface AppActions {
   focusView: (view: ViewId) => void;
 
   toggleDrawer: (open?: boolean) => void;
+  /** Moves the panel between the three modes, attaching it to whichever pane it
+   * is already showing. */
+  setContextMode: (mode: ContextMode) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
+  /** Opens the network setup form on an existing network, or on a new one for
+   * a null id. */
+  openSetup: (network: string | null) => void;
+  closeSetup: () => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
 }
@@ -70,8 +78,11 @@ const initialState: AppState = {
   layout: null,
   recent: [],
   drawerOpen: false,
+  contextMode: "follow",
+  contextPane: null,
   paletteOpen: false,
   searchOpen: false,
+  setup: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
 };
@@ -150,6 +161,10 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
 
       const { [view]: _closed, ...views } = s.views;
       const at = s.viewOrder.indexOf(view);
+      // A panel pinned to the pane that just closed would have nothing to point
+      // at and no header left to switch modes from, so it goes back to
+      // following focus.
+      const stranded = s.contextPane === view;
       return {
         layout,
         views,
@@ -158,6 +173,8 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
           s.activeViewId === view
             ? (s.viewOrder[at + 1] ?? s.viewOrder[at - 1] ?? null)
             : s.activeViewId,
+        contextMode: stranded ? "follow" : s.contextMode,
+        contextPane: stranded ? null : s.contextPane,
       };
     }),
 
@@ -198,8 +215,23 @@ export const useAppStore = create<AppState & AppActions>((set) => ({
     }),
 
   toggleDrawer: (open) => set((s) => ({ drawerOpen: open ?? !s.drawerOpen })),
+
+  setContextMode: (mode) =>
+    set((s) => ({
+      contextMode: mode,
+      contextPane:
+        mode === "follow"
+          ? null
+          : s.contextMode === "follow"
+            ? s.activeViewId
+            : s.contextPane,
+    })),
+
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
   toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),
+
+  openSetup: (network) => set({ setup: { network } }),
+  closeSetup: () => set({ setup: null }),
 
   toggleNetworkCollapsed: (network) =>
     set((s) => ({

@@ -101,8 +101,31 @@ What is left:
     and `ReplyQuote` draws from it, so on Libera that component cannot render.
     It also surfaced #112: ircx never *sends* `+reply` on a message at all, so
     the reply path has never worked end to end anywhere.
-  - **Another network.** Nothing has tried a server whose client-tag policy is
-    more permissive, which is what would show the ircx side is correct.
+  - **Another network settled it, and the client's side is correct.** Run
+    against a local `ergo` on 2026-07-30 — the first time the path has worked
+    end to end anywhere:
+
+    ```text
+    >> @label=ircx-1 PRIVMSG #test test
+    << @msgid=viupz9sxm6dubaqnxd3sf66fva;label=ircx-1 … PRIVMSG #test :test
+    >> @+reply=viupz9sxm6dubaqnxd3sf66fva;+draft/react=👍 TAGMSG #test
+    << @msgid=…;+reply=viupz9sxm6dubaqnxd3sf66fva;+draft/react=👍 … TAGMSG #test
+    ```
+
+    That answers both questions this entry was written to ask. A server does
+    relay a `TAGMSG` carrying the tag, and the `msgid` a `+reply` names survives
+    the relay byte for byte. `+draft/unreact` round-trips too, so taking one
+    back works, and the `label` echo confirms `labeled-response` on the same
+    line.
+
+    Ergo relays `+draft/react`, `+reply`, `+typing` and even an invented `+zzz`;
+    Libera relays only `+typing`. That is the difference and the whole of it.
+
+    Rebuilding it needs a server that relays client tags. `ergo` runs from a
+    single release binary on loopback once the `:6697` listener is removed from
+    its `default.yaml`, and a short socket script can probe the four tags with
+    ircx not involved at all — worth doing rather than assuming, if this is ever
+    in question again.
   - **A second client rendering one**, which needs both a server that relays and
     a client that draws it. IRCCloud does not implement the tag; the entry here
     used to say it did, and that was wrong.

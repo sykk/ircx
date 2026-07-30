@@ -219,7 +219,7 @@ export function PrimaryButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="h-8 rounded-[var(--radius-sm)] bg-[var(--accent)] px-3 text-[12px] font-medium text-[var(--text-inverse)] hover:bg-[var(--accent-hover)] disabled:opacity-50"
+      className="h-8 rounded-[var(--radius-sm)] bg-[var(--accent)] px-3 text-[12px] font-medium text-[var(--text-inverse)] hover:bg-[var(--accent-hover)] disabled:opacity-[var(--disabled-opacity)]"
     >
       {children}
     </button>

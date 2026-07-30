@@ -216,7 +216,7 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
           onClick={() => void send()}
           disabled={value.trim() === ""}
           aria-label="Send"
-          className="shrink-0 pb-0.5 text-[14px] disabled:opacity-40"
+          className="shrink-0 pb-0.5 text-[14px] disabled:opacity-[var(--disabled-opacity)]"
           style={{ color: "var(--accent)" }}
         >
           ➤

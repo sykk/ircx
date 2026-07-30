@@ -6,8 +6,15 @@
  * it is light or dark. The built-in dark and light themes are ordinary themes
  * loaded through `src/lib/theme`, not special cases.
  *
+ * Some of them are not colours. A ratio tuned against one palette is wrong
+ * against the other: fading a control to 40% reads as quiet on a dark surface
+ * and as empty on a light one, so the disabled fraction is a token. So are the
+ * focus ring and scrollbar dimensions, which a high-contrast theme exists to
+ * change and which no colour can stand in for.
+ *
  * Components must not hardcode a value a theme needs to reach. A hardcoded
- * colour, border, shadow or scrim is a hole a theme cannot patch.
+ * colour, border, shadow, scrim, opacity or focus-ring dimension is a hole a
+ * theme cannot patch.
  *
  * The full list of required properties is `REQUIRED_TOKENS` in
  * `src/lib/theme/tokens.ts`, which is derived from the dark theme's stylesheet

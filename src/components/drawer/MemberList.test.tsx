@@ -31,6 +31,13 @@ function memberButtons() {
   return screen.queryAllByRole("button");
 }
 
+/** A row's presence dot, which is its only aria-hidden child. */
+function dot(nick: RegExp): HTMLElement {
+  const found = screen.getByRole("button", { name: nick }).querySelector("[aria-hidden]");
+  if (!found) throw new Error(`no presence dot on the ${String(nick)} row`);
+  return found as HTMLElement;
+}
+
 /** One group of `count` unprivileged nicks, so the truncation row lands in a
  * predictable place. */
 function plain(count: number) {
@@ -76,6 +83,17 @@ describe("MemberList", () => {
     const wren = screen.getByRole("button", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
     expect(within(wren).getByText("wren").className).toContain("--text-muted");
+  });
+
+  it("hollows the presence dot for an away member rather than fading it", () => {
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
+
+    expect(dot(/wren/).className).toContain("border-[1.5px]");
+    expect(dot(/phrack/).className).not.toContain("border-");
+    for (const nick of [/wren/, /phrack/]) {
+      expect(dot(nick).className).not.toContain("opacity");
+    }
   });
 
   it("falls back to a bare away label when the server gave no reason", () => {

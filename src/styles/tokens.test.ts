@@ -16,6 +16,11 @@ const COOL_MIN = 180;
 const COOL_MAX = 350;
 const AA_BODY = 4.5;
 
+/** A disabled control is exempt from the AA floor, but not from being seen.
+ * Below this the accent fades into its own surface and the control reads as
+ * missing rather than as present and unavailable. */
+const DISABLED_FLOOR = 2.5;
+
 /** The surfaces a nickname can be drawn on. Contrast is checked against all of
  * them, so a hue only has to clear the worst one. */
 const SURFACES = [
@@ -43,6 +48,12 @@ function readVars(css: string, prefix: string): Record<string, string> {
   return out;
 }
 
+function readNumber(css: string, name: string): number {
+  const match = new RegExp(`--${name}:\\s*([0-9.]+)\\s*;`).exec(css);
+  if (!match) throw new Error(`missing --${name}`);
+  return Number(match[1]);
+}
+
 function channels(hex: string): [number, number, number] {
   const n = hex.slice(1);
   return [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255) as [
@@ -67,6 +78,17 @@ function luminance(hex: string): number {
     c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
   ) as [number, number, number];
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The colour the compositor ends up painting for `hex` drawn at `alpha` over
+ * `over` — an opacity is only ever seen through the surface behind it. */
+function flatten(hex: string, over: string, alpha: number): string {
+  const front = channels(hex);
+  const back = channels(over);
+  return `#${front
+    .map((c, i) => Math.round((c * alpha + back[i]! * (1 - alpha)) * 255))
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 function contrast(a: string, b: string): number {
@@ -116,5 +138,27 @@ describe.each(THEMES)("$id nick palette", ({ css }) => {
         expect(Math.min(apart, 360 - apart), `--${name} vs ${status}`).toBeGreaterThan(20);
       }
     }
+  });
+});
+
+// The disabled fraction is a token because a ratio tuned against one palette is
+// wrong against the other: 0.4 read as quiet on the dark surface and as empty
+// on the light one. The rule that produced each theme's value is the floor
+// below, not a preference, so a theme that retunes it has something to check
+// against.
+describe.each(THEMES)("$id disabled controls", ({ css }) => {
+  const all = readVars(css, "");
+  const opacity = readNumber(css, "disabled-opacity");
+
+  /** Where a disabled control actually sits: the onboarding button on the base
+   * surface, the composer's send affordance on the raised one. */
+  it.each(["surface-base", "surface-raised"])("stay visible on --%s", (surface) => {
+    const accent = all["accent"];
+    const behind = all[surface];
+    if (!accent || !behind) throw new Error(`missing --accent or --${surface}`);
+
+    expect(contrast(flatten(accent, behind, opacity), behind)).toBeGreaterThanOrEqual(
+      DISABLED_FLOOR,
+    );
   });
 });

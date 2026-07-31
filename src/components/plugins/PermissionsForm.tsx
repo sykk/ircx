@@ -50,13 +50,20 @@ export function PermissionsForm({
 }) {
   const [draft, setDraft] = useState<PluginGrants>(plugin.grants);
   const asked = plugin.requests;
+  /* #163. Held here rather than inside the input, so saving can see it. A name
+   * typed and not added reached nothing, and the grant saved as whatever the
+   * manifest had asked for — `*` for a plugin that asked for every
+   * conversation. The user had narrowed the scope and the client widened it
+   * back without saying so. */
+  const [pending, setPending] = useState("");
+  const unresolved = pending.trim() !== "";
 
   return (
     <form
       className="flex flex-col gap-4 p-6"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!unscoped(draft)) onSave(draft);
+        if (!unscoped(draft) && !unresolved) onSave(draft);
       }}
     >
       <header className="flex flex-col gap-1">
@@ -106,6 +113,8 @@ export function PermissionsForm({
                         ? (channel) => setDraft(toggleChannel(draft, channel))
                         : undefined
                     }
+                    pending={pending}
+                    onPending={setPending}
                   />
                 )}
                 {allowed && scope === "hosts" && (
@@ -131,7 +140,7 @@ export function PermissionsForm({
       )}
 
       <div className="flex gap-2">
-        <PrimaryButton disabled={busy || unscoped(draft)}>Save</PrimaryButton>
+        <PrimaryButton disabled={busy || unscoped(draft) || unresolved}>Save</PrimaryButton>
         <SecondaryButton onClick={onCancel}>Back</SecondaryButton>
       </div>
     </form>
@@ -150,6 +159,8 @@ function Scope({
   nameOf = (value) => value,
   onToggle,
   onName,
+  pending = "",
+  onPending,
 }: {
   legend: string;
   empty: string;
@@ -161,6 +172,8 @@ function Scope({
   /** Given when the manifest asked for every conversation, so the user can
    * hand over one instead of all of them. */
   onName?: ((value: string) => void) | undefined;
+  pending?: string;
+  onPending?: (value: string) => void;
 }) {
   return (
     // Indented past the checkbox it belongs to: 14px of box and the 8px gap.
@@ -180,7 +193,14 @@ function Scope({
               onChange={() => onToggle(value)}
             />
           ))}
-          {onName && <NameOne legend={legend} onName={onName} />}
+          {onName && onPending && (
+            <NameOne
+              legend={legend}
+              onName={onName}
+              typed={pending}
+              onTyped={onPending}
+            />
+          )}
           {chosen.length === 0 && <Note>{missing}</Note>}
         </>
       )}
@@ -196,13 +216,22 @@ function Scope({
  * marking the Add button `type="button"` does nothing about that, because the
  * submission comes from the input rather than from any button.
  */
-function NameOne({ legend, onName }: { legend: string; onName: (value: string) => void }) {
-  const [typed, setTyped] = useState("");
+function NameOne({
+  legend,
+  onName,
+  typed,
+  onTyped,
+}: {
+  legend: string;
+  onName: (value: string) => void;
+  typed: string;
+  onTyped: (value: string) => void;
+}) {
   const add = () => {
     const channel = typed.trim();
     if (channel === "" || channel === EVERY_CONVERSATION) return;
     onName(channel);
-    setTyped("");
+    onTyped("");
   };
 
   return (
@@ -218,9 +247,13 @@ function NameOne({ legend, onName }: { legend: string; onName: (value: string) =
         <TextField
           label="Name one instead"
           value={typed}
-          onChange={setTyped}
+          onChange={onTyped}
           placeholder="#channel or nick"
-          hint={`${legend} you name here are the only ones it reaches.`}
+          hint={
+            typed.trim() === ""
+              ? `${legend} you name here are the only ones it reaches.`
+              : `Add ${typed.trim()} or clear it — it is not granted until you do.`
+          }
         />
       </div>
       <SecondaryButton onClick={add}>Add</SecondaryButton>

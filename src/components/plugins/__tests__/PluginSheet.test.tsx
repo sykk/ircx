@@ -225,6 +225,76 @@ describe("PluginSheet", () => {
       expect((field as HTMLInputElement).value).toBe("");
     });
 
+    /**
+     * #163, found by installing a plugin and granting it one channel. Typing
+     * `#replytest` and pressing Save stored `"channels": ["*"]` — the typed
+     * text never left the input, so the manifest's wildcard stood. The user
+     * had narrowed the scope and the client widened it back in silence.
+     *
+     * This is the consent mechanism, so the rule is that nothing is granted
+     * which was not confirmed, and nothing typed is thrown away.
+     */
+    it("will not save while a typed conversation has not been added", async () => {
+      const eager: InstalledPlugin = {
+        ...GREETER,
+        requests: { ...GREETER.requests, channels: ["*"] },
+      };
+      await open([eager]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+      // What the manifest asked for, and what stood when the typed name was
+      // dropped: a saveable grant on every conversation.
+      fireEvent.click(box("Every conversation"));
+      expect(button("Save").disabled).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Name one instead"), {
+        target: { value: "#replytest" },
+      });
+
+      expect(button("Save").disabled).toBe(true);
+      expect(screen.getByText(/Add #replytest or clear it/)).toBeTruthy();
+      expect(ipcMock.setPluginGrants).not.toHaveBeenCalled();
+    });
+
+    it("saves once the typed conversation is added", async () => {
+      const eager: InstalledPlugin = {
+        ...GREETER,
+        requests: { ...GREETER.requests, channels: ["*"] },
+      };
+      await open([eager]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+
+      fireEvent.change(screen.getByLabelText("Name one instead"), {
+        target: { value: "#replytest" },
+      });
+      fireEvent.click(button("Add"));
+
+      expect(button("Save").disabled).toBe(false);
+      await save();
+      expect(ipcMock.setPluginGrants).toHaveBeenCalledWith(
+        "greeter",
+        expect.objectContaining({ channels: ["#replytest"] }),
+      );
+    });
+
+    it("saves again once the typed conversation is cleared", async () => {
+      const eager: InstalledPlugin = {
+        ...GREETER,
+        requests: { ...GREETER.requests, channels: ["*"] },
+      };
+      await open([eager]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+      fireEvent.click(box("Every conversation"));
+
+      const field = screen.getByLabelText("Name one instead");
+      fireEvent.change(field, { target: { value: "#replytest" } });
+      fireEvent.change(field, { target: { value: "  " } });
+
+      expect(button("Save").disabled).toBe(false);
+    });
+
     it("does not offer to name one when the manifest listed the channels itself", async () => {
       const listed: InstalledPlugin = {
         ...GREETER,

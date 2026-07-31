@@ -72,6 +72,7 @@ pub fn run() {
             commands::get_upload_provider,
             commands::save_upload_provider,
             commands::remove_upload_provider,
+            commands::describe_uploads,
             commands::upload_file,
             commands::remove_network,
             commands::connect_network,

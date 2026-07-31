@@ -8,6 +8,7 @@ import type {
   Attachment,
   ChatMessage,
   CommandOutcome,
+  FileToUpload,
   HistoryRequest,
   InstalledPlugin,
   IrcxEvent,
@@ -66,6 +67,7 @@ export const ipc = {
   saveUploadProvider: (provider: UploadProvider) =>
     invoke<void>("save_upload_provider", { provider }),
   removeUploadProvider: () => invoke<void>("remove_upload_provider"),
+  describeUploads: (paths: string[]) => invoke<FileToUpload[]>("describe_uploads", { paths }),
   uploadFile: (path: string) => invoke<string>("upload_file", { path }),
 
   connectNetwork: (network: string) => invoke<void>("connect_network", { network }),

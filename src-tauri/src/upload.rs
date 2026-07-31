@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use ircx_ipc::{UploadMethod, UploadProvider};
+use ircx_ipc::{FileToUpload, UploadMethod, UploadProvider};
 use ircx_net::http::{upload, UploadMethod as NetMethod, UploadPolicy};
 
 use crate::state::App;
@@ -96,6 +96,34 @@ fn net_method(method: UploadMethod) -> NetMethod {
         UploadMethod::Put => NetMethod::Put,
         UploadMethod::Post => NetMethod::Post,
     }
+}
+
+/// What the confirmation says about each file, before anything is sent.
+///
+/// Answers for every path rather than failing on the first: a drop of four
+/// files where one has gone is three uploads and one line saying so.
+pub async fn describe(paths: &[String]) -> Vec<FileToUpload> {
+    let mut described = Vec::with_capacity(paths.len());
+    for path in paths {
+        let file = Path::new(path);
+        let name = file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(path.as_str())
+            .to_owned();
+        let (bytes, unreadable) = match tokio::fs::metadata(file).await {
+            Ok(meta) => (meta.len(), None),
+            Err(error) => (0, Some(error.to_string())),
+        };
+        described.push(FileToUpload {
+            path: path.clone(),
+            name,
+            bytes: u32::try_from(bytes).unwrap_or(u32::MAX),
+            too_large: bytes > MAX_BYTES,
+            unreadable,
+        });
+    }
+    described
 }
 
 /// Reads `path` and sends it, returning the link.

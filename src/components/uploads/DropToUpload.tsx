@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import { ipc, onFileDrop } from "@/lib/ipc";
 import { useActiveTarget } from "@/store/selectors";
+import type { FileToUpload } from "@/types";
 
 /**
  * Dropping a file on the window uploads it to the conversation in focus.
@@ -18,7 +19,7 @@ import { useActiveTarget } from "@/store/selectors";
 export function DropToUpload() {
   const active = useActiveTarget();
   const [hovering, setHovering] = useState(false);
-  const [pending, setPending] = useState<string[] | null>(null);
+  const [pending, setPending] = useState<FileToUpload[] | null>(null);
   const [host, setHost] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,15 @@ export function DropToUpload() {
       setHovering(false);
       if (event.kind === "drop" && event.paths.length > 0) {
         setError(null);
-        setPending(event.paths);
+        // Described before the confirmation is drawn, so the size and the
+        // refusal are things the user reads rather than discovers on clicking.
+        void ipc.describeUploads(event.paths).then(
+          (files) => setPending(files),
+          (reason: unknown) => {
+            setPending(event.paths.map(unreadable));
+            setError(reasonOr(reason, "The files could not be read."));
+          },
+        );
       }
     });
     return () => void stop.then((off) => off());
@@ -66,17 +75,13 @@ export function DropToUpload() {
     try {
       // One at a time, in the order they were dropped, so the links arrive in
       // the conversation in the order the user sees them listed.
-      for (const path of pending) {
-        const link = await ipc.uploadFile(path);
+      for (const file of pending) {
+        const link = await ipc.uploadFile(file.path);
         await ipc.submitInput(active.network, active.target, link);
       }
       setPending(null);
     } catch (reason) {
-      setError(
-        typeof reason === "string" && reason.trim() !== ""
-          ? reason
-          : "The file could not be uploaded.",
-      );
+      setError(reasonOr(reason, "The file could not be uploaded."));
     }
     setBusy(false);
   }
@@ -108,9 +113,21 @@ export function DropToUpload() {
               {pending.length === 1 ? "Upload this file?" : `Upload ${pending.length} files?`}
             </h2>
             <ul className="flex flex-col gap-1 text-[13px]">
-              {pending.map((path) => (
-                <li key={path} className="truncate font-[family-name:var(--font-mono)]">
-                  {nameOf(path)}
+              {pending.map((file) => (
+                <li key={file.path} className="flex items-baseline justify-between gap-3">
+                  <span className="truncate font-[family-name:var(--font-mono)]">{file.name}</span>
+                  <span
+                    className="shrink-0 text-[12px] tabular-nums"
+                    style={{
+                      color: refused(file) ? "var(--danger)" : "var(--text-faint)",
+                    }}
+                  >
+                    {file.unreadable !== null
+                      ? "cannot be read"
+                      : file.tooLarge
+                        ? "too large"
+                        : size(file.bytes)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -132,7 +149,10 @@ export function DropToUpload() {
             )}
 
             <div className="flex items-center gap-2">
-              <PrimaryButton disabled={busy || host === null} onClick={() => void send()}>
+              <PrimaryButton
+                disabled={busy || host === null || pending.some(refused)}
+                onClick={() => void send()}
+              >
                 {busy ? "Uploading…" : "Upload"}
               </PrimaryButton>
               <SecondaryButton disabled={busy} onClick={() => setPending(null)}>
@@ -146,12 +166,36 @@ export function DropToUpload() {
   );
 }
 
-function nameOf(path: string): string {
-  return path.split(/[/\\]/).pop() ?? path;
+/** A file this client will not send. Offering the button anyway would make the
+ * refusal something the user finds out after agreeing to it. */
+function refused(file: FileToUpload): boolean {
+  return file.tooLarge || file.unreadable !== null;
+}
+
+function unreadable(path: string): FileToUpload {
+  return {
+    path,
+    name: path.split(/[/\\]/).pop() ?? path,
+    bytes: 0,
+    tooLarge: false,
+    unreadable: "unknown",
+  };
+}
+
+/** Rounded to something a person reads, not to something that is exact. */
+function size(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 /** The host the file is going to, which is the part of an endpoint the user
  * needs to recognise. A malformed one is shown whole rather than hidden. */
+function reasonOr(reason: unknown, fallback: string): string {
+  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
+}
+
 function hostOf(endpoint: string): string {
   try {
     return new URL(endpoint).host;

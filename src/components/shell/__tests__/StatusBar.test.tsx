@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import type { ConnectionStatus, InstalledPlugin } from "@/types";
@@ -101,19 +101,74 @@ describe("StatusBar", () => {
     expect(screen.getByLabelText("Capabilities: No capabilities negotiated")).toBeTruthy();
   });
 
-  it("names the SASL account when authentication succeeded", () => {
-    mount({ state: "connected" }, { sasl: { state: "authenticated", detail: { account: "sable" } } });
-    expect(screen.getByLabelText("Authenticated as sable")).toBeTruthy();
-  });
+  /**
+   * The indicator read `SASL` in every state, so the four cases below were all
+   * the same word with a differently coloured dot. Each asserts the visible
+   * text as well as the label it carries for a screen reader: the tooltip was
+   * always right, and the tooltip is not what somebody glancing at the bar
+   * reads.
+   */
+  describe("whether you are signed in", () => {
+    it("says so, and as whom", () => {
+      const bar = mount(
+        { state: "connected" },
+        { sasl: { state: "authenticated", detail: { account: "sable" } } },
+      );
+      expect(bar.textContent).toContain("signed in as sable");
+      expect(screen.getByLabelText("Authenticated as sable")).toBeTruthy();
+    });
 
-  it("reports SASL as unconfigured rather than implying it is off by choice of the server", () => {
-    mount({ state: "connected" });
-    expect(screen.getByLabelText("SASL is not configured")).toBeTruthy();
-  });
+    /** The case that started this: a mechanism the server never offered leaves
+     * a connection that succeeded and an account that is not signed in. */
+    it("says you are not, when it failed", () => {
+      const bar = mount(
+        { state: "connected" },
+        {
+          sasl: {
+            state: "failed",
+            detail: { message: "localhost does not accept SASL SCRAM-SHA-512" },
+          },
+        },
+      );
+      expect(bar.textContent).toContain("not signed in");
+      expect(
+        screen.getByLabelText(
+          "SASL failed: localhost does not accept SASL SCRAM-SHA-512",
+        ),
+      ).toBeTruthy();
+    });
 
-  it("carries the SASL failure reason", () => {
-    mount({ state: "connected" }, { sasl: { state: "failed", detail: { message: "bad password" } } });
-    expect(screen.getByLabelText("SASL failed: bad password")).toBeTruthy();
+    it("says it is still trying, while it is", () => {
+      const bar = mount({ state: "connected" }, { sasl: { state: "inProgress" } });
+      expect(bar.textContent).toContain("signing in");
+      expect(screen.getByLabelText("Authenticating")).toBeTruthy();
+    });
+
+    /** Nothing failed and nothing is signed in. Reporting an absence the user
+     * chose as a fault would make the bar cry wolf on every unauthenticated
+     * network. */
+    it("reports no account rather than a failure when none was configured", () => {
+      const bar = mount({ state: "connected" });
+      expect(bar.textContent).toContain("no account");
+      expect(bar.textContent).not.toContain("not signed in");
+      expect(screen.getByLabelText("SASL is not configured")).toBeTruthy();
+    });
+
+    /** The four states have to be four things a reader can tell apart. */
+    it("says something different in each state", () => {
+      const seen = new Set<string>();
+      for (const sasl of [
+        { state: "authenticated", detail: { account: "sable" } },
+        { state: "failed", detail: { message: "bad password" } },
+        { state: "inProgress" },
+        { state: "notConfigured" },
+      ] as const) {
+        const bar = mount({ state: "connected" }, { sasl });
+        seen.add(bar.textContent ?? "");
+        cleanup();
+      }
+      expect(seen.size).toBe(4);
+    });
   });
 
   describe("plugins", () => {

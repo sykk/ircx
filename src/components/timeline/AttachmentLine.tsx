@@ -88,7 +88,11 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
             page loaded over the client has no way back. */}
         <button
           type="button"
-          onClick={() => void openExternal(attachment.url).catch(() => undefined)}
+          onClick={() => {
+        void openExternal(attachment.url).catch((reason: unknown) => {
+          console.warn("ircx could not open", attachment.url, reason);
+        });
+      }}
           title={attachment.url}
           className="truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2"
           style={{ color: "var(--text-secondary)" }}

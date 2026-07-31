@@ -185,6 +185,33 @@ describe("the IPC contract", () => {
   });
 
   /**
+   * A Tauri plugin command is allowed by one permission and *scoped* by
+   * another. The window had `opener:allow-open-url` and not
+   * `opener:allow-default-urls`, so calling it was permitted and every
+   * `https://` URL was refused by scope — which is why no link in this client
+   * had ever opened.
+   *
+   * Narrow on purpose. A general check would have to read every plugin's ACL
+   * manifest; this asserts the one pairing that has already been wrong.
+   */
+  it("grants the scope for the opener, not only the command", () => {
+    const capability = readFileSync(
+      resolve(process.cwd(), "src-tauri", "capabilities", "default.json"),
+      "utf8",
+    );
+    const granted = new Set<string>(JSON.parse(capability).permissions);
+
+    const window = applicationSources()
+      .concat(IPC_FILE)
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
+    if (!/\bopenUrl\b/.test(window)) return;
+    expect(granted.has("opener:allow-open-url")).toBe(true);
+    expect(granted.has("opener:allow-default-urls")).toBe(true);
+  });
+
+  /**
    * A field is the third shape this has taken. `part_channel` was a command
    * nothing invoked, `opener:allow-open-url` was a permission nothing called,
    * and `Attachment.mime` was a field nothing read — which is why every URL in

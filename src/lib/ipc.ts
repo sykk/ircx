@@ -113,6 +113,11 @@ export const ipc = {
  * loaded over it has no way back. `target="_blank"` is not that guarantee —
  * what a webview does with it is the webview's business — so the destination
  * leaves through the opener, which is a different process by construction.
+ *
+ * The opener refuses a URL its capability does not cover, and `openUrl` says so
+ * by throwing. Callers report it rather than discarding it: `allow-open-url`
+ * without `allow-default-urls` denies every `https://` link, and a swallowed
+ * rejection is how that went unnoticed until somebody clicked one.
  */
 export async function openExternal(url: string): Promise<void> {
   await openUrl(url);

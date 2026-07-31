@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
 import { runConnectionCommand } from "@/components/composer/commands";
-import { applyDensity, applyTheme, storeDensity, storeThemeId } from "@/lib/theme";
+import { applyTheme, selectDensity, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import {
@@ -160,6 +160,9 @@ function Palette() {
       case "uploads":
         store.toggleUpload(true);
         break;
+      case "appearance":
+        store.toggleAppearance(true);
+        break;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;
@@ -167,13 +170,14 @@ function Palette() {
         attempt(ipc.disconnectNetwork(action.network));
         return;
       case "theme":
-        store.setThemeId(action.id);
-        storeThemeId(action.id);
+        // The repaint `selectTheme` does is one the preview effect has already
+        // done, so it is not what this is for: choosing a theme anywhere in the
+        // app has to leave the same three things set, and two call sites doing
+        // it by hand is how they come apart.
+        selectTheme(action.id);
         break;
       case "density":
-        store.setDensity(action.id);
-        applyDensity(action.id);
-        storeDensity(action.id);
+        selectDensity(action.id);
         break;
       case "themeProblem":
         setError(`${action.id}: ${action.problems.join(" ")}`);

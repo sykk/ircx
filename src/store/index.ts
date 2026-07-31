@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import { DEFAULT_DENSITY, FALLBACK_THEME_ID, type Catalogue, type DensityId } from "@/lib/theme";
+import {
+  DEFAULT_DENSITY,
+  FALLBACK_THEME_ID,
+  type Catalogue,
+  type DensityId,
+  type Overrides,
+} from "@/lib/theme";
 import {
   SERVER_TARGET,
   type ChatMessage,
@@ -83,6 +89,7 @@ export interface AppActions {
   closeSetup: () => void;
   togglePlugins: (open?: boolean) => void;
   toggleUpload: (open?: boolean) => void;
+  toggleAppearance: (open?: boolean) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
@@ -99,6 +106,10 @@ export interface AppActions {
   setThemeCatalogue: (catalogue: Catalogue) => void;
   setThemeId: (id: string) => void;
   setDensity: (id: DensityId) => void;
+  /** The whole record rather than one token, because an edit is committed in
+   * three places — the window, localStorage and here — and the three have to
+   * be given the same thing. */
+  setOverrides: (next: Overrides) => void;
 }
 
 const initialState: AppState = {
@@ -123,6 +134,7 @@ const initialState: AppState = {
   setup: null,
   pluginsOpen: false,
   uploadOpen: false,
+  appearanceOpen: false,
   channelsOpen: null,
   plugins: [],
   pluginsUnavailable: null,
@@ -132,6 +144,7 @@ const initialState: AppState = {
   brokenThemes: [],
   themeId: FALLBACK_THEME_ID,
   density: DEFAULT_DENSITY,
+  overrides: {},
 };
 
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
@@ -321,6 +334,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
   toggleUpload: (open) => set((s) => ({ uploadOpen: open ?? !s.uploadOpen })),
+  toggleAppearance: (open) => set((s) => ({ appearanceOpen: open ?? !s.appearanceOpen })),
   showChannels: (network) => set({ channelsOpen: network }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
@@ -353,6 +367,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
   setThemeId: (id) => set({ themeId: id }),
   setDensity: (id) => set({ density: id }),
+  setOverrides: (next) => set({ overrides: next }),
 }));
 
 /**

@@ -1,4 +1,4 @@
-import type { BrokenTheme, DensityId, Theme } from "@/lib/theme";
+import type { BrokenTheme, DensityId, Overrides, Theme } from "@/lib/theme";
 import type {
   Channel,
   ChannelListing,
@@ -144,4 +144,12 @@ export interface AppState {
   /** The timeline's vertical rhythm. Separate from the theme so changing how
    * tightly the conversation is set does not change its palette. */
   density: DensityId;
+  /** What the person changed about each theme, keyed by theme id. Held for
+   * every theme rather than only the one in force, so switching away and back
+   * returns to the palette they left. */
+  overrides: Overrides;
+  /** The appearance sheet. Listed beside what it changes rather than with the
+   * other sheets, because the theme, the density and the overrides are all
+   * edited in that one place. */
+  appearanceOpen: boolean;
 }

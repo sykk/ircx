@@ -29,6 +29,7 @@ export type CandidateAction =
   | { type: "openSetup"; network: string }
   | { type: "plugins" }
   | { type: "uploads" }
+  | { type: "appearance" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** A theme that failed to load. Running it prints why, which is the only
@@ -296,5 +297,10 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Upload provider",
     detail: "Where files go before their link is sent",
     action: { type: "uploads" },
+  },
+  {
+    label: "Appearance",
+    detail: "Change the theme, density, or any colour in them",
+    action: { type: "appearance" },
   },
 ];

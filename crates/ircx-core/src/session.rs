@@ -372,6 +372,21 @@ impl SessionState {
         self.drain()
     }
 
+    /// Says that a plugin stopped, in the console and once.
+    ///
+    /// A hook is dropped for the life of the connection, so the console note is
+    /// what the user has left to find hours later: a plugin that has been
+    /// switched off otherwise reads as a plugin with nothing to say.
+    pub fn plugin_stopped(&mut self, text: String, detail: Option<String>) -> Vec<Action> {
+        self.notice(
+            Severity::Warning,
+            text.clone(),
+            detail.as_deref().unwrap_or_default(),
+        );
+        self.note(SERVER_TARGET, MessageKind::Client, text);
+        self.drain()
+    }
+
     pub fn mark_read(&mut self, target: &str) -> Vec<Action> {
         let key = self.fold(target);
         if let Some(channel) = self.channels.get_mut(&key) {

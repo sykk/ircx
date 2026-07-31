@@ -330,15 +330,23 @@ departure from it, and neither is the ninth below.
 
 | what it does | what happens |
 |---|---|
-| throws | no annotation for that batch, reported once against the plugin's name |
-| throws every time | the annotator is dropped for the session, after three batches in a row |
+| throws | no annotation for that batch, logged once against the plugin's name |
+| throws every time | the annotator is dropped for the session after three batches in a row, and the server console says so |
 | overruns the deadline | runtime thrown away, as for a command; drawn messages are untouched |
 | returns a promise | refused, because hooks are synchronous |
 
 The second row is the one a command does not need. A command reports its failure
 to the person who typed it, and there is one of those. An annotator that fails on
-every message would report as often as the channel talks, so the first failure is
-the report and the rest are silence.
+every message would report as often as the channel talks, so only two moments
+are said at all: the first failure, which carries what the plugin threw, and the
+drop.
+
+The drop is the one the user is told about, in the server console rather than
+only in a log. A plugin that has been switched off looks from the outside
+exactly like a plugin with nothing to say, and the user installed it expecting
+the first. The sentence names the plugin, what stopped, and the only cure: the
+strikes belong to the connection, so removing the plugin and installing it again
+does not clear them, and a restart does.
 
 ## The notification rule
 
@@ -439,6 +447,11 @@ that list out of the ids it was given, but the bootstrap is a global on the
 plugin's own object and the plugin's top level runs after it, so the check that
 matters is the one on the host side. Without it, a plugin granted one channel
 could raise a message in a channel it was never allowed to read.
+
+A rule that throws is struck and dropped exactly as an annotator is, and the
+console says so in the same words. The two counts are separate: a rule that
+throws must not cost the same plugin its annotator, or a working note is lost to
+a broken decision.
 
 ### What a rule cannot reach
 

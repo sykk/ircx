@@ -113,6 +113,13 @@ impl Harness {
         outcome
     }
 
+    fn plugin_stopped(&mut self, text: &str, detail: Option<&str>) {
+        let actions = self
+            .state
+            .plugin_stopped(text.to_owned(), detail.map(str::to_owned));
+        self.apply(actions);
+    }
+
     fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) {
         let actions = self.state.react(target, message, emoji, active);
         self.apply(actions);
@@ -1519,6 +1526,50 @@ fn what_tls_negotiated_reaches_the_network_tab() {
     assert_eq!(
         plain.messages()[0].text,
         "Connected to irc.libera.chat without TLS"
+    );
+}
+
+/// #90. A hook is dropped for the life of the connection, so the moment it
+/// happens is the only moment there is. The notice is gone by the time anyone
+/// wonders why their notes stopped; the console note is what they can still
+/// find, which is why this is said twice and in two ways.
+#[test]
+fn a_plugin_that_stopped_says_so_where_the_network_says_everything_else() {
+    const TEXT: &str = "The units plugin failed 3 times in a row, so ircx stopped asking it to \
+                        annotate messages. Restart ircx to let it try again.";
+
+    let mut session = registered("");
+    session.plugin_stopped(
+        TEXT,
+        Some("TypeError: cannot read property 'text' of undefined"),
+    );
+
+    assert_eq!(
+        session.notices(),
+        vec![(Severity::Warning, TEXT)],
+        "a plugin switched off is a warning, not a failure of the connection"
+    );
+
+    let note = session
+        .messages()
+        .into_iter()
+        .rev()
+        .find(|message| message.kind == MessageKind::Client)
+        .expect("the console keeps what the notice does not");
+    assert_eq!(note.target, "*");
+    assert_eq!(note.text, TEXT);
+
+    let detail = session
+        .events
+        .iter()
+        .find_map(|event| match event {
+            IrcxEvent::Notice { detail, .. } => detail.clone(),
+            _ => None,
+        })
+        .expect("the notice carries what the plugin threw");
+    assert!(
+        detail.contains("TypeError"),
+        "the sentence is for the user and the detail is for whoever wrote the plugin: {detail}"
     );
 }
 

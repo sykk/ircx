@@ -37,6 +37,29 @@ impl Hook {
             Self::Notify => "decide whether a message was worth interrupting you for",
         }
     }
+
+    /// What the host stopped asking it for, in the sentence the user reads.
+    fn asking_for(self) -> &'static str {
+        match self {
+            Self::Annotate => "to annotate messages",
+            Self::Notify => "what is worth interrupting you for",
+        }
+    }
+}
+
+/// What the console says when a hook is dropped. Names the plugin the way the
+/// note beside a message does, so "stopped" and "raised by" say the same word
+/// about the same plugin.
+///
+/// A restart is the only cure, and the sentence says so rather than offering
+/// the one that looks obvious: the strikes belong to this connection, and
+/// removing the plugin and installing it again does not clear them.
+fn stopped_text(hook: Hook, plugin: &str) -> String {
+    format!(
+        "The {plugin} plugin failed {HOOK_STRIKES} times in a row, so ircx stopped asking it {}. \
+         Restart ircx to let it try again.",
+        hook.asking_for()
+    )
 }
 
 type Strikes = Mutex<HashMap<(Hook, String), u32>>;
@@ -53,11 +76,16 @@ fn out(strikes: &Strikes, hook: Hook, plugin: &str) -> u32 {
         .unwrap_or(0)
 }
 
-/// Records a failed batch, and says so once. A broken hook would otherwise
-/// report as often as the channel talks, so the first failure is the report and
-/// the rest are silence — including the one that drops it.
-fn strike(strikes: &Strikes, hook: Hook, plugin: &str, failure: Option<&Failure>) {
-    let Ok(mut held) = strikes.lock() else { return };
+/// Records a failed batch and logs the first one, which is the one carrying the
+/// failure text. Returns whether this strike is the one that dropped the hook.
+///
+/// A broken hook would otherwise report as often as the channel talks, so only
+/// the first failure and the drop are said at all — and the drop is the one the
+/// user is told about, because a plugin that failed once is still working.
+fn strike(strikes: &Strikes, hook: Hook, plugin: &str, failure: Option<&Failure>) -> bool {
+    let Ok(mut held) = strikes.lock() else {
+        return false;
+    };
     let count = held.entry((hook, plugin.to_owned())).or_insert(0);
     *count += 1;
     if *count == 1 {
@@ -67,6 +95,28 @@ fn strike(strikes: &Strikes, hook: Hook, plugin: &str, failure: Option<&Failure>
             None => warn!(%plugin, "the task asking a plugin to {doing} did not finish"),
         }
     }
+    *count == HOOK_STRIKES
+}
+
+/// Tells the session a hook is finished, so it lands in the server console with
+/// the network's other bad news rather than in a log nobody has open.
+///
+/// The text is built here rather than in the session because the session holds
+/// no strikes and does not know a hook from a hook.
+async fn report_stopped(
+    inbox: &mpsc::WeakSender<SessionCommand>,
+    hook: Hook,
+    plugin: &str,
+    failure: Option<String>,
+) {
+    let Some(inbox) = inbox.upgrade() else {
+        return;
+    };
+    let stopped = SessionCommand::PluginStopped {
+        text: stopped_text(hook, plugin),
+        detail: failure,
+    };
+    let _ = inbox.send(stopped).await;
 }
 
 fn strike_cleared(strikes: &Strikes, hook: Hook, plugin: &str) {
@@ -129,6 +179,13 @@ pub enum SessionCommand {
     /// session's, so the rule asks for it rather than keeping its own.
     Raised {
         target: TargetName,
+    },
+    /// A hook failed often enough that the host stopped calling it. Routed
+    /// through the session because the console is where a network's bad news
+    /// goes, and the session is what writes there.
+    PluginStopped {
+        text: String,
+        detail: Option<String>,
     },
     Disconnect {
         reason: Option<String>,
@@ -416,6 +473,7 @@ async fn apply(
             Vec::new()
         }
         SessionCommand::Raised { target } => session.raise(&target),
+        SessionCommand::PluginStopped { text, detail } => session.plugin_stopped(text, detail),
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -563,6 +621,7 @@ impl Context {
         let events = self.events.clone();
         let network = self.network.clone();
         let store = Arc::clone(&self.store);
+        let own_inbox = self.own_inbox.clone();
         tokio::spawn(async move {
             for annotator in annotators {
                 let request = AnnotateRequest {
@@ -578,11 +637,16 @@ impl Context {
                 let reply = match ran {
                     Ok(Ok(reply)) => reply,
                     Ok(Err(failure)) => {
-                        strike(&strikes, Hook::Annotate, &plugin, Some(&failure.failure));
+                        if strike(&strikes, Hook::Annotate, &plugin, Some(&failure.failure)) {
+                            let why = failure.failure.to_string();
+                            report_stopped(&own_inbox, Hook::Annotate, &plugin, Some(why)).await;
+                        }
                         continue;
                     }
                     Err(_) => {
-                        strike(&strikes, Hook::Annotate, &plugin, None);
+                        if strike(&strikes, Hook::Annotate, &plugin, None) {
+                            report_stopped(&own_inbox, Hook::Annotate, &plugin, None).await;
+                        }
                         continue;
                     }
                 };
@@ -654,11 +718,16 @@ impl Context {
                 let reply = match ran {
                     Ok(Ok(reply)) => reply,
                     Ok(Err(failure)) => {
-                        strike(&strikes, Hook::Notify, &plugin, Some(&failure.failure));
+                        if strike(&strikes, Hook::Notify, &plugin, Some(&failure.failure)) {
+                            let why = failure.failure.to_string();
+                            report_stopped(&own_inbox, Hook::Notify, &plugin, Some(why)).await;
+                        }
                         continue;
                     }
                     Err(_) => {
-                        strike(&strikes, Hook::Notify, &plugin, None);
+                        if strike(&strikes, Hook::Notify, &plugin, None) {
+                            report_stopped(&own_inbox, Hook::Notify, &plugin, None).await;
+                        }
                         continue;
                     }
                 };
@@ -739,15 +808,51 @@ mod tests {
         let strikes = Mutex::new(HashMap::new());
 
         for _ in 0..HOOK_STRIKES - 1 {
-            strike(&strikes, Hook::Annotate, "units", None);
+            assert!(
+                !strike(&strikes, Hook::Annotate, "units", None),
+                "a plugin still being called has not stopped"
+            );
         }
         assert!(
             out(&strikes, Hook::Annotate, "units") < HOOK_STRIKES,
             "one bad batch is a message the plugin did not expect"
         );
 
-        strike(&strikes, Hook::Annotate, "units", None);
+        assert!(strike(&strikes, Hook::Annotate, "units", None));
         assert_eq!(out(&strikes, Hook::Annotate, "units"), HOOK_STRIKES);
+    }
+
+    /// The hook is filtered out once it is dropped, so a later strike is a
+    /// batch already in flight rather than a second failure. Telling the user
+    /// twice about one plugin would be the noise the strikes exist to stop.
+    #[test]
+    fn a_hook_stops_once_however_many_batches_were_in_flight() {
+        let strikes = Mutex::new(HashMap::new());
+        for _ in 0..HOOK_STRIKES {
+            strike(&strikes, Hook::Notify, "deploys", None);
+        }
+
+        assert!(!strike(&strikes, Hook::Notify, "deploys", None));
+        assert!(!strike(&strikes, Hook::Notify, "deploys", None));
+    }
+
+    /// The sentence has to name the plugin the user installed and what they
+    /// have lost, or it is a status code with a name on it.
+    #[test]
+    fn what_stopped_says_which_plugin_and_what_it_was_doing() {
+        let annotate = stopped_text(Hook::Annotate, "units");
+        assert_eq!(
+            annotate,
+            "The units plugin failed 3 times in a row, so ircx stopped asking it to annotate \
+             messages. Restart ircx to let it try again."
+        );
+
+        let notify = stopped_text(Hook::Notify, "deploys");
+        assert!(notify.contains("deploys"));
+        assert!(
+            notify.contains("interrupting you"),
+            "a rule that stopped is a different loss from a note that stopped: {notify}"
+        );
     }
 
     /// Consecutive, not cumulative. A plugin that trips over one message every
@@ -769,6 +874,41 @@ mod tests {
         let strikes = Mutex::new(HashMap::new());
         strike(&strikes, Hook::Annotate, "units", None);
         assert_eq!(out(&strikes, Hook::Annotate, "links"), 0);
+    }
+
+    /// The task holds the strikes and the session holds the console, so a drop
+    /// that does not cross between them is a drop nobody hears about.
+    #[tokio::test]
+    async fn a_dropped_hook_reaches_the_session_that_can_say_so() {
+        let (inbox, mut session) = mpsc::channel(1);
+        report_stopped(
+            &inbox.downgrade(),
+            Hook::Notify,
+            "deploys",
+            Some("TypeError: t.split is not a function".into()),
+        )
+        .await;
+
+        let Ok(SessionCommand::PluginStopped { text, detail }) = session.try_recv() else {
+            panic!("the session was never told the rule stopped");
+        };
+        assert!(text.contains("deploys"), "{text}");
+        assert_eq!(
+            detail.as_deref(),
+            Some("TypeError: t.split is not a function")
+        );
+    }
+
+    /// A batch can still be in flight when its network is torn down. Reaching
+    /// for a session that has gone is the ordinary case there, not an error.
+    #[tokio::test]
+    async fn a_drop_with_no_session_left_is_quiet_rather_than_fatal() {
+        let (inbox, session) = mpsc::channel::<SessionCommand>(1);
+        let weak = inbox.downgrade();
+        drop(inbox);
+        drop(session);
+
+        report_stopped(&weak, Hook::Annotate, "units", None).await;
     }
 
     /// One plugin can hold both hooks, and one of them failing says nothing

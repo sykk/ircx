@@ -10,7 +10,7 @@
  */
 export function LeavesTheClient() {
   return (
-    <span aria-hidden="true" className="ml-0.5 text-[10px] align-baseline">
+    <span aria-hidden="true" className="ml-1 text-[11px] align-baseline">
       ↗
     </span>
   );

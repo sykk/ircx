@@ -7,7 +7,7 @@ import { serverMsgid } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
 import { Markdown } from "./Markdown";
-import { Reactions } from "./Reactions";
+import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
 import { writesOwnNick } from "./rows";
 
@@ -83,7 +83,8 @@ export function MessageRow({
       <div
         className="grid items-baseline"
         style={{
-          gridTemplateColumns: "var(--nick-col) minmax(0, var(--timeline-measure))",
+          gridTemplateColumns:
+            "var(--nick-col) minmax(0, var(--timeline-measure)) var(--timeline-actions-col)",
           columnGap: "var(--timeline-text-gap)",
         }}
       >
@@ -93,9 +94,7 @@ export function MessageRow({
           {writesOwnNick(message.kind) ? "" : message.sender.nick}
         </span>
 
-        {/* Relative so the hover-only add control can sit at the far end of the
-            measure without taking room from the message. */}
-        <div className="relative">
+        <div>
           {/* Prose gets the text face; code and identifiers keep monospace. */}
           <div
             className="selectable font-[family-name:var(--font-ui)]"
@@ -116,7 +115,6 @@ export function MessageRow({
                 ? null
                 : (emoji, active) => onReact(msgid, emoji, active)
             }
-            onReply={msgid === null ? null : () => onReply(msgid)}
           />
 
           {(message.annotations ?? []).map((note) => (
@@ -124,6 +122,24 @@ export function MessageRow({
           ))}
 
           {failed && <FailureNotice message={message} />}
+        </div>
+
+        {/* Their own column rather than laid over the far end of the measure.
+            Reserving the room costs it whether or not the pointer is here; a
+            long line running underneath a control could not be clicked, which
+            is worse than the space. */}
+        <div className="flex justify-end">
+          {msgid !== null && (
+            <RowControls
+              alone
+              onReply={() => onReply(msgid)}
+              onPick={
+                (message.reactions ?? []).length === 0
+                  ? (emoji) => onReact(msgid, emoji, true)
+                  : null
+              }
+            />
+          )}
         </div>
       </div>
     </div>

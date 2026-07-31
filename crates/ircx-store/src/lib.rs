@@ -13,8 +13,8 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ircx_ipc::{
-    ChatMessage, HistoryRequest, NetworkConfig, NetworkId, SaslConfig, SearchHit, SearchRequest,
-    TargetName, UploadProvider,
+    ChatMessage, HistoryRequest, NetworkConfig, NetworkId, S3Credentials, SaslConfig, SearchHit,
+    SearchRequest, TargetName, UploadProvider,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::de::DeserializeOwned;
@@ -196,17 +196,29 @@ impl Store {
     /// shows what is stored.
     pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
         let conn = self.conn();
-        let mut stmt = conn
-            .prepare("SELECT endpoint, method, auth_header FROM upload_provider WHERE only = 0")?;
+        let mut stmt = conn.prepare(
+            "SELECT endpoint, method, auth_header, s3_region, s3_access_key_id
+             FROM upload_provider WHERE only = 0",
+        )?;
         let mut rows = stmt.query([])?;
         let Some(row) = rows.next()? else {
             return Ok(None);
         };
+        // Both columns or neither: a half-configured signer would sign with a
+        // region nobody chose.
+        let region: Option<String> = row.get(3)?;
+        let access_key_id: Option<String> = row.get(4)?;
         Ok(Some(UploadProvider {
             endpoint: row.get(0)?,
             method: serde_json::from_str(&row.get::<_, String>(1)?)?,
             auth_header: row.get(2)?,
             token: None,
+            s3: region
+                .zip(access_key_id)
+                .map(|(region, access_key_id)| S3Credentials {
+                    region,
+                    access_key_id,
+                }),
         }))
     }
 
@@ -224,16 +236,21 @@ impl Store {
             self.credentials.set(credentials::UPLOAD_PROVIDER, token)?;
         }
         self.conn().execute(
-            "INSERT INTO upload_provider (only, endpoint, method, auth_header)
-             VALUES (0, ?1, ?2, ?3)
+            "INSERT INTO upload_provider
+                 (only, endpoint, method, auth_header, s3_region, s3_access_key_id)
+             VALUES (0, ?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (only) DO UPDATE SET
                  endpoint = excluded.endpoint,
                  method = excluded.method,
-                 auth_header = excluded.auth_header",
+                 auth_header = excluded.auth_header,
+                 s3_region = excluded.s3_region,
+                 s3_access_key_id = excluded.s3_access_key_id",
             params![
                 provider.endpoint,
                 to_json(&provider.method)?,
-                provider.auth_header
+                provider.auth_header,
+                provider.s3.as_ref().map(|s3| &s3.region),
+                provider.s3.as_ref().map(|s3| &s3.access_key_id),
             ],
         )?;
         Ok(())

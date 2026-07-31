@@ -48,6 +48,7 @@ describe("the upload provider sheet", () => {
         method: "PUT",
         authHeader: "Authorization",
         token: "Bearer sekrit",
+        s3: null,
       }),
     );
   });
@@ -123,5 +124,78 @@ describe("the upload provider sheet", () => {
 
     expect(await screen.findByText("The keyring is locked")).toBeTruthy();
     expect(useAppStore.getState().uploadOpen).toBe(true);
+  });
+});
+
+/** #90. S3-compatible storage proves it holds a credential rather than sending
+ * one, so the form asks for different things and saves a different shape. */
+describe("an S3-compatible provider", () => {
+  async function chooseS3() {
+    open();
+    fireEvent.change(await screen.findByLabelText("Address"), {
+      target: { value: "https://s3.example.com/bucket/{name}" },
+    });
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "s3" } });
+  }
+
+  it("asks for what a signature needs instead of a header", async () => {
+    await chooseS3();
+
+    expect(screen.getByLabelText("Access key id")).toBeTruthy();
+    expect(screen.getByLabelText("Region")).toBeTruthy();
+    expect(screen.queryByLabelText("Header")).toBeNull();
+    // A signature covers the method, so offering the choice would offer a
+    // request nobody can make.
+    expect(screen.queryByLabelText("Method")).toBeNull();
+    expect(screen.getByLabelText(/^Secret access key/)).toBeTruthy();
+  });
+
+  it("saves the region and key beside the endpoint, and the secret on its own", async () => {
+    await chooseS3();
+    fireEvent.change(screen.getByLabelText("Access key id"), {
+      target: { value: "AKIAIOSFODNN7EXAMPLE" },
+    });
+    fireEvent.change(screen.getByLabelText("Region"), { target: { value: "eu-west-1" } });
+    fireEvent.change(screen.getByLabelText(/^Secret access key/), {
+      target: { value: "wJalrXUtnFEMI" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(ipcMock.saveUploadProvider).toHaveBeenCalledWith({
+        endpoint: "https://s3.example.com/bucket/{name}",
+        method: "PUT",
+        authHeader: null,
+        token: "wJalrXUtnFEMI",
+        s3: { region: "eu-west-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
+      }),
+    );
+  });
+
+  /** Signing with no key is a 403 with nothing in it to read, so it is refused
+   * here where the field is. */
+  it("will not save without a key to sign with", async () => {
+    await chooseS3();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+  });
+
+  it("comes back as an S3 provider when one is stored", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://s3.example.com/bucket/{name}",
+      method: "PUT",
+      authHeader: null,
+      token: null,
+      s3: { region: "eu-west-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
+    });
+    open();
+
+    expect(await screen.findByLabelText("Region")).toHaveProperty("value", "eu-west-1");
+    expect(screen.getByLabelText("Access key id")).toHaveProperty(
+      "value",
+      "AKIAIOSFODNN7EXAMPLE",
+    );
   });
 });

@@ -9,8 +9,10 @@
 use std::path::Path;
 
 use ircx_ipc::{FileToUpload, UploadMethod, UploadProvider};
-use ircx_net::http::{upload, HttpError, UploadMethod as NetMethod, UploadPolicy};
+use ircx_net::http::{signing_target, upload, HttpError, UploadMethod as NetMethod, UploadPolicy};
+use time::OffsetDateTime;
 
+use crate::sigv4::{self, Credentials};
 use crate::state::App;
 
 /// The largest file this will read into memory before sending it.
@@ -167,7 +169,8 @@ pub async fn send_file(app: &App, path: &str) -> Result<String, String> {
     let url = endpoint_for(&provider.endpoint, &object_name(&name, &random));
 
     let host = host_of(&provider.endpoint);
-    let answer = upload(&url, &bytes, &policy(&provider, &name, app)?)
+    let policy = policy(&provider, &name, &url, &bytes, app)?;
+    let answer = upload(&url, &bytes, &policy)
         .await
         .map_err(|error| refusal(&name, &host, error))?;
 
@@ -210,7 +213,54 @@ fn host_of(endpoint: &str) -> String {
         .to_owned()
 }
 
-fn policy(provider: &UploadProvider, name: &str, app: &App) -> Result<UploadPolicy, String> {
+fn policy(
+    provider: &UploadProvider,
+    name: &str,
+    url: &str,
+    body: &[u8],
+    app: &App,
+) -> Result<UploadPolicy, String> {
+    let content_type = content_type(name).to_owned();
+
+    // S3-compatible storage signs the request rather than carrying a token, so
+    // the credential never goes on the wire and a signature is good for one
+    // request. The secret is read here, at the moment of the upload.
+    if let Some(s3) = provider.s3.as_ref() {
+        let secret = app
+            .store()
+            .upload_token()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| {
+                "The provider signs with an S3 secret key and none is saved. Set one from the \
+                 upload provider settings."
+                    .to_owned()
+            })?;
+        let (host, path) = signing_target(url).map_err(|error| error.to_string())?;
+        // Content-Type is sent by the request builder, so it is signed too.
+        let sent = [("content-type".to_owned(), content_type.clone())];
+        let headers = sigv4::signed(
+            "PUT",
+            &host,
+            &path,
+            &sigv4::sha256_hex(body),
+            &sent,
+            &Credentials {
+                access_key_id: &s3.access_key_id,
+                secret: &secret,
+                region: &s3.region,
+            },
+            OffsetDateTime::now_utc(),
+        );
+        return Ok(UploadPolicy {
+            // Signed as a PUT, so it has to be sent as one. A POST would be a
+            // signature over a request nobody made.
+            method: NetMethod::Put,
+            content_type,
+            headers,
+            ..UploadPolicy::default()
+        });
+    }
+
     let mut headers = Vec::new();
     if let Some(header) = provider.auth_header.as_deref().filter(|h| !h.is_empty()) {
         // Read at the moment of the upload rather than held anywhere it could
@@ -228,7 +278,7 @@ fn policy(provider: &UploadProvider, name: &str, app: &App) -> Result<UploadPoli
     }
     Ok(UploadPolicy {
         method: net_method(provider.method),
-        content_type: content_type(name).to_owned(),
+        content_type,
         headers,
         ..UploadPolicy::default()
     })

@@ -189,8 +189,28 @@ pub struct UploadProvider {
     /// the provider needs no credential — a self-hosted box behind a VPN.
     pub auth_header: Option<String>,
     /// Write-only, as the SASL password is: `Some` when the user sets it,
-    /// always `None` when read back.
+    /// always `None` when read back. Carries the secret access key when `s3`
+    /// is set — it is the provider's one secret either way.
     pub token: Option<String>,
+    /// Set for S3-compatible storage, which signs the request rather than
+    /// carrying a token in a header. `None` is a provider that takes a plain
+    /// `PUT` or `POST`, which is self-hosted storage and most temporary hosts.
+    pub s3: Option<S3Credentials>,
+}
+
+/// What signing an S3 request needs beyond the endpoint and the secret.
+///
+/// The secret access key is not here. It goes to the keyring with the other
+/// credential, for the reason the token does: a value that only travels one way
+/// cannot be leaked by a screen that shows what is stored.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct S3Credentials {
+    /// Part of the signature, so a provider that ignores regions still needs
+    /// one that matches what it expects. `us-east-1` is the usual answer.
+    pub region: String,
+    pub access_key_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

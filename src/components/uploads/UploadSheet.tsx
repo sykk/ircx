@@ -15,16 +15,36 @@ const METHODS: { value: UploadMethod; label: string }[] = [
   { value: "POST", label: "POST — the provider names the file" },
 ];
 
-/** What the form holds, which is not what is stored: the token is write-only,
+/** How the provider is convinced to accept the file. Two answers, and they
+ * share nothing: one sends a credential, the other proves it holds one. */
+type Kind = "header" | "s3";
+
+const KINDS: { value: Kind; label: string }[] = [
+  { value: "header", label: "A token in a header" },
+  { value: "s3", label: "S3-compatible, signed" },
+];
+
+/** What the form holds, which is not what is stored: the secret is write-only,
  * so the field starts empty and an empty field means "leave it alone". */
 interface Draft {
   endpoint: string;
   method: UploadMethod;
+  kind: Kind;
   authHeader: string;
+  region: string;
+  accessKeyId: string;
   token: string;
 }
 
-const EMPTY: Draft = { endpoint: "", method: "PUT", authHeader: "Authorization", token: "" };
+const EMPTY: Draft = {
+  endpoint: "",
+  method: "PUT",
+  kind: "header",
+  authHeader: "Authorization",
+  region: "us-east-1",
+  accessKeyId: "",
+  token: "",
+};
 
 /**
  * Where attachments go before their link is sent.
@@ -84,13 +104,24 @@ function Sheet() {
     setError(null);
     setBusy(true);
     try {
+      const signing = draft.kind === "s3";
+      if (signing && draft.accessKeyId.trim() === "") {
+        setError("An access key id is needed to sign the request.");
+        setBusy(false);
+        return;
+      }
       await ipc.saveUploadProvider({
         endpoint,
-        method: draft.method,
-        authHeader: draft.authHeader.trim() || null,
+        // A signature covers the method, so a signed upload is a PUT and the
+        // choice does not apply to it.
+        method: signing ? "PUT" : draft.method,
+        authHeader: signing ? null : draft.authHeader.trim() || null,
         // Empty means the stored one stands, which is what lets the endpoint be
-        // corrected without retyping a token nobody can see.
+        // corrected without retyping a secret nobody can see.
         token: draft.token === "" ? null : draft.token,
+        s3: signing
+          ? { region: draft.region.trim() || "us-east-1", accessKeyId: draft.accessKeyId.trim() }
+          : null,
       });
       closeSheet(false);
     } catch (reason) {
@@ -154,26 +185,56 @@ function Sheet() {
                 placeholder="https://files.example.com/{name}"
                 hint="{name} is replaced with a generated file name. Leave it out if the provider names the file itself."
               />
-              <SelectField
-                label="Method"
-                value={draft.method}
-                options={METHODS}
-                onChange={(method) => setDraft({ ...draft, method })}
-              />
+              {/* A signature covers the method, so a signed upload is a PUT
+                  and offering the choice would offer a request nobody can make. */}
+              {draft.kind === "header" && (
+                <SelectField
+                  label="Method"
+                  value={draft.method}
+                  options={METHODS}
+                  onChange={(method) => setDraft({ ...draft, method })}
+                />
+              )}
             </Group>
 
             <Group title="Credential">
-              <TextField
-                optional
-                label="Header"
-                value={draft.authHeader}
-                onChange={(authHeader) => setDraft({ ...draft, authHeader })}
-                placeholder="Authorization"
-                hint="Leave empty for a provider that needs no credential."
+              <SelectField
+                label="Kind"
+                value={draft.kind}
+                options={KINDS}
+                onChange={(kind) => setDraft({ ...draft, kind })}
               />
+
+              {draft.kind === "header" ? (
+                <TextField
+                  optional
+                  label="Header"
+                  value={draft.authHeader}
+                  onChange={(authHeader) => setDraft({ ...draft, authHeader })}
+                  placeholder="Authorization"
+                  hint="Leave empty for a provider that needs no credential."
+                />
+              ) : (
+                <>
+                  <TextField
+                    label="Access key id"
+                    value={draft.accessKeyId}
+                    onChange={(accessKeyId) => setDraft({ ...draft, accessKeyId })}
+                    placeholder="AKIAIOSFODNN7EXAMPLE"
+                  />
+                  <TextField
+                    label="Region"
+                    value={draft.region}
+                    onChange={(region) => setDraft({ ...draft, region })}
+                    placeholder="us-east-1"
+                    hint="Part of the signature. A provider that ignores regions still needs the one it expects."
+                  />
+                </>
+              )}
+
               <TextField
                 optional
-                label="Token"
+                label={draft.kind === "s3" ? "Secret access key" : "Token"}
                 type="password"
                 value={draft.token}
                 onChange={(token) => setDraft({ ...draft, token })}
@@ -217,7 +278,10 @@ function fromProvider(provider: UploadProvider): Draft {
   return {
     endpoint: provider.endpoint,
     method: provider.method,
+    kind: provider.s3 ? "s3" : "header",
     authHeader: provider.authHeader ?? "",
+    region: provider.s3?.region ?? EMPTY.region,
+    accessKeyId: provider.s3?.accessKeyId ?? "",
     token: "",
   };
 }

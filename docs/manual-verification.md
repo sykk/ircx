@@ -626,7 +626,16 @@ sends a `GET`. Fixed to name the credential and where to change it.
 **Not walked:**
 - **A file too large, or a provider that refuses.** Both produce sentences no
   one has read in situ.
-- **S3-compatible**, which is not built.
+- **S3-compatible storage**, which is built and has never sent a byte.
+  `src-tauri/src/sigv4.rs` is checked against the worked example AWS publishes
+  for a single-chunk `PUT` — their credentials, their bucket, their clock,
+  their answer — so the arithmetic is not in doubt. Everything around it is:
+  whether the region a provider expects is the one it documents, whether the
+  endpoint shape the settings sheet asks for fits how MinIO and the rest
+  address a bucket, and whether a refusal says anything a person can act on. A
+  signature wrong for any of those reasons is a 403 with nothing in it to read,
+  which is exactly why this one has to be walked against a real server rather
+  than a fixture.
 
 ## SCRAM
 

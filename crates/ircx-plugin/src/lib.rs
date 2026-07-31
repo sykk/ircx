@@ -32,7 +32,7 @@ pub mod sandbox;
 pub use library::{Installed, Library, LibraryError};
 pub use manifest::{CommandSpec, Grants, Manifest, ManifestError, Permission};
 pub use net::{FetchRequest, Fetched, Fetcher};
-pub use runtime::{Annotator, PluginRuntime, Route};
+pub use runtime::{Annotator, Notifier, PluginRuntime, Route};
 pub use sandbox::Sandbox;
 
 /// What the host allows a plugin to cost. Not the plugin's to declare: a
@@ -96,6 +96,28 @@ pub struct ArrivedMessage {
     pub text: String,
     /// RFC 3339 UTC, as the archive holds it.
     pub time: String,
+}
+
+/// A batch of messages handed to every notification rule that reaches the
+/// conversation. Separate from [`AnnotateRequest`] because the two hooks are
+/// separate consents, and one type would let a change to either reach the
+/// other.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotifyRequest {
+    pub target: String,
+    pub messages: Vec<ArrivedMessage>,
+}
+
+/// Which messages in the batch one rule thought worth interrupting the user
+/// for, by [`ArrivedMessage::id`].
+///
+/// A rule raises and cannot lower: there is no field here for a message it
+/// wants quiet, so nothing a plugin returns can hide a message the host
+/// already raised, or one another rule did. That is the same constraint the
+/// annotator holds as a type, said about attention rather than about text.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NotifyReply {
+    pub raised: Vec<String>,
 }
 
 /// What one annotator said about one batch. A message the plugin passed over
@@ -191,6 +213,9 @@ fn denied(permission: Permission) -> &'static str {
         Permission::RenderContent => "show text in this conversation",
         Permission::AnnotateMessages => {
             "read messages as they arrive and note something beside them"
+        }
+        Permission::RaiseNotifications => {
+            "read messages as they arrive and decide which are worth interrupting you for"
         }
     }
 }

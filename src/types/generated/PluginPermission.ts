@@ -4,4 +4,4 @@
  * The permissions a plugin can ask for. Spelled as the manifest spells
  * them, so a name here and a name in a `plugin.json` are the same string.
  */
-export type PluginPermission = "read-messages" | "send-messages" | "add-commands" | "store-local-data" | "access-channels" | "network-requests" | "render-content" | "annotate-messages";
+export type PluginPermission = "read-messages" | "send-messages" | "add-commands" | "store-local-data" | "access-channels" | "network-requests" | "render-content" | "annotate-messages" | "raise-notifications";

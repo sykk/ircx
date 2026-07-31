@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use ircx_plugin::{
     AnnotateRequest, ArrivedMessage, CommandRequest, CommandSpec, Fetched, Fetcher, Grants,
-    Manifest, Permission,
+    Manifest, NotifyRequest, Permission,
 };
 
 pub const TARGET: &str = "#ircx";
@@ -29,6 +29,7 @@ pub fn author(root: &Path, id: &str, source: &str, requests: Grants) -> PathBuf 
         description: String::new(),
         entry: "main.js".into(),
         annotates: requests.holds(Permission::AnnotateMessages),
+        notifies: requests.holds(Permission::RaiseNotifications),
         commands: match requests.holds(Permission::AddCommands) {
             true => vec![CommandSpec {
                 name: id.to_owned(),
@@ -107,6 +108,15 @@ pub fn arrivals(messages: &[(&str, &str, &str)]) -> AnnotateRequest {
                 time: "2026-07-31T00:00:00.000Z".into(),
             })
             .collect(),
+    }
+}
+
+/// The same batch on its way to a notification rule instead.
+pub fn to_notify(messages: &[(&str, &str, &str)]) -> NotifyRequest {
+    let batch = arrivals(messages);
+    NotifyRequest {
+        target: batch.target,
+        messages: batch.messages,
     }
 }
 

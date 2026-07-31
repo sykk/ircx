@@ -190,6 +190,7 @@ fn author_annotator(root: &Path) -> PathBuf {
         description: "Reads Fahrenheit in Celsius".into(),
         entry: "main.js".into(),
         annotates: true,
+        notifies: false,
         commands: Vec::new(),
         requests: annotates(),
     };
@@ -241,6 +242,7 @@ fn author(root: &Path) -> PathBuf {
         description: "One command, one answer".into(),
         entry: "main.js".into(),
         annotates: false,
+        notifies: false,
         commands: vec![CommandSpec {
             name: "echo".into(),
             summary: "say it back".into(),

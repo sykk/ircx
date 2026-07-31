@@ -3,14 +3,14 @@
 A plugin is JavaScript with a manifest. It runs in its own QuickJS runtime on
 its own thread and reaches the client only through the functions its grants
 allow. `docs/plugin-isolation.md` is why QuickJS: a subprocess enforces two of
-the seven permissions the spec names, and this enforces all seven, plus the
-eighth the annotator adds.
+the seven permissions the spec names, and this enforces all seven, plus the two
+the hooks that read on arrival add.
 
-The one extension point built is the **custom slash command**. Message
-renderers, link and attachment providers, notification rules and protocol
-capability adapters are the same shape — the host hands a value over, the plugin
-returns one, the host applies a deadline — and are follow-up work. The renderer
-has a design and no code: *The annotator, before it is built*, below.
+The extension points built are the **custom slash command**, the **annotator**
+and the **notification rule**. Message renderers, link and attachment providers
+and protocol capability adapters are the same shape — the host hands a value
+over, the plugin returns one, the host applies a deadline — and are follow-up
+work.
 
 ## What a plugin looks like
 
@@ -85,6 +85,8 @@ Everything a plugin can reach, and nothing else. There is no `fetch`, no
 | `ircx.command(name, handler)` | `add-commands`, and the name declared in the manifest |
 | `ircx.send(target, text)` | `send-messages`, and `target` among the granted channels |
 | `call.messages` | `read-messages`, and the conversation among the granted channels |
+| `ircx.annotate(handler)` | `annotate-messages`, and `annotates` in the manifest |
+| `ircx.notify(handler)` | `raise-notifications`, and `notifies` in the manifest |
 | `ircx.store.get/set/remove/keys` | `store-local-data` |
 | `ircx.fetch(url)` | `network-requests`, and the URL's host among the granted hosts |
 | the handler's return value | `render-content` |
@@ -123,6 +125,8 @@ try {
 | access selected channels | Work in the channels you choose, and no others | Scopes both `ircx.send` and `call.messages`; `*` is every conversation and is a choice the user makes explicitly |
 | make external network requests | Fetch data from the websites it names | `ircx.fetch` throws without the grant or off the granted hosts; only `http` and `https` are addresses |
 | render message content | Show text in your conversations | A returned answer is refused without it, and sanitised with it |
+| annotate messages | Read every message as it arrives in the channels you choose, and show its own note beside them | `Sandbox::annotate` refuses without it, and `annotators` does not offer the plugin at all |
+| raise notifications | Read every message as it arrives in the channels you choose, and mark ones worth interrupting you for | `Sandbox::notify` refuses without it, and `notifiers` does not offer the plugin at all |
 
 Sanitising the answer is the host's job under **every** isolation mechanism:
 control characters go, and the output is cut to 40 lines and 8 KiB. Nothing
@@ -316,11 +320,7 @@ leave the install dialogue's sentence describing something smaller than what the
 user agreed to.
 
 It is also the eighth. The spec's list is "such as", so an eighth is not a
-departure from it.
-
-A notification rule reads on arrival and shows nothing — it answers whether a
-message should reach the user. Same trigger, different consent, so it owns a
-permission too rather than borrowing this one.
+departure from it, and neither is the ninth below.
 
 ### What a broken annotator costs
 
@@ -336,10 +336,78 @@ to the person who typed it, and there is one of those. An annotator that fails o
 every message would report as often as the channel talks, so the first failure is
 the report and the rest are silence.
 
+## The notification rule
+
+The third extension point. A rule is handed a message that arrived and answers
+whether it is worth interrupting the user for. Same trigger as the annotator and
+a different consent — it reads on arrival and shows nothing — so it owns a
+permission of its own rather than borrowing `annotate-messages`.
+
+**The plugin half is built**: the permission, the manifest flag, the batch call,
+what the handler cannot reach, and the check that a rule may only speak about
+the batch it was handed. What the host does with a raised message is #90's
+next slice.
+
+```json
+{
+  "id": "deploys",
+  "name": "Deploys",
+  "version": "1.0.0",
+  "description": "Raises the build bot when a deploy fails",
+  "entry": "main.js",
+  "notifies": true,
+  "permissions": ["raise-notifications", "access-channels"],
+  "channels": ["#ops"]
+}
+```
+
+```js
+ircx.notify((message) => message.nick === "buildbot" && message.text.includes("failed"));
+```
+
+### It raises and cannot lower
+
+The reply carries the messages to raise and has no field for a message the
+plugin wants quiet. So a rule cannot take back what the user's own nick raised,
+and cannot take back what another rule raised.
+
+This is deliberate and it is the same constraint the annotator holds as a type,
+said about attention rather than about text. A plugin that could silence could
+hide a person talking to you, and the person would have no way to know it
+happened: an interruption that does not arrive leaves nothing behind. Muting a
+noisy bot is the use this gives up, and it is the user's setting to make rather
+than a plugin's.
+
+`false` is therefore not "silence this" but "I have nothing to say about it",
+which is what the handler returning nothing at all also means.
+
+### It answers whether, and only about what it was handed
+
+A handler returns `true` or `false`. Anything else is refused rather than read
+as truthy — a promise is an object, and a rule that returned one would raise
+every message it was ever handed.
+
+The answer is a list of ids, and the host drops any the batch did not contain.
+The bootstrap builds that list out of the ids it was given, but the bootstrap is
+a global on the plugin's own object and the plugin's top level runs after it, so
+the check that matters is the one on the host side. Without it, a plugin granted
+one channel could raise a message in a channel it was never allowed to read.
+
+### What a rule cannot reach
+
+The same three as an annotator, for the same reasons: `ircx.send` is closed
+because the bound that makes a plugin's sends safe is the keystroke, `ircx.fetch`
+is closed because a fetch per arriving message is the client reaching a remote
+URL on its own, and `ircx.store` works — it is the only way a rule can be about
+more than the message in front of it, such as the third failure this hour.
+
 ## What is not built
 
-- **The other three extension points' shapes.** Providers, notification rules
-  and protocol adapters are still only described.
+- **What the host does with a raised message.** The plugin half of the
+  notification rule is built and nothing drives it: no arrival reaches a rule,
+  and nothing is raised.
+- **The other two extension points' shapes.** Providers and protocol adapters
+  are still only described.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The
   install dialogue offers the channels the manifest named, and lets the user
   type one when the manifest asked for `*`. Neither is a list of the channels

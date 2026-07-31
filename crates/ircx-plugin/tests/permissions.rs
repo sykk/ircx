@@ -1,5 +1,5 @@
-//! The permissions `ircclient.md` names, one section each, and the eighth
-//! that `docs/plugins.md` adds for the annotator.
+//! The permissions `ircclient.md` names, one section each, and the two that
+//! `docs/plugins.md` adds for the hooks that read on arrival.
 //!
 //! A permission is only real if the mechanism can refuse the capability when
 //! the grant is withheld, so every one of these grants it, withholds it, and
@@ -9,12 +9,12 @@
 use std::path::Path;
 
 use ircx_plugin::{
-    net, ContextMessage, Failure, Fetcher, Grants, Limits, Outgoing, Permission, PluginRuntime,
-    Sandbox,
+    net, ContextMessage, Failure, Fetcher, Grants, Limits, NotifyReply, Outgoing, Permission,
+    PluginRuntime, Sandbox,
 };
 
 mod common;
-use common::{arrivals, author, call, grants, in_channels, on_hosts, Requests, TARGET};
+use common::{arrivals, author, call, grants, in_channels, on_hosts, to_notify, Requests, TARGET};
 
 fn load(directory: &Path, source: &str, grants: &Grants) -> Sandbox {
     with_host(directory, source, grants, net::refuses())
@@ -830,5 +830,361 @@ mod annotating {
             .annotate(&annotator, arrivals(&[("m2", "sable", "ok")]))
             .expect("the next batch gets a fresh runtime");
         assert_eq!(reply.notes[0].text, "fine");
+    }
+}
+
+/// The ninth permission, and the third extension point. A rule reads on
+/// arrival like an annotator and shows nothing; what it produces is attention,
+/// which is why it is a consent of its own rather than a use of that one.
+mod notifying {
+    use super::*;
+
+    const DEPLOYS: &str = r#"
+        ircx.notify((message) => message.text.includes("deploy failed"));
+    "#;
+
+    fn notifies() -> Grants {
+        in_channels(grants(&[Permission::RaiseNotifications]), &[TARGET])
+    }
+
+    #[test]
+    fn a_rule_raises_the_messages_it_chose_and_no_others() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), DEPLOYS, &notifies());
+
+        let reply = plugin
+            .notify(&to_notify(&[
+                ("m1", "buildbot", "deploy failed on main"),
+                ("m2", "nyx", "morning"),
+            ]))
+            .expect("the batch is read");
+
+        assert_eq!(reply.raised, ["m1"]);
+    }
+
+    /// A rule raises and cannot lower. There is no field it could put a
+    /// message in to make it quiet, so a message the host raised on the user's
+    /// own nick is not something a plugin can take back — the constraint the
+    /// annotator holds about text, held here about attention.
+    #[test]
+    fn answering_false_leaves_a_message_alone_rather_than_silencing_it() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), "ircx.notify(() => false);", &notifies());
+
+        let reply = plugin
+            .notify(&to_notify(&[("m1", "sable", "sykk: are you there")]))
+            .expect("the batch is read");
+
+        assert_eq!(
+            reply,
+            NotifyReply::default(),
+            "the reply carries what to raise and has nowhere to say otherwise"
+        );
+    }
+
+    #[test]
+    fn without_the_grant_it_is_refused() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            DEPLOYS,
+            &in_channels(Grants::default(), &[TARGET]),
+        );
+
+        assert_eq!(
+            plugin.notify(&to_notify(&[("m1", "buildbot", "deploy failed")])),
+            Err(Failure::Denied(Permission::RaiseNotifications))
+        );
+    }
+
+    /// Granting the other on-arrival hook is not granting this one: they run
+    /// off the same trigger and the user agreed to different things.
+    #[test]
+    fn the_annotators_grant_does_not_open_it() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            DEPLOYS,
+            &in_channels(grants(&[Permission::AnnotateMessages]), &[TARGET]),
+        );
+
+        assert_eq!(
+            plugin.notify(&to_notify(&[("m1", "buildbot", "deploy failed")])),
+            Err(Failure::Denied(Permission::RaiseNotifications))
+        );
+    }
+
+    #[test]
+    fn it_reaches_only_the_channels_the_grant_names() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), DEPLOYS, &notifies());
+
+        let mut elsewhere = to_notify(&[("m1", "buildbot", "deploy failed")]);
+        elsewhere.target = "#somewhere-else".into();
+
+        assert_eq!(
+            plugin.notify(&elsewhere),
+            Err(Failure::Denied(Permission::AccessChannels))
+        );
+    }
+
+    /// The batch it was handed is the whole of what it may speak about.
+    ///
+    /// The bootstrap builds the answer out of the ids it was given, but the
+    /// bootstrap is a global on the plugin's own object and the plugin can
+    /// replace it. So the filter is on this side: an id from a conversation
+    /// the user never let this plugin read would otherwise raise a message it
+    /// cannot even see.
+    #[test]
+    fn it_cannot_raise_a_message_it_was_not_handed() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.notify(() => false);
+              globalThis.__ircx_notify = function () {
+                return JSON.stringify(["m1", "a-message-in-another-channel"]);
+              };
+            "#,
+            &notifies(),
+        );
+
+        let reply = plugin
+            .notify(&to_notify(&[("m1", "buildbot", "deploy failed")]))
+            .expect("the batch is read");
+        assert_eq!(reply.raised, ["m1"], "only what the batch contained");
+    }
+
+    /// A rule answers whether. Anything else is refused rather than read as
+    /// truthy: a promise is an object, and a rule that returned one would
+    /// otherwise raise every message it was ever handed.
+    #[test]
+    fn an_answer_that_is_not_true_or_false_is_refused() {
+        for source in [
+            r#"ircx.notify(() => "yes");"#,
+            r#"ircx.notify(() => 1);"#,
+            r#"ircx.notify(async () => true);"#,
+        ] {
+            let root = tempfile::tempdir().expect("a temporary directory");
+            let mut plugin = load(root.path(), source, &notifies());
+
+            let failure = plugin
+                .notify(&to_notify(&[("m1", "buildbot", "deploy failed")]))
+                .expect_err("only true or false answers");
+            assert!(
+                matches!(failure, Failure::Raised(_)),
+                "{source} gave {failure:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_cannot_send_however_it_is_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let everything = in_channels(
+            grants(&[
+                Permission::RaiseNotifications,
+                Permission::SendMessages,
+                Permission::AddCommands,
+                Permission::RenderContent,
+            ]),
+            &[TARGET],
+        );
+        let mut plugin = load(
+            root.path(),
+            r##"ircx.notify(() => { ircx.send("#ircx", "hello"); return true; });"##,
+            &everything,
+        );
+
+        let failure = plugin
+            .notify(&to_notify(&[("m1", "buildbot", "deploy failed")]))
+            .expect_err("sending from a rule is refused");
+        assert!(
+            matches!(&failure, Failure::Raised(why) if why.contains("ircx.send")),
+            "expected the refusal to name what it refused, got {failure:?}"
+        );
+    }
+
+    #[test]
+    fn it_cannot_fetch_however_it_is_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let everything = on_hosts(
+            in_channels(grants(&[Permission::RaiseNotifications]), &[TARGET]),
+            &["example.com"],
+        );
+        let requests = Requests::default();
+        let mut plugin = with_host(
+            root.path(),
+            r#"ircx.notify(() => ircx.fetch("https://example.com/x").raise);"#,
+            &everything,
+            requests.fetcher("{}"),
+        );
+
+        let failure = plugin
+            .notify(&to_notify(&[("m1", "buildbot", "deploy failed")]))
+            .expect_err("fetching from a rule is refused");
+        assert!(
+            matches!(&failure, Failure::Raised(why) if why.contains("ircx.fetch")),
+            "expected the refusal to name what it refused, got {failure:?}"
+        );
+        assert!(
+            requests.seen().is_empty(),
+            "the refusal happens before anything reaches the network"
+        );
+    }
+
+    /// The one host function it keeps, and the only way a rule can be about
+    /// more than the message in front of it — the third time this hour, say.
+    #[test]
+    fn it_can_still_store_data() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.notify(() => {
+                const seen = Number(ircx.store.get("seen") || 0) + 1;
+                ircx.store.set("seen", String(seen));
+                return seen > 1;
+              });
+            "#,
+            &in_channels(
+                grants(&[Permission::RaiseNotifications, Permission::StoreLocalData]),
+                &[TARGET],
+            ),
+        );
+
+        let reply = plugin
+            .notify(&to_notify(&[("m1", "sable", "one"), ("m2", "nyx", "two")]))
+            .expect("the batch is read");
+        assert_eq!(
+            reply.raised,
+            ["m2"],
+            "the first was the one it was counting"
+        );
+    }
+
+    #[test]
+    fn a_rule_cannot_change_what_somebody_said() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.notify((message) => {
+                message.text = "something else entirely";
+                message.nick = "somebody else";
+                return true;
+              });
+            "#,
+            &notifies(),
+        );
+
+        let batch = to_notify(&[("m1", "sable", "what was actually said")]);
+        let reply = plugin.notify(&batch).expect("the batch is read");
+
+        assert_eq!(reply.raised, ["m1"]);
+        assert_eq!(
+            batch.messages[0].text, "what was actually said",
+            "the handler was handed a copy across the boundary, not the message"
+        );
+    }
+
+    #[test]
+    fn declaring_it_and_registering_nothing_is_the_plugins_fault_not_a_silent_pass() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), "ircx.command('x', () => 'y');", &notifies());
+
+        assert!(matches!(
+            plugin.notify(&to_notify(&[("m1", "buildbot", "deploy failed")])),
+            Err(Failure::Raised(_))
+        ));
+    }
+
+    /// The lookup the host does on every batch: a plugin that declared
+    /// `notifies` and was not granted it is not a rule, and neither is one
+    /// granted a different channel.
+    #[test]
+    fn only_a_granted_plugin_notifies_and_only_where_it_was_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let source = author(root.path(), "deploys", DEPLOYS, notifies());
+        runtime.install(&source).expect("install");
+
+        assert!(
+            runtime.notifiers(TARGET).is_empty(),
+            "installing grants nothing, so nothing notifies yet"
+        );
+
+        runtime.set_grants("deploys", notifies()).expect("grant");
+        assert_eq!(
+            runtime
+                .notifiers(TARGET)
+                .into_iter()
+                .map(|rule| rule.plugin)
+                .collect::<Vec<_>>(),
+            ["deploys"]
+        );
+        assert!(
+            runtime.notifiers("#somewhere-else").is_empty(),
+            "the grant names one channel"
+        );
+
+        runtime
+            .set_grants("deploys", Grants::default())
+            .expect("revoke everything");
+        assert!(
+            runtime.notifiers(TARGET).is_empty(),
+            "a withdrawn grant stops it deciding, as it stops a command"
+        );
+    }
+
+    /// One plugin is one thread and one interpreter, so a rule and an annotator
+    /// in the same plugin run one after the other. What that has to preserve is
+    /// that neither breaks the other.
+    #[test]
+    fn a_plugin_can_notify_and_annotate_from_one_runtime() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let both = in_channels(
+            grants(&[Permission::RaiseNotifications, Permission::AnnotateMessages]),
+            &[TARGET],
+        );
+        let source = author(
+            root.path(),
+            "deploys",
+            r#"
+              ircx.annotate((message) => message.text.includes("failed") ? "a note" : undefined);
+              ircx.notify((message) => message.text.includes("failed"));
+            "#,
+            both.clone(),
+        );
+        runtime.install(&source).expect("install");
+        runtime.set_grants("deploys", both).expect("grant");
+
+        let annotator = runtime.annotators(TARGET).remove(0);
+        let rule = runtime.notifiers(TARGET).remove(0);
+
+        for _ in 0..3 {
+            let raised = runtime
+                .notify(&rule, to_notify(&[("m1", "buildbot", "deploy failed")]))
+                .expect("the batch is read");
+            assert_eq!(raised.raised, ["m1"]);
+
+            let noted = runtime
+                .annotate(&annotator, arrivals(&[("m1", "buildbot", "deploy failed")]))
+                .expect("the batch is annotated");
+            assert_eq!(noted.notes[0].text, "a note");
+        }
     }
 }

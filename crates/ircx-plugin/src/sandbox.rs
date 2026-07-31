@@ -9,6 +9,7 @@
 //! The runtime is built on the thread that will use it and never moves.
 
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,7 +22,8 @@ use crate::data::LocalData;
 use crate::manifest::{Grants, Permission};
 use crate::net::{FetchRequest, Fetcher};
 use crate::{
-    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, Note, Outgoing,
+    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, Note,
+    NotifyReply, NotifyRequest, Outgoing,
 };
 
 /// Deep enough for the recursion a plugin has any business doing, shallow
@@ -45,6 +47,7 @@ const MAX_NOTE_CHARS: usize = 200;
 const BOOTSTRAP: &str = r#"
 globalThis.__ircx_commands = Object.create(null);
 globalThis.__ircx_annotator = null;
+globalThis.__ircx_notifier = null;
 globalThis.ircx = {
   command(name, handler) {
     if (typeof handler !== "function") {
@@ -57,6 +60,12 @@ globalThis.ircx = {
       throw new TypeError("ircx.annotate needs a function");
     }
     __ircx_annotator = handler;
+  },
+  notify(handler) {
+    if (typeof handler !== "function") {
+      throw new TypeError("ircx.notify needs a function");
+    }
+    __ircx_notifier = handler;
   },
   send(target, text) {
     __ircx_send(String(target), String(text));
@@ -116,6 +125,25 @@ globalThis.__ircx_annotate = function (json) {
   }
   return JSON.stringify(notes);
 };
+globalThis.__ircx_notify = function (json) {
+  if (!__ircx_notifier) {
+    throw new Error("this plugin declared notifies and registered no handler");
+  }
+  const batch = JSON.parse(json);
+  const raised = [];
+  for (const message of batch.messages) {
+    const answer = __ircx_notifier(message);
+    if (answer === undefined || answer === null || answer === false) continue;
+    // A rule answers whether, so only true raises. A string or an object is
+    // refused rather than read as truthy: a promise is an object, and a rule
+    // that returned one would raise every message it was ever handed.
+    if (answer !== true) {
+      throw new TypeError("a notification rule must answer true or false, not a " + typeof answer);
+    }
+    raised.push(message.id);
+  }
+  return JSON.stringify(raised);
+};
 "#;
 
 /// The interrupt handler runs on the interpreter's own thread and takes no
@@ -163,9 +191,11 @@ enum Refusal {
 /// is all the sharing that is needed.
 struct Host {
     grants: Grants,
-    /// Set for the length of an annotate call. `send` and `fetch` read it
-    /// before they read the grants, because no grant opens them here.
-    annotating: Cell<bool>,
+    /// What the plugin is doing, while it is doing something that arrived
+    /// rather than something the user typed. `send` and `fetch` read it before
+    /// they read the grants, because no grant opens them here. `None` outside
+    /// such a call.
+    on_arrival: Cell<Option<&'static str>>,
     outbox: RefCell<Vec<Outgoing>>,
     refusal: Cell<Option<Refusal>>,
     data: RefCell<LocalData>,
@@ -181,20 +211,21 @@ impl Host {
         throw(ctx, &format!("ircx: {} was not granted", permission.name()))
     }
 
-    /// An annotator cannot send because the bound that makes a plugin's sends
-    /// safe is the keystroke, and a send caused by an arrival has no such
-    /// unit. It cannot fetch because a fetch per arriving message is the
-    /// client reaching a remote URL on its own, the one exclusion this
+    /// A hook that runs on arrival cannot send, because the bound that makes a
+    /// plugin's sends safe is the keystroke, and a send caused by an arrival
+    /// has no such unit. It cannot fetch because a fetch per arriving message
+    /// is the client reaching a remote URL on its own, the one exclusion this
     /// milestone made deliberately.
     ///
     /// Thrown rather than recorded as a `Refusal`. A refusal is recorded so a
     /// plugin cannot fake a denial, and no grant opens these, so it surfaces
     /// as the plugin having thrown.
-    fn closed_to_annotators(&self, ctx: &Ctx<'_>, what: &'static str) -> rquickjs::Error {
-        throw(
-            ctx,
-            &format!("ircx: {what} is not available while annotating a message"),
-        )
+    fn closed_on_arrival(&self, ctx: &Ctx<'_>, what: &'static str) -> rquickjs::Error {
+        let doing = self
+            .on_arrival
+            .get()
+            .unwrap_or("reading an arriving message");
+        throw(ctx, &format!("ircx: {what} is not available while {doing}"))
     }
 
     fn refuse(&self, ctx: &Ctx<'_>, refusal: Refusal, message: &str) -> rquickjs::Error {
@@ -248,7 +279,7 @@ impl Sandbox {
         let context = Context::full(&runtime).map_err(|error| Failure::Host(error.to_string()))?;
         let host = Rc::new(Host {
             grants: grants.clone(),
-            annotating: Cell::new(false),
+            on_arrival: Cell::new(None),
             outbox: RefCell::new(Vec::new()),
             refusal: Cell::new(None),
             data: RefCell::new(LocalData::open(data_file)),
@@ -284,8 +315,8 @@ impl Sandbox {
                     Function::new(
                         ctx.clone(),
                         move |ctx: Ctx<'_>, target: String, text: String| -> rquickjs::Result<()> {
-                            if send.annotating.get() {
-                                return Err(send.closed_to_annotators(&ctx, "ircx.send"));
+                            if send.on_arrival.get().is_some() {
+                                return Err(send.closed_on_arrival(&ctx, "ircx.send"));
                             }
                             if !send.grants.holds(Permission::SendMessages) {
                                 return Err(send.deny(&ctx, Permission::SendMessages));
@@ -378,8 +409,8 @@ impl Sandbox {
                     Function::new(
                         ctx.clone(),
                         move |ctx: Ctx<'_>, url: String| -> rquickjs::Result<String> {
-                            if fetch.annotating.get() {
-                                return Err(fetch.closed_to_annotators(&ctx, "ircx.fetch"));
+                            if fetch.on_arrival.get().is_some() {
+                                return Err(fetch.closed_on_arrival(&ctx, "ircx.fetch"));
                             }
                             if !fetch.grants.holds(Permission::NetworkRequests) {
                                 return Err(fetch.deny(&ctx, Permission::NetworkRequests));
@@ -469,12 +500,12 @@ impl Sandbox {
         let argument =
             serde_json::to_string(request).map_err(|error| Failure::Host(error.to_string()))?;
 
-        self.host.annotating.set(true);
+        self.host.on_arrival.set(Some("annotating a message"));
         let answer = self.under_deadline(move |ctx| {
             let dispatch: Function = ctx.globals().get("__ircx_annotate")?;
             dispatch.call::<_, String>((argument,))
         });
-        self.host.annotating.set(false);
+        self.host.on_arrival.set(None);
         // An annotator that reached for `ircx.send` also cleared the outbox
         // check by throwing, but a handler that caught the refusal and carried
         // on would leave whatever a command before it queued.
@@ -487,6 +518,67 @@ impl Sandbox {
                 Ok(AnnotateReply {
                     notes: raw.into_iter().filter_map(|note| self.note(note)).collect(),
                 })
+            }
+            Err(failure) => {
+                if matches!(failure, Failure::Timeout | Failure::OutOfMemory) {
+                    self.poisoned = Some(failure.clone());
+                }
+                Err(failure)
+            }
+        }
+    }
+
+    /// One batch through the plugin's notify handler.
+    ///
+    /// Needs no `render-content`: a rule shows nothing. What it produces is a
+    /// list of ids the host already had, so there is no text of the plugin's
+    /// to sanitise — the ids are checked against the batch instead, because a
+    /// rule may only raise what it was handed.
+    pub fn notify(&mut self, request: &NotifyRequest) -> Result<NotifyReply, Failure> {
+        if let Some(dead) = &self.poisoned {
+            return Err(dead.clone());
+        }
+        if !self.host.grants.holds(Permission::RaiseNotifications) {
+            return Err(Failure::Denied(Permission::RaiseNotifications));
+        }
+        if !self.host.grants.reaches(&request.target) {
+            return Err(Failure::Denied(Permission::AccessChannels));
+        }
+        self.host.refusal.set(None);
+
+        let argument =
+            serde_json::to_string(request).map_err(|error| Failure::Host(error.to_string()))?;
+
+        self.host
+            .on_arrival
+            .set(Some("deciding whether to interrupt you"));
+        let answer = self.under_deadline(move |ctx| {
+            let dispatch: Function = ctx.globals().get("__ircx_notify")?;
+            dispatch.call::<_, String>((argument,))
+        });
+        self.host.on_arrival.set(None);
+        // As for an annotator: a rule that caught the refusal from `ircx.send`
+        // and carried on would otherwise leave whatever a command before it
+        // queued.
+        self.host.outbox.borrow_mut().clear();
+
+        match answer {
+            Ok(json) => {
+                let raw: Vec<String> = serde_json::from_str(&json)
+                    .map_err(|error| Failure::Host(error.to_string()))?;
+                let handed: BTreeSet<&str> =
+                    request.messages.iter().map(|m| m.id.as_str()).collect();
+                let mut raised: Vec<String> = Vec::new();
+                for id in raw {
+                    // A message this batch did not contain is dropped rather
+                    // than refused: the plugin cannot name one it was never
+                    // given, and the batch it was given is the whole of what
+                    // it may speak about.
+                    if handed.contains(id.as_str()) && !raised.contains(&id) {
+                        raised.push(id);
+                    }
+                }
+                Ok(NotifyReply { raised })
             }
             Err(failure) => {
                 if matches!(failure, Failure::Timeout | Failure::OutOfMemory) {

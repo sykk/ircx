@@ -245,6 +245,7 @@ fn sent(permission: Permission) -> PluginPermission {
         Permission::NetworkRequests => PluginPermission::NetworkRequests,
         Permission::RenderContent => PluginPermission::RenderContent,
         Permission::AnnotateMessages => PluginPermission::AnnotateMessages,
+        Permission::RaiseNotifications => PluginPermission::RaiseNotifications,
     }
 }
 
@@ -258,6 +259,7 @@ fn enforced(permission: PluginPermission) -> Permission {
         PluginPermission::NetworkRequests => Permission::NetworkRequests,
         PluginPermission::RenderContent => Permission::RenderContent,
         PluginPermission::AnnotateMessages => Permission::AnnotateMessages,
+        PluginPermission::RaiseNotifications => Permission::RaiseNotifications,
     }
 }
 

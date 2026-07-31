@@ -461,19 +461,40 @@ This one was worth walking because two of the three layers only matter for data
 already written: a fix tested on a fresh archive would have passed while the
 reporter's own history stayed invisible.
 
-## SCRAM-SHA-512
+## SCRAM
 
-**Not walked against a real account.** The exchange has unit tests against
-vectors computed independently in Python, and a session test that answers all
-four messages the way a server does, including a forged signature and a
-replayed nonce. What none of that covers is a real server: `ergo` supports the
-mechanism and Libera does not, so the walk is `ergo` with a registered account,
-and the questions are whether the iteration count a real server names is inside
-the range this client will run and whether the account reads back on `900`.
+**SCRAM-SHA-256 can be walked here; SCRAM-SHA-512 cannot.** `ergo` advertises
 
-This is the same gap `sasl.rs` already had — `docs/manual-verification.md` has
-listed SASL against a real account as unwalked since the beginning — and this
-adds a second mechanism to it rather than closing it.
+```text
+sasl=PLAIN,EXTERNAL,SCRAM-SHA-256
+```
+
+and Libera advertises `SCRAM-SHA-512` (the capability list in
+`tests/session.rs` is a real capture from #43). So the local walk is SHA-256
+against `ergo` with a registered account, and SHA-512 has no server here to
+answer it.
+
+That is worth stating plainly: SHA-512 shipped first and there was nowhere to
+run it. The mechanism's own tests are strong — the SHA-256 half is checked
+against RFC 7677's published vectors, and the exchange, the nonce check and the
+signature check are shared — but no server has answered a SHA-512 exchange this
+client sent.
+
+**Not walked**, for either:
+
+- **A real account through the whole exchange.** Whether the iteration count a
+  real server names is inside the range this client will run, and whether the
+  account reads back on `900`.
+- **A wrong password.** SCRAM fails at the signature rather than at a numeric,
+  so the sentence a user sees comes from a different path than PLAIN's.
+
+Also worth knowing, and the reason this section exists: **picking a mechanism the
+server does not offer connects successfully and does not log you in.** The
+client says `<network> does not accept SASL <mechanism>` in the server tab and
+carries on, because a missing capability is not an authentication failure. It is
+easy to read the successful connection as a successful login;
+`a_mechanism_the_server_does_not_offer_says_so_and_connects_anyway` pins the
+behaviour, but nothing makes it loud.
 
 ## The notification rule
 

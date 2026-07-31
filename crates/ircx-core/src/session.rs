@@ -565,7 +565,13 @@ impl SessionState {
 
         // PLAIN and EXTERNAL answer the empty challenge and are done. SCRAM is
         // four messages, so everything after the first is data it has to read.
-        if credentials.mechanism != SaslMechanism::ScramSha512 {
+        let hash = match credentials.mechanism {
+            SaslMechanism::ScramSha256 => Some(scram::Hash::Sha256),
+            SaslMechanism::ScramSha512 => Some(scram::Hash::Sha512),
+            _ => None,
+        };
+
+        let Some(hash) = hash else {
             if param != "+" {
                 return;
             }
@@ -577,10 +583,11 @@ impl SessionState {
                 _ => String::new(),
             };
             return self.send_payload(&payload);
-        }
+        };
 
         if param == "+" && self.scram.is_none() {
             let (exchange, first) = scram::Scram::start(
+                hash,
                 &credentials.account,
                 credentials.password.as_deref().unwrap_or_default(),
                 &scram::nonce(&ring::rand::SystemRandom::new()),

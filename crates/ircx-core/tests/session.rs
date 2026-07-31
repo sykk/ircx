@@ -2304,22 +2304,31 @@ mod scram_over_a_session {
     const SERVER_PART: &str = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0";
 
     fn authenticating() -> Harness {
+        authenticating_with(SaslMechanism::ScramSha512, "SCRAM-SHA-512")
+    }
+
+    fn authenticating_with(mechanism: SaslMechanism, token: &str) -> Harness {
         let mut config = config();
         config.sasl = Some(SaslCredentials {
-            mechanism: SaslMechanism::ScramSha512,
+            mechanism,
             account: "user".into(),
             password: Some("pencil".into()),
         });
         let mut session = Harness::new(config);
         session.connect();
-        session.feed(&format!(":irc.libera.chat CAP * LS :{LIBERA_CAPS}"));
+        // The server advertises the mechanism being negotiated. A server that
+        // does not is a different case, and the client is right to refuse it —
+        // `ergo` offers SHA-256 and not SHA-512, which is how that was found.
+        session.feed(&format!(
+            ":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,{token} message-tags"
+        ));
         session.feed(":irc.libera.chat CAP * ACK :sasl");
         // `sent` drains, so registration is cleared here and every assertion
         // below is about the exchange rather than about what came before it.
         let sent = session.sent();
         assert_eq!(
             sent.last().map(String::as_str),
-            Some("AUTHENTICATE SCRAM-SHA-512"),
+            Some(format!("AUTHENTICATE {token}").as_str()),
             "the mechanism is named before anything is sent: {sent:?}"
         );
         session
@@ -2387,6 +2396,57 @@ mod scram_over_a_session {
             ),
             "{:?}",
             session.sasl_states().last()
+        );
+    }
+
+    /// A mechanism the server never offered is not an authentication failure:
+    /// the client says so and carries on unauthenticated, per the degradation
+    /// rule. Pinned because it is quiet — `ergo` advertises SHA-256, a user
+    /// picking SHA-512 connects fine, and nothing about the connection says
+    /// they are not logged in unless this line is read.
+    #[test]
+    fn a_mechanism_the_server_does_not_offer_says_so_and_connects_anyway() {
+        let mut config = config();
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::ScramSha512,
+            account: "user".into(),
+            password: Some("pencil".into()),
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,SCRAM-SHA-256");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+
+        let said: Vec<String> = session
+            .messages()
+            .iter()
+            .map(|message| message.text.clone())
+            .filter(|text| text.contains("SASL"))
+            .collect();
+        assert_eq!(said, ["Libera does not accept SASL SCRAM-SHA-512"]);
+        assert!(
+            session.sent().contains(&"CAP END".to_string()),
+            "registration carries on rather than stopping"
+        );
+    }
+
+    /// Which hash is negotiated is the one thing this wiring can get wrong, and
+    /// getting it wrong would send a proof the server cannot check. `ergo`
+    /// offers SHA-256 and Libera advertises SHA-512, so both are real.
+    #[test]
+    fn sha_256_names_itself_and_runs_the_same_exchange() {
+        let mut session = authenticating_with(SaslMechanism::ScramSha256, "SCRAM-SHA-256");
+        session.feed("AUTHENTICATE +");
+        let first = session.sent();
+        let nonce = nonce_from(&first[0]);
+        let combined = format!("{nonce}{SERVER_PART}");
+        let server_first = format!("r={combined},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+
+        let client_final = payload(&session.sent()[0]);
+        assert!(
+            client_final.starts_with(&format!("c=biws,r={combined},p=")),
+            "got {client_final}"
         );
     }
 

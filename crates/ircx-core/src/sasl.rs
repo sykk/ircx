@@ -10,6 +10,7 @@ pub fn mechanism_token(mechanism: SaslMechanism) -> &'static str {
     match mechanism {
         SaslMechanism::Plain => "PLAIN",
         SaslMechanism::External => "EXTERNAL",
+        SaslMechanism::ScramSha256 => "SCRAM-SHA-256",
         SaslMechanism::ScramSha512 => "SCRAM-SHA-512",
     }
 }

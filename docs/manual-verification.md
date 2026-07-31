@@ -395,6 +395,59 @@ neither direction is a message anything could miss.
 which is #93 seen from the other side: the refusal is an `Error` and a plugin
 that degrades can say why it did.
 
+## The annotator
+
+Built end to end and **never run in the assembled application.** Every part is
+covered by a test — the sandbox refusals, the runtime, the batch, the store
+round trip, and the shipped example under `examples/plugins/units` — and no
+message has ever reached an annotator inside the running client.
+
+The path to walk, once there is somebody to walk it. Local `ergo` is the server
+to do it against, and `docs/plugins.md` describes what should happen at each
+step.
+
+- **The install dialogue's eighth line.** `annotate-messages` reads *"Read every
+  message as it arrives in the channels you choose, and show its own note beside
+  them"*, and nothing has ever displayed it. The seven that came before it were
+  read cold by the owner on 2026-07-30 and one of them did not survive the
+  reading, so this one is worth the same treatment rather than an assumption.
+  It is also the first permission whose manifest asks for `"channels": ["*"]`,
+  so the dialogue has to ask which conversations rather than list any.
+- **A note appearing at all.** Install `examples/plugins/units`, grant it a
+  channel, and have somebody say a temperature in it.
+- **The note arriving after the message rather than with it.** This is the
+  whole of the design: the annotator runs on arrival and never on draw, so the
+  conversation is never waiting on a plugin. A note that appears in the same
+  frame as the message would still look right and would mean the ordering is
+  accidental.
+- **The note not reading as part of what was said.** Named with the plugin and
+  set apart from the text. A test asserts the message's own text does not
+  contain the note, which is not the same as a person finding them
+  distinguishable at a glance.
+- **A note surviving a restart.** The archive is the only place one lives once
+  the window has moved on. Close the client, reopen the conversation, and the
+  note should come back with the message without the annotator running again.
+- **A broken annotator being dropped.** Three consecutive failed batches, the
+  first reported and the rest silent. An example that throws would show whether
+  the report reaches anywhere a person looks — the strike counting is unit
+  tested, the reporting is a `warn!` nobody has read in situ.
+
+## Density
+
+Chosen in the palette and remembered in `localStorage`, verified that far on
+2026-07-31: `ircx.density` read back as `read` after a restart, alongside
+`ircx.theme`. What is left is a matter of looking rather than of mechanism.
+
+- **The loosened compact.** The first values were too tight against real
+  backlog; leading went 1.45 to 1.55 and the block gap 8px to 10px. Nobody has
+  looked at the result. `read` has never been looked at against a long backlog
+  at all.
+- **Changing theme while on a density that is not comfortable.** The
+  implementation is built around this case — theme and density write the same
+  three properties to the same inline declaration — and `apply.test.ts` covers
+  it, but it has not been seen. The density should survive and the colours
+  should still change.
+
 ## Unread counts
 
 `mark_read` is the only thing that resets a conversation's unread count, and

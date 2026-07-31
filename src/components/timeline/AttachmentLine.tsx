@@ -44,6 +44,11 @@ function Paperclip() {
 /**
  * An attachment is an offer, not a card: one line, and no bytes cross the
  * network until the reader asks for them.
+ *
+ * The offer is only made for what can be shown. `mime` is guessed from the
+ * extension for exactly this, and every URL in a message is an attachment — so
+ * without the check, a link to a news article carries a `fetch` whose only
+ * possible answer is that it is not an image.
  */
 export function AttachmentLine({ attachment }: { attachment: Attachment }) {
   // Held locally rather than pushed into the store: a preview is session-only,
@@ -96,7 +101,7 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
             · fetched {formatClock(fetchedAt)}
           </span>
         )}
-        {!preview && (
+        {!preview && attachment.mime !== null && (
           <button
             type="button"
             onClick={load}

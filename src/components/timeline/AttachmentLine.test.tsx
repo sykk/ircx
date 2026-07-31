@@ -5,7 +5,11 @@ import { makeAttachment } from "./fixtures";
 
 const { ipcMock } = vi.hoisted(() => ({ ipcMock: { loadPreview: vi.fn() } }));
 
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn() }));
+vi.mock("@/lib/ipc", () => ({
+  ipc: ipcMock,
+  onIrcxEvent: vi.fn(),
+  openExternal: vi.fn().mockResolvedValue(undefined),
+}));
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -70,5 +74,33 @@ describe("AttachmentLine", () => {
       />,
     );
     expect(screen.getByText("dump.bin")).toBeTruthy();
+  });
+});
+
+/**
+ * Every URL in a message is an attachment, and only four image formats can be
+ * shown. Offering `fetch` on the rest is an action whose only possible answer
+ * is that it is not an image.
+ */
+describe("what a preview is offered for", () => {
+  it("offers nothing for a URL that is not an image", () => {
+    render(
+      <AttachmentLine
+        attachment={makeAttachment({
+          url: "https://example.invalid/an/article",
+          filename: "article",
+          mime: null,
+          sizeBytes: null,
+        })}
+      />,
+    );
+
+    expect(screen.queryByText("fetch")).toBeNull();
+    expect(screen.getByText("article")).toBeTruthy();
+  });
+
+  it("still offers one for an image", () => {
+    render(<AttachmentLine attachment={makeAttachment()} />);
+    expect(screen.getByText("fetch")).toBeTruthy();
   });
 });

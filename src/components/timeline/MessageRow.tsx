@@ -106,6 +106,8 @@ export function MessageRow({
             }
           />
 
+          {(message.raisedBy ?? []).length > 0 && <RaisedLine by={message.raisedBy ?? []} />}
+
           {(message.annotations ?? []).map((note) => (
             <AnnotationLine key={note.plugin} note={note} />
           ))}
@@ -183,6 +185,31 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
  * that a plugin cannot change what somebody said would mean little if its note
  * looked like the message.
  */
+/**
+ * Why this message made the conversation go loud, when it was not the reader's
+ * own name that did it.
+ *
+ * Without it the badge is a mystery: a channel marked as loudly as a mention,
+ * and nothing in it that mentions them. Named, because which rule thought so is
+ * how a reader decides whether it should have — the same reason a note carries
+ * the plugin that wrote it.
+ *
+ * Led by the verb rather than by the name, so it cannot be read as a note. A
+ * note is the plugin's own words about a message; this is the client's words
+ * about the plugin, and the two sit one above the other.
+ */
+function RaisedLine({ by }: { by: string[] }) {
+  return (
+    <div
+      className="mt-0.5 flex items-baseline gap-1.5 font-[family-name:var(--font-ui)] text-[11px]"
+      style={{ color: "var(--text-faint)" }}
+    >
+      <span className="shrink-0">raised by</span>
+      <span className="min-w-0 font-[family-name:var(--font-mono)]">{by.join(", ")}</span>
+    </div>
+  );
+}
+
 function AnnotationLine({ note }: { note: Annotation }) {
   return (
     <div

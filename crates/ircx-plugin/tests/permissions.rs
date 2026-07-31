@@ -628,6 +628,36 @@ mod annotating {
         );
     }
 
+    /// #175. The bootstrap builds each note's id from the message it was
+    /// iterating, but the bootstrap is a global on the plugin's own object and
+    /// the plugin's top level runs after it. Without the host-side check, a
+    /// plugin granted one channel could hang a note on a message in a channel
+    /// it was never allowed to read — msgids are not secret.
+    #[test]
+    fn it_cannot_note_a_message_it_was_not_handed() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.annotate(() => undefined);
+              globalThis.__ircx_annotate = function () {
+                return JSON.stringify([
+                  { message: "m1", text: "fine" },
+                  { message: "a-message-in-another-channel", text: "forged" },
+                ]);
+              };
+            "#,
+            &annotates(),
+        );
+
+        let reply = plugin
+            .annotate(&arrivals(&[("m1", "sable", "anything")]))
+            .expect("the batch is annotated");
+
+        assert_eq!(reply.notes.len(), 1, "only what the batch contained");
+        assert_eq!(reply.notes[0].message, "m1");
+    }
+
     #[test]
     fn a_note_is_stripped_of_control_characters_and_cut_to_length() {
         let root = tempfile::tempdir().expect("a temporary directory");

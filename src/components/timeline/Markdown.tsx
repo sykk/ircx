@@ -3,6 +3,7 @@ import { stripIrcFormatting } from "@/lib/ircFormat";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
+import { splitOnMention } from "@/store/selectors";
 import { describeUrl } from "@/lib/url";
 
 /**
@@ -34,11 +35,21 @@ function spansText(spans: Span[]): string {
     .join("");
 }
 
-export function Markdown({ text, urls = [] }: { text: string; urls?: readonly string[] }) {
+interface MarkdownProps {
+  text: string;
+  urls?: readonly string[];
+  /**
+   * The reader's nick, marked wherever it appears in the prose. Null leaves the
+   * text alone, which is every render that is not a message addressed to them.
+   */
+  mention?: string | null;
+}
+
+export function Markdown({ text, urls = [], mention = null }: MarkdownProps) {
   return (
     <>
       {parseMarkdown(stripIrcFormatting(text), urls).map((block, i) => (
-        <BlockView key={i} block={block} />
+        <BlockView key={i} block={block} mention={mention} />
       ))}
     </>
   );
@@ -48,7 +59,7 @@ export function Markdown({ text, urls = [] }: { text: string; urls?: readonly st
  * conversation off screen. */
 const PASTE_MAX_PX = 260;
 
-function BlockView({ block }: { block: Block }) {
+function BlockView({ block, mention }: { block: Block; mention: string | null }) {
   if (block.type === "code") {
     const lines = block.text === "" ? 0 : block.text.split("\n").length;
     return (
@@ -78,7 +89,7 @@ function BlockView({ block }: { block: Block }) {
   // notice's `-nick-` on the same line as the first word.
   return (
     <span className="whitespace-pre-wrap break-words">
-      <Spans spans={block.spans} />
+      <Spans spans={block.spans} mention={mention} />
     </span>
   );
 }
@@ -160,20 +171,50 @@ function Link({ url }: { url: string }) {
   );
 }
 
-function Spans({ spans }: { spans: Span[] }) {
+function Spans({ spans, mention }: { spans: Span[]; mention: string | null }) {
   return (
     <>
       {spans.map((span, i) => (
-        <Fragment key={i}>{renderSpan(span)}</Fragment>
+        <Fragment key={i}>{renderSpan(span, mention)}</Fragment>
       ))}
     </>
   );
 }
 
-function renderSpan(span: Span) {
+/**
+ * The reader's own nick where it appears in what somebody wrote.
+ *
+ * Prose only. A nick inside a paste or a `code` span is a string somebody
+ * quoted, not a person being addressed, and marking it would make the client
+ * claim a piece of data was about you.
+ */
+export function Mentioned({ text, mention }: { text: string; mention: string | null }) {
+  const runs = splitOnMention(text, mention);
+  if (runs.length === 1) return <>{text}</>;
+
+  return (
+    <>
+      {runs.map((run, i) =>
+        run.mine ? (
+          <mark
+            key={i}
+            className="rounded-[var(--radius-sm)] px-1 font-semibold"
+            style={{ background: "var(--accent-muted)", color: "var(--text-primary)" }}
+          >
+            {run.text}
+          </mark>
+        ) : (
+          <Fragment key={i}>{run.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+function renderSpan(span: Span, mention: string | null) {
   switch (span.type) {
     case "text":
-      return span.text;
+      return <Mentioned text={span.text} mention={mention} />;
     case "code":
       return (
         <code
@@ -186,13 +227,13 @@ function renderSpan(span: Span) {
     case "strong":
       return (
         <strong className="font-semibold">
-          <Spans spans={span.spans} />
+          <Spans spans={span.spans} mention={mention} />
         </strong>
       );
     case "em":
       return (
         <em className="italic">
-          <Spans spans={span.spans} />
+          <Spans spans={span.spans} mention={mention} />
         </em>
       );
     case "link":
@@ -200,7 +241,7 @@ function renderSpan(span: Span) {
     case "strike":
       return (
         <s style={{ color: "var(--text-muted)" }}>
-          <Spans spans={span.spans} />
+          <Spans spans={span.spans} mention={mention} />
         </s>
       );
   }

@@ -222,6 +222,57 @@ describe("Timeline", () => {
     expect(other?.getAttribute("data-highlight")).toBe(null);
   });
 
+  /** A tint says the client noticed something. It does not say what, and what
+   * it noticed — your name is in here — is the part a colour cannot carry. */
+  it("says why a run is marked, and names who addressed you", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "sable: look at this" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText(/addressed you by name/).textContent).toBe(
+      "phrack addressed you by name",
+    );
+  });
+
+  it("marks the name inside the line, so the reader is not hunting for it", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "sable: look at this" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect([...document.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["sable"]);
+  });
+
+  it("says nothing about a run that does not mention you", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "sableton is a different person" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText(/addressed you by name/)).toBeNull();
+    expect(document.querySelector("mark")).toBeNull();
+  });
+
+  /** A nick inside code is a string somebody quoted. Marking it would have the
+   * client claim a piece of data was about you. */
+  it("leaves a nick inside code alone", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "grep `sable` in the log" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(document.querySelector("mark")).toBeNull();
+  });
+
+  /** isHighlight already refuses your own line; the marking has to agree, or a
+   * message you sent would be marked for containing your own name. */
+  it("does not mark your own line back at you", () => {
+    seed([
+      makeMessage({
+        id: "a",
+        text: "sable is what they call me",
+        sender: { nick: "sable", user: null, host: null, account: null, isSelf: true },
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText(/addressed you by name/)).toBeNull();
+    expect(document.querySelector("mark")).toBeNull();
+  });
+
   it("renders markdown as elements, never as markup", () => {
     seed([makeMessage({ id: "a", text: "**bold** and <b>not a tag</b>" })]);
     render(<Timeline view={TEST_VIEW} />);

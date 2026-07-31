@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme } from "@/lib/theme";
+import { applyDensity, applyTheme } from "@/lib/theme";
 import { catalogue } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -378,6 +378,70 @@ describe("CommandPalette", () => {
       expect(screen.getByRole("alert").textContent).toContain("theme.css has no --scrim.");
       expect(useAppStore.getState().themeId).toBe("ircx-dark");
       expect(useAppStore.getState().paletteOpen).toBe(true);
+    });
+  });
+
+  /**
+   * #85. `readability/READABILITY.md` study 05 asked for three densities and
+   * left how a person picks one unanswered. The palette is how this client
+   * answers "how do I do a thing" everywhere else.
+   */
+  describe("choosing a density", () => {
+    const root = document.documentElement;
+
+    beforeEach(() => {
+      useAppStore.setState({ themes: catalogue().themes, themeId: "ircx-dark" });
+    });
+
+    afterEach(() => {
+      applyDensity("comfortable");
+      root.removeAttribute("style");
+      localStorage.clear();
+    });
+
+    it("offers all three, and says which is in use", () => {
+      render(<CommandPalette />);
+      type("density");
+
+      // The order is the ranker's, which has its own tests; what matters here
+      // is that all three are offered and only the one in force says so.
+      const rows = optionLabels();
+      expect(rows).toHaveLength(3);
+      for (const name of ["Compact", "Comfortable", "Read"]) {
+        expect(rows.some((row) => row.includes(`Density: ${name}`))).toBe(true);
+      }
+      expect(rows.filter((row) => row.includes("in use"))).toEqual([
+        expect.stringContaining("Density: Comfortable"),
+      ]);
+    });
+
+    it("is reachable by the name of the density rather than the word", () => {
+      render(<CommandPalette />);
+      type("compact");
+
+      expect(optionLabels().some((row) => row.includes("Density: Compact"))).toBe(true);
+    });
+
+    it("sets the rhythm, and remembers it, on Enter", () => {
+      render(<CommandPalette />);
+      type("Density: Compact");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("8px");
+      expect(useAppStore.getState().density).toBe("compact");
+      expect(localStorage.getItem("ircx.density")).toBe("compact");
+      expect(useAppStore.getState().paletteOpen).toBe(false);
+    });
+
+    /** The density is not the theme, and picking one must not quietly pick the
+     * other. */
+    it("leaves the theme where it was", () => {
+      render(<CommandPalette />);
+      type("Density: Read");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(useAppStore.getState().themeId).toBe("ircx-dark");
+      expect(root.style.getPropertyValue("--surface-base")).toBe("#0a0d12");
     });
   });
 });

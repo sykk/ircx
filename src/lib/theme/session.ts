@@ -1,7 +1,8 @@
 import { ipc, onThemesChanged } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ThemeSource } from "@/types";
-import { applyTheme, storedThemeId } from "./apply";
+import { applyDensity, applyTheme, storedThemeId } from "./apply";
+import { DEFAULT_DENSITY, storedDensity } from "./density";
 import { FALLBACK_THEME_ID, catalogue } from "./load";
 
 /** The theme the window opens in, resolved from the built-ins alone so it can
@@ -9,9 +10,11 @@ import { FALLBACK_THEME_ID, catalogue } from "./load";
  * synchronously; it lands a moment later, when `startThemes` resolves. */
 export function applyOpeningTheme(): void {
   const wanted = storedThemeId() ?? FALLBACK_THEME_ID;
+  const density = storedDensity() ?? DEFAULT_DENSITY;
   const { themes } = catalogue();
 
-  useAppStore.setState({ themes, themeId: wanted });
+  useAppStore.setState({ themes, themeId: wanted, density });
+  applyDensity(density);
   applyTheme(themes.find((theme) => theme.id === wanted) ?? null);
 }
 

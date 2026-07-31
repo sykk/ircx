@@ -1,4 +1,4 @@
-import type { BrokenTheme, Theme } from "@/lib/theme";
+import type { BrokenTheme, DensityId, Theme } from "@/lib/theme";
 import type {
   Channel,
   ChannelListing,
@@ -138,4 +138,7 @@ export interface AppState {
   /** The theme in force. Falls back to the built-in dark theme when it names
    * one that is not installed. */
   themeId: string;
+  /** The timeline's vertical rhythm. Separate from the theme so changing how
+   * tightly the conversation is set does not change its palette. */
+  density: DensityId;
 }

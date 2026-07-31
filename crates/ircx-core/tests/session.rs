@@ -1536,7 +1536,7 @@ fn what_tls_negotiated_reaches_the_network_tab() {
 #[test]
 fn a_plugin_that_stopped_says_so_where_the_network_says_everything_else() {
     const TEXT: &str = "The units plugin failed 3 times in a row, so ircx stopped asking it to \
-                        annotate messages. Restart ircx to let it try again.";
+                        annotate messages. Install it again from Plugins once it is fixed.";
 
     let mut session = registered("");
     session.plugin_stopped(

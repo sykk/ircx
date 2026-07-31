@@ -261,17 +261,18 @@ impl App {
 
     /// Copies a plugin folder into the library. It arrives granted nothing;
     /// what the user allows is a separate decision and a separate call.
-    pub fn install_plugin(&self, source: &Path) -> Result<InstalledPlugin, String> {
+    pub async fn install_plugin(&self, source: &Path) -> Result<InstalledPlugin, String> {
         let installed = self
             .plugin_runtime()?
             .install(source)
             .map_err(describe_library)?;
+        self.plugin_changed(installed.id()).await;
         Ok(describe_plugin(&installed))
     }
 
     /// Writes exactly what it is given, so granting less is how a permission is
     /// taken back and granting nothing turns the plugin off.
-    pub fn set_plugin_grants(
+    pub async fn set_plugin_grants(
         &self,
         plugin: &str,
         grants: PluginGrants,
@@ -280,13 +281,39 @@ impl App {
             .plugin_runtime()?
             .set_grants(plugin, chosen_grants(grants))
             .map_err(describe_library)?;
+        self.plugin_changed(plugin).await;
         Ok(describe_plugin(&installed))
     }
 
-    pub fn remove_plugin(&self, plugin: &str) -> Result<(), String> {
+    pub async fn remove_plugin(&self, plugin: &str) -> Result<(), String> {
         self.plugin_runtime()?
             .remove(plugin)
-            .map_err(describe_library)
+            .map_err(describe_library)?;
+        self.plugin_changed(plugin).await;
+        Ok(())
+    }
+
+    /// Tells every running network that this plugin's library entry changed, so
+    /// a hook it dropped is asked again.
+    ///
+    /// The strikes belong to a connection and nothing else clears them, so
+    /// without this a plugin repaired and installed again stays switched off
+    /// until the client restarts — which is the repair nobody tries first.
+    ///
+    /// Every network rather than the ones the plugin reaches: which channels it
+    /// is granted is part of what may just have changed.
+    async fn plugin_changed(&self, plugin: &str) {
+        // Collected before the awaits, because `guard` is a std lock and the
+        // sends are not instant.
+        let senders: Vec<_> = self.guard().values().map(NetworkHandle::commands).collect();
+        for sender in senders {
+            let changed = SessionCommand::PluginChanged {
+                plugin: plugin.to_owned(),
+            };
+            if sender.send(changed).await.is_err() {
+                warn!(%plugin, "a network stopped before it could be told the plugin changed");
+            }
+        }
     }
 
     fn plugin_runtime(&self) -> Result<&PluginRuntime, String> {
@@ -549,7 +576,10 @@ mod tests {
         let root = tempfile::tempdir().expect("a temporary directory");
         let app = plugin_app(root.path());
 
-        let installed = app.install_plugin(&author(root.path(), "greeter")).unwrap();
+        let installed = app
+            .install_plugin(&author(root.path(), "greeter"))
+            .await
+            .unwrap();
 
         assert_eq!(installed.id, "greeter");
         assert_eq!(
@@ -569,7 +599,9 @@ mod tests {
     async fn granting_what_a_plugin_never_asked_for_is_refused_by_name() {
         let root = tempfile::tempdir().expect("a temporary directory");
         let app = plugin_app(root.path());
-        app.install_plugin(&author(root.path(), "greeter")).unwrap();
+        app.install_plugin(&author(root.path(), "greeter"))
+            .await
+            .unwrap();
 
         let error = app
             .set_plugin_grants(
@@ -579,6 +611,7 @@ mod tests {
                     ..PluginGrants::default()
                 },
             )
+            .await
             .unwrap_err();
 
         assert!(error.contains("greeter"), "{error}");
@@ -595,8 +628,12 @@ mod tests {
     async fn granting_less_takes_a_permission_back() {
         let root = tempfile::tempdir().expect("a temporary directory");
         let app = plugin_app(root.path());
-        let installed = app.install_plugin(&author(root.path(), "greeter")).unwrap();
+        let installed = app
+            .install_plugin(&author(root.path(), "greeter"))
+            .await
+            .unwrap();
         app.set_plugin_grants("greeter", installed.requests.clone())
+            .await
             .unwrap();
 
         let narrowed = app
@@ -607,6 +644,7 @@ mod tests {
                     ..PluginGrants::default()
                 },
             )
+            .await
             .unwrap();
 
         assert_eq!(
@@ -623,13 +661,51 @@ mod tests {
     async fn a_removed_plugin_is_gone_from_the_list() {
         let root = tempfile::tempdir().expect("a temporary directory");
         let app = plugin_app(root.path());
-        app.install_plugin(&author(root.path(), "greeter")).unwrap();
+        app.install_plugin(&author(root.path(), "greeter"))
+            .await
+            .unwrap();
 
-        app.remove_plugin("greeter").unwrap();
+        app.remove_plugin("greeter").await.unwrap();
 
         assert!(app.list_plugins().unwrap().is_empty());
-        let error = app.remove_plugin("greeter").unwrap_err();
+        let error = app.remove_plugin("greeter").await.unwrap_err();
         assert!(error.contains("greeter"), "{error}");
+    }
+
+    /// Changing the library tells every running network, so three calls that
+    /// used to touch nothing but files now await a send per network. A session
+    /// whose inbox is full stalls them, which the type system has nothing to
+    /// say about — holding the guard across the sends is the failure it does
+    /// catch, because the future stops being `Send` and Tauri will not take it.
+    ///
+    /// Bounded, so a regression hangs this rather than the user's client.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn changing_the_library_answers_with_a_network_running() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let app = plugin_app(root.path());
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        app.connect(&id).await.unwrap();
+
+        let installed = timeout(
+            Duration::from_secs(5),
+            app.install_plugin(&author(root.path(), "greeter")),
+        )
+        .await
+        .expect("installing answered")
+        .unwrap();
+
+        timeout(
+            Duration::from_secs(5),
+            app.set_plugin_grants("greeter", installed.requests.clone()),
+        )
+        .await
+        .expect("granting answered")
+        .unwrap();
+
+        timeout(Duration::from_secs(5), app.remove_plugin("greeter"))
+            .await
+            .expect("removing answered")
+            .unwrap();
     }
 
     /// A client whose plugin library could not be opened is still a client.

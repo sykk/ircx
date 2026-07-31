@@ -232,7 +232,7 @@ pub async fn install_plugin(
     app: State<'_, App>,
     source: String,
 ) -> Result<InstalledPlugin, String> {
-    app.install_plugin(&PathBuf::from(source))
+    app.install_plugin(&PathBuf::from(source)).await
 }
 
 #[tauri::command]
@@ -241,10 +241,10 @@ pub async fn set_plugin_grants(
     plugin: String,
     grants: PluginGrants,
 ) -> Result<InstalledPlugin, String> {
-    app.set_plugin_grants(&plugin, grants)
+    app.set_plugin_grants(&plugin, grants).await
 }
 
 #[tauri::command]
 pub async fn remove_plugin(app: State<'_, App>, plugin: String) -> Result<(), String> {
-    app.remove_plugin(&plugin)
+    app.remove_plugin(&plugin).await
 }

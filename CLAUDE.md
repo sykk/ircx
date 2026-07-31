@@ -12,16 +12,18 @@ How the conversation *reads* — grouping, gutter timestamps, nick colour,
 presence digests, the unread seam, typography — follows
 `readability/READABILITY.md`, which supersedes the mockup on those points. Its
 studies assume an encryption layer this milestone does not build; take the
-structural findings and leave the verdict machinery. Four deliberate departures
+structural findings and leave the verdict machinery. Three deliberate departures
 from it: typography stays semantic (prose in the text face, data in mono); the
-nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`; a
-message in no group keeps a neutral spine where the study draws nothing; and a
-message naming you takes the accent, outranking the colour of any group it is in.
+nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`;
+and a message in no group keeps a neutral spine where the study draws nothing.
 
 The spine carries grouping, and its hue names the group — taken from whoever
 opened it. `src/components/timeline/groups.ts` assigns each message to at most
 one, on the evidence of what people typed: a `[topic]` somebody declared, or a
-leading `nick:` addressing somebody who has spoken.
+leading `nick:` naming somebody in the channel. A group keeps the spine even
+where the run names you; the mention is already marked by the line above the
+run and by the tint on its row, and letting it take the spine cost the accent
+the second block of every exchange the reader was in.
 
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the

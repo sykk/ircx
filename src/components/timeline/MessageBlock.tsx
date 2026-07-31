@@ -162,12 +162,21 @@ export function MessageBlock({
   // and which rule is on the row, where the message is.
   const raised = messages.some((message) => (message.raisedBy ?? []).length > 0);
 
-  // A mention outranks the group. The group's colour breaks for this one block
-  // and the run either side still holds it, whereas a mention has nowhere else
-  // to go: it is the loudest thing the timeline says and a reading aid must not
-  // sit on top of it.
+  // The group keeps the spine; a mention takes it only where there is no group
+  // to lose.
+  //
+  // This was the other way round, on the argument that a mention has nowhere
+  // else to go. It has two: the block prints "X addressed you by name" above
+  // the run, and the row itself is tinted. The spine was a third mark on the
+  // same message and the only one carrying something the others cannot — which
+  // conversation it belongs to.
+  //
+  // Watching an exchange settled it. A reply to you names you, because that is
+  // what replying on IRC is, so the accent took the second block of every
+  // exchange the reader was in and the hue survived only on conversations
+  // between other people.
   const groupTint = group === null ? undefined : nickColor(group.opener);
-  const spineTint = addressed || raised ? "var(--accent)" : groupTint;
+  const spineTint = groupTint ?? (addressed || raised ? "var(--accent)" : undefined);
 
   return (
     <Block

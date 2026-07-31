@@ -137,6 +137,9 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         // A finished list arrives once for a `LIST` and writes where nothing
         // else does, so it shares a lane with nothing.
         | IrcxEvent::ChannelsListed { .. }
+        // One note about one message, from one plugin. Sharing the message
+        // lane would fold it into the message it is about and lose it.
+        | IrcxEvent::MessageAnnotated { .. }
         | IrcxEvent::Notice { .. } => None,
     }
 }

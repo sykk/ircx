@@ -108,6 +108,7 @@ const initialState: AppState = {
   members: {},
   timelines: {},
   typing: {},
+  annotations: {},
   replyTo: {},
   rawLog: {},
   channelList: {},
@@ -499,6 +500,28 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       if (at === -1) messages.splice(insertionPoint(messages, event.message), 0, event.message);
       else messages[at] = event.message;
       return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
+    }
+
+    /** #90. The note arrives after the message it is about, because the
+     * annotator runs on arrival rather than on draw — so the message is
+     * already here, and a note for one that is not is kept anyway: it is
+     * drawn if the message scrolls back in. */
+    case "messageAnnotated": {
+      const key = targetKey(event.network, event.target);
+      const held = s.annotations[key] ?? {};
+      const forMessage = held[event.message] ?? [];
+      // One note per plugin per message. A plugin that answers the same
+      // message twice replaces what it said rather than saying it twice.
+      const next = [
+        ...forMessage.filter((note) => note.plugin !== event.plugin),
+        { plugin: event.plugin, text: event.text },
+      ];
+      return {
+        annotations: {
+          ...s.annotations,
+          [key]: { ...held, [event.message]: next },
+        },
+      };
     }
 
     case "reactionChanged": {

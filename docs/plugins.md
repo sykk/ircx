@@ -197,10 +197,11 @@ answers with its own text, drawn beside that message and named with the plugin's
 id. It is the command shape under a different trigger: the host hands a value
 over, the plugin returns one, the host applies a deadline.
 
-**The sandbox half is built**: the permission, the manifest flag, the batch call,
-what the handler cannot reach, and the sanitising. Nothing calls it yet — no
-message reaches an annotator and nothing draws a note. What that still needs is
-in *What is not built*.
+**Built**: the permission, the manifest flag, the batch call, what the handler
+cannot reach, the sanitising, the host handing arrivals over on the batch that
+drew them, and the note drawn under the message and named with the plugin. What
+is missing is in *What is not built* — chiefly that a note does not survive a
+restart.
 
 ```json
 {
@@ -311,7 +312,7 @@ permission too rather than borrowing this one.
 | what it does | what happens |
 |---|---|
 | throws | no annotation for that batch, reported once against the plugin's name |
-| throws every time | the annotator is dropped for the session |
+| throws every time | the annotator is dropped for the session, after three batches in a row |
 | overruns the deadline | runtime thrown away, as for a command; drawn messages are untouched |
 | returns a promise | refused, because hooks are synchronous |
 
@@ -322,11 +323,11 @@ the report and the rest are silence.
 
 ## What is not built
 
-- **Anything that calls an annotator.** `Sandbox::annotate` works and nothing
-  invokes it: messages are not handed over on arrival, notes are not stored
-  beside the message, nothing is drawn, and an annotator that throws on every
-  batch is not yet dropped for the session. The permission is grantable and
-  buys nothing until then.
+- **A note that survives a restart.** It is held in the window and nowhere
+  else, so closing the client loses every note and reopening a conversation
+  does not bring them back — the annotator does not run again over history.
+  What it needs is a table keyed by the message and the plugin, the way `via`
+  is a column on the message.
 - **The other three extension points.** Providers, notification rules and
   protocol adapters.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The

@@ -9,7 +9,6 @@ import { AttachmentLine } from "./AttachmentLine";
 import { Markdown } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
-import { writesOwnNick } from "./rows";
 
 interface MessageRowProps {
   message: ChatMessage;
@@ -29,9 +28,6 @@ interface MessageRowProps {
   onReply: (msgid: string) => void;
   flashing: boolean;
 }
-
-/** Indent that puts anything without a nick under the text column. */
-const TEXT_INDENT = "calc(var(--nick-col) + var(--timeline-text-gap))";
 
 export function MessageRow({
   message,
@@ -56,9 +52,7 @@ export function MessageRow({
     <div
       data-msgid={message.id}
       data-highlight={highlight || undefined}
-      // Monospace here so `--nick-col`, which is stated in `ch`, resolves
-      // against the face the nick is actually set in.
-      className="group font-[family-name:var(--font-mono)] text-[13px]"
+      className="group text-[13px]"
       style={{
         paddingBlock: "var(--timeline-row-pad-y)",
         background: flashing
@@ -71,7 +65,7 @@ export function MessageRow({
       }}
     >
       {message.replyTo && !quotedAbove && (
-        <div style={{ marginLeft: TEXT_INDENT, maxWidth: "var(--timeline-measure)" }}>
+        <div style={{ maxWidth: "var(--timeline-measure)" }}>
           <ReplyQuote
             msgid={message.replyTo}
             parent={parentOf(message.replyTo)}
@@ -83,17 +77,10 @@ export function MessageRow({
       <div
         className="grid items-baseline"
         style={{
-          gridTemplateColumns:
-            "var(--nick-col) minmax(0, var(--timeline-measure)) var(--timeline-actions-col)",
-          columnGap: "var(--timeline-text-gap)",
+          gridTemplateColumns: "minmax(0, var(--timeline-measure)) var(--timeline-actions-col)",
+          columnGap: "var(--timeline-actions-gap)",
         }}
       >
-        {/* The nickname is the identifier; colour only reinforces it, so the
-            name is written out in full beside every line its author sent. */}
-        <span className="font-semibold" style={{ color: nickColor(message.sender.nick) }}>
-          {writesOwnNick(message.kind) ? "" : message.sender.nick}
-        </span>
-
         <div>
           {/* Prose gets the text face; code and identifiers keep monospace. */}
           <div

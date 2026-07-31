@@ -3,7 +3,7 @@ import { render, within } from "@testing-library/react";
 import { member } from "@/components/drawer/fixtures";
 import { MemberRow } from "@/components/drawer/MemberRow";
 import { makeMessage } from "@/components/timeline/fixtures";
-import { MessageRow } from "@/components/timeline/MessageRow";
+import { MessageBlock } from "@/components/timeline/MessageBlock";
 import { nickColor, nickColorIndex, PALETTE_SIZE } from "./nickColor";
 
 describe("nickColor", () => {
@@ -62,17 +62,18 @@ describe("nick colour across surfaces", () => {
       const roster = render(
         <MemberRow member={member(nick)} selected={false} onSelect={() => {}} />,
       );
+      // The block, because that is where the name is written: once, at the head
+      // of its author's run.
       const timeline = render(
-        <MessageRow
-          message={makeMessage({ nick })}
+        <MessageBlock
+          messages={[makeMessage({ nick })]}
           ownNick={null}
           parentOf={() => undefined}
           onJump={() => {}}
-          quotedAbove={false}
           canTag={false}
           onReact={() => {}}
           onReply={() => {}}
-          flashing={false}
+          flashId={null}
         />,
       );
 

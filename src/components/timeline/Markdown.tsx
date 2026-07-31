@@ -106,7 +106,10 @@ function Link({ url }: { url: string }) {
             setRefused(String(reason));
           });
         }}
-        className="cursor-pointer underline decoration-from-font underline-offset-2 hover:decoration-2"
+        /* A button is inline-block and sizes to its content, so a long URL
+           ignored the paragraph's wrapping and ran out of the pane — over the
+           column beside it in a split. Capped and broken anywhere. */
+        className="max-w-full cursor-pointer text-left break-all underline decoration-from-font underline-offset-2 hover:decoration-2"
         style={{ color: "var(--accent)" }}
       >
         {url}

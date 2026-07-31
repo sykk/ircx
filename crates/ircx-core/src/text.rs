@@ -133,6 +133,12 @@ fn filename(url: &str) -> Option<String> {
 
 /// Guessed from the extension so the UI knows whether a preview is even worth
 /// offering. Nothing is fetched to confirm it.
+///
+/// Only what `src-tauri/src/preview.rs` can actually render, which is why AVIF
+/// and SVG are absent: naming a type here that comes back as "not an image
+/// ircx can show" offers the reader an action that cannot work. SVG is not
+/// merely unimplemented — it is a document with scripting rather than a
+/// bitmap, and the previewer excludes it deliberately.
 fn mime(url: &str) -> Option<String> {
     let name = filename(url)?.to_ascii_lowercase();
     let kind = match name.rsplit('.').next()? {
@@ -140,8 +146,6 @@ fn mime(url: &str) -> Option<String> {
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
         "webp" => "image/webp",
-        "avif" => "image/avif",
-        "svg" => "image/svg+xml",
         _ => return None,
     };
     Some(kind.into())
@@ -178,6 +182,37 @@ mod tests {
         assert_eq!(found[0].mime.as_deref(), Some("image/png"));
         assert!(found[0].preview.is_none());
         assert!(found[0].size_bytes.is_none());
+    }
+
+    /// `mime` is what the window offers a preview on, so it names only what the
+    /// previewer can render. A type it cannot is worse than none: the reader is
+    /// offered a fetch whose only possible answer is that it is not an image.
+    #[test]
+    fn only_what_can_be_shown_is_given_a_type() {
+        let typed = |url: &str| attachments(url).remove(0).mime;
+
+        assert_eq!(
+            typed("https://e.invalid/a.png").as_deref(),
+            Some("image/png")
+        );
+        assert_eq!(
+            typed("https://e.invalid/a.jpeg").as_deref(),
+            Some("image/jpeg")
+        );
+        assert_eq!(
+            typed("https://e.invalid/a.gif").as_deref(),
+            Some("image/gif")
+        );
+        assert_eq!(
+            typed("https://e.invalid/a.webp").as_deref(),
+            Some("image/webp")
+        );
+
+        // SVG is a document with scripting rather than a bitmap, and the
+        // previewer excludes it on purpose. AVIF is simply not implemented.
+        assert_eq!(typed("https://e.invalid/a.svg"), None);
+        assert_eq!(typed("https://e.invalid/a.avif"), None);
+        assert_eq!(typed("https://e.invalid/an/article"), None);
     }
 
     #[test]

@@ -344,9 +344,17 @@ drop.
 The drop is the one the user is told about, in the server console rather than
 only in a log. A plugin that has been switched off looks from the outside
 exactly like a plugin with nothing to say, and the user installed it expecting
-the first. The sentence names the plugin, what stopped, and the only cure: the
-strikes belong to the connection, so removing the plugin and installing it again
-does not clear them, and a restart does.
+the first. The sentence names the plugin, what stopped, and the repair.
+
+The repair is installing the plugin again. The strikes belong to the connection
+and nothing in the plugin itself clears them, so the library tells every running
+network when a plugin's entry is installed, granted or removed, and the network
+forgets what that plugin did before. Both of its hooks are forgiven at once,
+because which one was broken is not something the user was ever shown.
+
+Installing over a plugin resets its grants, so a repair is two steps and the
+second one clears the strikes as surely as the first. Until this was built the
+only cure was restarting the client, which is the repair nobody tries first.
 
 ## The notification rule
 

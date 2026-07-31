@@ -457,6 +457,11 @@ The archive holds exactly one copy of it, which is the property the strikes
 exist for: a hook that fails on every message must not report as often as the
 channel talks.
 
+The sentence quoted above is what the client said on the day, and the last
+clause of it is no longer what it says. Restarting was the only cure at the
+time; installing the plugin again now clears the strikes, and the sentence says
+that instead. The rest of the walk stands.
+
 Asked whether the server console is where they would go if their notes had
 quietly stopped a day later, the owner said it is the first place they would
 look. That is the question the walk existed to answer, and it is the reason the
@@ -646,6 +651,14 @@ arrow in #172. A mark that is obvious to whoever built it is not evidence.
 
 **A broken rule being dropped** is walked, under the annotator's section above,
 along with one plugin holding both hooks and only one of them broken.
+
+Still not walked:
+
+- **A dropped hook coming back.** Installing a plugin again now clears the
+  strikes against it on every running network, so a plugin repaired and
+  installed should start answering without a restart. The clearing is unit
+  tested at both ends and the two have never been joined in the application —
+  which is the same shape as the gap that made the drop itself worth walking.
 
 ## The topic of a channel you have joined
 

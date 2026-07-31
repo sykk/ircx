@@ -51,13 +51,13 @@ impl Hook {
 /// note beside a message does, so "stopped" and "raised by" say the same word
 /// about the same plugin.
 ///
-/// A restart is the only cure, and the sentence says so rather than offering
-/// the one that looks obvious: the strikes belong to this connection, and
-/// removing the plugin and installing it again does not clear them.
+/// Installing is the repair rather than restarting, because installing over a
+/// plugin resets its grants: the user has to visit the sheet anyway, and
+/// `PluginChanged` clears the strikes when they do.
 fn stopped_text(hook: Hook, plugin: &str) -> String {
     format!(
         "The {plugin} plugin failed {HOOK_STRIKES} times in a row, so ircx stopped asking it {}. \
-         Restart ircx to let it try again.",
+         Install it again from Plugins once it is fixed.",
         hook.asking_for()
     )
 }
@@ -186,6 +186,12 @@ pub enum SessionCommand {
     PluginStopped {
         text: String,
         detail: Option<String>,
+    },
+    /// This plugin's library entry was installed, granted or removed. Whatever
+    /// it did before was done by code or permissions the user has since
+    /// replaced, so the strikes against it no longer describe anything.
+    PluginChanged {
+        plugin: String,
     },
     Disconnect {
         reason: Option<String>,
@@ -474,6 +480,14 @@ async fn apply(
         }
         SessionCommand::Raised { target } => session.raise(&target),
         SessionCommand::PluginStopped { text, detail } => session.plugin_stopped(text, detail),
+        SessionCommand::PluginChanged { plugin } => {
+            // Both hooks, because the user repairing a plugin is repairing the
+            // plugin: which of its two hooks was the broken one is not
+            // something they were ever shown.
+            strike_cleared(&context.strikes, Hook::Annotate, &plugin);
+            strike_cleared(&context.strikes, Hook::Notify, &plugin);
+            Vec::new()
+        }
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -844,7 +858,7 @@ mod tests {
         assert_eq!(
             annotate,
             "The units plugin failed 3 times in a row, so ircx stopped asking it to annotate \
-             messages. Restart ircx to let it try again."
+             messages. Install it again from Plugins once it is fixed."
         );
 
         let notify = stopped_text(Hook::Notify, "deploys");
@@ -909,6 +923,87 @@ mod tests {
         drop(session);
 
         report_stopped(&weak, Hook::Annotate, "units", None).await;
+    }
+
+    /// A plugin repaired and installed again is not the code that failed, so
+    /// the strikes against it must not outlive it. Both hooks, because which
+    /// one broke is not something the user was ever shown.
+    #[tokio::test]
+    async fn a_plugin_that_changed_is_asked_again() {
+        let mut strikes = HashMap::new();
+        for hook in [Hook::Annotate, Hook::Notify] {
+            strikes.insert((hook, "units".to_owned()), HOOK_STRIKES);
+        }
+        let context = context(Mutex::new(strikes));
+        let mut session = SessionState::new(config());
+
+        let actions = apply(
+            SessionCommand::PluginChanged {
+                plugin: "units".into(),
+            },
+            &mut session,
+            &context,
+        )
+        .await;
+
+        assert!(actions.is_empty(), "nothing is said about a plugin working");
+        assert_eq!(out(&context.strikes, Hook::Annotate, "units"), 0);
+        assert_eq!(out(&context.strikes, Hook::Notify, "units"), 0);
+    }
+
+    /// Only the plugin that changed. Installing one is not a statement about
+    /// any other, and reviving a second broken plugin would put it back to
+    /// failing on every message the channel carries.
+    #[tokio::test]
+    async fn changing_one_plugin_does_not_revive_another() {
+        let mut strikes = HashMap::new();
+        strikes.insert((Hook::Annotate, "units".to_owned()), HOOK_STRIKES);
+        strikes.insert((Hook::Annotate, "links".to_owned()), HOOK_STRIKES);
+        let context = context(Mutex::new(strikes));
+        let mut session = SessionState::new(config());
+
+        apply(
+            SessionCommand::PluginChanged {
+                plugin: "units".into(),
+            },
+            &mut session,
+            &context,
+        )
+        .await;
+
+        assert_eq!(out(&context.strikes, Hook::Annotate, "units"), 0);
+        assert_eq!(out(&context.strikes, Hook::Annotate, "links"), HOOK_STRIKES);
+    }
+
+    fn context(strikes: Strikes) -> Context {
+        let (events, _held) = mpsc::channel(8);
+        let (inbox, _also_held) = mpsc::channel(8);
+        Context {
+            network: "test".into(),
+            store: Arc::new(Store::open_in_memory().expect("an in-memory archive")),
+            events,
+            plugins: None,
+            strikes: Arc::new(strikes),
+            own_inbox: inbox.downgrade(),
+        }
+    }
+
+    fn config() -> SessionConfig {
+        SessionConfig {
+            network: "test".into(),
+            name: "Test".into(),
+            host: "127.0.0.1".into(),
+            port: 6667,
+            tls: false,
+            tls_verify: false,
+            nick: "ircx".into(),
+            alt_nicks: Vec::new(),
+            username: "ircx".into(),
+            realname: "ircx".into(),
+            sasl: None,
+            connect_commands: Vec::new(),
+            autojoin: Vec::new(),
+        }
     }
 
     /// One plugin can hold both hooks, and one of them failing says nothing

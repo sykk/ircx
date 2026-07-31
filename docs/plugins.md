@@ -380,6 +380,16 @@ sidebar already draws for a mention, which is the only interruption this client
 has. The message carries which rule raised it, archived beside it, so a
 conversation reopened tomorrow still says why it went loud.
 
+In the conversation, the run takes the accent on its spine, as a mention does,
+and the message says `raised by <rule>` beneath it. Both halves are needed: the
+spine is what a reader sees while scrolling, and the name is how they decide
+whether the rule should have. Without the name the badge is a mystery — a
+channel marked as loudly as a mention with nothing in it that mentions them.
+
+Led by the verb rather than by the name, so it cannot be read as an annotation.
+A note is the plugin's own words about a message; this is the client's words
+about the plugin, and on a message with both they sit one above the other.
+
 A raise arrives *after* the message is drawn, because a rule runs on arrival
 rather than on draw and nothing waits for a plugin. The badge therefore moves a
 beat later than the message. That is the cost of the conversation never
@@ -440,9 +450,6 @@ more than the message in front of it, such as the third failure this hour.
 
 ## What is not built
 
-- **A raised message drawn as anything.** The channel's badge goes loud and the
-  message records which rule raised it; nothing in the timeline draws that yet,
-  so a reader who opens the conversation cannot see which message it was.
 - **The other two extension points' shapes.** Providers and protocol adapters
   are still only described.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The

@@ -1244,3 +1244,89 @@ describe("links in a message", () => {
     expect(link.getAttribute("aria-label")).toContain("opens in your browser");
   });
 });
+
+/**
+ * #90's third extension point, drawn. A rule shows nothing of its own — what a
+ * reader sees is a conversation gone loud, so what the timeline has to say is
+ * why, and which rule thought so.
+ */
+describe("a message a notification rule raised", () => {
+  function raise(message: string, plugin: string) {
+    useAppStore.getState().applyEvent({
+      type: "messageRaised",
+      network: "libera",
+      target: "#ctf-ops",
+      message,
+      plugin,
+    });
+  }
+
+  it("says which rule raised it, under the message", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })]);
+    raise("m1", "deploys");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("raised by")).toBeTruthy();
+    expect(screen.getByText("deploys")).toBeTruthy();
+  });
+
+  /** The whole point of naming it: without this the badge is a channel marked
+   * as loudly as a mention, with nothing in it that mentions the reader. */
+  it("marks the run as loudly as a mention does", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })]);
+    raise("m1", "deploys");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(accentSpines()).toBe(1);
+  });
+
+  it("leaves the spine alone for a run nothing raised", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "starting a build" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(accentSpines()).toBe(0);
+  });
+
+  /** The spine is the block's, drawn as one element with no text of its own. */
+  function accentSpines() {
+    return [...document.querySelectorAll('[aria-hidden="true"]')].filter((spine) =>
+      (spine.getAttribute("style") ?? "").includes("var(--accent)"),
+    ).length;
+  }
+
+  it("names both when two rules raised the same message", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })]);
+    raise("m1", "deploys");
+    raise("m1", "oncall");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("deploys, oncall")).toBeTruthy();
+  });
+
+  /** A rule's mark is the client speaking about a plugin; a note is the
+   * plugin's own words. They stack on one message and must stay legible as
+   * two different things. */
+  it("keeps the mark and a note apart on the same message", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed at 72F" })]);
+    raise("m1", "deploys");
+    useAppStore.getState().applyEvent({
+      type: "messageAnnotated",
+      network: "libera",
+      target: "#ctf-ops",
+      message: "m1",
+      plugin: "units",
+      text: "22 C",
+    });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("raised by")).toBeTruthy();
+    expect(screen.getByText("22 C")).toBeTruthy();
+  });
+
+  it("leaves a message nothing raised unmarked", () => {
+    seed([makeMessage({ id: "m1", nick: "buildbot", text: "starting a build" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText("raised by")).toBeNull();
+  });
+});

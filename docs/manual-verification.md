@@ -467,9 +467,10 @@ event and the count — every layer but the drawing, which is not built.
 Not walked in the application, and the list is short because there is little to
 look at yet:
 
-- **A raised channel read by a person.** The badge goes loud with no message in
-  the conversation that mentions them. Until the timeline draws the raise, that
-  is by design and it is worth seeing how it feels: it may read as a bug.
+- **A raised conversation read by a person.** The badge goes loud, the run
+  takes the accent and the message says `raised by deploys`. Whether that is
+  enough to explain a channel that went loud without their name in it is the
+  thing only a person can answer.
 - **A broken rule being dropped.** Three consecutive failed batches, the first
   reported and the rest silent — the same gap the annotator has, and now with a
   second hook keyed separately.

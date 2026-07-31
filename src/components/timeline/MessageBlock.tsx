@@ -96,9 +96,13 @@ export function MessageBlock({
 }: Props) {
   const head = messages[0]!;
   const addressed = messages.some((message) => isHighlight(message, ownNick));
+  // A rule raises a message to the same loudness a mention has — the badge
+  // does not distinguish them — so the spine says so the same way. Which line
+  // and which rule is on the row, where the message is.
+  const raised = messages.some((message) => (message.raisedBy ?? []).length > 0);
 
   return (
-    <Block spine spineTint={addressed ? "var(--accent)" : undefined}>
+    <Block spine spineTint={addressed || raised ? "var(--accent)" : undefined}>
       {/* Why the run is marked, in the words for it. A tint on its own leaves
           the reader to work out what the client noticed, and the answer — your
           name is in here — is the one thing they cannot get from the colour.

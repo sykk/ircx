@@ -284,6 +284,7 @@ interface RowContext {
 function renderRow(row: TimelineRow, context: RowContext) {
   if (row.kind === "unread") return <UnreadDivider seam={row.seam} />;
   if (row.kind === "date") return <DateSeparator at={row.at} />;
-  if (row.kind === "system") return <SystemMessage messages={row.messages} />;
+  if (row.kind === "system")
+    return <SystemMessage messages={row.messages} ownNick={context.ownNick} />;
   return <MessageBlock messages={row.messages} {...context} />;
 }

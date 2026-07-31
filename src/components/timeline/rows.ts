@@ -54,6 +54,9 @@ const SYSTEM_KINDS = new Set<MessageKind>([
 /** Comings and goings: weather, and the only kinds the digest may fold away. */
 const PRESENCE_KINDS = new Set<MessageKind>(["join", "part", "quit", "nick"]);
 
+/** What the client and the server print. A console holds nothing else. */
+const CONSOLE_KINDS = new Set<MessageKind>(["server", "client"]);
+
 /**
  * Events that change who can read or speak. They are named in the digest's
  * first clause and no control hides them.
@@ -98,18 +101,25 @@ function continuesRun(
 ): boolean {
   const head = open.messages[0]!;
 
-  if (open.kind === "system") {
-    const bucket = bucketOf(head.timestamp);
-    return bucket !== null && bucket === bucketOf(message.timestamp);
-  }
-
   const start = Date.parse(head.timestamp);
   const at = Date.parse(message.timestamp);
+  if (!Number.isFinite(start) || !Number.isFinite(at)) return false;
+
+  if (open.kind === "system") {
+    // Console output keeps the minute, which is the whole reason BUCKET_MS
+    // exists. Comings and goings get the run window instead: a netsplit takes
+    // minutes to play out, and four digest lines each saying a fraction of it
+    // is the repetition the digest was built to end.
+    if (CONSOLE_KINDS.has(head.kind)) {
+      const bucket = bucketOf(head.timestamp);
+      return bucket !== null && bucket === bucketOf(message.timestamp);
+    }
+    return at - start <= RUN_MS;
+  }
+
   return (
     head.sender.nick === message.sender.nick &&
     writesOwnNick(head.kind) === writesOwnNick(message.kind) &&
-    Number.isFinite(start) &&
-    Number.isFinite(at) &&
     at - start <= RUN_MS
   );
 }
@@ -240,6 +250,50 @@ export function describePresence(messages: readonly ChatMessage[]): string {
     counts.set(message.kind, (counts.get(message.kind) ?? 0) + 1);
   }
   return [...counts].map(([kind, n]) => `${n} ${VERBS[kind] ?? "changed"}`).join(", ");
+}
+
+/**
+ * How long the run covered, or null when that is not worth a reader's time.
+ *
+ * A burst inside one minute is a burst. Four minutes of it is a netsplit, and
+ * knowing it is one event rather than several is the difference between
+ * skipping the line and going looking for what happened.
+ */
+export function describePresenceSpan(messages: readonly ChatMessage[]): string | null {
+  const first = Date.parse(messages[0]?.timestamp ?? "");
+  const last = Date.parse(messages[messages.length - 1]?.timestamp ?? "");
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+  const span = describeSpan(Math.max(0, last - first));
+  return span === "under a minute" ? null : `Over ${span}`;
+}
+
+/**
+ * How many of these are about the reader: their own coming or going, or a
+ * parting line that names them.
+ *
+ * Presence is skippable exactly when this is zero, and a digest that does not
+ * say so leaves the reader opening it to find out — which is the reading the
+ * fold exists to save them.
+ */
+export function presenceInvolving(
+  messages: readonly ChatMessage[],
+  ownNick: string | null,
+): number {
+  return messages.filter((m) => m.sender.isSelf || isHighlight(m, ownNick)).length;
+}
+
+/** The whole digest: how long, what happened, and whether it was about you. */
+export function describePresenceRun(
+  messages: readonly ChatMessage[],
+  ownNick: string | null,
+): string {
+  const span = describePresenceSpan(messages);
+  const involving = presenceInvolving(messages, ownNick);
+  const clause =
+    involving === 0
+      ? "None of it involves you."
+      : `${involving} of them ${involving === 1 ? "involves" : "involve"} you.`;
+  return `${span === null ? "" : `${span}: `}${describePresence(messages)}. ${clause}`;
 }
 
 export function describeSpan(ms: number): string {

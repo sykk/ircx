@@ -3,7 +3,7 @@ import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { Block, Clock } from "./MessageBlock";
-import { describePresence, partitionSystemRun } from "./rows";
+import { describePresenceRun, partitionSystemRun } from "./rows";
 
 /**
  * Backends that phrase the event themselves win; the fallback exists so a bare
@@ -39,7 +39,13 @@ function systemText(message: ChatMessage): string {
  *
  * No spine, because a spine is what marks a run of speech.
  */
-export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
+export function SystemMessage({
+  messages,
+  ownNick,
+}: {
+  messages: ChatMessage[];
+  ownNick: string | null;
+}) {
   const { loud, presence, plain } = partitionSystemRun(messages);
   const [expanded, setExpanded] = useState(false);
 
@@ -56,7 +62,7 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
         {presence.length > 0 && (
           <>
             <span className="min-w-0 flex-1" style={{ color: "var(--text-muted)" }}>
-              {describePresence(presence)}
+              {describePresenceRun(presence, ownNick)}
             </span>
             <button
               type="button"

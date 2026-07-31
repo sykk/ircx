@@ -406,3 +406,28 @@ describe("starting and stopping a network", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+/**
+ * #153. `Query.online` crossed the boundary and nothing drew it, so a query
+ * with somebody who had quit looked exactly like one with somebody there.
+ */
+describe("whether the other person is there", () => {
+  function seedQuery(online: boolean) {
+    seedStore(
+      [makeNetwork("libera", { name: "Libera.Chat" })],
+      [],
+      [makeQuery("libera", "phrack", { online })],
+    );
+    render(<SidebarNetworks />);
+  }
+
+  it("says so in the row's name when they have quit", () => {
+    seedQuery(false);
+    expect(screen.getByRole("treeitem", { name: "phrack, offline" })).toBeTruthy();
+  });
+
+  it("says nothing extra when they are there", () => {
+    seedQuery(true);
+    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+  });
+});

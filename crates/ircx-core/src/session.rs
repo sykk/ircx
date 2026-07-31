@@ -990,6 +990,12 @@ impl SessionState {
 
         if !self.isupport.is_channel(&target) && target != SERVER_TARGET {
             self.touch_query(&target, sender.account.clone());
+            // Hearing from somebody is the only evidence this client gets that
+            // they came back. Our own echo is not: sending to a nick says
+            // nothing about whether anyone is there to read it.
+            if !sender.is_self {
+                self.mark_online(&target);
+            }
         }
         let chat = self.chat_message(message, &target, kind, text);
         self.append(chat);
@@ -1422,6 +1428,25 @@ impl SessionState {
             ("-", reference) => self.close_batch(reference),
             _ => {}
         }
+    }
+
+    /// Records that this nick was heard from, which is what takes back a quit.
+    ///
+    /// `online` latched: it was set once when the query was created and
+    /// cleared on `QUIT`, so somebody who quit and came back stayed marked
+    /// gone for the rest of the session. It is only ever false because a quit
+    /// was seen and nothing has been heard since — a restored query has no
+    /// evidence either way and is not called offline on a guess.
+    fn mark_online(&mut self, nick: &str) {
+        let key = self.fold(nick);
+        let Some(query) = self.queries.get_mut(&key) else {
+            return;
+        };
+        if query.online {
+            return;
+        }
+        query.online = true;
+        self.emit_query(&key);
     }
 
     pub(crate) fn touch_query(&mut self, nick: &str, account: Option<String>) {

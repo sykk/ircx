@@ -52,9 +52,10 @@ const UNREAD_FIELDS: Record<string, string> = {
   timestampIsLocal:
     "Whether the time came from server-time or from receipt. Nothing draws the difference between the two.",
   user: "The ident out of the mask. A message is written under a nick; nothing shows the rest of it.",
-  online: "Tracked and never drawn — #153.",
-  setAt: "Tracked and never drawn — #153.",
-  setBy: "Tracked and never drawn — #153.",
+  setAt:
+    "Turned into a sentence in core, which is where the phrasing of every other system line lives. The window is handed the line, not the parts — #153.",
+  setBy:
+    "Turned into a sentence in core, with setAt. The window is handed the line, not the parts — #153.",
 };
 
 /** Fields declared on the types that cross the boundary, camelCased the way

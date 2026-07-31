@@ -2110,3 +2110,57 @@ mod topic_on_join {
         assert_eq!(said(&session)[1], "Set by sable");
     }
 }
+
+/// #153. A query with somebody who has quit looked exactly like one with
+/// somebody who is there, which is the one thing that changes whether it is
+/// worth typing into.
+mod query_presence {
+    use super::*;
+
+    fn online(session: &Harness, nick: &str) -> Option<bool> {
+        session.events.iter().rev().find_map(|event| match event {
+            IrcxEvent::QueryUpdated { query } if query.nick == nick => Some(query.online),
+            _ => None,
+        })
+    }
+
+    fn talking() -> Harness {
+        let mut session = registered("");
+        session.feed(":sable!s@h PRIVMSG sykk :are you there");
+        session
+    }
+
+    #[test]
+    fn a_quit_is_seen() {
+        let mut session = talking();
+        assert_eq!(online(&session, "sable"), Some(true));
+
+        session.feed(":sable!s@h QUIT :gone");
+        assert_eq!(online(&session, "sable"), Some(false));
+    }
+
+    /// It latched: `online` was set once when the query was created and
+    /// cleared on `QUIT`, so somebody who quit and came back stayed marked
+    /// gone for the rest of the session.
+    #[test]
+    fn hearing_from_them_again_takes_the_quit_back() {
+        let mut session = talking();
+        session.feed(":sable!s@h QUIT :gone");
+        assert_eq!(online(&session, "sable"), Some(false));
+
+        session.feed(":sable!s@h PRIVMSG sykk :back");
+        assert_eq!(online(&session, "sable"), Some(true));
+    }
+
+    /// Sending to a nick says nothing about whether anyone is there to read
+    /// it, so our own echo is not evidence they returned.
+    #[test]
+    fn our_own_message_is_not_evidence_they_are_back() {
+        let mut session = registered("echo-message");
+        session.feed(":sable!s@h PRIVMSG sykk :are you there");
+        session.feed(":sable!s@h QUIT :gone");
+        session.feed(":sykk!~sykk@user/sykk PRIVMSG sable :are you back?");
+
+        assert_eq!(online(&session, "sable"), Some(false));
+    }
+}

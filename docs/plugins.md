@@ -8,7 +8,8 @@ the seven permissions the spec names, and this enforces all seven.
 The one extension point built is the **custom slash command**. Message
 renderers, link and attachment providers, notification rules and protocol
 capability adapters are the same shape — the host hands a value over, the plugin
-returns one, the host applies a deadline — and are follow-up work.
+returns one, the host applies a deadline — and are follow-up work. The renderer
+has a design and no code: *The annotator, before it is built*, below.
 
 ## What a plugin looks like
 
@@ -188,23 +189,142 @@ constraints on future work, not things already banked.
   QuickJS. `a_plugin_looping_inside_the_regex_engine_is_also_terminated` exists
   to catch a version bump regressing it.
 
+## The annotator, before it is built
+
+The second extension point, designed here and not built. An annotator is handed
+a message that arrived and answers with its own text, drawn beside that message
+and named with the plugin's id. It is the command shape under a different
+trigger: the host hands a value over, the plugin returns one, the host applies a
+deadline.
+
+```json
+{
+  "id": "units",
+  "name": "Units",
+  "version": "1.0.0",
+  "description": "Reads Fahrenheit in Celsius",
+  "entry": "main.js",
+  "annotates": true,
+  "permissions": ["annotate-messages", "access-channels"],
+  "channels": ["#ircx"]
+}
+```
+
+```js
+ircx.annotate((message) => {
+  const found = /(-?\d+(?:\.\d+)?)\s?°?F\b/.exec(message.text);
+  if (!found) return;
+  return Math.round((Number(found[1]) - 32) * 5 / 9) + " °C";
+});
+```
+
+`annotates` is declared for the reason commands are: a conversation where no
+installed plugin annotates costs nothing, because nothing has to start a runtime
+to find that out. `Math` is there because the sandbox is a full context — what
+is missing from it is host functions, not the language.
+
+### It runs on arrival, not on draw
+
+Three properties, and the first is what makes the other two affordable.
+
+- **The message is drawn before any annotator runs.** An annotation arrives
+  afterwards, as an update to a message already on screen. A slow annotator
+  delays its own note and never the conversation, so the deadline stays a
+  question about the plugin rather than about message latency.
+- **It runs once per message.** The answer is stored beside the message, keyed by
+  the message and the plugin, so scrolling redraws it instead of recomputing it,
+  and a restart still has it — the way `via` survives one. The 0.022 ms in
+  `docs/measurements.md` is per slash command, something a person types; calling
+  into QuickJS while a timeline scrolls is not an option at any figure.
+- **Messages are handed over in batches.** A netsplit rejoin or a history
+  backfill is hundreds of messages, and one call per batch keeps the call count
+  near the command path's rather than multiplying it by the channel's traffic.
+
+### What an annotate handler cannot reach
+
+| host function | inside an annotate handler |
+|---|---|
+| `ircx.send` | throws, whatever the grants say |
+| `ircx.fetch` | throws, whatever the grants say |
+| `ircx.store` | works |
+
+`ircx.send` throws because an annotator that can send **is** the reactive send,
+and the bound that makes a plugin's sends safe is the keystroke: `MAX_SENDS` is
+eight a command because a command is one thing a person asked for. A send caused
+by an arrival has no such unit. Two plugins answering each other's messages pass
+every check in `tests/failure_modes.rs` individually while the pair never stops,
+and nothing in this crate can see that, because every bound it has is inside a
+single call. Opening this means a loop-breaker first — a send caused by an
+arrival marked as such, and arrival hooks not firing on a marked message — which
+is provenance rather than a rate, and is not designed here.
+
+`ircx.fetch` throws because a fetch per arriving message is the client reaching a
+remote URL on its own, which is the rule attachments already keep: a preview
+loads when the user asks for one. An annotator that wants a fetch is asking for
+the one exclusion this milestone made deliberately.
+
+`ircx.store` works, and is the only way an annotator remembers anything — that
+this link has been posted before, say. It is a write per message rather than per
+command, which is the one cost the permission's own floor does not already
+bound.
+
+### It annotates and does not transform
+
+The handler is handed the message and answers with its own text. No signature in
+the host surface takes a message and returns a different one, which is the
+standing constraint above holding as a type rather than as a convention. The
+annotation is drawn beside what it is about and carries the plugin's id, for the
+reason a command's answer does: it is how a reader tells what somebody else's
+code said from what the person said.
+
+Sanitising is the host's, as everywhere else: control characters go, newlines
+with them, and the answer is cut to 200 characters. A command's 40-line ceiling
+is the wrong shape for a note that sits beside one line.
+
+### The permission
+
+`annotate-messages` — *Read every message as it arrives in the channels you
+choose, and show its own note beside them*. Scoped by `access-channels`, the way
+`ircx.send` and `call.messages` are.
+
+It is a new permission rather than `read-messages` widened, because
+`read-messages` says "the conversation it is used in" and means it: the archive
+is read for one call, on demand, and not at all otherwise. Reading on arrival is
+continuous and has no conversation it was used in, so widening the grant would
+leave the install dialogue's sentence describing something smaller than what the
+user agreed to.
+
+It is also the eighth. The spec's list is "such as", so an eighth is not a
+departure from it, but this document counts seven twice and both sentences change
+when the annotator lands.
+
+A notification rule reads on arrival and shows nothing — it answers whether a
+message should reach the user. Same trigger, different consent, so it owns a
+permission too rather than borrowing this one.
+
+### What a broken annotator costs
+
+| what it does | what happens |
+|---|---|
+| throws | no annotation for that batch, reported once against the plugin's name |
+| throws every time | the annotator is dropped for the session |
+| overruns the deadline | runtime thrown away, as for a command; drawn messages are untouched |
+| returns a promise | refused, because hooks are synchronous |
+
+The second row is the one a command does not need. A command reports its failure
+to the person who typed it, and there is one of those. An annotator that fails on
+every message would report as often as the channel talks, so the first failure is
+the report and the rest are silence.
+
 ## What is not built
 
-- **The other four extension points.** Renderers, providers, notification rules
-  and protocol adapters.
+- **The annotator.** Designed above, including the permission it adds and the
+  reason it cannot send or fetch. None of it is written.
+- **The other three extension points.** Providers, notification rules and
+  protocol adapters.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The
   install dialogue offers the channels the manifest named, and lets the user
   type one when the manifest asked for `*`. Neither is a list of the channels
   they are actually in, so naming one is spelling rather than picking.
-- **A renderer that annotates a message.** A plugin's own answer is named, and
-  nothing yet lets a plugin add anything beside a message it did not write —
-  a link preview under a URL, say. Transforming one is not on this list because
-  it is refused above rather than unbuilt.
-
-  What it would need is the per-message budget. The 0.022 ms in
-  `docs/measurements.md` is per slash command, something a user types; an
-  annotation runs against messages as they arrive, and calling into QuickJS
-  while a timeline scrolls is not an option — it would have to run once on
-  arrival with its result stored, the way `via` is.
 - **A second plugin's marginal cost.** Every figure in `docs/measurements.md` is
   one plugin.

@@ -489,6 +489,13 @@ impl SessionState {
         kind: MessageKind,
         reply_to: Option<&str>,
     ) -> Vec<ChatMessage> {
+        // What the user typed names the conversation; the conversation names
+        // the message. Typing `/msg nickserv` at an open `NickServ` query would
+        // otherwise file the outgoing copy where the replies are not. #190. The
+        // line on the wire keeps what was typed: the server does its own
+        // folding, and a target it does not know is its answer to give.
+        let filed = self.canonical(target);
+
         let command = match kind {
             MessageKind::Notice => "NOTICE",
             _ => "PRIVMSG",
@@ -520,7 +527,7 @@ impl SessionState {
             let Ok(line) = builder.build() else { continue };
             self.send_line(line.to_line());
 
-            let mut message = self.local_message(target, kind, piece);
+            let mut message = self.local_message(&filed, kind, piece);
             message.reply_to = parent.map(str::to_string);
             message.delivery = match echoes {
                 true => Delivery::Pending,

@@ -119,11 +119,18 @@ impl Store {
 
     /// Oldest first, so a caller can render the page in order. `before` pages
     /// backwards from the oldest message already on screen.
+    ///
+    /// The target is matched without case, because IRC compares targets that
+    /// way and rows written before #190 hold whichever casing arrived. It is
+    /// ASCII folding rather than the server's casemapping, which differs only
+    /// for `[]\^` in a nick — and errs toward showing a message rather than
+    /// losing one, which is the direction a reader can do something about.
     pub fn load_history(&self, req: &HistoryRequest) -> Result<Vec<ChatMessage>, StoreError> {
         let sql = format!(
             "SELECT {columns}
              FROM messages m
-             WHERE m.network = ?1 AND m.target = ?2 AND (?3 IS NULL OR m.timestamp < ?3)
+             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+               AND (?3 IS NULL OR m.timestamp < ?3)
              ORDER BY m.timestamp DESC, m.id DESC
              LIMIT ?4",
             columns = message::COLUMNS,

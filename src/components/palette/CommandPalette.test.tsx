@@ -427,7 +427,7 @@ describe("CommandPalette", () => {
       type("Density: Compact");
       fireEvent.keyDown(input(), { key: "Enter" });
 
-      expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("10px");
+      expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("6px");
       expect(useAppStore.getState().density).toBe("compact");
       expect(localStorage.getItem("ircx.density")).toBe("compact");
       expect(useAppStore.getState().paletteOpen).toBe(false);

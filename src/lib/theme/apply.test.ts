@@ -81,7 +81,7 @@ describe("applyDensity", () => {
     applyTheme(dense);
     applyDensity("compact");
 
-    expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("10px");
+    expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("6px");
     expect(root.style.getPropertyValue("--surface-base")).toBe("#010203");
   });
 
@@ -109,7 +109,7 @@ describe("applyDensity", () => {
     applyTheme(dense);
     applyTheme(null);
 
-    expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("10px");
+    expect(root.style.getPropertyValue("--timeline-block-gap")).toBe("6px");
     expect(root.style.getPropertyValue("--surface-base")).toBe("");
   });
 });

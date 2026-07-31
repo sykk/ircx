@@ -26,7 +26,7 @@ export const DENSITIES: readonly Density[] = [
     detail: "For operators and log reading",
     tokens: {
       "--timeline-row-pad-y": "0px",
-      "--timeline-block-gap": "10px",
+      "--timeline-block-gap": "6px",
       "--timeline-body-leading": "1.55",
     },
   },

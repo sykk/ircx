@@ -473,10 +473,16 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
 2026-07-31: `ircx.density` read back as `read` after a restart, alongside
 `ircx.theme`. What is left is a matter of looking rather than of mechanism.
 
-- **The loosened compact.** The first values were too tight against real
-  backlog; leading went 1.45 to 1.55 and the block gap 8px to 10px. Nobody has
-  looked at the result. `read` has never been looked at against a long backlog
-  at all.
+- **Compact against a long backlog.** Two rounds of looking so far: 1.45
+  leading with an 8px gap read as too tight, and 1.55 with 10px read as barely
+  different from comfortable. The gap moved to 6px on the second reading, which
+  keeps the line spacing and buys the density from between the blocks.
+
+  Worth knowing before judging it again: leading only shows where messages
+  wrap, so a channel of short one-liners is the worst place to tell the
+  densities apart. On a 600px pane the shipped values put 27% more one-line
+  messages on screen than comfortable. `read` has never been looked at against
+  a long backlog at all.
 - **Changing theme while on a density that is not comfortable.** The
   implementation is built around this case — theme and density write the same
   three properties to the same inline declaration — and `apply.test.ts` covers

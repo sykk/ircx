@@ -1287,6 +1287,27 @@ describe("a message a notification rule raised", () => {
     expect(accentSpines()).toBe(0);
   });
 
+  /** The mark alone was not enough to see: faint text under the message read as
+   * trailing debris. The row is tinted as a mention's row is, so the line that
+   * caused the noise is the line that looks different. */
+  it("tints the raised row, and only the raised row", () => {
+    seed([
+      makeMessage({ id: "m1", nick: "buildbot", text: "starting a build" }),
+      makeMessage({ id: "m2", nick: "buildbot", text: "deploy failed on main" }),
+    ]);
+    raise("m2", "deploys");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(tintedRows()).toEqual(["deploy failed on main"]);
+  });
+
+  /** Every row a mention tints, and no others. */
+  function tintedRows() {
+    return [...document.querySelectorAll("div")]
+      .filter((row) => (row.getAttribute("style") ?? "").includes("var(--mention-bg)"))
+      .map((row) => row.textContent?.replace("raised by deploys", "").trim());
+  }
+
   /** The spine is the block's, drawn as one element with no text of its own. */
   function accentSpines() {
     return [...document.querySelectorAll('[aria-hidden="true"]')].filter((spine) =>

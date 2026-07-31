@@ -56,17 +56,6 @@ pub async fn join_channel(
 }
 
 #[tauri::command]
-pub async fn part_channel(
-    app: State<'_, App>,
-    network: NetworkId,
-    channel: String,
-    reason: Option<String>,
-) -> Result<(), String> {
-    app.tell(&network, SessionCommand::Part { channel, reason })
-        .await
-}
-
-#[tauri::command]
 pub async fn open_query(
     app: State<'_, App>,
     network: NetworkId,
@@ -100,11 +89,6 @@ pub async fn submit_input(
         reply,
     })
     .await
-}
-
-#[tauri::command]
-pub async fn send_raw(app: State<'_, App>, network: NetworkId, line: String) -> Result<(), String> {
-    app.tell(&network, SessionCommand::Raw { line }).await
 }
 
 #[tauri::command]

@@ -411,6 +411,68 @@ neither direction is a message anything could miss.
 which is #93 seen from the other side: the refusal is an `Error` and a plugin
 that degrades can say why it did.
 
+## The coloured spine
+
+**Walked by the owner on 2026-07-31 against local `ergo`**, over four rounds,
+and every round changed the design. Nothing here was found by a test; the tests
+passed at every step, including the steps that were wrong.
+
+The last run, measured off the screenshot rather than read off it:
+
+```text
+203px  #be72d6   a group   walker's line, "walker: yup", walker's reply
+ 49px  neutral   "yes"
+ 95px  accent    "hey syk" — a mention in no group
+ 79px  neutral   "yo" / "hello syk_"
+134px  #8389db   a group   "walker: hello", walker's reply
+```
+
+Two exchanges in two colours with neutral between them, which is the whole of
+what the feature is for. `hello syk_` is correctly in no group: naming somebody
+in passing is not addressing them, and it is the case where widening the rule
+would have felt generous and been wrong.
+
+### What the rounds found
+
+**The rule broke once per author, and once per join.** Two separate causes. The
+block gap is padding on the grid, so a spine started below it; and `buildRows`
+reset the open group on a system run, so a channel with ordinary comings and
+goings drew one group as four, each labelled again. The second is the model and
+the rows disagreeing about how many groups exist, with nothing checking that
+they agree.
+
+**Guessed grouping went out.** Twenty messages between three people came back as
+one group spanning the lot — a rule down the whole screen, distinguishing
+nothing. Grouping separates conversations happening at once, and a channel where
+everybody is in one conversation has nothing to separate. `groups.ts` says why
+no threshold fixes it.
+
+**An address was bounded by a clock, and missed by nine seconds.** Somebody
+addressed a person sitting in the channel and it grouped nothing, because they
+had last spoken fifteen minutes and nine seconds earlier. The bound is reach
+now, not time.
+
+**A mention outranked the group, and should not have.** A reply to you names
+you, so the accent took the second block of every exchange the reader was in.
+Measured on a screenshot: one exchange, two colours. The group keeps the spine
+now, and the run above confirms a mention in no group is still unmistakable.
+
+### Still open
+
+- **Groups chain.** Addressing somebody already in a group joins that group, so
+  a run of people answering each other within reach never closes. One round
+  drew five messages and two separate question-and-answers as one group. It did
+  not recur in the last round — ordinary chatter breaks the chain — but the
+  mechanism is there, and it is the shape of the failure that took guessing out.
+  Worth measuring on a channel busier than three people before trusting it.
+- **Declared grouping has never been seen outside a fixture.** No other client
+  reads a `[topic]` prefix, so nothing types one. It is exercised by tests and
+  by the preview harness and by nothing else.
+- **Whether the split reads as stutter.** A run that spans two groups is broken
+  in two, repeating the name and the time. It did not come up in these rounds
+  because it needs somebody to say two things about two conversations in one
+  breath.
+
 ## The annotator
 
 **The session half is verified.** `crates/ircx-core/tests/ergo.rs` drives the

@@ -2091,6 +2091,18 @@ mod topic_on_join {
         assert_eq!(topic.set_at.as_deref(), Some("2026-01-29T10:40:00Z"));
     }
 
+    /// Ergo sends the whole `nick!user@host` in `333` where Libera sends a
+    /// bare nick, and the live driver read back "Set by
+    /// ircx-other!~u@f6u3beryjfghu.irc" before this.
+    #[test]
+    fn a_mask_is_read_back_as_the_nick_that_set_it() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
+        session.feed(":irc.libera.chat 333 sykk #ircx sable!~s@user/sable 1769683200");
+
+        assert_eq!(said(&session)[1], "Set by sable on 2026-01-29 at 10:40 UTC");
+    }
+
     #[test]
     fn a_channel_with_no_topic_says_nothing() {
         let mut session = joined();

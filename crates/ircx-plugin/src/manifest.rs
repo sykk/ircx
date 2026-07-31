@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 /// become a directory name and a `/word`, so both stay short.
 const MAX_NAME: usize = 48;
 
-/// The seven permissions `ircclient.md` names, plus the eighth
-/// `docs/plugins.md` adds for the annotator. One variant each.
+/// The seven permissions `ircclient.md` names, plus the two `docs/plugins.md`
+/// adds for the hooks that read on arrival. One variant each.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Permission {
@@ -27,10 +27,11 @@ pub enum Permission {
     NetworkRequests,
     RenderContent,
     AnnotateMessages,
+    RaiseNotifications,
 }
 
 impl Permission {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::ReadMessages,
         Self::SendMessages,
         Self::AddCommands,
@@ -39,6 +40,7 @@ impl Permission {
         Self::NetworkRequests,
         Self::RenderContent,
         Self::AnnotateMessages,
+        Self::RaiseNotifications,
     ];
 
     /// The name in a manifest.
@@ -52,6 +54,7 @@ impl Permission {
             Self::NetworkRequests => "network-requests",
             Self::RenderContent => "render-content",
             Self::AnnotateMessages => "annotate-messages",
+            Self::RaiseNotifications => "raise-notifications",
         }
     }
 
@@ -70,6 +73,9 @@ impl Permission {
             Self::RenderContent => "Show text in your conversations",
             Self::AnnotateMessages => {
                 "Read every message as it arrives in the channels you choose, and show its own note beside them"
+            }
+            Self::RaiseNotifications => {
+                "Read every message as it arrives in the channels you choose, and mark ones worth interrupting you for"
             }
         }
     }
@@ -188,6 +194,9 @@ pub struct Manifest {
     /// to find that out.
     #[serde(default)]
     pub annotates: bool,
+    /// Declared for the same reason `annotates` is.
+    #[serde(default)]
+    pub notifies: bool,
     /// What the plugin asks for. What it gets is the `Grants` beside it in the
     /// library, which the user wrote.
     #[serde(flatten)]
@@ -227,6 +236,11 @@ impl Manifest {
                 "annotates without asking for annotate-messages",
             ));
         }
+        if self.notifies && !self.requests.holds(Permission::RaiseNotifications) {
+            return Err(ManifestError::Undeclared(
+                "notifies without asking for raise-notifications",
+            ));
+        }
         if self.requests.holds(Permission::AccessChannels) && self.requests.channels.is_empty() {
             return Err(ManifestError::Undeclared(
                 "asks for access-channels without naming a channel",
@@ -238,7 +252,8 @@ impl Manifest {
         // offer the user a permission that cannot do anything once allowed.
         let scoped_to_channels = self.requests.holds(Permission::SendMessages)
             || self.requests.holds(Permission::ReadMessages)
-            || self.requests.holds(Permission::AnnotateMessages);
+            || self.requests.holds(Permission::AnnotateMessages)
+            || self.requests.holds(Permission::RaiseNotifications);
         if scoped_to_channels && !self.requests.holds(Permission::AccessChannels) {
             return Err(ManifestError::Undeclared(
                 "asks to send or read messages without asking for access-channels, which is what says where",

@@ -3,6 +3,7 @@ import { stripIrcFormatting } from "@/lib/ircFormat";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
+import { describeUrl } from "@/lib/url";
 
 /**
  * The same message flattened to one line of text, for excerpts that quote a
@@ -82,12 +83,42 @@ function BlockView({ block }: { block: Block }) {
   );
 }
 
+/* A button is inline-block and sizes to its content, so a long URL ignored the
+   paragraph's wrapping and ran out of the pane — over the column beside it in a
+   split. Capped and broken anywhere. A chip rarely reaches that width now, but a
+   host on its own still can in a narrow split. */
+const LINK = "max-w-full cursor-pointer text-left break-all";
+
+/** What a URL with no host to lead with falls back to: written out whole. */
+const WHOLE = {
+  className: "underline decoration-from-font underline-offset-2 hover:decoration-2",
+  style: { color: "var(--accent)" },
+};
+
+const CHIP = {
+  className:
+    "rounded-[var(--radius-sm)] border px-1 py-px align-baseline font-[family-name:var(--font-mono)] text-[12px] hover:bg-[var(--surface-hover)]",
+  style: { background: "var(--surface-raised)", borderColor: "var(--border-default)" },
+};
+
 /**
- * Written out in full and opened outside this window. An anchor with an `href`
- * would be a navigation the webview might take, so there is no `href` at all.
- * That gives up middle-click and "copy link address", which is the trade.
+ * Opened outside this window. An anchor with an `href` would be a navigation
+ * the webview might take, so there is no `href` at all. That gives up
+ * middle-click and "copy link address", which is the trade.
+ *
+ * The host leads at full weight and the path follows behind it, quieter and
+ * elided once long — `readability/READABILITY.md` study 07, which is about the
+ * kinds of thing IRC carries that are not prose and should not be set as prose.
+ *
+ * The text no longer states the destination character for character, which was
+ * a property this had and gave up. What it states is the host, resolved by
+ * `URL` rather than skimmed off the front of a string — which is why the short
+ * form is the harder of the two to spoof. The whole URL stays in the accessible
+ * name and the tooltip.
  */
 function Link({ url }: { url: string }) {
+  const label = describeUrl(url);
+  const look = label === null ? WHOLE : CHIP;
   /* A link that will not open has to say so where the reader is looking. The
      only report before this was a `console.warn`, which is invisible to anyone
      not holding devtools open — the same mistake as swallowing the rejection,
@@ -100,19 +131,24 @@ function Link({ url }: { url: string }) {
       <button
         type="button"
         aria-label={leavingLabel(url)}
+        title={url}
         onClick={() => {
           setRefused(null);
           void openExternal(url).catch((reason: unknown) => {
             setRefused(String(reason));
           });
         }}
-        /* A button is inline-block and sizes to its content, so a long URL
-           ignored the paragraph's wrapping and ran out of the pane — over the
-           column beside it in a split. Capped and broken anywhere. */
-        className="max-w-full cursor-pointer text-left break-all underline decoration-from-font underline-offset-2 hover:decoration-2"
-        style={{ color: "var(--accent)" }}
+        className={`${LINK} ${look.className}`}
+        style={look.style}
       >
-        {url}
+        {label === null ? (
+          url
+        ) : (
+          <>
+            <span style={{ color: "var(--accent)" }}>{label.host}</span>
+            {label.tail !== "" && <span style={{ color: "var(--text-muted)" }}>{label.tail}</span>}
+          </>
+        )}
         <LeavesTheClient />
       </button>
       {refused !== null && (

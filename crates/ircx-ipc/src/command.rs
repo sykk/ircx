@@ -151,6 +151,7 @@ pub enum PluginPermission {
     NetworkRequests,
     RenderContent,
     AnnotateMessages,
+    RaiseNotifications,
 }
 
 /// A permission and the plain terms the install dialogue shows for it. Sent

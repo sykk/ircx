@@ -77,6 +77,7 @@ fn author(root: &Path, id: &str, command: &str, source: &str, requests: Grants) 
         description: String::new(),
         entry: "main.js".into(),
         annotates: false,
+        notifies: false,
         commands: vec![CommandSpec {
             name: command.into(),
             summary: String::new(),

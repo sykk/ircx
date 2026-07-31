@@ -18,7 +18,8 @@ use crate::manifest::{Grants, Permission};
 use crate::net::Fetcher;
 use crate::sandbox::Sandbox;
 use crate::{
-    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, PluginFailure,
+    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, NotifyReply,
+    NotifyRequest, PluginFailure,
 };
 
 /// Which plugin owns a slash command, and what it was granted at the moment
@@ -43,6 +44,14 @@ impl Route {
 /// caller cannot hand `annotate` the name of a plugin nobody checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Annotator {
+    pub plugin: String,
+}
+
+/// A plugin that decides what is worth interrupting the user for in a
+/// conversation. Its own type rather than an `Annotator`, so a plugin granted
+/// one hook cannot be handed to the other.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notifier {
     pub plugin: String,
 }
 
@@ -173,6 +182,59 @@ impl PluginRuntime {
             .collect()
     }
 
+    /// The plugins that decide what is worth interrupting the user for in
+    /// `target`, answered from the library without starting a runtime, as
+    /// [`PluginRuntime::annotators`] is.
+    pub fn notifiers(&self, target: &str) -> Vec<Notifier> {
+        hold(&self.library)
+            .installed()
+            .into_iter()
+            .filter(|installed| installed.manifest.notifies)
+            .filter(|installed| {
+                installed.grants.holds(Permission::RaiseNotifications)
+                    && installed.grants.reaches(target)
+            })
+            .map(|installed| Notifier {
+                plugin: installed.id().to_owned(),
+            })
+            .collect()
+    }
+
+    /// Runs one batch through one notification rule. Blocking and bounded, as
+    /// [`PluginRuntime::annotate`] is.
+    pub fn notify(
+        &self,
+        notifier: &Notifier,
+        request: NotifyRequest,
+    ) -> Result<NotifyReply, PluginFailure> {
+        let named = |failure| PluginFailure {
+            plugin: notifier.plugin.clone(),
+            failure,
+        };
+        let worker = self.worker(&notifier.plugin).map_err(named)?;
+        let (reply, answer) = mpsc::channel();
+
+        let outcome = {
+            let worker = hold(&worker);
+            match worker.jobs.send(Work::Notify(request, reply)) {
+                Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
+                Err(_) => Err(RecvTimeoutError::Disconnected),
+            }
+        };
+
+        match outcome {
+            Ok(result) => result.map_err(named),
+            Err(RecvTimeoutError::Timeout) => {
+                self.stop(&notifier.plugin);
+                Err(named(Failure::Unresponsive))
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                self.stop(&notifier.plugin);
+                Err(named(Failure::Host("its runtime stopped".into())))
+            }
+        }
+    }
+
     /// Runs one batch through one annotator. Blocking and bounded, exactly as
     /// [`PluginRuntime::run`] is.
     pub fn annotate(
@@ -272,6 +334,7 @@ fn hold<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
 enum Work {
     Command(CommandRequest, Sender<Result<CommandReply, Failure>>),
     Annotate(AnnotateRequest, Sender<Result<AnnotateReply, Failure>>),
+    Notify(NotifyRequest, Sender<Result<NotifyReply, Failure>>),
 }
 
 struct Worker {
@@ -317,8 +380,16 @@ fn work(installed: Installed, limits: Limits, fetch: Fetcher, jobs: Receiver<Wor
                 }
                 reply.send(outcome).is_err()
             }
+            (Ok(mut ready), Work::Notify(request, reply)) => {
+                let outcome = ready.notify(&request);
+                if keep(&outcome) {
+                    sandbox = Some(ready);
+                }
+                reply.send(outcome).is_err()
+            }
             (Err(failure), Work::Command(_, reply)) => reply.send(Err(failure)).is_err(),
             (Err(failure), Work::Annotate(_, reply)) => reply.send(Err(failure)).is_err(),
+            (Err(failure), Work::Notify(_, reply)) => reply.send(Err(failure)).is_err(),
         };
         if gave_up {
             // The caller gave up on this plugin, so it has been quarantined

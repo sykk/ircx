@@ -1100,7 +1100,8 @@ describe("links in a message", () => {
    * whether to follow a link is looking at it now. */
   it("marks that it leaves the client", () => {
     const link = withLink();
-    expect(link.textContent).toContain("\u2197");
+    // Drawn rather than written: a text arrow read as too quiet twice over.
+    expect(link.querySelector("svg")).toBeTruthy();
     expect(link.getAttribute("aria-label")).toContain("opens in your browser");
   });
 });

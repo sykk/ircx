@@ -1,3 +1,5 @@
+import { Icon } from "./Icon";
+
 /**
  * The mark on a link that leaves ircx.
  *
@@ -10,8 +12,11 @@
  */
 export function LeavesTheClient() {
   return (
-    <span aria-hidden="true" className="ml-1 text-[11px] align-baseline">
-      ↗
+    <span
+      className="ml-1 inline-flex translate-y-px align-baseline"
+      style={{ color: "var(--accent)" }}
+    >
+      <Icon name="external" size={11} />
     </span>
   );
 }

@@ -248,6 +248,12 @@ Three properties, and the first is what makes the other two affordable.
   message and the plugin, alongside the one reactions use. The 0.021 ms in
   `docs/measurements.md` is per slash command, something a person types; calling
   into QuickJS while a timeline scrolls is not an option at any figure.
+- **An annotator never sees your own messages.** A line you sent is handed back
+  to the caller that submitted it rather than appended, and its echo arrives as
+  an update to that copy, so neither path reaches an annotator. This is not a
+  rule that was decided; it falls out of how a sent message is delivered, and
+  `crates/ircx-core/tests/ergo.rs` is what established it. Anything that wants
+  to annotate what you said would have to change that path first.
 - **Messages are handed over in batches.** A netsplit rejoin or a history
   backfill is hundreds of messages, and one call per batch keeps the call count
   near the command path's rather than multiplying it by the channel's traffic.

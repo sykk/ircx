@@ -397,6 +397,19 @@ that degrades can say why it did.
 
 ## The annotator
 
+**The session half is verified.** `crates/ircx-core/tests/ergo.rs` drives the
+real stack against a local `ergo` and reads a note back:
+
+```text
+PASS  annotator: units: 22 °C
+```
+
+That covers install, grant, arrival, batch, the call and the event — everything
+but the drawing. It also established that an annotator never sees your own
+messages, which `docs/plugins.md` now records.
+
+What is left is what a person has to look at, below.
+
 Built end to end and **never run in the assembled application.** Every part is
 covered by a test — the sandbox refusals, the runtime, the batch, the store
 round trip, and the shipped example under `examples/plugins/units` — and no

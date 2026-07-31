@@ -786,7 +786,12 @@ impl SessionState {
     fn on_topic_who_time(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
         let (name, key) = (name.clone(), self.fold(name));
-        let set_by = params.get(1).cloned();
+        // Ergo sends the whole `nick!user@host` here and Libera sends a bare
+        // nick. The specification says "nick"; a mask in a sentence a person
+        // reads is noise either way.
+        let set_by = params
+            .get(1)
+            .map(|who| who.split('!').next().unwrap_or(who).to_string());
         let set_at = params.get(2).and_then(|epoch| rfc3339(epoch));
         let Some(channel) = self.channels.get_mut(&key) else {
             return;

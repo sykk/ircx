@@ -480,11 +480,23 @@ against RFC 7677's published vectors, and the exchange, the nonce check and the
 signature check are shared — but no server has answered a SHA-512 exchange this
 client sent.
 
-**Not walked**, for either:
+**SCRAM-SHA-256 is walked**, on 2026-07-31, against local `ergo` with a
+registered account. The whole exchange ran against a real server: a real salt
+and iteration count, and the server's signature verifying. Confirmed from
+`ergo`'s side rather than from the client's own report —
 
-- **A real account through the whole exchange.** Whether the iteration count a
-  real server names is inside the range this client will run, and whether the
-  account reads back on `900`.
+```text
+:ergo.test 330 whoisprobe syk syk :is logged in as
+```
+
+— because the client saying it authenticated is the thing under test. This is
+the first time SASL has been verified against a real account at all; the
+mechanism this milestone shipped first, SHA-512, still has not been.
+
+**Not walked**:
+
+- **SHA-512 against any server.** Libera advertises it and `ergo` does not, so
+  the walk is a registered Libera account.
 - **A wrong password.** SCRAM fails at the signature rather than at a numeric,
   so the sentence a user sees comes from a different path than PLAIN's.
 

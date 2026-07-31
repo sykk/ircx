@@ -23,6 +23,7 @@ const HELP: &str = "\
 /away [reason]            mark yourself away, or back
 /quit [reason]            disconnect
 /raw <line>               send a line to the server untouched
+/close [target]           close a conversation and forget it
 /help                     this list";
 
 impl SessionState {
@@ -80,6 +81,11 @@ impl SessionState {
     /// Leaves the channel if we are still in it and drops what we held for it,
     /// including its place in the set of conversations a restart reopens.
     pub fn close_target(&mut self, target: &str) -> Vec<Action> {
+        self.cmd_close(target);
+        self.drain()
+    }
+
+    fn cmd_close(&mut self, target: &str) {
         let key = self.fold(target);
         if let Some(channel) = self.channels.remove(&key) {
             if channel.joined {
@@ -98,7 +104,6 @@ impl SessionState {
                 nick: query.nick,
             });
         }
-        self.drain()
     }
 
     pub fn raw(&mut self, line: &str) -> Vec<Action> {
@@ -210,6 +215,7 @@ impl SessionState {
                 CommandOutcome::Handled
             }
             "raw" | "quote" => self.cmd_raw(args),
+            "close" => self.cmd_close_here(target, args),
             "help" => self.cmd_help(target),
             other => CommandOutcome::Rejected(format!(
                 "`/{other}` is not a command ircx knows. `/help` lists the ones it does."
@@ -219,6 +225,28 @@ impl SessionState {
 
     /// The list goes into the tab it was asked for, as client notes, so it
     /// lands where the user is looking and scrolls like everything else there.
+    /// Closes a conversation and forgets it, so a restart does not reopen it.
+    ///
+    /// The window has had this since #121, by right-clicking the sidebar row;
+    /// #158 is that the typed form was offered by the palette and did not
+    /// exist. Naming one is for closing a conversation you are not looking at.
+    fn cmd_close_here(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let named = args.split_whitespace().next().unwrap_or(target);
+        if named == SERVER_TARGET {
+            return CommandOutcome::Rejected(
+                "This tab is the server's, and closing it would leave the network with nowhere to speak.".into(),
+            );
+        }
+        let key = self.fold(named);
+        if !self.channels.contains_key(&key) && !self.queries.contains_key(&key) {
+            return CommandOutcome::Rejected(format!(
+                "`{named}` is not a conversation that is open"
+            ));
+        }
+        self.cmd_close(named);
+        CommandOutcome::Handled
+    }
+
     fn cmd_help(&mut self, target: &str) -> CommandOutcome {
         self.note_block(target, HELP);
         CommandOutcome::Handled

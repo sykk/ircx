@@ -37,6 +37,7 @@ export const COMMANDS: SlashCommand[] = [
   { name: "away", args: "[reason]", summary: "Set or clear away status" },
   { name: "quit", args: "[reason]", summary: "Disconnect from the network" },
   { name: "raw", args: "<line>", summary: "Send a protocol line unchanged" },
+  { name: "close", args: "[target]", summary: "Close this conversation and forget it" },
   { name: "help", args: "", summary: "List the commands ircx knows" },
 ];
 

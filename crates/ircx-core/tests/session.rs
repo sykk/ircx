@@ -2176,3 +2176,76 @@ mod query_presence {
         assert_eq!(online(&session, "sable"), Some(false));
     }
 }
+
+/// #158. The palette offered `/close` and the dispatch table had no arm for it,
+/// so typing it got "not a command ircx knows" from a list the client drew.
+mod closing {
+    use super::*;
+
+    fn in_channel() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session
+    }
+
+    fn removed(session: &Harness) -> Vec<String> {
+        session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::ChannelRemoved { name, .. } => Some(name.clone()),
+                IrcxEvent::QueryRemoved { nick, .. } => Some(nick.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn closing_a_channel_parts_it_and_forgets_it() {
+        let mut session = in_channel();
+        assert!(matches!(
+            session.submit("#ircx", "/close"),
+            CommandOutcome::Handled
+        ));
+
+        assert_eq!(session.sent(), vec!["PART #ircx"]);
+        assert_eq!(removed(&session), ["#ircx"]);
+    }
+
+    /// For closing a conversation you are not looking at.
+    #[test]
+    fn a_named_target_is_closed_instead_of_this_one() {
+        let mut session = in_channel();
+        session.feed(":sable!s@h PRIVMSG sykk :hello");
+        session.events.clear();
+
+        session.submit("#ircx", "/close sable");
+
+        assert_eq!(removed(&session), ["sable"]);
+        assert!(
+            session.sent().is_empty(),
+            "closing a query parts nothing — there is nothing to leave"
+        );
+    }
+
+    #[test]
+    fn closing_something_that_is_not_open_says_so() {
+        let mut session = in_channel();
+        assert!(matches!(
+            session.submit("#ircx", "/close #elsewhere"),
+            CommandOutcome::Rejected(_)
+        ));
+    }
+
+    /// The console is where a network speaks when it has no conversation to
+    /// speak in, so closing it would leave that nowhere to go.
+    #[test]
+    fn the_server_console_cannot_be_closed() {
+        let mut session = in_channel();
+        assert!(matches!(
+            session.submit("*", "/close"),
+            CommandOutcome::Rejected(_)
+        ));
+    }
+}

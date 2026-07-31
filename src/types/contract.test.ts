@@ -89,6 +89,13 @@ const ALIASES: Record<string, string> = {
   quote: "raw",
 };
 
+/** The commands `/help` prints, which is a third list of the same thing. */
+function helpedCommands(): string[] {
+  const source = readFileSync(DISPATCH, "utf8");
+  const help = source.slice(source.indexOf('const HELP: &str = "'), source.indexOf('this list"'));
+  return [...help.matchAll(/^\/([a-z]+)/gm)].map((match) => match[1]!);
+}
+
 /** Every name the dispatch table answers to, read off its match arms. */
 function dispatchedCommands(): string[] {
   const source = readFileSync(DISPATCH, "utf8");
@@ -170,6 +177,11 @@ describe("the IPC contract", () => {
     expect(dispatched.filter((name) => !named.has(name))).toEqual([]);
     // An alias is a second name for something offered, not a way to hide one.
     expect(Object.values(ALIASES).filter((name) => !offered.includes(name))).toEqual([]);
+
+    // `/help` is the third copy, and the only one a user can ask for.
+    const helped = helpedCommands();
+    expect(helped.filter((name) => !dispatched.includes(name))).toEqual([]);
+    expect(offered.filter((name) => !helped.includes(name))).toEqual([]);
   });
 
   /**

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
 import { isHighlight } from "@/store/selectors";
+import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
 import { formatClock, writesOwnNick } from "./rows";
 
@@ -11,6 +12,13 @@ interface BlockProps {
   spine: boolean;
   /** What the spine is drawn in. The default marks a run of speech and no more. */
   spineTint?: string | undefined;
+  /** Dashed says the client grouped this and could be wrong. Nothing else in
+   * the timeline is dashed, so dashed can only ever mean that. */
+  spineDashed?: boolean;
+  /** This block continues a group the block above opened, so its spine has to
+   * climb through the gap between them. Without it a group's rule breaks once
+   * per author and a solid group reads as a dashed one. */
+  spineContinues?: boolean;
   children: ReactNode;
 }
 
@@ -23,7 +31,13 @@ interface BlockProps {
  * before the first word and printed only when the minute changed, so most rows
  * paid for it and left it empty. It is in the block header now.
  */
-export function Block({ spine, spineTint = "var(--border-strong)", children }: BlockProps) {
+export function Block({
+  spine,
+  spineTint = "var(--border-strong)",
+  spineDashed = false,
+  spineContinues = false,
+  children,
+}: BlockProps) {
   return (
     <div
       className="grid"
@@ -31,11 +45,41 @@ export function Block({ spine, spineTint = "var(--border-strong)", children }: B
         gridTemplateColumns: LADDER,
         paddingLeft: "var(--timeline-rail-pad)",
         paddingRight: "16px",
-        paddingTop: "var(--timeline-block-gap)",
+        // The gap between blocks moves onto the content column when a group
+        // continues, so the spine spans the whole row and the two blocks meet
+        // with nothing between them. Cancelling the padding with a negative
+        // margin instead left a hairline of background at every boundary —
+        // arithmetic that was one pixel out, on every author, all the way down.
+        paddingTop: spineContinues ? undefined : "var(--timeline-block-gap)",
       }}
     >
-      {spine && <div style={{ gridColumn: 1, background: spineTint }} aria-hidden="true" />}
-      <div style={{ gridColumn: 3 }}>{children}</div>
+      {spine && (
+        <div
+          data-spine={spineDashed ? "dashed" : "solid"}
+          style={{
+            gridColumn: 1,
+            // A border rather than a fill: only a border can be dashed.
+            borderLeftWidth: "var(--timeline-spine-width)",
+            borderLeftStyle: spineDashed ? "dashed" : "solid",
+            borderLeftColor: spineTint,
+            // Overlap the block above by a pixel. Block heights are fractional,
+            // so a boundary rounds either way and leaves a hairline of
+            // background at some of them and not others — measured on a
+            // screenshot, invisible in jsdom, and worse than a clean break
+            // because it reads as an accident rather than as a division.
+            marginTop: spineContinues ? "-1px" : undefined,
+          }}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        style={{
+          gridColumn: 3,
+          paddingTop: spineContinues ? "var(--timeline-block-gap)" : undefined,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -62,6 +106,46 @@ interface Props {
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
   flashId: string | null;
+  group: Group | null;
+  opensGroup: boolean;
+  onDismissGroup: (groupId: string) => void;
+}
+
+/**
+ * The name of a declared group, above the first block in it.
+ *
+ * Only the declared grade is named, because it is the only one a person named.
+ * An addressed group carries no label — both people are in the blocks below in
+ * their own colours, so a caption naming them says nothing new.
+ */
+function GroupName({ name, tint }: { name: string; tint: string }) {
+  return (
+    <div className="flex items-baseline gap-2 text-[11px]">
+      <span className="font-[family-name:var(--font-mono)] font-medium" style={{ color: tint }}>
+        {name}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The way out of a guess, above the first block in it.
+ *
+ * The affordance is the label: only a guess can be undone, so an offer to undo
+ * is what tells the reader the client did this — without a sentence explaining
+ * the heuristic, which is the client talking about itself at length.
+ */
+function DismissGuess({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onDismiss}
+      className="text-[11px] hover:underline"
+      style={{ color: "var(--text-faint)" }}
+    >
+      not a group
+    </button>
+  );
 }
 
 /**
@@ -93,6 +177,9 @@ export function MessageBlock({
   onReact,
   onReply,
   flashId,
+  group,
+  opensGroup,
+  onDismissGroup,
 }: Props) {
   const head = messages[0]!;
   const addressed = messages.some((message) => isHighlight(message, ownNick));
@@ -101,8 +188,26 @@ export function MessageBlock({
   // and which rule is on the row, where the message is.
   const raised = messages.some((message) => (message.raisedBy ?? []).length > 0);
 
+  // A mention outranks the group. The group's colour breaks for this one block
+  // and the run either side still holds it, whereas a mention has nowhere else
+  // to go: it is the loudest thing the timeline says and a reading aid must not
+  // sit on top of it.
+  const groupTint = group === null ? undefined : nickColor(group.opener);
+  const spineTint = addressed || raised ? "var(--accent)" : groupTint;
+
   return (
-    <Block spine spineTint={addressed || raised ? "var(--accent)" : undefined}>
+    <Block
+      spine
+      spineTint={spineTint}
+      spineDashed={group?.grade === "guessed"}
+      spineContinues={group !== null && !opensGroup}
+    >
+      {opensGroup && group !== null && group.name !== null && (
+        <GroupName name={group.name} tint={groupTint ?? "var(--text-faint)"} />
+      )}
+      {opensGroup && group?.grade === "guessed" && (
+        <DismissGuess onDismiss={() => onDismissGroup(group.id)} />
+      )}
       {/* Why the run is marked, in the words for it. A tint on its own leaves
           the reader to work out what the client noticed, and the answer — your
           name is in here — is the one thing they cannot get from the colour.

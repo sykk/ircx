@@ -12,9 +12,17 @@ How the conversation *reads* — grouping, gutter timestamps, nick colour,
 presence digests, the unread seam, typography — follows
 `readability/READABILITY.md`, which supersedes the mockup on those points. Its
 studies assume an encryption layer this milestone does not build; take the
-structural findings and leave the verdict machinery. Two deliberate departures
-from it: typography stays semantic (prose in the text face, data in mono) and
-the nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`.
+structural findings and leave the verdict machinery. Four deliberate departures
+from it: typography stays semantic (prose in the text face, data in mono); the
+nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`; a
+message in no group keeps a neutral spine where the study draws nothing; and a
+message naming you takes the accent, outranking the colour of any group it is in.
+
+The spine carries grouping, in the three grades
+`readability/ircx-live-studies.html` sets out — declared, addressed, guessed.
+Hue says which group, taken from whoever opened it; stroke says how sure the
+client is, and dashed can mean nothing but a guess.
+`src/components/timeline/groups.ts` assigns each message to at most one.
 
 `docs/multiwindow.md` describes split panes and per-pane context. The layout
 tree is built, and every pane on a channel draws its own member list inside it —

@@ -6,6 +6,7 @@ import { nickColor } from "@/lib/nickColor";
 import { serverMsgid } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
+import { bodyText } from "./groups";
 import { Markdown, Mentioned } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
@@ -178,7 +179,10 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
     );
   }
 
-  return <Markdown text={message.text} urls={urlsOf(message)} mention={mention} />;
+  // `bodyText` drops a bracket the sender typed to name a group, which the
+  // block has already printed above the run. The archive keeps the raw text,
+  // so search still matches what was written.
+  return <Markdown text={bodyText(message)} urls={urlsOf(message)} mention={mention} />;
 }
 
 /**

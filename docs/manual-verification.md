@@ -164,8 +164,12 @@ resolved it back to the right message. Three replies to two different parents
 all landed correctly.
 
 **Still unverified:** a reply long enough to split. `say` tags every piece and
-`session.rs` asserts that, but no live run has produced one — the longest sent
-was about 140 characters, well under the wire budget. It takes roughly 400.
+`session.rs` asserts that, but no live run has produced one. The budget is not a
+fixed number to aim at — `wire_budget` derives it from the nick, ident, host and
+target, because those are what the server prepends to the copy everyone else
+receives. On ergo as `syk!~u@4dy55fkndsc9u.irc` in `#replytest` it came to 464
+bytes, and a 400-character attempt went as one message. Read the figure off the
+mask in the raw log rather than guessing at it.
 
 **On Libera it will not work**, and the client cannot tell in advance. Client
 tags there are an allowlist holding only `+typing`, and `message-tags` is

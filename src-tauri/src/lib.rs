@@ -18,7 +18,42 @@ use tracing::warn;
 /// connection may run.
 const EVENT_QUEUE: usize = 4_096;
 
+/// Where a debug build looks for the frontend. Tauri bakes `devUrl` into the
+/// binary, so this is the address regardless of what `dist/` holds.
+#[cfg(debug_assertions)]
+const DEV_URL: &str = "http://localhost:5183";
+
+/// Whether anything is listening on `host:port`.
+///
+/// A hostname does not parse as a `SocketAddr`, so it is resolved first — the
+/// dev URL is `localhost:5183`, which is exactly the case that would otherwise
+/// answer "cannot tell" and let the blank window through.
+#[cfg(debug_assertions)]
+fn listening(address: &str) -> bool {
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+
+    let Ok(resolved) = address.to_socket_addrs() else {
+        // Nothing this can check, so say nothing rather than refuse to start
+        // over a check that did not run.
+        return true;
+    };
+    resolved
+        .into_iter()
+        .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(500)).is_ok())
+}
+
 pub fn run() {
+    #[cfg(debug_assertions)]
+    if !listening(DEV_URL.trim_start_matches("http://")) {
+        eprintln!("ircx: nothing is listening on {DEV_URL}.");
+        eprintln!(
+            "A debug build loads the frontend from the dev server, so the window would be blank."
+        );
+        eprintln!("Start it with: npm run tauri dev");
+        std::process::exit(1);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("IRCX_LOG")
@@ -100,4 +135,37 @@ fn open_plugins(app: &tauri::AppHandle) -> Option<Arc<PluginRuntime>> {
         .inspect_err(|error| warn!(%error, "starting without plugins"))
         .ok()
         .map(Arc::new)
+}
+
+#[cfg(all(test, debug_assertions))]
+mod tests {
+    use super::listening;
+    use std::net::TcpListener;
+
+    /// #187. The check has to be right about the address the binary actually
+    /// uses, and `localhost:5183` is a hostname — the case that does not parse
+    /// as a `SocketAddr` and would otherwise wave a blank window through.
+    #[test]
+    fn a_hostname_is_resolved_rather_than_waved_through() {
+        let socket = TcpListener::bind("127.0.0.1:0").expect("a port to listen on");
+        let port = socket.local_addr().expect("its address").port();
+
+        assert!(listening(&format!("localhost:{port}")));
+    }
+
+    #[test]
+    fn a_port_with_nothing_behind_it_is_not_listening() {
+        let socket = TcpListener::bind("127.0.0.1:0").expect("a port to listen on");
+        let port = socket.local_addr().expect("its address").port();
+        drop(socket);
+
+        assert!(!listening(&format!("localhost:{port}")));
+    }
+
+    /// Said rather than guessed: a check that cannot run must not be the reason
+    /// the client refuses to start.
+    #[test]
+    fn an_address_that_cannot_be_resolved_does_not_stop_the_client() {
+        assert!(listening("this is not an address"));
+    }
 }

@@ -442,14 +442,43 @@ Still not walked, and worth doing when there is reason to:
 the conversation reopened, and the note came back with the message without the
 annotator running again.
 
+**A broken annotator is dropped and says so**, walked by the owner on
+2026-07-31 against local `ergo`. An annotator that throws on every message was
+installed through the folder picker and granted `#test`, and a second client
+said five things. The first two produced nothing, the third produced this in
+the network console, and the fourth and fifth produced nothing:
+
+```text
+The broken plugin failed 3 times in a row, so ircx stopped asking it to
+annotate messages. Restart ircx to let it try again.
+```
+
+The archive holds exactly one copy of it, which is the property the strikes
+exist for: a hook that fails on every message must not report as often as the
+channel talks.
+
+Asked whether the server console is where they would go if their notes had
+quietly stopped a day later, the owner said it is the first place they would
+look. That is the question the walk existed to answer, and it is the reason the
+plugin sheet still says nothing about a dropped hook — the sheet would be a
+second place to look for something already found in the first.
+
+The walk found no defect in the client and one in the walk. The first attempt
+had the owner say three things themselves and nothing happened, because an
+annotator never sees your own messages: a line you send is handed back to the
+caller rather than appended, so it never becomes an arrival. It is written down
+twice — `docs/plugins.md` under what an annotator is not handed, and in
+`ergo.rs` where the second client is introduced — and the instructions were
+written without reading either. Anything walking an on-arrival hook needs a
+second client.
+
 Still not walked:
 
-- **A broken annotator being dropped.** Three consecutive failed batches. The
-  drop now writes a line to the server console instead of only a `warn!`, so
-  the walk is a matter of reading it: install an annotator that throws, say
-  three things in the channel, and look for the sentence naming the plugin in
-  that network's console. What no test can answer is whether somebody whose
-  notes stopped would find it there.
+- **A broken rule being dropped**, which is the same walk against the other
+  hook. See the notification rule's section below.
+- **A plugin whose annotator is dropped keeping a working notification rule**,
+  and the reverse. The counts are keyed separately and unit tested; no run has
+  had one plugin holding both hooks with only one of them broken.
 
 ## One conversation, one name
 
@@ -596,9 +625,11 @@ arrow in #172. A mark that is obvious to whoever built it is not evidence.
 
 Still not walked:
 
-- **A broken rule being dropped.** The same walk as the annotator's above,
-  against the other hook. The counts are separate, so a rule that throws has to
-  leave the same plugin's annotator working.
+- **A broken rule being dropped.** The annotator's walk is done and the console
+  line reads well, so what is left here is the other hook saying the other
+  sentence — a rule that throws should say ircx stopped asking it what is worth
+  interrupting you for. A rule needs a third client under the nick it looks
+  for, as the run above needed a second.
 
 ## The topic of a channel you have joined
 

@@ -298,11 +298,56 @@ describe("Timeline", () => {
     );
     render(<Timeline view={TEST_VIEW} />);
 
-    expect(screen.getByText("7 joined")).toBeTruthy();
+    expect(screen.getByText(/7 joined/)).toBeTruthy();
     expect(screen.queryByText("user0 joined")).toBe(null);
 
     fireEvent.click(screen.getByText("show all"));
     expect(screen.getByText("user0 joined")).toBeTruthy();
+  });
+
+  /** Weather is skippable exactly when none of it was about you, and a digest
+   * that does not say so leaves the reader opening it to find out. */
+  it("says the burst was not about you, and how long it ran", () => {
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    seed(
+      Array.from({ length: 4 }, (_, i) =>
+        makeMessage({
+          id: `s${i}`,
+          nick: `user${i}`,
+          kind: "join",
+          text: "",
+          timestamp: new Date(base + i * 90_000).toISOString(),
+        }),
+      ),
+    );
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText(/joined/).textContent).toBe(
+      "Over 5 minutes: 4 joined. None of it involves you.",
+    );
+  });
+
+  it("counts your own coming and going as involving you", () => {
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    seed([
+      makeMessage({
+        id: "s0",
+        kind: "join",
+        text: "",
+        timestamp: new Date(base).toISOString(),
+        sender: { nick: "sable", user: null, host: null, account: null, isSelf: true },
+      }),
+      makeMessage({
+        id: "s1",
+        nick: "kade",
+        kind: "join",
+        text: "",
+        timestamp: new Date(base + 1000).toISOString(),
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText(/joined/).textContent).toBe("2 joined. 1 of them involves you.");
   });
 
   it("names an access change in the digest and never hides it", () => {

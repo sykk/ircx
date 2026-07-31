@@ -6,6 +6,7 @@ import {
   buildRows,
   describeDay,
   describePresence,
+  describePresenceRun,
   describeSpan,
   formatClock,
   partitionSystemRun,
@@ -168,9 +169,21 @@ describe("buildRows system runs", () => {
     expect(rows[1]).toMatchObject({ id: "s:a" });
   });
 
-  it("ends on the minute, like a block, so no row grows without bound", () => {
+  /** A netsplit takes minutes to play out. Bounded by the minute, it arrived as
+   * several digest lines each stating a fraction of one event. */
+  it("holds a burst of comings and goings that runs for minutes", () => {
     const rows = buildRows(
       [at(0, { id: "a", kind: "join" }), at(4 * BUCKET_MS, { id: "b", kind: "quit" })],
+      null,
+    );
+    expect(rows.filter((r) => r.kind === "system").map((r) => r.messages.map((m) => m.id))).toEqual(
+      [["a", "b"]],
+    );
+  });
+
+  it("still ends that run, so no row grows without bound", () => {
+    const rows = buildRows(
+      [at(0, { id: "a", kind: "join" }), at(RUN_MS + 1, { id: "b", kind: "quit" })],
       null,
     );
     expect(rows.filter((r) => r.kind === "system").map((r) => r.messages.map((m) => m.id))).toEqual(
@@ -210,6 +223,41 @@ describe("buildRows system runs", () => {
       at(3, { id: "d", kind: "nick" }),
     ];
     expect(describePresence(presence)).toBe("2 joined, 1 left, 1 renamed");
+  });
+});
+
+describe("describePresenceRun", () => {
+  const joins = (count: number, everyMs: number, over: Parameters<typeof at>[1] = {}) =>
+    Array.from({ length: count }, (_, i) =>
+      at(i * everyMs, { id: `s${i}`, kind: "join", ...over }),
+    );
+
+  it("leads with how long it ran once that is worth saying", () => {
+    expect(describePresenceRun(joins(4, 90_000), null)).toBe(
+      "Over 5 minutes: 4 joined. None of it involves you.",
+    );
+  });
+
+  /** A burst inside one minute is a burst. Saying so costs a clause and tells
+   * the reader nothing they would act on. */
+  it("says nothing about a span under a minute", () => {
+    expect(describePresenceRun(joins(3, 1000), null)).toBe("3 joined. None of it involves you.");
+  });
+
+  it("counts a line that names the reader", () => {
+    const run = [
+      at(0, { id: "a", kind: "quit", text: "sable: back later" }),
+      at(1, { id: "b", kind: "join" }),
+    ];
+    expect(describePresenceRun(run, "sable")).toBe("1 quit, 1 joined. 1 of them involves you.");
+  });
+
+  it("agrees with itself about singular and plural", () => {
+    const run = [
+      at(0, { id: "a", kind: "quit", text: "sable: one" }),
+      at(1, { id: "b", kind: "quit", text: "sable: two" }),
+    ];
+    expect(describePresenceRun(run, "sable")).toBe("2 quit. 2 of them involve you.");
   });
 });
 

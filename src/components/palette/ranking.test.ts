@@ -167,21 +167,24 @@ describe("frame budget", () => {
   // Scaling rather than milliseconds. The product goal is a frame, but a
   // wall-clock assertion measures whatever else the machine is doing: this
   // failed at 21ms on a box running a concurrent Rust build and passed on the
-  // same commit when idle. Load hits both sample sizes equally, so the ratio
-  // survives it while still catching the regression that matters — someone
-  // making the ranker quadratic.
-  it("scales linearly in the number of candidates", () => {
-    const small = fixtureState(1000);
-    const large = fixtureState(4000);
+  // same commit when idle.
+  //
+  // A ratio was meant to survive that, and it does not on its own. Load does
+  // not hit the two sample sizes equally: min-of-N filters contamination well
+  // for a short run and badly for a long one, because a run four times as long
+  // has four times the chance of catching a preemption. At five runs each, the
+  // 4x workload is the contaminated side by a wide margin, and it is the
+  // numerator. Hence three defences below, and a comment saying so rather than
+  // a number nobody can account for.
+  it("scales linearly in the number of candidates", { retry: 2 }, () => {
     const rank = (s: AppState) => () => {
       const candidates = buildCandidates(s);
       rankMatches(candidates, filterMatches(candidates, "", null), recent, 60);
     };
-
-    const ratio = fastest(5, rank(large)) / Math.max(fastest(5, rank(small)), 0.05);
+    const [small, large] = interleaved(12, rank(fixtureState(1000)), rank(fixtureState(4000)));
 
     // 4x the input. Linear lands near 4, quadratic near 16.
-    expect(ratio).toBeLessThan(8);
+    expect(large / Math.max(small, 0.05)).toBeLessThan(8);
   });
 
   it("keeps each keystroke within a frame", () => {
@@ -201,10 +204,28 @@ describe("frame budget", () => {
  * budget: a slow run on a loaded machine says nothing about the algorithm. */
 function fastest(runs: number, work: () => void): number {
   let best = Infinity;
-  for (let i = 0; i < runs; i++) {
-    const started = performance.now();
-    work();
-    best = Math.min(best, performance.now() - started);
-  }
+  for (let i = 0; i < runs; i++) best = Math.min(best, timed(work));
   return best;
+}
+
+/**
+ * The quickest of each, measured alternately rather than one series after the
+ * other. The load that perturbs a timing test arrives in bursts, and running
+ * all of one workload and then all of the other lets a burst land entirely on
+ * one side — which is the whole of what the ratio was supposed to rule out.
+ */
+function interleaved(runs: number, a: () => void, b: () => void): [number, number] {
+  let bestA = Infinity;
+  let bestB = Infinity;
+  for (let i = 0; i < runs; i++) {
+    bestA = Math.min(bestA, timed(a));
+    bestB = Math.min(bestB, timed(b));
+  }
+  return [bestA, bestB];
+}
+
+function timed(work: () => void): number {
+  const started = performance.now();
+  work();
+  return performance.now() - started;
 }

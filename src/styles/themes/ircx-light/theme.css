@@ -66,17 +66,15 @@
   --timeline-block-gap: 14px;
   --timeline-body-leading: 1.7;
 
-  --timeline-rail-pad: 35px;
-  --timeline-clock-col: 36px;
-  --timeline-spine-gap: 27px;
+  --timeline-rail-pad: 16px;
   --timeline-spine-width: 2px;
-  --timeline-nick-gap: 20px;
-  --timeline-text-gap: 16px;
+  --timeline-spine-gap: 14px;
   --timeline-measure: 595px;
   /* Reserved for the reply and react controls, which appear with the pointer.
      They used to sit over the far end of the measure to avoid taking room; a
      long line then ran underneath them and could not be clicked. */
   --timeline-actions-col: 60px;
+  --timeline-actions-gap: 16px;
 
   --timeline-quote-width: 2px;
 

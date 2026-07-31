@@ -2,7 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
-import { Block } from "./MessageBlock";
+import { Block, Clock } from "./MessageBlock";
 import { describePresence, partitionSystemRun } from "./rows";
 
 /**
@@ -44,32 +44,31 @@ export function SystemMessage({ messages }: { messages: ChatMessage[] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Block at={messages[0]!.timestamp} spine={false}>
-      {(loud.length > 0 || presence.length > 0) && (
-        <div className="flex items-baseline gap-2 text-[12px]">
-          {loud.length > 0 && (
-            <span style={{ color: "var(--warning)" }}>
-              {loud.map(systemText).join(", ")}
-              {presence.length > 0 && " —"}
+    <Block spine={false}>
+      <div className="flex items-baseline gap-2 text-[12px]">
+        <Clock at={messages[0]!.timestamp} />
+        {loud.length > 0 && (
+          <span style={{ color: "var(--warning)" }}>
+            {loud.map(systemText).join(", ")}
+            {presence.length > 0 && " —"}
+          </span>
+        )}
+        {presence.length > 0 && (
+          <>
+            <span className="min-w-0 flex-1" style={{ color: "var(--text-muted)" }}>
+              {describePresence(presence)}
             </span>
-          )}
-          {presence.length > 0 && (
-            <>
-              <span className="min-w-0 flex-1" style={{ color: "var(--text-muted)" }}>
-                {describePresence(presence)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setExpanded((open) => !open)}
-                className="shrink-0 text-[11px]"
-                style={{ color: "var(--accent)" }}
-              >
-                {expanded ? "hide" : "show all"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => setExpanded((open) => !open)}
+              className="shrink-0 text-[11px]"
+              style={{ color: "var(--accent)" }}
+            >
+              {expanded ? "hide" : "show all"}
+            </button>
+          </>
+        )}
+      </div>
 
       {expanded && presence.map((message) => <SystemLine key={message.id} message={message} />)}
       {runsOf(plain).map((run) => (

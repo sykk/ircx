@@ -2,12 +2,27 @@ import type { ChatMessage, MessageKind } from "@/types";
 import { isHighlight } from "@/store/selectors";
 
 /**
- * A minute of the conversation, whoever spoke during it. It bounds a run of
- * system messages too: a server console holds nothing else, so without it the
- * console would be a single row for the length of the session — one element for
- * the virtualiser to measure however long the output ran.
+ * Bounds a run of system messages: a server console holds nothing else, so
+ * without it the console would be a single row for the length of the session —
+ * one element for the virtualiser to measure however long the output ran.
+ *
+ * It used to bound a block of speech too, which is what made a block a minute
+ * rather than a person. See `RUN_MS`.
  */
 export const BUCKET_MS = 60 * 1000;
+
+/**
+ * How long one person may go on before their run is broken and their name and
+ * the time are stated again.
+ *
+ * Measured from the run's own first message rather than off a wall clock, which
+ * is the whole of the difference from `BUCKET_MS`. A fixed grid splits two
+ * lines seconds apart whenever a boundary happens to fall between them, and at
+ * a minute wide it did that constantly. Anchored to the run, the break only
+ * arrives after somebody has genuinely been talking for five minutes — which is
+ * a reason to restate the time rather than an artefact of where the grid fell.
+ */
+export const RUN_MS = 5 * 60 * 1000;
 
 /** One virtualised item. Blocks and system runs hold several messages each. */
 export type TimelineRow =
@@ -69,15 +84,34 @@ function dayOf(timestamp: string): string | null {
 }
 
 /**
- * A minute can open more than one block — a burst of joins between two
- * sentences splits it — so the bucket alone is not a key. The suffix keeps
- * React and the virtualiser's measurement cache on distinct rows while the
- * first block of a bucket keeps its id when older history merges into it.
+ * Whether `message` belongs to the run already open.
+ *
+ * Speech continues while one person keeps talking. Anyone else speaking ends
+ * the run, which is what makes a block an author rather than an interval, and
+ * the kinds that write their own nick into the body (`* nick`, `-nick-`) form
+ * their own runs — a header above them would state the name the line is about
+ * to state again.
  */
-function uniqueId(taken: Map<string, number>, base: string): string {
-  const n = (taken.get(base) ?? 0) + 1;
-  taken.set(base, n);
-  return n === 1 ? base : `${base}#${n}`;
+function continuesRun(
+  open: Extract<TimelineRow, { kind: "block" | "system" }>,
+  message: ChatMessage,
+): boolean {
+  const head = open.messages[0]!;
+
+  if (open.kind === "system") {
+    const bucket = bucketOf(head.timestamp);
+    return bucket !== null && bucket === bucketOf(message.timestamp);
+  }
+
+  const start = Date.parse(head.timestamp);
+  const at = Date.parse(message.timestamp);
+  return (
+    head.sender.nick === message.sender.nick &&
+    writesOwnNick(head.kind) === writesOwnNick(message.kind) &&
+    Number.isFinite(start) &&
+    Number.isFinite(at) &&
+    at - start <= RUN_MS
+  );
 }
 
 export function buildRows(
@@ -86,9 +120,7 @@ export function buildRows(
   ownNick: string | null = null,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
-  const taken = new Map<string, number>();
   let open: Extract<TimelineRow, { kind: "block" | "system" }> | null = null;
-  let openBucket: number | null = null;
   let openDay: string | null = null;
 
   for (let i = 0; i < messages.length; i++) {
@@ -107,23 +139,18 @@ export function buildRows(
     }
 
     const system = isSystemKind(message.kind);
-    const bucket = bucketOf(message.timestamp);
-    const continues =
-      open?.kind === (system ? "system" : "block") && bucket !== null && bucket === openBucket;
+    const wanted = system ? "system" : "block";
 
-    if (continues && open) {
+    if (open !== null && open.kind === wanted && continuesRun(open, message)) {
       open.messages.push(message);
       continue;
     }
 
+    // Named for the message that opened the run, message ids being unique
+    // already. The id used to name the bucket, and there is no bucket now.
     open = system
       ? { kind: "system", id: `s:${message.id}`, messages: [message] }
-      : {
-          kind: "block",
-          id: uniqueId(taken, bucket === null ? `b:${message.id}` : `b:${bucket}`),
-          messages: [message],
-        };
-    openBucket = bucket;
+      : { kind: "block", id: `b:${message.id}`, messages: [message] };
     rows.push(open);
   }
 
@@ -146,27 +173,6 @@ function measureSeam(unread: readonly ChatMessage[], ownNick: string | null): Se
     spanMs: first && last ? Math.max(0, Date.parse(last.timestamp) - Date.parse(first.timestamp)) : 0,
     mentions: speech.filter((m) => isHighlight(m, ownNick)).length,
   };
-}
-
-/** Narrow enough that the ladder still reads as a column under a short nick. */
-const MIN_NICK_CH = 4;
-
-/**
- * Width of a block's nick column in monospace character advances, sized to the
- * widest nick the block actually holds. A block of `nyx` and `kade` therefore
- * sits closer to its text than one containing `phrack`, and the nick never
- * truncates: the name is the identifier and colour only reinforces it.
- *
- * Actions and notices write their nick into the body, so they leave the column
- * empty and do not widen it.
- */
-export function nickColumnCh(messages: readonly ChatMessage[]): number {
-  let widest = MIN_NICK_CH;
-  for (const message of messages) {
-    if (writesOwnNick(message.kind)) continue;
-    widest = Math.max(widest, message.sender.nick.length);
-  }
-  return widest;
 }
 
 /** `HH:MM` in the viewer's timezone, without locale-dependent separators. */

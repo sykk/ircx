@@ -8,10 +8,10 @@ import {
   describePresence,
   describeSpan,
   formatClock,
-  nickColumnCh,
   partitionSystemRun,
   rowIndexOfMessage,
   rowMessages,
+  RUN_MS,
   type TimelineRow,
 } from "./rows";
 
@@ -26,7 +26,7 @@ function blocks(rows: TimelineRow[]) {
 }
 
 describe("buildRows blocks", () => {
-  it("puts a minute of the conversation in one block, whoever spoke", () => {
+  it("gives each speaker their own block, however fast they take turns", () => {
     const rows = buildRows(
       [
         at(0, { id: "a", nick: "sable" }),
@@ -35,43 +35,73 @@ describe("buildRows blocks", () => {
       ],
       null,
     );
-    expect(blocks(rows)).toHaveLength(1);
-    expect(blocks(rows)[0]!.messages.map((m) => m.id)).toEqual(["a", "b", "c"]);
+    expect(blocks(rows).map((row) => row.messages.map((m) => m.id))).toEqual([["a"], ["b"], ["c"]]);
   });
 
-  it("opens a new block on the next minute even for one speaker", () => {
+  it("keeps one speaker's consecutive lines together", () => {
     const rows = buildRows(
       [
         at(0, { id: "a", nick: "sable" }),
-        at(BUCKET_MS - 1, { id: "b", nick: "sable" }),
-        at(BUCKET_MS, { id: "c", nick: "sable" }),
+        at(1000, { id: "b", nick: "sable" }),
+        at(2000, { id: "c", nick: "sable" }),
+      ],
+      null,
+    );
+    expect(blocks(rows).map((row) => row.messages.map((m) => m.id))).toEqual([["a", "b", "c"]]);
+  });
+
+  // The defect this replaced: on a wall-clock grid two lines seconds apart fell
+  // in different buckets whenever a boundary landed between them, and the
+  // speaker was split for no reason the reader could see.
+  it("does not split a speaker on a clock boundary they happened to cross", () => {
+    const rows = buildRows(
+      [
+        at(BUCKET_MS - 1, { id: "a", nick: "sable" }),
+        at(BUCKET_MS + 1, { id: "b", nick: "sable" }),
+      ],
+      null,
+    );
+    expect(blocks(rows).map((row) => row.messages.map((m) => m.id))).toEqual([["a", "b"]]);
+  });
+
+  it("breaks a run once one person has held the floor for RUN_MS", () => {
+    const rows = buildRows(
+      [
+        at(0, { id: "a", nick: "sable" }),
+        at(RUN_MS, { id: "b", nick: "sable" }),
+        at(RUN_MS + 1, { id: "c", nick: "sable" }),
       ],
       null,
     );
     expect(blocks(rows).map((row) => row.messages.map((m) => m.id))).toEqual([["a", "b"], ["c"]]);
   });
 
-  it("keeps actions and notices in the block they were said in", () => {
+  it("runs a kind that writes its own nick separately from the same nick's speech", () => {
     const rows = buildRows(
       [
         at(0, { id: "a", nick: "sable" }),
         at(1000, { id: "b", nick: "sable", kind: "action" }),
         at(2000, { id: "c", nick: "sable", kind: "notice" }),
+        at(3000, { id: "d", nick: "sable" }),
       ],
       null,
     );
-    expect(blocks(rows)).toHaveLength(1);
+    expect(blocks(rows).map((row) => row.messages.map((m) => m.id))).toEqual([
+      ["a"],
+      ["b", "c"],
+      ["d"],
+    ]);
   });
 
-  it("keeps a block's id when older history merges into it", () => {
-    const later = [at(30_000, { id: "b" })];
-    const merged = [at(10_000, { id: "a" }), at(30_000, { id: "b" })];
+  // The id used to name the minute so it survived a prepend. A run is named for
+  // the message that opened it instead, and older history merging into one
+  // renames it — which costs that block a re-measure and nothing else.
+  it("merges older history into the run it continues", () => {
+    const merged = blocks(buildRows([at(10_000, { id: "a" }), at(30_000, { id: "b" })], null));
 
-    const before = blocks(buildRows(later, null))[0]!;
-    const after = blocks(buildRows(merged, null))[0]!;
-
-    expect(after.id).toBe(before.id);
-    expect(after.messages.map((m) => m.id)).toEqual(["a", "b"]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.messages.map((m) => m.id)).toEqual(["a", "b"]);
+    expect(merged[0]!.id).toBe("b:a");
   });
 
   it("gives distinct ids to two blocks a burst of joins split apart", () => {
@@ -88,7 +118,7 @@ describe("buildRows blocks", () => {
     expect(new Set(ids).size).toBe(2);
   });
 
-  it("falls back to the message id when the server mangled the timestamp", () => {
+  it("gives a message its own block when the server mangled the timestamp", () => {
     const rows = buildRows(
       [makeMessage({ id: "a", timestamp: "not a date" }), makeMessage({ id: "b", timestamp: "" })],
       null,
@@ -107,7 +137,7 @@ describe("buildRows date rules", () => {
       ],
       null,
     );
-    expect(rows.map((row) => row.kind)).toEqual(["date", "block", "date", "block", "block"]);
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block", "date", "block"]);
   });
 
   it("ends the open block, so no block spans a day", () => {
@@ -189,7 +219,7 @@ describe("buildRows unread divider", () => {
       [at(0, { id: "a" }), at(BUCKET_MS, { id: "b" }), at(2 * BUCKET_MS, { id: "c" })],
       "b",
     );
-    expect(rows.map((r) => r.kind)).toEqual(["date", "block", "unread", "block", "block"]);
+    expect(rows.map((r) => r.kind)).toEqual(["date", "block", "unread", "block"]);
   });
 
   it("splits a block that would otherwise span the rule", () => {
@@ -225,22 +255,6 @@ describe("buildRows unread divider", () => {
     expect(divider).toMatchObject({
       seam: { messages: 3, people: 2, mentions: 1 },
     });
-  });
-});
-
-describe("nickColumnCh", () => {
-  it("sizes the column to the widest nick the block holds", () => {
-    const block = [makeMessage({ nick: "nyx" }), makeMessage({ nick: "phrack" })];
-    expect(nickColumnCh(block)).toBe(6);
-  });
-
-  it("does not count a kind that writes its own nick into the body", () => {
-    const block = [makeMessage({ nick: "kade" }), makeMessage({ nick: "bitwise", kind: "action" })];
-    expect(nickColumnCh(block)).toBe(4);
-  });
-
-  it("keeps a floor so a short nick still reads as a column", () => {
-    expect(nickColumnCh([makeMessage({ nick: "jo" })])).toBe(4);
   });
 });
 

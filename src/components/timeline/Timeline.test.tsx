@@ -142,7 +142,7 @@ describe("Timeline", () => {
     expect(screen.getByText("No conversation open")).toBeTruthy();
   });
 
-  it("prints one gutter time per minute, over as many speakers as it holds", () => {
+  it("heads each speaker's run with their own time", () => {
     const base = Date.parse("2026-07-29T02:00:00.000Z");
     seed([
       makeMessage({ id: "a", nick: "sable", text: "first", timestamp: new Date(base).toISOString() }),
@@ -152,13 +152,14 @@ describe("Timeline", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     const clocks = document.querySelectorAll("time");
-    expect(clocks).toHaveLength(2);
+    expect(clocks).toHaveLength(3);
     expect(clocks[0]!.textContent).toBe(formatClock(new Date(base).toISOString()));
+    expect(clocks[2]!.textContent).toBe(formatClock(new Date(base + 61_000).toISOString()));
     expect(screen.getByText("first")).toBeTruthy();
     expect(screen.getByText("second")).toBeTruthy();
   });
 
-  it("names the author of every line, including a repeat inside one block", () => {
+  it("names the author once over the run, however many lines they sent", () => {
     const base = Date.parse("2026-07-29T02:00:00.000Z");
     seed([
       makeMessage({ id: "a", nick: "kade", text: "first", timestamp: new Date(base).toISOString() }),
@@ -166,8 +167,10 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    expect(screen.getAllByText("kade")).toHaveLength(2);
+    expect(screen.getAllByText("kade")).toHaveLength(1);
     expect(document.querySelectorAll("time")).toHaveLength(1);
+    expect(screen.getByText("first")).toBeTruthy();
+    expect(screen.getByText("second")).toBeTruthy();
   });
 
   it("rules off each day it has messages for", () => {

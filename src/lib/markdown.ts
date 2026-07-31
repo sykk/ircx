@@ -9,7 +9,12 @@ export type Span =
   | { type: "code"; text: string }
   | { type: "strong"; spans: Span[] }
   | { type: "em"; spans: Span[] }
-  | { type: "strike"; spans: Span[] };
+  | { type: "strike"; spans: Span[] }
+  /** A bare URL, written out in full. There is no form where the text differs
+   * from the destination: that is how a reader is made to click something they
+   * did not intend, and in a message from a stranger the destination is the
+   * only thing they can check. */
+  | { type: "link"; url: string };
 
 export type Block =
   | { type: "paragraph"; spans: Span[] }
@@ -17,7 +22,13 @@ export type Block =
 
 const FENCE = /^\s*```(.*)$/;
 
-export function parseMarkdown(text: string): Block[] {
+/**
+ * `urls` are the links to write out as links. They are not found here: the
+ * backend already decided what a URL is when it built the message's
+ * attachments, and finding them twice would let the two disagree about where
+ * one ends. Anything not in this list stays text.
+ */
+export function parseMarkdown(text: string, urls: readonly string[] = []): Block[] {
   const blocks: Block[] = [];
   const lines = text.split("\n");
   let paragraph: string[] = [];
@@ -27,7 +38,7 @@ export function parseMarkdown(text: string): Block[] {
     const joined = paragraph.join("\n");
     paragraph = [];
     if (joined.trim() === "") return;
-    blocks.push({ type: "paragraph", spans: parseSpans(joined) });
+    blocks.push({ type: "paragraph", spans: parseSpans(joined, urls) });
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -53,7 +64,7 @@ export function parseMarkdown(text: string): Block[] {
   return blocks;
 }
 
-export function parseSpans(text: string): Span[] {
+export function parseSpans(text: string, urls: readonly string[] = []): Span[] {
   const spans: Span[] = [];
   let plain = "";
 
@@ -65,7 +76,7 @@ export function parseSpans(text: string): Span[] {
 
   let i = 0;
   while (i < text.length) {
-    const span = matchAt(text, i);
+    const span = matchAt(text, i, urls);
     if (!span) {
       plain += text[i];
       i++;
@@ -80,8 +91,19 @@ export function parseSpans(text: string): Span[] {
   return spans;
 }
 
-function matchAt(text: string, i: number): { span: Span; end: number } | null {
+function matchAt(
+  text: string,
+  i: number,
+  urls: readonly string[],
+): { span: Span; end: number } | null {
   const ch = text[i];
+
+  // Before the emphasis markers, so a URL containing one is not cut in half,
+  // and after nothing, because a URL inside a code span is code.
+  const url = urls.find((candidate) => text.startsWith(candidate, i));
+  if (url !== undefined) {
+    return { span: { type: "link", url }, end: i + url.length };
+  }
 
   if (ch === "`") {
     let ticks = 0;
@@ -94,11 +116,11 @@ function matchAt(text: string, i: number): { span: Span; end: number } | null {
     return { span: { type: "code", text: body }, end: close + ticks };
   }
 
-  if (text.startsWith("**", i)) return delimited(text, i, "**", "strong");
-  if (text.startsWith("~~", i)) return delimited(text, i, "~~", "strike");
-  if (ch === "*") return delimited(text, i, "*", "em");
+  if (text.startsWith("**", i)) return delimited(text, i, "**", "strong", urls);
+  if (text.startsWith("~~", i)) return delimited(text, i, "~~", "strike", urls);
+  if (ch === "*") return delimited(text, i, "*", "em", urls);
   if (ch === "_" && isWordEdge(text[i - 1])) {
-    const found = delimited(text, i, "_", "em");
+    const found = delimited(text, i, "_", "em", urls);
     if (found && isWordEdge(text[found.end])) return found;
     return null;
   }
@@ -116,6 +138,7 @@ function delimited(
   i: number,
   marker: string,
   type: "strong" | "em" | "strike",
+  urls: readonly string[],
 ): { span: Span; end: number } | null {
   const from = i + marker.length;
   if (/\s/.test(text[from] ?? "")) return null;
@@ -129,7 +152,7 @@ function delimited(
       continue;
     }
     return {
-      span: { type, spans: parseSpans(text.slice(from, close)) },
+      span: { type, spans: parseSpans(text.slice(from, close), urls) },
       end: close + marker.length,
     };
   }

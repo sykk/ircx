@@ -14,7 +14,8 @@ import {
 } from "./fixtures";
 import { formatClock } from "./rows";
 
-const { ipcMock } = vi.hoisted(() => ({
+const { ipcMock, openExternalMock } = vi.hoisted(() => ({
+  openExternalMock: vi.fn().mockResolvedValue(undefined),
   ipcMock: {
     loadHistory: vi.fn(),
     loadPreview: vi.fn(),
@@ -23,7 +24,7 @@ const { ipcMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn() }));
+vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn(), openExternal: openExternalMock }));
 
 const KEY = targetKey("libera", "#ctf-ops");
 /** Height the history head reports, so the space it reserves is checkable. */
@@ -1013,5 +1014,50 @@ describe("plugin annotations", () => {
 
     expect(screen.getByText("22 C")).toBeTruthy();
     expect(screen.getByText("units")).toBeTruthy();
+  });
+});
+
+/**
+ * #14. A link in a message must reach the system browser and must not navigate
+ * this window: the webview is the client, and a page loaded over it has no way
+ * back.
+ */
+describe("links in a message", () => {
+  const URL = "https://example.com/a";
+
+  function withLink() {
+    seed([
+      makeMessage({
+        id: "m1",
+        nick: "phrack",
+        text: `see ${URL} for it`,
+        attachments: [makeAttachment({ url: URL })],
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+    return screen.getByRole("button", { name: URL });
+  }
+
+  it("opens the destination outside this window", async () => {
+    const link = withLink();
+    await act(async () => {
+      fireEvent.click(link);
+    });
+
+    expect(openExternalMock).toHaveBeenCalledWith(URL);
+  });
+
+  /** No `href`, so there is nothing the webview could decide to navigate to —
+   * not a middle click, not a dragged link, not a restored session. */
+  it("offers nothing a webview could navigate to", () => {
+    const link = withLink();
+    expect(link.getAttribute("href")).toBeNull();
+    expect(document.querySelector(`a[href="${URL}"]`)).toBeNull();
+  });
+
+  /** The destination is written out in full. There is no form where the text
+   * differs from where it goes. */
+  it("writes the destination out as the text", () => {
+    expect(withLink().textContent).toBe(URL);
   });
 });

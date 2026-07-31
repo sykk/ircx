@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use ircx_core::SessionCommand;
 use ircx_ipc::{
-    AppSnapshot, Attachment, ChatMessage, CommandOutcome, HistoryRequest, InstalledPlugin, Member,
-    NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query, SearchHit, SearchRequest,
-    TargetName, ThemeSource, UploadProvider,
+    AppSnapshot, Attachment, ChatMessage, CommandOutcome, FileToUpload, HistoryRequest,
+    InstalledPlugin, Member, NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query,
+    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
 };
 use tauri::State;
 
@@ -41,6 +41,13 @@ pub async fn save_upload_provider(
 #[tauri::command]
 pub async fn remove_upload_provider(app: State<'_, App>) -> Result<(), String> {
     app.store().remove_upload_provider().map_err(describe)
+}
+
+/// What the confirmation shows about the files a user dropped: the name, the
+/// size, and whether this client will send it at all.
+#[tauri::command]
+pub async fn describe_uploads(paths: Vec<String>) -> Result<Vec<FileToUpload>, String> {
+    Ok(crate::upload::describe(&paths).await)
 }
 
 /// Sends a file to the configured provider and answers with its address. The

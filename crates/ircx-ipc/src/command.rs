@@ -147,6 +147,29 @@ pub struct AppSnapshot {
     pub queries: Vec<Query>,
 }
 
+/// A file the user has offered to upload, as the confirmation needs it.
+///
+/// `too_large` is decided here rather than by comparing sizes in the window: the
+/// cap is enforced in one place, and a second copy of the number would be a
+/// second thing to keep in step with it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct FileToUpload {
+    pub path: String,
+    pub name: String,
+    /// For display only, and saturating: a `u64` crosses the boundary as a
+    /// `bigint` the window never receives, because Tauri sends a JSON number.
+    /// The decision below is made from the true size, so a file large enough
+    /// to saturate this is refused on the real one and its number is never
+    /// shown.
+    pub bytes: u32,
+    pub too_large: bool,
+    /// Why it cannot be read, when it cannot. A file that vanished between the
+    /// drop and the confirmation is the ordinary case.
+    pub unreadable: Option<String>,
+}
+
 /// Where an attachment is uploaded before its link is sent.
 ///
 /// `None` from `get_upload_provider` is "no provider", which the spec names as

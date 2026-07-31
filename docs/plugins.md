@@ -173,6 +173,12 @@ constraints on future work, not things already banked.
   annotate — its own text, attributed, beside what it is about — and may not
   transform. A protocol adapter handling a capability ircx does not know may
   produce messages and may not rewrite the ones already there.
+
+  `docs/renderers.md` works that through for renderers and finds one shape the
+  rule leaves standing: spans over the sender's own text, where the plugin says
+  where and which and is never asked for a character. It also finds that the
+  rule needs a second half — hiding text is forgery by omission — and
+  recommends not building it yet.
 - **Hooks are synchronous.** A promise nobody settles leaves the job queue empty
   with no bytecode running, so nothing trips the deadline. Making hooks
   asynchronous means putting a deadline around the microtask pump.

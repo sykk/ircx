@@ -68,7 +68,8 @@ crates/ircx-ipc      types crossing the Tauri boundary
 nothing about what it means. Neither depends on `ircx-ipc`. `ircx-plugin` knows
 nothing about IRC: it takes a command and gives back what the plugin asked the
 host to do, and `ircx-core` is what turns that into messages. `docs/plugins.md`
-is the permission model.
+is the permission model, and `docs/renderers.md` is the design note for the one
+extension point that is still only described.
 
 ## The IPC contract
 

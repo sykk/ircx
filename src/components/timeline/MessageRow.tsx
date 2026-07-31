@@ -16,10 +16,11 @@ interface MessageRowProps {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
-  /** False on a server without `message-tags`: reactions arrive as a `TAGMSG`
-   * client tag or not at all, so there is nothing to offer. */
-  canReact: boolean;
+  /** False on a server without `message-tags`. Both reacting and replying put
+   * a client tag on the wire, so without it there is nothing to offer. */
+  canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
+  onReply: (msgid: string) => void;
   flashing: boolean;
 }
 
@@ -31,16 +32,18 @@ export function MessageRow({
   ownNick,
   parentOf,
   onJump,
-  canReact,
+  canTag,
   onReact,
+  onReply,
   flashing,
 }: MessageRowProps) {
   const highlight = isHighlight(message, ownNick);
   const failed = message.delivery.state === "failed";
-  // A reaction travels as a `+reply` naming a msgid. Until the server has given
-  // this message one there is nothing to name it by, so it cannot be reacted to
-  // — which is the window between sending a line and its echo arriving.
-  const msgid = canReact ? serverMsgid(message) : null;
+  // A reaction and a reply both travel as a `+reply` naming a msgid. Until the
+  // server has given this message one there is nothing to name it by, so it can
+  // be answered by neither — which is the window between sending a line and its
+  // echo arriving.
+  const msgid = canTag ? serverMsgid(message) : null;
 
   return (
     <div
@@ -106,6 +109,7 @@ export function MessageRow({
                 ? null
                 : (emoji, active) => onReact(msgid, emoji, active)
             }
+            onReply={msgid === null ? null : () => onReply(msgid)}
           />
 
           {failed && <FailureNotice message={message} />}

@@ -26,6 +26,7 @@ pub enum SessionCommand {
     Submit {
         target: TargetName,
         input: String,
+        reply_to: Option<String>,
         reply: oneshot::Sender<CommandOutcome>,
     },
     Join {
@@ -308,6 +309,7 @@ async fn apply(
         SessionCommand::Submit {
             target,
             input,
+            reply_to,
             reply,
         } => {
             if let Some(call) = context.plugin_call(session, &target, &input) {
@@ -315,7 +317,7 @@ async fn apply(
                 let _ = reply.send(outcome);
                 return actions;
             }
-            let (outcome, actions) = session.submit(&target, &input);
+            let (outcome, actions) = session.submit(&target, &input, reply_to.as_deref());
             if let CommandOutcome::Sent(message) = &outcome {
                 context.persist(std::slice::from_ref(message.as_ref()));
             }

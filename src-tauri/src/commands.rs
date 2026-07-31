@@ -82,10 +82,12 @@ pub async fn submit_input(
     network: NetworkId,
     target: TargetName,
     input: String,
+    reply_to: Option<String>,
 ) -> Result<CommandOutcome, String> {
     app.ask(&network, |reply| SessionCommand::Submit {
         target,
         input,
+        reply_to,
         reply,
     })
     .await

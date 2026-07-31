@@ -47,8 +47,16 @@ export const ipc = {
   closeTarget: (network: string, target: string) =>
     invoke<void>("close_target", { network, target }),
 
-  submitInput: (network: string, target: string, input: string) =>
-    invoke<CommandOutcome>("submit_input", { network, target, input }),
+  /** `replyTo` is the server msgid this message answers, and follows the same
+   * rule as `react` below: only a server-given id names something another
+   * client can resolve. */
+  submitInput: (network: string, target: string, input: string, replyTo?: string) =>
+    invoke<CommandOutcome>("submit_input", {
+      network,
+      target,
+      input,
+      replyTo: replyTo ?? null,
+    }),
   /** Reacting has no command of its own: it is `/react`, spelled here so the
    * timeline does not have to know it. `message` is the server msgid — a
    * locally minted id names nothing anyone else can resolve, so the caller
@@ -58,6 +66,7 @@ export const ipc = {
       network,
       target,
       input: `${active ? "/react" : "/unreact"} ${message} ${emoji}`,
+      replyTo: null,
     }),
 
   listMembers: (network: string, channel: string) =>

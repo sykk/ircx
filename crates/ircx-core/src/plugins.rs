@@ -107,7 +107,7 @@ impl SessionState {
         let outcome = match answer {
             Ok(reply) => {
                 for out in reply.sends {
-                    for message in self.say(&out.target, &out.text, MessageKind::Privmsg) {
+                    for message in self.say(&out.target, &out.text, MessageKind::Privmsg, None) {
                         self.append(message);
                     }
                 }

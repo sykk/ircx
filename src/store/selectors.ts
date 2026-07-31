@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import { EMPTY_TIMELINE, useAppStore } from "./index";
+import { EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
 import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
@@ -93,6 +93,25 @@ export function useTypingNicks(network: string, target: string): string[] {
       return Object.entries(entries)
         .filter(([, expiry]) => expiry > now)
         .map(([nick]) => nick);
+    }),
+  );
+}
+
+/** What the composer is about to answer: the staged msgid, and the message it
+ * names if that message is still in the loaded window. The msgid alone is
+ * enough to send with, so a parent scrolled out of history does not cancel the
+ * reply — it only leaves nothing to quote. */
+export function useReplyTarget(
+  network: string,
+  target: string,
+): { msgid: string; parent: ChatMessage | undefined } | null {
+  return useAppStore(
+    useShallow((s) => {
+      const key = targetKey(network, target);
+      const msgid = s.replyTo[key];
+      if (msgid === undefined) return null;
+      const messages = s.timelines[key]?.messages ?? EMPTY;
+      return { msgid, parent: messages.find((m) => serverMsgid(m) === msgid) };
     }),
   );
 }

@@ -773,3 +773,74 @@ describe("reaction chips", () => {
     expect(ipcMock.react).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * #112: half of replying was built. The timeline drew "in reply to …" from a
+ * `+reply` off the wire and offered no way to send one, so a user could see
+ * that somebody had answered them and could not answer back.
+ */
+describe("staging a reply", () => {
+  function seedNamed(message: Partial<ChatMessage> = {}) {
+    seed([makeMessage({ id: "123", nick: "phrack", text: "the flag is in the env", ...message })]);
+    useAppStore.getState().applyEvent({
+      type: "capsChanged",
+      network: "libera",
+      enabled: ["message-tags"],
+    });
+  }
+
+  function staged() {
+    return useAppStore.getState().replyTo[KEY];
+  }
+
+  it("stages the msgid the server gave the message", () => {
+    seedNamed();
+    render(<Timeline view={TEST_VIEW} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reply to this message" }));
+    expect(staged()).toBe("123");
+  });
+
+  it("stages the server's name for a message we sent, not the local id", () => {
+    seedNamed({ id: "local-1", idIsLocal: true, tags: [["msgid", "789"]] });
+    render(<Timeline view={TEST_VIEW} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reply to this message" }));
+    expect(staged()).toBe("789");
+  });
+
+  // The same window that stops a reaction: nothing can name the message yet.
+  it("offers nothing on a message the server has not named", () => {
+    seedNamed({ id: "local-1", idIsLocal: true });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByRole("button", { name: "Reply to this message" })).toBe(null);
+  });
+
+  // A reply travels as a client tag, so without message-tags there is nothing
+  // to offer — and nothing to say about it, per the degradation rule.
+  it("offers nothing on a server without message-tags", () => {
+    seed([makeMessage({ id: "123", nick: "phrack", text: "the flag is in the env" })]);
+    useAppStore.getState().applyEvent({ type: "capsChanged", network: "libera", enabled: [] });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByRole("button", { name: "Reply to this message" })).toBe(null);
+  });
+
+  it("stays offered on a message that already has reactions", () => {
+    seedNamed();
+    useAppStore.getState().applyEvent({
+      type: "reactionChanged",
+      network: "libera",
+      target: "#ctf-ops",
+      message: "123",
+      nick: "kade",
+      emoji: "\u{1F525}",
+      active: true,
+    });
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByRole("button", { name: "Reply to this message" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a reaction" })).toBeTruthy();
+  });
+});

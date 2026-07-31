@@ -27,8 +27,18 @@ const HELP: &str = "\
 
 impl SessionState {
     /// Composer input: a slash command, or text to say in `target`.
-    pub fn submit(&mut self, target: &str, input: &str) -> (CommandOutcome, Vec<Action>) {
-        let outcome = self.dispatch(target, input);
+    ///
+    /// `reply_to` is the server `msgid` of the message being answered, which
+    /// only the arms that say something use. `/msg` and `/query` address
+    /// somebody else, so a parent staged in this conversation does not follow
+    /// them there.
+    pub fn submit(
+        &mut self,
+        target: &str,
+        input: &str,
+        reply_to: Option<&str>,
+    ) -> (CommandOutcome, Vec<Action>) {
+        let outcome = self.dispatch(target, input, reply_to);
         (outcome, self.drain())
     }
 
@@ -159,13 +169,13 @@ impl SessionState {
         }
     }
 
-    fn dispatch(&mut self, target: &str, input: &str) -> CommandOutcome {
+    fn dispatch(&mut self, target: &str, input: &str, reply_to: Option<&str>) -> CommandOutcome {
         let Some(rest) = input.strip_prefix('/') else {
-            return self.say_here(target, input, MessageKind::Privmsg);
+            return self.say_here(target, input, MessageKind::Privmsg, reply_to);
         };
         // `//` is how you start a message with a slash.
         if let Some(text) = rest.strip_prefix('/') {
-            return self.say_here(target, &format!("/{text}"), MessageKind::Privmsg);
+            return self.say_here(target, &format!("/{text}"), MessageKind::Privmsg, reply_to);
         }
 
         let (name, args) = rest.split_once(' ').unwrap_or((rest, ""));
@@ -185,7 +195,7 @@ impl SessionState {
             "notice" => self.cmd_msg(args, MessageKind::Notice),
             "react" => self.cmd_react(target, args, true),
             "unreact" => self.cmd_react(target, args, false),
-            "me" => self.cmd_me(target, args),
+            "me" => self.cmd_me(target, args, reply_to),
             "query" => self.cmd_query(args),
             "nick" => self.one_argument("NICK", args, "/nick <nickname>"),
             "topic" => self.cmd_topic(target, args),
@@ -247,7 +257,7 @@ impl SessionState {
         if !self.isupport.is_channel(target) {
             self.touch_query(target, None);
         }
-        for message in self.say(target, text, kind) {
+        for message in self.say(target, text, kind, None) {
             self.append(message);
         }
         CommandOutcome::Handled
@@ -284,11 +294,11 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
-    fn cmd_me(&mut self, target: &str, args: &str) -> CommandOutcome {
+    fn cmd_me(&mut self, target: &str, args: &str, reply_to: Option<&str>) -> CommandOutcome {
         if args.is_empty() {
             return CommandOutcome::Rejected("`/me <action>` needs something to do".into());
         }
-        self.say_here(target, args, MessageKind::Action)
+        self.say_here(target, args, MessageKind::Action, reply_to)
     }
 
     fn cmd_query(&mut self, args: &str) -> CommandOutcome {
@@ -298,7 +308,7 @@ impl SessionState {
         }
         self.touch_query(nick, None);
         if !text.trim().is_empty() {
-            for message in self.say(nick, text, MessageKind::Privmsg) {
+            for message in self.say(nick, text, MessageKind::Privmsg, None) {
                 self.append(message);
             }
         }
@@ -409,7 +419,13 @@ impl SessionState {
     /// Text typed into a tab. The first piece goes back as the optimistic copy
     /// the caller renders; anything the split produced beyond it is appended
     /// like any other arrival.
-    fn say_here(&mut self, target: &str, text: &str, kind: MessageKind) -> CommandOutcome {
+    fn say_here(
+        &mut self,
+        target: &str,
+        text: &str,
+        kind: MessageKind,
+        reply_to: Option<&str>,
+    ) -> CommandOutcome {
         if text.trim().is_empty() {
             return CommandOutcome::Handled;
         }
@@ -419,7 +435,7 @@ impl SessionState {
                     .into(),
             );
         }
-        let mut messages = self.say(target, text, kind).into_iter();
+        let mut messages = self.say(target, text, kind, reply_to).into_iter();
         let Some(first) = messages.next() else {
             return CommandOutcome::Rejected(format!(
                 "`{target}` is not a target ircx can send to"
@@ -432,7 +448,13 @@ impl SessionState {
     }
 
     /// Splits `text` to fit the wire, sends it, and returns the local copies.
-    pub(crate) fn say(&mut self, target: &str, text: &str, kind: MessageKind) -> Vec<ChatMessage> {
+    pub(crate) fn say(
+        &mut self,
+        target: &str,
+        text: &str,
+        kind: MessageKind,
+        reply_to: Option<&str>,
+    ) -> Vec<ChatMessage> {
         let command = match kind {
             MessageKind::Notice => "NOTICE",
             _ => "PRIVMSG",
@@ -441,6 +463,9 @@ impl SessionState {
         let budget = self.wire_budget(command, target, action);
         let echoes = self.caps.is_enabled("echo-message");
         let labels = self.caps.is_enabled("labeled-response");
+        // Without `message-tags` the tag cannot travel, and a quote drawn only
+        // here names a parent nobody else was shown.
+        let parent = reply_to.filter(|_| self.caps.is_enabled("message-tags"));
 
         let mut copies = Vec::new();
         for piece in text::split_for_wire(text, budget) {
@@ -453,10 +478,16 @@ impl SessionState {
             if let Some(label) = label.clone() {
                 builder = builder.tag("label", Some(label));
             }
+            // Every piece of a split answers the same message. Tagging only the
+            // first would leave the rest looking like they answered nothing.
+            if let Some(parent) = parent {
+                builder = builder.tag("+reply", Some(parent.to_string()));
+            }
             let Ok(line) = builder.build() else { continue };
             self.send_line(line.to_line());
 
             let mut message = self.local_message(target, kind, piece);
+            message.reply_to = parent.map(str::to_string);
             message.delivery = match echoes {
                 true => Delivery::Pending,
                 false => Delivery::Sent,

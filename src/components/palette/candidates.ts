@@ -1,4 +1,5 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
+import { COMMANDS } from "@/components/composer/commands";
 import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
 import { targetKey, type TargetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
@@ -67,32 +68,6 @@ export const KIND_ORDER: Record<CandidateKind, number> = {
   theme: 5,
 };
 
-interface SlashCommand {
-  name: string;
-  args: string;
-  detail: string;
-}
-
-const SLASH_COMMANDS: readonly SlashCommand[] = [
-  { name: "join", args: "<channel> [key]", detail: "Join a channel" },
-  { name: "part", args: "[channel] [reason]", detail: "Leave a channel" },
-  { name: "query", args: "<nick>", detail: "Open a private conversation" },
-  { name: "msg", args: "<target> <message>", detail: "Send without opening a tab" },
-  { name: "notice", args: "<target> <message>", detail: "Send a notice" },
-  { name: "me", args: "<action>", detail: "Send an action" },
-  { name: "nick", args: "<nick>", detail: "Change your nickname" },
-  { name: "topic", args: "[topic]", detail: "Show or set the channel topic" },
-  { name: "mode", args: "<target> <modes>", detail: "Set modes" },
-  { name: "kick", args: "<nick> [reason]", detail: "Kick someone from the channel" },
-  { name: "invite", args: "<nick> [channel]", detail: "Invite someone" },
-  { name: "whois", args: "<nick>", detail: "Look up a user" },
-  { name: "away", args: "[reason]", detail: "Set or clear away status" },
-  { name: "connect", args: "[network]", detail: "Connect a network" },
-  { name: "disconnect", args: "[reason]", detail: "Disconnect this network" },
-  { name: "quit", args: "[reason]", detail: "Quit every network" },
-  { name: "raw", args: "<line>", detail: "Send a raw protocol line" },
-  { name: "close", args: "", detail: "Close the current target" },
-];
 
 /** Where a command line typed into the palette is dispatched. */
 export interface CommandContext {
@@ -118,7 +93,7 @@ export function commandLineCandidate(
   if (!where || !input.startsWith("/") || input.length < 2) return null;
 
   const [name = "", ...rest] = input.slice(1).split(" ");
-  const known = SLASH_COMMANDS.find((command) => command.name === name.toLowerCase());
+  const known = COMMANDS.find((command) => command.name === name.toLowerCase());
   if (known?.args.includes("<") && rest.join("").trim() === "") return null;
 
   const inConversation = where.target !== SERVER_TARGET;
@@ -225,12 +200,12 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
     });
   }
 
-  for (const command of SLASH_COMMANDS) {
+  for (const command of COMMANDS) {
     candidates.push({
       id: `command:${command.name}`,
       kind: "command",
       label: `/${command.name}`,
-      detail: command.args ? `${command.args} — ${command.detail}` : command.detail,
+      detail: command.args ? `${command.args} — ${command.summary}` : command.summary,
       hay: prepare(`/${command.name}`),
       key: null,
       action: { type: "refine", text: `/${command.name} ` },

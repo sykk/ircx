@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SERVER_TARGET } from ".";
+import { COMMANDS } from "@/components/composer/commands";
 
 /** Values, unlike types, do not come out of ts-rs. Reading the Rust source is
  * the only way to hold the two halves of one together. */
@@ -75,6 +76,29 @@ function ipcFields(): Map<string, string[]> {
   return fields;
 }
 
+const DISPATCH = resolve(process.cwd(), "crates", "ircx-core", "src", "dispatch.rs");
+
+/**
+ * Second names for a command, which `dispatch.rs` answers to and no surface
+ * advertises. Offering both spellings of one thing is a longer list saying
+ * less.
+ */
+const ALIASES: Record<string, string> = {
+  j: "join",
+  leave: "part",
+  quote: "raw",
+};
+
+/** Every name the dispatch table answers to, read off its match arms. */
+function dispatchedCommands(): string[] {
+  const source = readFileSync(DISPATCH, "utf8");
+  const table = source.slice(
+    source.indexOf("match name.as_str() {"),
+    source.indexOf("is not a command ircx knows"),
+  );
+  return [...table.matchAll(/"([a-z]+)"/g)].map((match) => match[1]!);
+}
+
 /** The command names `ipc` asks the backend for. */
 function invokedCommands(): string[] {
   const source = readFileSync(IPC_FILE, "utf8");
@@ -126,6 +150,26 @@ describe("the IPC contract", () => {
     expect(invokedCommands().length).toBeGreaterThan(0);
     const registered = registeredCommands();
     expect(invokedCommands().filter((name) => !registered.has(name))).toEqual([]);
+  });
+
+  /**
+   * The window offered `/connect`, `/disconnect` and `/close`, which the
+   * dispatch table has no arm for: typing one got "not a command ircx knows"
+   * from a list the client itself had drawn. It offered neither `/help` nor
+   * `/list`, which it does have. Two hand-kept copies of one list, drifting in
+   * both directions at once.
+   */
+  it("offers exactly the commands the dispatch table answers to", () => {
+    const dispatched = dispatchedCommands();
+    expect(dispatched.length).toBeGreaterThan(10);
+
+    const offered = COMMANDS.map((command) => command.name);
+    const named = new Set([...offered, ...Object.keys(ALIASES)]);
+
+    expect(offered.filter((name) => !dispatched.includes(name))).toEqual([]);
+    expect(dispatched.filter((name) => !named.has(name))).toEqual([]);
+    // An alias is a second name for something offered, not a way to hide one.
+    expect(Object.values(ALIASES).filter((name) => !offered.includes(name))).toEqual([]);
   });
 
   /**

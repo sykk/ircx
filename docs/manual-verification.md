@@ -444,10 +444,12 @@ annotator running again.
 
 Still not walked:
 
-- **A broken annotator being dropped.** Three consecutive failed batches, the
-  first reported and the rest silent. An example that throws would show whether
-  the report reaches anywhere a person looks — the strike counting is unit
-  tested, the reporting is a `warn!` nobody has read in situ.
+- **A broken annotator being dropped.** Three consecutive failed batches. The
+  drop now writes a line to the server console instead of only a `warn!`, so
+  the walk is a matter of reading it: install an annotator that throws, say
+  three things in the channel, and look for the sentence naming the plugin in
+  that network's console. What no test can answer is whether somebody whose
+  notes stopped would find it there.
 
 ## One conversation, one name
 
@@ -594,12 +596,9 @@ arrow in #172. A mark that is obvious to whoever built it is not evidence.
 
 Still not walked:
 
-- **A broken rule being dropped.** Three consecutive failed batches, the first
-  reported and the rest silent — the same gap the annotator has, and now with a
-  second hook keyed separately.
-- **A broken rule being dropped.** Three consecutive failed batches, the first
-  reported and the rest silent — the same gap the annotator has, and now with a
-  second hook keyed separately.
+- **A broken rule being dropped.** The same walk as the annotator's above,
+  against the other hook. The counts are separate, so a rule that throws has to
+  leave the same plugin's annotator working.
 
 ## The topic of a channel you have joined
 

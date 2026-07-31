@@ -170,18 +170,39 @@ describe("the IPC contract", () => {
     const dispatched = dispatchedCommands();
     expect(dispatched.length).toBeGreaterThan(10);
 
-    const offered = COMMANDS.map((command) => command.name);
-    const named = new Set([...offered, ...Object.keys(ALIASES)]);
+    // A command about the connection is performed by the window: there may be
+    // no session to send it to, which is why `/connect` exists at all. It is
+    // offered and must *not* be dispatched, or two things would answer it.
+    const performed = COMMANDS.filter((command) => command.runs === "connection");
+    const sent = COMMANDS.filter((command) => command.runs !== "connection");
+
+    expect(performed.length).toBeGreaterThan(0);
+    expect(
+      performed.filter((command) => dispatched.includes(command.name)).map((c) => c.name),
+    ).toEqual([]);
+
+    const offered = sent.map((command) => command.name);
+    const named = new Set([
+      ...COMMANDS.map((command) => command.name),
+      ...Object.keys(ALIASES),
+    ]);
 
     expect(offered.filter((name) => !dispatched.includes(name))).toEqual([]);
     expect(dispatched.filter((name) => !named.has(name))).toEqual([]);
     // An alias is a second name for something offered, not a way to hide one.
     expect(Object.values(ALIASES).filter((name) => !offered.includes(name))).toEqual([]);
 
-    // `/help` is the third copy, and the only one a user can ask for.
+    // `/help` is the third copy, and the only one a user can ask for. It lists
+    // what the window performs as well: a reader does not care which layer
+    // answers.
     const helped = helpedCommands();
-    expect(helped.filter((name) => !dispatched.includes(name))).toEqual([]);
-    expect(offered.filter((name) => !helped.includes(name))).toEqual([]);
+    const performedNames = performed.map((command) => command.name);
+    expect(
+      helped.filter((name) => !dispatched.includes(name) && !performedNames.includes(name)),
+    ).toEqual([]);
+    expect(
+      COMMANDS.map((command) => command.name).filter((name) => !helped.includes(name)),
+    ).toEqual([]);
   });
 
   /**

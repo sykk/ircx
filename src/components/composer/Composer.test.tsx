@@ -12,6 +12,8 @@ const { ipcMock } = vi.hoisted(() => ({
     setDraft: vi.fn(),
     setTyping: vi.fn(),
     submitInput: vi.fn(),
+    connectNetwork: vi.fn(),
+    disconnectNetwork: vi.fn(),
   },
 }));
 
@@ -25,6 +27,8 @@ beforeEach(() => {
   ipcMock.setDraft.mockResolvedValue(undefined);
   ipcMock.setTyping.mockResolvedValue(undefined);
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+  ipcMock.connectNetwork.mockResolvedValue(undefined);
+  ipcMock.disconnectNetwork.mockResolvedValue(undefined);
 
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
@@ -68,13 +72,57 @@ describe("Composer sending", () => {
     const event = press(box, "Enter");
 
     expect(event.defaultPrevented).toBe(true);
-    expect(ipcMock.submitInput).toHaveBeenCalledWith(
-      "libera",
-      "#ctf-ops",
-      "the flag is in the env",
-      undefined,
+    await waitFor(() =>
+      expect(ipcMock.submitInput).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "the flag is in the env",
+        undefined,
+      ),
     );
     await waitFor(() => expect(box.value).toBe(""));
+  });
+
+  /** #158. `/connect` cannot be sent: what would carry it is the thing that is
+   * gone. Both connection commands are performed by the window instead, and
+   * the session never sees them. */
+  it("performs a connection command here instead of sending it", async () => {
+    const box = await mount();
+    type(box, "/connect");
+    press(box, "Enter");
+
+    await waitFor(() => expect(ipcMock.connectNetwork).toHaveBeenCalledWith("libera"));
+    expect(ipcMock.submitInput).not.toHaveBeenCalled();
+  });
+
+  it("gives /disconnect the reason that was typed after it", async () => {
+    const box = await mount();
+    type(box, "/disconnect back later");
+    press(box, "Enter");
+
+    await waitFor(() =>
+      expect(ipcMock.disconnectNetwork).toHaveBeenCalledWith("libera", "back later"),
+    );
+  });
+
+  it("leaves the reason out when none was typed", async () => {
+    const box = await mount();
+    type(box, "/disconnect");
+    press(box, "Enter");
+
+    await waitFor(() =>
+      expect(ipcMock.disconnectNetwork).toHaveBeenCalledWith("libera", undefined),
+    );
+  });
+
+  it("shows why the connection refused and does not send it on", async () => {
+    ipcMock.connectNetwork.mockRejectedValue("No server configured for libera");
+    const box = await mount();
+    type(box, "/connect");
+    press(box, "Enter");
+
+    expect(await screen.findByText(/No server configured for libera/)).toBeTruthy();
+    expect(ipcMock.submitInput).not.toHaveBeenCalled();
   });
 
   it("draws the local copy the backend hands back, before any echo", async () => {

@@ -8,7 +8,9 @@ import { activeTarget, oneView } from "@/components/shell/fixtures";
 import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { CommandPalette } from "./CommandPalette";
 
-const { ipcMock } = vi.hoisted(() => ({ ipcMock: { submitInput: vi.fn() } }));
+const { ipcMock } = vi.hoisted(() => ({
+  ipcMock: { submitInput: vi.fn(), connectNetwork: vi.fn(), disconnectNetwork: vi.fn() },
+}));
 vi.mock("@/lib/ipc", () => ({ ipc: ipcMock }));
 
 const network: Network = {
@@ -44,6 +46,8 @@ function query(nick: string): Query {
 beforeEach(() => {
   vi.clearAllMocks();
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+  ipcMock.connectNetwork.mockResolvedValue(undefined);
+  ipcMock.disconnectNetwork.mockResolvedValue(undefined);
 
   useAppStore.setState({
     networks: { libera: network },
@@ -245,6 +249,20 @@ describe("CommandPalette", () => {
       });
 
       expect(ipcMock.submitInput).toHaveBeenCalledWith("libera", "#ctf-ops", "/topic something");
+    });
+
+    // The palette is where /connect gets typed: with the session gone there is
+    // often no composer left to type it in.
+    it("performs a connection command instead of sending it", async () => {
+      render(<CommandPalette />);
+      type("/connect");
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter" });
+      });
+
+      expect(ipcMock.connectNetwork).toHaveBeenCalledWith("libera");
+      expect(ipcMock.submitInput).not.toHaveBeenCalled();
+      expect(useAppStore.getState().paletteOpen).toBe(false);
     });
 
     it("holds the palette open with the reason when the command is refused", async () => {

@@ -4,6 +4,10 @@ use ircx_proto::{MessageBuilder, MAX_MESSAGE_BYTES};
 use crate::session::{build, Action, SessionState, SERVER_TARGET};
 use crate::text;
 
+/// What `/help` prints. It lists `/connect` and `/disconnect` although this
+/// table answers to neither: they act on the connection rather than travelling
+/// over it, so the window performs them, and a reader asking what ircx knows
+/// does not care which layer answers.
 const HELP: &str = "\
 /join #channel [key]      join a channel
 /part [#channel] [reason] leave it
@@ -24,6 +28,8 @@ const HELP: &str = "\
 /quit [reason]            disconnect
 /raw <line>               send a line to the server untouched
 /close [target]           close a conversation and forget it
+/connect                  connect this network
+/disconnect [reason]      disconnect it, leaving its conversations open
 /help                     this list";
 
 impl SessionState {

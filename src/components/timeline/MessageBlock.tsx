@@ -1,7 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { ChatMessage } from "@/types";
+import type { Annotation } from "@/store/types";
 import { MessageRow } from "./MessageRow";
 import { formatClock, nickColumnCh } from "./rows";
+
+/** One stable empty array, so a message nobody annotated does not re-render on
+ * every draw. */
+const NONE: Annotation[] = [];
 
 const LADDER =
   "var(--timeline-clock-col) var(--timeline-spine-gap) var(--timeline-spine-width) var(--timeline-nick-gap) minmax(0, 1fr)";
@@ -60,6 +65,8 @@ interface Props {
   canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
+  /** Every note in this conversation, keyed by the message it is about. */
+  annotations: Record<string, Annotation[]>;
   flashId: string | null;
 }
 
@@ -91,6 +98,7 @@ export function MessageBlock({
   canTag,
   onReact,
   onReply,
+  annotations,
   flashId,
 }: Props) {
   return (
@@ -106,6 +114,7 @@ export function MessageBlock({
           canTag={canTag}
           onReact={onReact}
           onReply={onReply}
+          annotations={annotations[message.id] ?? NONE}
           flashing={message.id === flashId}
         />
       ))}

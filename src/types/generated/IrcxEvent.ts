@@ -27,4 +27,14 @@ message: string, nick: string, emoji: string,
 /**
  * `false` when the tag was `+draft/unreact`.
  */
-active: boolean, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };
+active: boolean, } | { "type": "messageAnnotated", network: string, target: string, 
+/**
+ * The id of the message the note is about.
+ */
+message: string, 
+/**
+ * Which plugin said it. Drawn with the note, for the reason a
+ * command's answer is named: it is how a reader tells what somebody
+ * else's code said from what the person said.
+ */
+plugin: string, text: string, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };

@@ -116,6 +116,20 @@ pub enum IrcxEvent {
         /// `false` when the tag was `+draft/unreact`.
         active: bool,
     },
+    /// A plugin's note about a message that arrived. Sent after the message
+    /// itself, because the annotator runs on arrival rather than on draw: the
+    /// conversation is never waiting on a plugin.
+    MessageAnnotated {
+        network: NetworkId,
+        target: TargetName,
+        /// The id of the message the note is about.
+        message: String,
+        /// Which plugin said it. Drawn with the note, for the reason a
+        /// command's answer is named: it is how a reader tells what somebody
+        /// else's code said from what the person said.
+        plugin: String,
+        text: String,
+    },
     LagChanged {
         network: NetworkId,
         lag_ms: u32,

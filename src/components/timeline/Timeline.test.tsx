@@ -104,6 +104,10 @@ function seedTimelines(timelines: AppState["timelines"]) {
       },
     },
     timelines,
+    // Cleared with the timelines it belongs to: `setState` merges, so a note
+    // left by one test would be drawn against another's messages.
+    annotations: {},
+    replyTo: {},
   });
 }
 
@@ -909,5 +913,92 @@ describe("drawing a reply quote", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(quotes()).toHaveLength(2);
+  });
+});
+
+/**
+ * #90's second extension point. A note is what a plugin said *about* a message,
+ * so what matters in the timeline is that it is drawn beside the message and
+ * never reads as part of it.
+ */
+describe("plugin annotations", () => {
+  function annotate(message: string, plugin: string, text: string) {
+    useAppStore.getState().applyEvent({
+      type: "messageAnnotated",
+      network: "libera",
+      target: "#ctf-ops",
+      message,
+      plugin,
+      text,
+    });
+  }
+
+  it("draws the note under the message, named with the plugin", () => {
+    seed([makeMessage({ id: "m1", nick: "phrack", text: "it is 72F outside" })]);
+    annotate("m1", "units", "22 C");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("22 C")).toBeTruthy();
+    expect(screen.getByText("units")).toBeTruthy();
+  });
+
+  /** The note is not the message. A reader who cannot tell them apart is the
+   * failure this whole extension point is shaped around. */
+  it("keeps the note out of the message's own text", () => {
+    seed([makeMessage({ id: "m1", nick: "phrack", text: "it is 72F outside" })]);
+    annotate("m1", "units", "22 C");
+    render(<Timeline view={TEST_VIEW} />);
+
+    const said = screen.getByText("it is 72F outside");
+    expect(said.textContent).toBe("it is 72F outside");
+    expect(said.textContent).not.toContain("22 C");
+  });
+
+  it("draws a note from each plugin that had something to say", () => {
+    seed([makeMessage({ id: "m1", nick: "phrack", text: "see https://example.com" })]);
+    annotate("m1", "units", "22 C");
+    annotate("m1", "links", "example.com — Example Domain");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("22 C")).toBeTruthy();
+    expect(screen.getByText("example.com — Example Domain")).toBeTruthy();
+  });
+
+  /** One note per plugin per message: a plugin answering the same message
+   * twice replaces what it said rather than saying it twice. */
+  it("lets a plugin correct itself rather than repeat itself", () => {
+    seed([makeMessage({ id: "m1", nick: "phrack", text: "it is 72F outside" })]);
+    annotate("m1", "units", "22 C");
+    annotate("m1", "units", "22.2 C");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText("22 C")).toBeNull();
+    expect(screen.getByText("22.2 C")).toBeTruthy();
+    expect(screen.getAllByText("units")).toHaveLength(1);
+  });
+
+  it("leaves a message nobody annotated alone", () => {
+    seed([
+      makeMessage({ id: "m1", nick: "phrack", text: "it is 72F outside" }),
+      makeMessage({ id: "m2", nick: "sable", text: "nothing to say about this" }),
+    ]);
+    annotate("m1", "units", "22 C");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getAllByText("units")).toHaveLength(1);
+  });
+
+  /** The annotator runs on arrival, so a note can name a message that has
+   * scrolled out of the loaded window. Holding it costs nothing and means it
+   * is there if the message scrolls back in. */
+  it("keeps a note for a message that is not loaded", () => {
+    seed([makeMessage({ id: "m1", nick: "phrack", text: "here" })]);
+    annotate("gone", "units", "22 C");
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText("22 C")).toBeNull();
+    expect(useAppStore.getState().annotations[KEY]?.gone).toEqual([
+      { plugin: "units", text: "22 C" },
+    ]);
   });
 });

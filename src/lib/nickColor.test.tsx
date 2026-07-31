@@ -69,6 +69,7 @@ describe("nick colour across surfaces", () => {
           parentOf={() => undefined}
           onJump={() => {}}
           quotedAbove={false}
+          annotations={[]}
           canTag={false}
           onReact={() => {}}
           onReply={() => {}}

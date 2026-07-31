@@ -485,3 +485,35 @@ fn every_built_in_command_is_answered_by_the_client() {
         assert!(!rejected, "/{name} is the client's: {outcome:?}");
     }
 }
+
+/// What an annotator is handed. A note sits beside something somebody wrote,
+/// and handing over joins and server chatter would multiply the call count by
+/// traffic that has nothing to annotate.
+#[test]
+fn only_what_a_person_said_reaches_an_annotator() {
+    let mut session = session();
+    let action = "\u{1}ACTION waves\u{1}";
+    let mut appended = Vec::new();
+    for line in [
+        format!(":sable!s@h PRIVMSG {CHANNEL} :hello"),
+        format!(":nyx!n@h JOIN {CHANNEL}"),
+        format!(":nyx!n@h PRIVMSG {CHANNEL} :{action}"),
+        format!(":kade!k@h PART {CHANNEL}"),
+        format!(":serv NOTICE {CHANNEL} :heads up"),
+    ] {
+        for emitted in session.on_line(&line) {
+            if let Action::Emit(event) = emitted {
+                if let IrcxEvent::MessagesAppended { messages, .. } = *event {
+                    appended.extend(messages);
+                }
+            }
+        }
+    }
+
+    let handed = ircx_core::spoken(&appended);
+    assert_eq!(
+        handed.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["hello", "waves", "heads up"],
+        "the join and the part are not things a person said"
+    );
+}

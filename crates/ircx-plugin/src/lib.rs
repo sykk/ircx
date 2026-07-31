@@ -32,7 +32,7 @@ pub mod sandbox;
 pub use library::{Installed, Library, LibraryError};
 pub use manifest::{CommandSpec, Grants, Manifest, ManifestError, Permission};
 pub use net::{FetchRequest, Fetched, Fetcher};
-pub use runtime::{PluginRuntime, Route};
+pub use runtime::{Annotator, PluginRuntime, Route};
 pub use sandbox::Sandbox;
 
 /// What the host allows a plugin to cost. Not the plugin's to declare: a

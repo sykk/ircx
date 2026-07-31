@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatMessage } from "@/types";
+import type { Annotation } from "@/store/types";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
@@ -19,6 +20,9 @@ interface MessageRowProps {
    * else; drawing the quote again under it only splits one paragraph in two.
    * #138. */
   quotedAbove: boolean;
+  /** What plugins said about this message. Drawn under it and named, because a
+   * reader has to be able to tell somebody else's code from the person. */
+  annotations: readonly Annotation[];
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
@@ -36,6 +40,7 @@ const TEXT_INDENT = "calc(var(--nick-col) + var(--timeline-text-gap))";
 export function MessageRow({
   message,
   quotedAbove,
+  annotations,
   ownNick,
   parentOf,
   onJump,
@@ -119,6 +124,10 @@ export function MessageRow({
             onReply={msgid === null ? null : () => onReply(msgid)}
           />
 
+          {annotations.map((note) => (
+            <AnnotationLine key={note.plugin} note={note} />
+          ))}
+
           {failed && <FailureNotice message={message} />}
         </div>
       </div>
@@ -156,6 +165,25 @@ function Body({ message }: { message: ChatMessage }) {
   }
 
   return <Markdown text={message.text} />;
+}
+
+/**
+ * A plugin's note about somebody else's message. Named with the plugin rather
+ * than the sender, and set apart from the text, because the one thing it must
+ * never do is read as part of what the person wrote — the standing constraint
+ * that a plugin cannot change what somebody said would mean little if its note
+ * looked like the message.
+ */
+function AnnotationLine({ note }: { note: Annotation }) {
+  return (
+    <div
+      className="mt-0.5 flex items-baseline gap-1.5 font-[family-name:var(--font-ui)] text-[11px]"
+      style={{ color: "var(--text-faint)" }}
+    >
+      <span className="shrink-0 font-[family-name:var(--font-mono)]">{note.plugin}</span>
+      <span className="min-w-0">{note.text}</span>
+    </div>
+  );
 }
 
 function FailureNotice({ message }: { message: ChatMessage }) {

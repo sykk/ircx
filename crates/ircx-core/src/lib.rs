@@ -27,7 +27,7 @@ pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;
 pub use isupport::ISupport;
 pub use plugins::{
-    chosen_grants, describe_permissions, describe_plugin, network_for_plugins, run_plugin,
+    chosen_grants, describe_permissions, describe_plugin, network_for_plugins, run_plugin, spoken,
     PluginCall,
 };
 pub use session::{Action, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET};

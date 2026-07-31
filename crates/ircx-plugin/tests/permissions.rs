@@ -673,4 +673,162 @@ mod annotating {
             Err(Failure::Raised(_))
         ));
     }
+
+    /// The lookup the host does on every batch, so it has to be cheap and it
+    /// has to be right: a plugin that declared `annotates` and was not granted
+    /// it is not an annotator, and neither is one granted a different channel.
+    #[test]
+    fn only_a_granted_plugin_annotates_and_only_where_it_was_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let source = author(root.path(), "units", UNITS, annotates());
+        runtime.install(&source).expect("install");
+
+        assert!(
+            runtime.annotators(TARGET).is_empty(),
+            "installing grants nothing, so nothing annotates yet"
+        );
+
+        runtime.set_grants("units", annotates()).expect("grant");
+        assert_eq!(
+            runtime
+                .annotators(TARGET)
+                .into_iter()
+                .map(|a| a.plugin)
+                .collect::<Vec<_>>(),
+            ["units"]
+        );
+        assert!(
+            runtime.annotators("#somewhere-else").is_empty(),
+            "the grant names one channel"
+        );
+
+        runtime
+            .set_grants("units", Grants::default())
+            .expect("revoke everything");
+        assert!(
+            runtime.annotators(TARGET).is_empty(),
+            "a withdrawn grant stops it annotating, as it stops a command"
+        );
+    }
+
+    #[test]
+    fn a_batch_through_the_runtime_comes_back_as_notes() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let source = author(root.path(), "units", UNITS, annotates());
+        runtime.install(&source).expect("install");
+        runtime.set_grants("units", annotates()).expect("grant");
+
+        let annotator = runtime.annotators(TARGET).remove(0);
+        let reply = runtime
+            .annotate(
+                &annotator,
+                arrivals(&[("m1", "sable", "it is 72F"), ("m2", "nyx", "nothing")]),
+            )
+            .expect("the batch is annotated");
+
+        assert_eq!(reply.notes.len(), 1);
+        assert_eq!(reply.notes[0].message, "m1");
+    }
+
+    /// The same worker runs both shapes, because a plugin is one thread and one
+    /// interpreter: a command and a batch must not run at once. What that has
+    /// to preserve is that neither breaks the other.
+    #[test]
+    fn a_plugin_can_annotate_and_answer_a_command_from_one_runtime() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let both = in_channels(
+            grants(&[
+                Permission::AnnotateMessages,
+                Permission::AddCommands,
+                Permission::RenderContent,
+            ]),
+            &[TARGET],
+        );
+        let source = author(
+            root.path(),
+            "units",
+            r#"
+              ircx.command("units", () => "a command answer");
+              ircx.annotate((message) => message.text.includes("F") ? "a note" : undefined);
+            "#,
+            both.clone(),
+        );
+        runtime.install(&source).expect("install");
+        runtime.set_grants("units", both).expect("grant");
+
+        let annotator = runtime.annotators(TARGET).remove(0);
+        let route = runtime.route("units").expect("it owns /units");
+
+        for _ in 0..3 {
+            let reply = runtime
+                .annotate(&annotator, arrivals(&[("m1", "sable", "72F")]))
+                .expect("the batch is annotated");
+            assert_eq!(reply.notes[0].text, "a note");
+
+            let answer = runtime.run(&route, call("units", "")).expect("answers");
+            assert_eq!(answer.content.as_deref(), Some("a command answer"));
+        }
+    }
+
+    /// A timeout poisons the runtime, and the next call has to get a fresh one
+    /// rather than a dead one — the property the command path already has.
+    #[test]
+    fn an_annotator_that_hangs_is_replaced_rather_than_left_broken() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let runtime = PluginRuntime::open(
+            root.path().join("plugins"),
+            Limits::default(),
+            net::refuses(),
+        )
+        .expect("open the library");
+
+        let source = author(
+            root.path(),
+            "hog",
+            r#"
+              ircx.annotate((message) => {
+                if (message.text === "hang") { for (;;) {} }
+                return "fine";
+              });
+            "#,
+            annotates(),
+        );
+        runtime.install(&source).expect("install");
+        runtime.set_grants("hog", annotates()).expect("grant");
+        let annotator = runtime.annotators(TARGET).remove(0);
+
+        let failure = runtime
+            .annotate(&annotator, arrivals(&[("m1", "sable", "hang")]))
+            .expect_err("the deadline stops it");
+        assert!(
+            matches!(failure.failure, Failure::Timeout | Failure::Unresponsive),
+            "got {failure:?}"
+        );
+
+        let reply = runtime
+            .annotate(&annotator, arrivals(&[("m2", "sable", "ok")]))
+            .expect("the next batch gets a fresh runtime");
+        assert_eq!(reply.notes[0].text, "fine");
+    }
 }

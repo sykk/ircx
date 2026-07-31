@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ircx_ipc::HistoryRequest;
@@ -7,17 +8,46 @@ use ircx_ipc::{
     Query, Severity, TargetName,
 };
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
-use ircx_plugin::PluginRuntime;
+use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, PluginRuntime};
 use ircx_store::Store;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
 
-use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES};
+use crate::plugins::{self, PluginCall, ANNOTATOR_STRIKES, CONTEXT_MESSAGES};
 use crate::session::{Action, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
+
+/// How many batches in a row this annotator has failed.
+fn out(strikes: &Mutex<HashMap<String, u32>>, plugin: &str) -> u32 {
+    strikes
+        .lock()
+        .map(|held| held.get(plugin).copied().unwrap_or(0))
+        .unwrap_or(0)
+}
+
+/// Records a failed batch, and says so once. A broken annotator would
+/// otherwise report as often as the channel talks, so the first failure is the
+/// report and the rest are silence — including the one that drops it.
+fn strike(strikes: &Mutex<HashMap<String, u32>>, plugin: &str, failure: Option<&Failure>) {
+    let Ok(mut held) = strikes.lock() else { return };
+    let count = held.entry(plugin.to_owned()).or_insert(0);
+    *count += 1;
+    if *count == 1 {
+        match failure {
+            Some(failure) => warn!(%plugin, %failure, "a plugin could not annotate a message"),
+            None => warn!(%plugin, "the task annotating a message did not finish"),
+        }
+    }
+}
+
+fn strike_cleared(strikes: &Mutex<HashMap<String, u32>>, plugin: &str) {
+    if let Ok(mut held) = strikes.lock() {
+        held.remove(plugin);
+    }
+}
 const KEEPALIVE: Duration = Duration::from_secs(120);
 
 /// What the Tauri layer asks of a running network. Anything expecting an
@@ -183,6 +213,7 @@ async fn run(
         store,
         events,
         plugins,
+        strikes: Arc::default(),
     };
 
     let remembered = match context.store.open_targets(&context.network) {
@@ -360,6 +391,9 @@ struct Context {
     /// `None` when no runtime was given, which is the whole of what a launch
     /// with no plugins costs on this path.
     plugins: Option<Arc<PluginRuntime>>,
+    /// Consecutive failed batches per annotator. An annotator that fails on
+    /// every message would otherwise report as often as the channel talks.
+    strikes: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 impl Context {
@@ -418,6 +452,12 @@ impl Context {
                     }
                 }
                 Action::Emit(event) => {
+                    let arrived = match event.as_ref() {
+                        IrcxEvent::MessagesAppended {
+                            target, messages, ..
+                        } => Some((target.clone(), plugins::spoken(messages))),
+                        _ => None,
+                    };
                     match event.as_ref() {
                         IrcxEvent::MessagesAppended { messages, .. } => self.persist(messages),
                         IrcxEvent::MessageUpdated { message } => self.update(message),
@@ -432,6 +472,11 @@ impl Context {
                     }
                     if self.events.send(*event).await.is_err() {
                         close = true;
+                    }
+                    // After the send, which is what makes the message drawn
+                    // before any annotator runs.
+                    if let Some((target, messages)) = arrived {
+                        self.annotate(target, messages);
                     }
                 }
                 Action::Remember(target) => {
@@ -448,6 +493,72 @@ impl Context {
             }
         }
         close
+    }
+
+    /// Hands a batch to every annotator that reaches this conversation.
+    ///
+    /// Spawned rather than awaited: the message is already drawn, and a slow
+    /// annotator must delay its own note and nothing else. A conversation no
+    /// installed plugin annotates costs one map lookup, because `annotators`
+    /// answers from the library without starting a runtime.
+    fn annotate(&self, target: TargetName, messages: Vec<ArrivedMessage>) {
+        if messages.is_empty() {
+            return;
+        }
+        let Some(runtime) = self.plugins.clone() else {
+            return;
+        };
+        let strikes = Arc::clone(&self.strikes);
+        let annotators: Vec<_> = runtime
+            .annotators(&target)
+            .into_iter()
+            .filter(|annotator| out(&strikes, &annotator.plugin) < ANNOTATOR_STRIKES)
+            .collect();
+        if annotators.is_empty() {
+            return;
+        }
+
+        let events = self.events.clone();
+        let network = self.network.clone();
+        tokio::spawn(async move {
+            for annotator in annotators {
+                let request = AnnotateRequest {
+                    target: target.clone(),
+                    messages: messages.clone(),
+                };
+                let running = Arc::clone(&runtime);
+                let plugin = annotator.plugin.clone();
+                let ran =
+                    tokio::task::spawn_blocking(move || running.annotate(&annotator, request))
+                        .await;
+
+                let reply = match ran {
+                    Ok(Ok(reply)) => reply,
+                    Ok(Err(failure)) => {
+                        strike(&strikes, &plugin, Some(&failure.failure));
+                        continue;
+                    }
+                    Err(_) => {
+                        strike(&strikes, &plugin, None);
+                        continue;
+                    }
+                };
+                strike_cleared(&strikes, &plugin);
+
+                for note in reply.notes {
+                    let event = IrcxEvent::MessageAnnotated {
+                        network: network.clone(),
+                        target: target.clone(),
+                        message: note.message,
+                        plugin: plugin.clone(),
+                        text: note.text,
+                    };
+                    if events.send(event).await.is_err() {
+                        return;
+                    }
+                }
+            }
+        });
     }
 
     fn persist(&self, messages: &[ChatMessage]) {
@@ -473,5 +584,50 @@ impl Context {
         if let Err(error) = self.store.update_message(message) {
             warn!(%error, "could not update a message in the archive");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A broken annotator would report as often as the channel talks, so the
+    /// first failure is the report and the rest are silence — and after
+    /// `ANNOTATOR_STRIKES` in a row the host stops calling it at all.
+    #[test]
+    fn an_annotator_is_dropped_only_after_failing_repeatedly() {
+        let strikes = Mutex::new(HashMap::new());
+
+        for _ in 0..ANNOTATOR_STRIKES - 1 {
+            strike(&strikes, "units", None);
+        }
+        assert!(
+            out(&strikes, "units") < ANNOTATOR_STRIKES,
+            "one bad batch is a message the plugin did not expect"
+        );
+
+        strike(&strikes, "units", None);
+        assert_eq!(out(&strikes, "units"), ANNOTATOR_STRIKES);
+    }
+
+    /// Consecutive, not cumulative. A plugin that trips over one message every
+    /// so often and works the rest of the time is not broken.
+    #[test]
+    fn a_batch_that_worked_clears_what_came_before_it() {
+        let strikes = Mutex::new(HashMap::new());
+
+        strike(&strikes, "units", None);
+        strike(&strikes, "units", None);
+        strike_cleared(&strikes, "units");
+        strike(&strikes, "units", None);
+
+        assert_eq!(out(&strikes, "units"), 1);
+    }
+
+    #[test]
+    fn one_annotators_failures_are_not_anothers() {
+        let strikes = Mutex::new(HashMap::new());
+        strike(&strikes, "units", None);
+        assert_eq!(out(&strikes, "links"), 0);
     }
 }

@@ -17,7 +17,9 @@ use crate::library::{Installed, Library, LibraryError};
 use crate::manifest::{Grants, Permission};
 use crate::net::Fetcher;
 use crate::sandbox::Sandbox;
-use crate::{CommandReply, CommandRequest, Failure, Limits, PluginFailure};
+use crate::{
+    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, PluginFailure,
+};
 
 /// Which plugin owns a slash command, and what it was granted at the moment
 /// the command was typed. Cheap to hand out: routing must not start a runtime.
@@ -35,6 +37,13 @@ impl Route {
     pub fn reads_messages(&self, target: &str) -> bool {
         self.grants.holds(Permission::ReadMessages) && self.grants.reaches(target)
     }
+}
+
+/// A plugin that annotates a conversation. Named rather than a bare id so the
+/// caller cannot hand `annotate` the name of a plugin nobody checked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotator {
+    pub plugin: String,
 }
 
 pub struct PluginRuntime {
@@ -119,11 +128,10 @@ impl PluginRuntime {
         };
         let worker = self.worker(&route.plugin).map_err(named)?;
         let (reply, answer) = mpsc::channel();
-        let job = Job { request, reply };
 
         let outcome = {
             let worker = hold(&worker);
-            match worker.jobs.send(job) {
+            match worker.jobs.send(Work::Command(request, reply)) {
                 Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
                 Err(_) => Err(RecvTimeoutError::Disconnected),
             }
@@ -142,6 +150,59 @@ impl PluginRuntime {
             }
             Err(RecvTimeoutError::Disconnected) => {
                 self.stop(&route.plugin);
+                Err(named(Failure::Host("its runtime stopped".into())))
+            }
+        }
+    }
+
+    /// The plugins that annotate `target`, so the caller can skip a
+    /// conversation nothing watches without starting a runtime to find out.
+    /// A plugin that declared `annotates` and was not granted it is not one.
+    pub fn annotators(&self, target: &str) -> Vec<Annotator> {
+        hold(&self.library)
+            .installed()
+            .into_iter()
+            .filter(|installed| installed.manifest.annotates)
+            .filter(|installed| {
+                installed.grants.holds(Permission::AnnotateMessages)
+                    && installed.grants.reaches(target)
+            })
+            .map(|installed| Annotator {
+                plugin: installed.id().to_owned(),
+            })
+            .collect()
+    }
+
+    /// Runs one batch through one annotator. Blocking and bounded, exactly as
+    /// [`PluginRuntime::run`] is.
+    pub fn annotate(
+        &self,
+        annotator: &Annotator,
+        request: AnnotateRequest,
+    ) -> Result<AnnotateReply, PluginFailure> {
+        let named = |failure| PluginFailure {
+            plugin: annotator.plugin.clone(),
+            failure,
+        };
+        let worker = self.worker(&annotator.plugin).map_err(named)?;
+        let (reply, answer) = mpsc::channel();
+
+        let outcome = {
+            let worker = hold(&worker);
+            match worker.jobs.send(Work::Annotate(request, reply)) {
+                Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
+                Err(_) => Err(RecvTimeoutError::Disconnected),
+            }
+        };
+
+        match outcome {
+            Ok(result) => result.map_err(named),
+            Err(RecvTimeoutError::Timeout) => {
+                self.stop(&annotator.plugin);
+                Err(named(Failure::Unresponsive))
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                self.stop(&annotator.plugin);
                 Err(named(Failure::Host("its runtime stopped".into())))
             }
         }
@@ -206,13 +267,15 @@ fn hold<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
     lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-struct Job {
-    request: CommandRequest,
-    reply: Sender<Result<CommandReply, Failure>>,
+/// Both shapes go down the same channel, because a plugin is one thread and
+/// one interpreter: a command and a batch of arrivals must not run at once.
+enum Work {
+    Command(CommandRequest, Sender<Result<CommandReply, Failure>>),
+    Annotate(AnnotateRequest, Sender<Result<AnnotateReply, Failure>>),
 }
 
 struct Worker {
-    jobs: Sender<Job>,
+    jobs: Sender<Work>,
 }
 
 impl Worker {
@@ -231,7 +294,7 @@ impl Worker {
 
 /// The plugin's whole life. The runtime is built here, on this thread, and
 /// never leaves it.
-fn work(installed: Installed, limits: Limits, fetch: Fetcher, jobs: Receiver<Job>) {
+fn work(installed: Installed, limits: Limits, fetch: Fetcher, jobs: Receiver<Work>) {
     let mut sandbox: Option<Sandbox> = None;
 
     while let Ok(job) = jobs.recv() {
@@ -239,26 +302,36 @@ fn work(installed: Installed, limits: Limits, fetch: Fetcher, jobs: Receiver<Job
             Some(ready) => Ok(ready),
             None => load(&installed, limits, Arc::clone(&fetch)),
         };
-        let outcome = match loaded {
-            Ok(mut ready) => {
-                let outcome = ready.call(&job.request);
-                // A terminated runtime is not asked for more work. Dropping it
-                // here is what makes the next use of the command a fresh
-                // plugin rather than a dead one.
-                match &outcome {
-                    Err(Failure::Timeout | Failure::OutOfMemory) => {}
-                    _ => sandbox = Some(ready),
+        let gave_up = match (loaded, job) {
+            (Ok(mut ready), Work::Command(request, reply)) => {
+                let outcome = ready.call(&request);
+                if keep(&outcome) {
+                    sandbox = Some(ready);
                 }
-                outcome
+                reply.send(outcome).is_err()
             }
-            Err(failure) => Err(failure),
+            (Ok(mut ready), Work::Annotate(request, reply)) => {
+                let outcome = ready.annotate(&request);
+                if keep(&outcome) {
+                    sandbox = Some(ready);
+                }
+                reply.send(outcome).is_err()
+            }
+            (Err(failure), Work::Command(_, reply)) => reply.send(Err(failure)).is_err(),
+            (Err(failure), Work::Annotate(_, reply)) => reply.send(Err(failure)).is_err(),
         };
-        if job.reply.send(outcome).is_err() {
+        if gave_up {
             // The caller gave up on this plugin, so it has been quarantined
             // and nothing will read another answer from it.
             return;
         }
     }
+}
+
+/// A terminated runtime is not asked for more work. Dropping it is what makes
+/// the next call a fresh plugin rather than a dead one.
+fn keep<T>(outcome: &Result<T, Failure>) -> bool {
+    !matches!(outcome, Err(Failure::Timeout | Failure::OutOfMemory))
 }
 
 fn load(installed: &Installed, limits: Limits, fetch: Fetcher) -> Result<Sandbox, Failure> {

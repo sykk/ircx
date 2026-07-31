@@ -22,8 +22,8 @@ use ircx_ipc::{
 };
 use ircx_net::http::{fetch, FetchPolicy};
 use ircx_plugin::{
-    CommandReply, CommandRequest, ContextMessage, Failure, Fetched, Fetcher, Grants, Installed,
-    Permission, PluginFailure, PluginRuntime, Route,
+    ArrivedMessage, CommandReply, CommandRequest, ContextMessage, Failure, Fetched, Fetcher,
+    Grants, Installed, Permission, PluginFailure, PluginRuntime, Route,
 };
 
 use crate::dispatch;
@@ -32,8 +32,37 @@ use crate::session::{Action, SessionState};
 /// How many recent messages a plugin granted `read-messages` is handed.
 pub const CONTEXT_MESSAGES: u32 = 50;
 
+/// Consecutive failed batches before an annotator is dropped for the session.
+/// `docs/plugins.md` says a broken one is dropped and does not say when; one
+/// bad batch is a message the plugin did not expect, three in a row is the
+/// plugin.
+pub const ANNOTATOR_STRIKES: u32 = 3;
+
 /// An answer a plugin reads, not a download.
 const MAX_FETCH_BYTES: usize = 256 * 1024;
+
+/// What an annotator is handed: the messages in one batch that a person said.
+///
+/// Joins, quits, mode changes and server chatter are left out. A note sits
+/// beside something somebody wrote, and handing over the rest would multiply
+/// the call count by traffic that has nothing to annotate.
+pub fn spoken(messages: &[ChatMessage]) -> Vec<ArrivedMessage> {
+    messages
+        .iter()
+        .filter(|message| {
+            matches!(
+                message.kind,
+                MessageKind::Privmsg | MessageKind::Notice | MessageKind::Action
+            )
+        })
+        .map(|message| ArrivedMessage {
+            id: message.id.clone(),
+            nick: message.sender.nick.clone(),
+            text: message.text.clone(),
+            time: message.timestamp.clone(),
+        })
+        .collect()
+}
 
 /// A command on its way to the plugin that owns it.
 #[derive(Debug, Clone)]

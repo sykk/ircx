@@ -198,6 +198,23 @@ pub struct UploadProvider {
     pub s3: Option<S3Credentials>,
 }
 
+/// What an upload produced: the address, and whether anybody else can open it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadedFile {
+    pub link: String,
+    /// Why the address will not open for the people it is about to be sent to,
+    /// or `None` when it will.
+    ///
+    /// A stored object is not a readable one. An S3 bucket is private until
+    /// somebody makes it otherwise, so an upload can succeed and hand back an
+    /// address that opens for nobody — found by walking it against MinIO. This
+    /// is the difference between the sender learning that now and learning it
+    /// from whoever they sent it to.
+    pub unreadable: Option<String>,
+}
+
 /// What signing an S3 request needs beyond the endpoint and the secret.
 ///
 /// The secret access key is not here. It goes to the keyring with the other

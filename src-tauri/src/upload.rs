@@ -8,8 +8,10 @@
 
 use std::path::Path;
 
-use ircx_ipc::{FileToUpload, UploadMethod, UploadProvider};
-use ircx_net::http::{signing_target, upload, HttpError, UploadMethod as NetMethod, UploadPolicy};
+use ircx_ipc::{FileToUpload, S3Credentials, UploadMethod, UploadProvider, UploadedFile};
+use ircx_net::http::{
+    head, signing_target, upload, FetchPolicy, HttpError, UploadMethod as NetMethod, UploadPolicy,
+};
 use time::OffsetDateTime;
 
 use crate::sigv4::{self, Credentials};
@@ -132,7 +134,7 @@ pub async fn describe(paths: &[String]) -> Vec<FileToUpload> {
 ///
 /// Every error is a sentence for whoever has to fix it: the file, the provider
 /// and the size are all things the user chose and can change.
-pub async fn send_file(app: &App, path: &str) -> Result<String, String> {
+pub async fn send_file(app: &App, path: &str) -> Result<UploadedFile, String> {
     let Some(provider) = app.store().upload_provider().map_err(|e| e.to_string())? else {
         return Err(
             "No upload provider is configured. Set one from the command palette, or paste a \
@@ -174,7 +176,36 @@ pub async fn send_file(app: &App, path: &str) -> Result<String, String> {
         .await
         .map_err(|error| refusal(&name, &host, error))?;
 
-    Ok(link_from(&answer.body, &url))
+    let link = link_from(&answer.body, &url);
+    Ok(UploadedFile {
+        unreadable: unreadable(&link).await,
+        link,
+    })
+}
+
+/// Why the address will not open for whoever it is sent to, or `None`.
+///
+/// A `HEAD` rather than a fetch: the file may be 25 MB and the question is only
+/// what the server answers. A provider that will not answer a `HEAD` at all
+/// says nothing either way, and silence is not a reason to warn about a link
+/// that is probably fine.
+async fn unreadable(link: &str) -> Option<String> {
+    let policy = FetchPolicy {
+        allow_local_addresses: true,
+        ..FetchPolicy::default()
+    };
+    match head(link, &policy).await {
+        Ok(200..=399) | Err(_) => None,
+        Ok(status @ (401 | 403)) => Some(format!(
+            "The file was stored, but the address is not public ({status}), so this link will \
+             not open for anyone you send it to. Allow public reads on the bucket, or send a \
+             link you made elsewhere."
+        )),
+        Ok(status) => Some(format!(
+            "The file was stored, but the address answered HTTP {status}, so this link may not \
+             open for anyone you send it to."
+        )),
+    }
 }
 
 /// Why the provider would not take it, for whoever has to fix it.
@@ -235,30 +266,7 @@ fn policy(
                  upload provider settings."
                     .to_owned()
             })?;
-        let (host, path) = signing_target(url).map_err(|error| error.to_string())?;
-        // Content-Type is sent by the request builder, so it is signed too.
-        let sent = [("content-type".to_owned(), content_type.clone())];
-        let headers = sigv4::signed(
-            "PUT",
-            &host,
-            &path,
-            &sigv4::sha256_hex(body),
-            &sent,
-            &Credentials {
-                access_key_id: &s3.access_key_id,
-                secret: &secret,
-                region: &s3.region,
-            },
-            OffsetDateTime::now_utc(),
-        );
-        return Ok(UploadPolicy {
-            // Signed as a PUT, so it has to be sent as one. A POST would be a
-            // signature over a request nobody made.
-            method: NetMethod::Put,
-            content_type,
-            headers,
-            ..UploadPolicy::default()
-        });
+        return s3_policy(s3, &secret, &content_type, url, body);
     }
 
     let mut headers = Vec::new();
@@ -279,6 +287,44 @@ fn policy(
     Ok(UploadPolicy {
         method: net_method(provider.method),
         content_type,
+        headers,
+        ..UploadPolicy::default()
+    })
+}
+
+/// The request as S3 wants it: signed, and therefore a `PUT` sent to exactly
+/// the host and path the signature covers.
+///
+/// Split out from `policy` so the walk against a real bucket goes through the
+/// same code an upload does rather than a copy of it that could drift.
+fn s3_policy(
+    s3: &S3Credentials,
+    secret: &str,
+    content_type: &str,
+    url: &str,
+    body: &[u8],
+) -> Result<UploadPolicy, String> {
+    let (host, path) = signing_target(url).map_err(|error| error.to_string())?;
+    // Content-Type is sent by the request builder, so it is signed too.
+    let sent = [("content-type".to_owned(), content_type.to_owned())];
+    let headers = sigv4::signed(
+        "PUT",
+        &host,
+        &path,
+        &sigv4::sha256_hex(body),
+        &sent,
+        &Credentials {
+            access_key_id: &s3.access_key_id,
+            secret,
+            region: &s3.region,
+        },
+        OffsetDateTime::now_utc(),
+    );
+    Ok(UploadPolicy {
+        // Signed as a PUT, so it has to be sent as one. A POST would be a
+        // signature over a request nobody made.
+        method: NetMethod::Put,
+        content_type: content_type.to_owned(),
         headers,
         ..UploadPolicy::default()
     })
@@ -462,5 +508,113 @@ mod tests {
         assert_eq!(content_type("a.jpeg"), "image/jpeg");
         assert_eq!(content_type("a.tar.gz"), "application/octet-stream");
         assert_eq!(content_type("noextension"), "application/octet-stream");
+    }
+}
+
+/// Against a real S3-compatible server, because the arithmetic being right and
+/// the request being accepted are different questions.
+///
+/// Ignored by default so `cargo test --workspace` dials nothing. Set up with:
+///
+/// ```text
+/// podman run -d --rm --name ircx-minio -p 9000:9000 \
+///   -e MINIO_ROOT_USER=ircxtest -e MINIO_ROOT_PASSWORD=ircxtestsecret \
+///   docker.io/minio/minio:latest server /data
+/// cargo test -p ircx --lib minio -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+mod minio {
+    use super::*;
+    use ircx_net::http::upload;
+
+    const ORIGIN: &str = "http://127.0.0.1:9000";
+    const BUCKET: &str = "ircx-walk";
+    const SECRET: &str = "ircxtestsecret";
+
+    fn credentials() -> S3Credentials {
+        S3Credentials {
+            // MinIO accepts any region and signs with the one it is told, which
+            // is the case worth covering: a provider that does not care still
+            // has to agree with the signature.
+            region: "us-east-1".into(),
+            access_key_id: "ircxtest".into(),
+        }
+    }
+
+    async fn put(url: &str, body: &[u8], content_type: &str) -> Result<u16, String> {
+        let policy = s3_policy(&credentials(), SECRET, content_type, url, body)?;
+        upload(url, body, &policy)
+            .await
+            .map(|answer| answer.status)
+            .map_err(|error| error.to_string())
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a local MinIO on :9000"]
+    async fn a_signed_upload_reaches_a_real_bucket() {
+        // Creating the bucket is itself a signed PUT, so a failure here is the
+        // signature rather than anything about objects.
+        let made = put(
+            &format!("{ORIGIN}/{BUCKET}"),
+            b"",
+            "application/octet-stream",
+        )
+        .await;
+        match made {
+            Ok(status) => println!("PASS  bucket: HTTP {status}"),
+            // Already there from a previous run, which is not a failure.
+            Err(error) if error.contains("409") => println!("PASS  bucket: already exists"),
+            Err(error) => panic!("the bucket could not be made: {error}"),
+        }
+
+        let name = object_name(
+            "walk.png",
+            &[0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x18],
+        );
+        let url = endpoint_for(&format!("{ORIGIN}/{BUCKET}/{{name}}"), &name);
+        let body = b"the bytes ircx put there";
+
+        let status = put(&url, body, content_type("walk.png"))
+            .await
+            .expect("the object is stored");
+        println!("PASS  object: HTTP {status} at {url}");
+
+        // The link this client is about to put in a conversation, fetched the
+        // way anybody reading that conversation would fetch it.
+        //
+        // It is refused, and that is the finding: a bucket is private until
+        // somebody makes it otherwise, so a signed upload can succeed and hand
+        // back an address that opens for nobody. The bytes did arrive — the
+        // walk read them out of MinIO's own storage — so this is the object
+        // being private rather than the object being wrong.
+        let read = ircx_net::http::fetch(
+            &url,
+            &ircx_net::http::FetchPolicy {
+                allow_local_addresses: true,
+                ..Default::default()
+            },
+        )
+        .await;
+        let refusal = read.expect_err("a private bucket refuses an anonymous read");
+        println!("NOTE  the link is private: {refusal}");
+        assert!(refusal.to_string().contains("403"), "{refusal}");
+    }
+
+    /// A wrong secret has to be told apart from a wrong everything else, since
+    /// both come back as a refusal with nothing in it.
+    #[tokio::test]
+    #[ignore = "needs a local MinIO on :9000"]
+    async fn a_wrong_secret_is_refused() {
+        let url = format!("{ORIGIN}/{BUCKET}/never-stored");
+        let policy = s3_policy(&credentials(), "not the secret", "text/plain", &url, b"x")
+            .expect("a policy");
+
+        let answer = upload(&url, b"x", &policy).await;
+
+        let error = answer
+            .expect_err("a wrong signature is refused")
+            .to_string();
+        println!("refusal: {error}");
+        assert!(error.contains("403"), "{error}");
     }
 }

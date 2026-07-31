@@ -626,16 +626,47 @@ sends a `GET`. Fixed to name the credential and where to change it.
 **Not walked:**
 - **A file too large, or a provider that refuses.** Both produce sentences no
   one has read in situ.
-- **S3-compatible storage**, which is built and has never sent a byte.
-  `src-tauri/src/sigv4.rs` is checked against the worked example AWS publishes
-  for a single-chunk `PUT` — their credentials, their bucket, their clock,
-  their answer — so the arithmetic is not in doubt. Everything around it is:
-  whether the region a provider expects is the one it documents, whether the
-  endpoint shape the settings sheet asks for fits how MinIO and the rest
-  address a bucket, and whether a refusal says anything a person can act on. A
-  signature wrong for any of those reasons is a 403 with nothing in it to read,
-  which is exactly why this one has to be walked against a real server rather
-  than a fixture.
+**S3-compatible storage is walked**, against MinIO in a container on
+2026-07-31. `src-tauri/src/upload.rs` holds the run as an ignored test, with
+the command to stand the server up:
+
+```text
+PASS  bucket: HTTP 200
+PASS  object: HTTP 200 at http://127.0.0.1:9000/ircx-walk/a1b2c3d4e5f60718-walk.png
+NOTE  the link is private: … returned HTTP 403
+```
+
+Creating the bucket is itself a signed `PUT`, so the first line is the
+signature working against a real server rather than against Amazon's worked
+example. The bytes were read back out of MinIO's own storage on disk — `the
+bytes ircx put there`, byte for byte — rather than over HTTP, because HTTP is
+where the walk found something.
+
+**The walk found that a successful upload hands back a dead link.** A bucket is
+private until somebody makes it otherwise, so the object stored, the client
+sent the address to the conversation, and it opened for nobody. Silent, and the
+sender would have learned it from whoever they sent it to.
+
+An upload now asks the address what it answers — a `HEAD`, because the file may
+be 25 MB and the question is only what the server says — and a refusal stops
+the link being sent. The reader is told what happened, shown the address in
+full, and offered the send anyway: a provider can serve a link it refuses a
+`HEAD` for, and being wrong about that should not silently swallow their file.
+
+Three ways to make it public were weighed. `x-amz-acl: public-read` was refused:
+it works on MinIO and older AWS and fails outright with a 400 on current AWS,
+where ACLs are off by default — trading a dead link for a failed upload on the
+provider most people have.
+
+**Still not walked:**
+- **A bucket that is public.** Every run so far has been against a private one,
+  so the path where `HEAD` answers 200 and the link goes out has never been
+  taken against a real server.
+- **AWS itself.** MinIO accepts any region and signs with what it is told.
+  Whether the region a real provider expects is the one its console displays is
+  the next thing likely to be wrong.
+- **A provider that refuses `HEAD`.** It would read as a dead link and offer
+  the send anyway, which is the right shape, but nothing has produced one.
 
 ## SCRAM
 

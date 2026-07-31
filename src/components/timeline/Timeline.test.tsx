@@ -1035,7 +1035,7 @@ describe("links in a message", () => {
       }),
     ]);
     render(<Timeline view={TEST_VIEW} />);
-    return screen.getByRole("button", { name: URL });
+    return screen.getByRole("button", { name: `${URL}, opens in your browser` });
   }
 
   it("opens the destination outside this window", async () => {
@@ -1058,6 +1058,14 @@ describe("links in a message", () => {
   /** The destination is written out in full. There is no form where the text
    * differs from where it goes. */
   it("writes the destination out as the text", () => {
-    expect(withLink().textContent).toBe(URL);
+    expect(withLink().textContent?.startsWith(URL)).toBe(true);
+  });
+
+  /** Said before the click rather than reported after it. A reader deciding
+   * whether to follow a link is looking at it now. */
+  it("marks that it leaves the client", () => {
+    const link = withLink();
+    expect(link.textContent).toContain("\u2197");
+    expect(link.getAttribute("aria-label")).toContain("opens in your browser");
   });
 });

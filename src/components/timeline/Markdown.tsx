@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { stripIrcFormatting } from "@/lib/ircFormat";
+import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
 
@@ -98,6 +99,7 @@ function Link({ url }: { url: string }) {
     <>
       <button
         type="button"
+        aria-label={leavingLabel(url)}
         onClick={() => {
           setRefused(null);
           void openExternal(url).catch((reason: unknown) => {
@@ -108,6 +110,7 @@ function Link({ url }: { url: string }) {
         style={{ color: "var(--accent)" }}
       >
         {url}
+        <LeavesTheClient />
       </button>
       {refused !== null && (
         <span className="ml-1.5 text-[11px]" style={{ color: "var(--danger)" }}>

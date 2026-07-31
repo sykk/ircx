@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Attachment, AttachmentPreview } from "@/types";
+import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { ipc, openExternal } from "@/lib/ipc";
 import { formatClock } from "./rows";
 
@@ -85,7 +86,10 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
         </span>
         {/* Opened outside this window rather than linked into it. An `href`
             with `target="_blank"` leaves what happens to the webview, and a
-            page loaded over the client has no way back. */}
+            page loaded over the client has no way back.
+
+            The filename is what is on screen, so it is what is announced; the
+            whole URL stays in the tooltip. */}
         <button
           type="button"
           onClick={() => {
@@ -94,11 +98,13 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
               setError(`could not open — ${String(reason)}`);
             });
           }}
+          aria-label={leavingLabel(filenameOf(attachment))}
           title={attachment.url}
           className="truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2"
           style={{ color: "var(--text-secondary)" }}
         >
           {filenameOf(attachment)}
+          <LeavesTheClient />
         </button>
         {size && <span className="shrink-0 font-[family-name:var(--font-mono)]">{size}</span>}
         {fetchedAt && (

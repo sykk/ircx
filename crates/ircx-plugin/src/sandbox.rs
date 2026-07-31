@@ -22,8 +22,8 @@ use crate::data::LocalData;
 use crate::manifest::{Grants, Permission};
 use crate::net::{FetchRequest, Fetcher};
 use crate::{
-    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, Note,
-    NotifyReply, NotifyRequest, Outgoing,
+    AnnotateReply, AnnotateRequest, ArrivedMessage, CommandReply, CommandRequest, Failure, Limits,
+    Note, NotifyReply, NotifyRequest, Outgoing,
 };
 
 /// Deep enough for the recursion a plugin has any business doing, shallow
@@ -232,6 +232,19 @@ impl Host {
         self.refusal.set(Some(refusal));
         throw(ctx, message)
     }
+}
+
+/// The ids an on-arrival hook was handed, which is the whole of what it may
+/// answer about. What comes back names one of these or is dropped: the plugin
+/// cannot name a message it was never given, so an answer that does is not
+/// something a working plugin produces.
+///
+/// The bootstrap builds each answer out of the ids it was iterating, but it is
+/// a global on the plugin's own object and the plugin's top level runs after
+/// it. Without this, a plugin granted one channel could speak about a message
+/// in a channel it was never allowed to read.
+fn ids(messages: &[ArrivedMessage]) -> BTreeSet<&str> {
+    messages.iter().map(|message| message.id.as_str()).collect()
 }
 
 /// Every refusal a plugin can catch, thrown as an `Error`. A bare string would
@@ -515,8 +528,13 @@ impl Sandbox {
             Ok(json) => {
                 let raw: Vec<Note> = serde_json::from_str(&json)
                     .map_err(|error| Failure::Host(error.to_string()))?;
+                let handed = ids(&request.messages);
                 Ok(AnnotateReply {
-                    notes: raw.into_iter().filter_map(|note| self.note(note)).collect(),
+                    notes: raw
+                        .into_iter()
+                        .filter(|note| handed.contains(note.message.as_str()))
+                        .filter_map(|note| self.note(note))
+                        .collect(),
                 })
             }
             Err(failure) => {
@@ -566,14 +584,9 @@ impl Sandbox {
             Ok(json) => {
                 let raw: Vec<String> = serde_json::from_str(&json)
                     .map_err(|error| Failure::Host(error.to_string()))?;
-                let handed: BTreeSet<&str> =
-                    request.messages.iter().map(|m| m.id.as_str()).collect();
+                let handed = ids(&request.messages);
                 let mut raised: Vec<String> = Vec::new();
                 for id in raw {
-                    // A message this batch did not contain is dropped rather
-                    // than refused: the plugin cannot name one it was never
-                    // given, and the batch it was given is the whole of what
-                    // it may speak about.
                     if handed.contains(id.as_str()) && !raised.contains(&id) {
                         raised.push(id);
                     }

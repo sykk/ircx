@@ -303,7 +303,11 @@ reason a command's answer does: it is how a reader tells what somebody else's
 code said from what the person said.
 
 Sanitising is the host's, as everywhere else: control characters go, newlines
-with them, and the answer is cut to 200 characters. A command's 40-line ceiling
+with them, and the answer is cut to 200 characters. The message id a note names
+is checked against the batch the plugin was handed, for the reason *It answers
+whether, and only about what it was handed* gives below: msgids are not secret,
+and without the check a plugin granted one channel could hang a note on a
+message in another. A command's 40-line ceiling
 is the wrong shape for a note that sits beside one line.
 
 ### The permission
@@ -387,11 +391,12 @@ A handler returns `true` or `false`. Anything else is refused rather than read
 as truthy — a promise is an object, and a rule that returned one would raise
 every message it was ever handed.
 
-The answer is a list of ids, and the host drops any the batch did not contain.
-The bootstrap builds that list out of the ids it was given, but the bootstrap is
-a global on the plugin's own object and the plugin's top level runs after it, so
-the check that matters is the one on the host side. Without it, a plugin granted
-one channel could raise a message in a channel it was never allowed to read.
+The answer is a list of ids, and the host drops any the batch did not contain —
+the same check `annotate` does, and for the same reason. The bootstrap builds
+that list out of the ids it was given, but the bootstrap is a global on the
+plugin's own object and the plugin's top level runs after it, so the check that
+matters is the one on the host side. Without it, a plugin granted one channel
+could raise a message in a channel it was never allowed to read.
 
 ### What a rule cannot reach
 

@@ -151,8 +151,32 @@ author   << @time=…;msgid=m3i6rz7yv…;+reply=vcgd7gp6dgd7hp4347ajqaqk6a
 The tag reaches the other client naming the same msgid byte for byte, and the
 sender's own echo carries it back as well.
 
-**Not yet verified:** ircx driving that itself. Nothing has yet clicked reply in
-the timeline, sent a line and watched the quote appear in a second client.
+**ircx drives it correctly.** Run against local `ergo` on 2026-07-31: reply
+clicked in the timeline, line sent, read off a second client's socket.
+
+```text
+@msgid=73wr46ugs6kvnbpb3qep8xq5he;time=…;+reply=p9fsy6knntni4dt3yndbmv69b6
+  :syk!~u@… PRIVMSG #replytest :ffff
+```
+
+The `+reply` names the parent the control was clicked on, and the second client
+resolved it back to the right message. Three replies to two different parents
+all landed correctly.
+
+**A split reply carries the tag on every piece.** A 600-character reply arrived
+as two messages naming the same parent:
+
+```text
+@msgid=skyxwtig…;+reply=9w5f72rc8dhgggvphsf9mqkdz6 … :This single sentence … from the very first word to
+@msgid=e6but6s3…;+reply=9w5f72rc8dhgggvphsf9mqkdz6 … :the final period at the end of this long …
+```
+
+Producing one takes more text than it looks. The budget is not a fixed number
+to aim at: `wire_budget` derives it from the nick, ident, host and target,
+because those are what the server prepends to the copy everyone else receives.
+On ergo as `syk!~u@4dy55fkndsc9u.irc` in `#replytest` it came to 464 bytes, and
+a 400-character attempt went as one message. Read the figure off the mask in the
+raw log rather than guessing at it.
 
 **On Libera it will not work**, and the client cannot tell in advance. Client
 tags there are an allowlist holding only `+typing`, and `message-tags` is

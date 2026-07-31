@@ -92,7 +92,7 @@ async fn against_libera() {
     report.finish();
 }
 
-// ---------------------------------------------------------------- transport
+// Transport.
 
 async fn tls(report: &mut Report) {
     let attempt = Transport::connect(ConnectionConfig {
@@ -155,7 +155,7 @@ async fn certificate_is_actually_checked(report: &mut Report) {
     }
 }
 
-// ------------------------------------------------------------------ session
+// Session.
 
 async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &str) {
     let started = Instant::now();
@@ -1307,7 +1307,7 @@ async fn reconnect(report: &mut Report, live: &mut Live) {
     );
 }
 
-// ------------------------------------------------------------------ archive
+// Archive.
 
 async fn archive(report: &mut Report, db: &Path, marker: &str, store: Arc<Store>) {
     let request = HistoryRequest {
@@ -1437,7 +1437,7 @@ fn seed(store: &Store, rows: &[ChatMessage], count: usize) -> bool {
     store.append_messages(&batch).is_ok()
 }
 
-// ------------------------------------------------------------------- plumbing
+// Plumbing.
 
 /// One running network plus everything it has said so far.
 struct Live {

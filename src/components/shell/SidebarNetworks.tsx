@@ -408,9 +408,7 @@ function SidebarRow({
       >
         <StatusDot network={row.network} />
         {/* Quieter rather than badged. `online` is false only because a quit
-            was seen and nothing has been heard since, so this says "there is
-            nobody there to read it" — which is the one thing that changes
-            whether the conversation is worth typing into. */}
+            was seen and nothing has been heard since. */}
         <span
           className="truncate"
           style={row.query.online ? undefined : { color: "var(--text-muted)" }}

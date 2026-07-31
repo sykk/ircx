@@ -83,9 +83,8 @@ function BlockView({ block }: { block: Block }) {
 
 /**
  * Written out in full and opened outside this window. An anchor with an `href`
- * would be a navigation the webview might take, so there is no `href` at all —
- * what a middle click or "copy link address" would offer is not worth a page
- * that replaced the client.
+ * would be a navigation the webview might take, so there is no `href` at all.
+ * That gives up middle-click and "copy link address", which is the trade.
  */
 function Link({ url }: { url: string }) {
   return (

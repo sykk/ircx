@@ -181,15 +181,15 @@ impl Host {
         throw(ctx, &format!("ircx: {} was not granted", permission.name()))
     }
 
-    /// Why an annotator cannot send: the bound that makes a plugin's sends
+    /// An annotator cannot send because the bound that makes a plugin's sends
     /// safe is the keystroke, and a send caused by an arrival has no such
-    /// unit. Why it cannot fetch: a fetch per arriving message is the client
-    /// reaching a remote URL on its own, which is the one exclusion this
+    /// unit. It cannot fetch because a fetch per arriving message is the
+    /// client reaching a remote URL on its own, the one exclusion this
     /// milestone made deliberately.
-    /// Thrown rather than recorded as a `Refusal`: a refusal is recorded so a
-    /// plugin cannot fake a denial, and there is nothing here worth faking —
-    /// no grant opens these, so it surfaces as the plugin having thrown, which
-    /// is what it is.
+    ///
+    /// Thrown rather than recorded as a `Refusal`. A refusal is recorded so a
+    /// plugin cannot fake a denial, and no grant opens these, so it surfaces
+    /// as the plugin having thrown.
     fn closed_to_annotators(&self, ctx: &Ctx<'_>, what: &'static str) -> rquickjs::Error {
         throw(
             ctx,

@@ -122,7 +122,7 @@ export function draftOf(config: NetworkConfig): Draft {
  * password in whichever was missed.
  */
 export function needsPassword(mechanism: Draft["mechanism"]): boolean {
-  return mechanism === "PLAIN" || mechanism === "SCRAM-SHA-512";
+  return mechanism === "PLAIN" || mechanism.startsWith("SCRAM-");
 }
 
 /** Whether the password field should say "saved" instead of standing empty. */

@@ -85,6 +85,8 @@ pub enum SaslMechanism {
     /// Named rather than derived: the case convention would spell it
     /// `SCRAM-SHA512`, and the mechanism's name — the one on the wire and in
     /// the server's advertised list — has the second hyphen.
+    #[serde(rename = "SCRAM-SHA-256")]
+    ScramSha256,
     #[serde(rename = "SCRAM-SHA-512")]
     ScramSha512,
 }

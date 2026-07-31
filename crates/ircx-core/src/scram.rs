@@ -1,4 +1,5 @@
-//! SCRAM-SHA-512, the salted challenge-response exchange in RFC 5802.
+//! SCRAM, the salted challenge-response exchange in RFC 5802, over SHA-256
+//! and SHA-512.
 //!
 //! Four messages rather than one, which is the whole reason this is a module
 //! and not another arm of [`crate::sasl`]: the password never crosses the wire,
@@ -21,7 +22,13 @@
 //!   server knew the password too. Without it a machine in the middle can
 //!   accept any login it likes.
 //!
-//! No channel binding: this is `SCRAM-SHA-512`, not `-PLUS`, and the gs2 header
+//! Which hash is the mechanism's whole difference: the messages, the checks and
+//! the proof are identical, so the hash is a parameter rather than a second
+//! copy of any of this. Servers differ on which they offer — `ergo` speaks
+//! SHA-256 and Libera advertises SHA-512 — so a client that wants to
+//! authenticate anywhere needs both.
+//!
+//! No channel binding: neither is a `-PLUS` mechanism, and the gs2 header
 //! says `n` — the client does not support it. Saying so honestly is what keeps
 //! a downgrade visible, because the header is covered by the proof.
 //!
@@ -50,6 +57,41 @@ const NONCE_BYTES: usize = 18;
 /// would hang the connection task rather than fail it.
 const MIN_ITERATIONS: u32 = 4096;
 const MAX_ITERATIONS: u32 = 1_000_000;
+
+/// Which hash a mechanism is built on. Everything else about the exchange is
+/// the same.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hash {
+    Sha256,
+    Sha512,
+}
+
+impl Hash {
+    fn hmac(self) -> hmac::Algorithm {
+        match self {
+            Self::Sha256 => hmac::HMAC_SHA256,
+            Self::Sha512 => hmac::HMAC_SHA512,
+        }
+    }
+
+    fn digest(self) -> &'static digest::Algorithm {
+        match self {
+            Self::Sha256 => &digest::SHA256,
+            Self::Sha512 => &digest::SHA512,
+        }
+    }
+
+    fn pbkdf2(self) -> pbkdf2::Algorithm {
+        match self {
+            Self::Sha256 => pbkdf2::PBKDF2_HMAC_SHA256,
+            Self::Sha512 => pbkdf2::PBKDF2_HMAC_SHA512,
+        }
+    }
+
+    fn output_len(self) -> usize {
+        self.digest().output_len()
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScramError {
@@ -95,6 +137,7 @@ impl fmt::Display for ScramError {
 
 /// One exchange, from the first message to the signature that ends it.
 pub struct Scram {
+    hash: Hash,
     password: String,
     nonce: String,
     first_bare: String,
@@ -110,11 +153,12 @@ impl Scram {
     /// The nonce is a parameter rather than generated here so the exchange can
     /// be tested against a published vector; [`nonce`] is what the session
     /// calls.
-    pub fn start(account: &str, password: &str, nonce: &str) -> (Self, String) {
+    pub fn start(hash: Hash, account: &str, password: &str, nonce: &str) -> (Self, String) {
         let first_bare = format!("n={},r={nonce}", escape(account));
         let message = format!("{GS2}{first_bare}");
         (
             Self {
+                hash,
                 password: password.to_owned(),
                 nonce: nonce.to_owned(),
                 first_bare,
@@ -148,21 +192,21 @@ impl Scram {
             .filter(|_| (MIN_ITERATIONS..=MAX_ITERATIONS).contains(&count))
             .ok_or(ScramError::Iterations(count))?;
 
-        let mut salted = [0u8; digest::SHA512_OUTPUT_LEN];
+        let mut salted = vec![0u8; self.hash.output_len()];
         pbkdf2::derive(
-            pbkdf2::PBKDF2_HMAC_SHA512,
+            self.hash.pbkdf2(),
             rounds,
             &salt,
             self.password.as_bytes(),
             &mut salted,
         );
 
-        let client_key = mac(&salted, b"Client Key");
-        let stored_key = digest::digest(&digest::SHA512, client_key.as_ref());
+        let client_key = mac(self.hash, &salted, b"Client Key");
+        let stored_key = digest::digest(self.hash.digest(), client_key.as_ref());
 
         let without_proof = format!("c={GS2_B64},r={combined}");
         let auth = format!("{},{server_first},{without_proof}", self.first_bare);
-        let client_signature = mac(stored_key.as_ref(), auth.as_bytes());
+        let client_signature = mac(self.hash, stored_key.as_ref(), auth.as_bytes());
 
         let proof: Vec<u8> = client_key
             .as_ref()
@@ -171,7 +215,7 @@ impl Scram {
             .map(|(key, signature)| key ^ signature)
             .collect();
 
-        let server_key = mac(&salted, b"Server Key");
+        let server_key = mac(self.hash, &salted, b"Server Key");
         self.signed = Some((server_key.as_ref().to_vec(), auth));
 
         Ok(format!("{without_proof},p={}", STANDARD.encode(proof)))
@@ -201,7 +245,7 @@ impl Scram {
         // Constant time, and the primitive that says what this is: the server's
         // signature verified against the key only the password produces.
         hmac::verify(
-            &hmac::Key::new(hmac::HMAC_SHA512, server_key),
+            &hmac::Key::new(self.hash.hmac(), server_key),
             auth.as_bytes(),
             &signature,
         )
@@ -221,8 +265,8 @@ pub fn nonce(random: &dyn SecureRandom) -> String {
     STANDARD.encode(bytes)
 }
 
-fn mac(key: &[u8], message: &[u8]) -> hmac::Tag {
-    hmac::sign(&hmac::Key::new(hmac::HMAC_SHA512, key), message)
+fn mac(hash: Hash, key: &[u8], message: &[u8]) -> hmac::Tag {
+    hmac::sign(&hmac::Key::new(hash.hmac(), key), message)
 }
 
 /// The value of `<name>=` in a comma-separated SCRAM message.
@@ -265,12 +309,12 @@ mod tests {
                                 fDSeVGT4+5ZxXnJq199RVG2rR7N7Zw==";
 
     fn exchange() -> Scram {
-        Scram::start(ACCOUNT, PASSWORD, CNONCE).0
+        Scram::start(Hash::Sha512, ACCOUNT, PASSWORD, CNONCE).0
     }
 
     #[test]
     fn the_first_message_declares_no_channel_binding() {
-        let (_, first) = Scram::start(ACCOUNT, PASSWORD, CNONCE);
+        let (_, first) = Scram::start(Hash::Sha512, ACCOUNT, PASSWORD, CNONCE);
         assert_eq!(first, "n,,n=user,r=rOprNGfwEbeRWgbNEkqO");
     }
 
@@ -369,8 +413,45 @@ mod tests {
     /// either would otherwise end the field early and change what was signed.
     #[test]
     fn a_username_with_a_separator_in_it_is_escaped() {
-        let (_, first) = Scram::start("a,b=c", PASSWORD, CNONCE);
+        let (_, first) = Scram::start(Hash::Sha512, "a,b=c", PASSWORD, CNONCE);
         assert!(first.starts_with("n,,n=a=2Cb=3Dc,r="), "got {first}");
+    }
+
+    /// RFC 7677 section 3, printed in the document rather than computed here.
+    /// The SHA-512 vectors above had to be worked out, because no RFC publishes
+    /// them; these are the specification's own, so the exchange is checked
+    /// against the standard rather than against a second implementation of it.
+    #[test]
+    fn the_published_sha_256_vector_matches() {
+        const RFC_SERVER_FIRST: &str = "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,\
+                                        s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096";
+        const RFC_PROOF: &str = "dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=";
+        const RFC_SIGNATURE: &str = "6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=";
+
+        let (mut scram, first) = Scram::start(Hash::Sha256, ACCOUNT, PASSWORD, CNONCE);
+        assert_eq!(first, "n,,n=user,r=rOprNGfwEbeRWgbNEkqO");
+
+        let final_message = scram
+            .respond(RFC_SERVER_FIRST)
+            .expect("the reply is answered");
+        assert_eq!(final_message, format!("c=biws,r={SNONCE},p={RFC_PROOF}"));
+
+        assert_eq!(scram.verify(&format!("v={RFC_SIGNATURE}")), Ok(()));
+    }
+
+    /// The hash is the mechanism's whole difference, so the same inputs under
+    /// the other one must not verify: a client that ignored which was
+    /// negotiated would authenticate against the wrong thing.
+    #[test]
+    fn one_mechanisms_proof_is_not_the_others() {
+        let (mut sha256, _) = Scram::start(Hash::Sha256, ACCOUNT, PASSWORD, CNONCE);
+        let (mut sha512, _) = Scram::start(Hash::Sha512, ACCOUNT, PASSWORD, CNONCE);
+
+        let short = sha256.respond(SERVER_FIRST).expect("answered");
+        let long = sha512.respond(SERVER_FIRST).expect("answered");
+        assert_ne!(short, long);
+
+        assert_eq!(sha256.verify(SERVER_FINAL), Err(ScramError::BadSignature));
     }
 
     #[test]

@@ -40,6 +40,7 @@ const MECHANISMS: { value: SaslMechanism | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: "PLAIN", label: "PLAIN — account and password" },
   { value: "EXTERNAL", label: "EXTERNAL — client certificate" },
+  { value: "SCRAM-SHA-256", label: "SCRAM-SHA-256 — password, never sent" },
   { value: "SCRAM-SHA-512", label: "SCRAM-SHA-512 — password, never sent" },
 ];
 

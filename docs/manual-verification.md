@@ -151,8 +151,21 @@ author   << @time=…;msgid=m3i6rz7yv…;+reply=vcgd7gp6dgd7hp4347ajqaqk6a
 The tag reaches the other client naming the same msgid byte for byte, and the
 sender's own echo carries it back as well.
 
-**Not yet verified:** ircx driving that itself. Nothing has yet clicked reply in
-the timeline, sent a line and watched the quote appear in a second client.
+**ircx drives it correctly.** Run against local `ergo` on 2026-07-31: reply
+clicked in the timeline, line sent, read off a second client's socket.
+
+```text
+@msgid=73wr46ugs6kvnbpb3qep8xq5he;time=…;+reply=p9fsy6knntni4dt3yndbmv69b6
+  :syk!~u@… PRIVMSG #replytest :ffff
+```
+
+The `+reply` names the parent the control was clicked on, and the second client
+resolved it back to the right message. Three replies to two different parents
+all landed correctly.
+
+**Still unverified:** a reply long enough to split. `say` tags every piece and
+`session.rs` asserts that, but no live run has produced one — the longest sent
+was about 140 characters, well under the wire budget. It takes roughly 400.
 
 **On Libera it will not work**, and the client cannot tell in advance. Client
 tags there are an allowlist holding only `+typing`, and `message-tags` is

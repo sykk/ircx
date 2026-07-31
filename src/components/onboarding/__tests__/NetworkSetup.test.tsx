@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
@@ -6,12 +6,14 @@ import type { NetworkConfig } from "@/types";
 import { NetworkSetup } from "../NetworkSetup";
 
 const listNetworkConfigs = vi.fn<() => Promise<NetworkConfig[]>>();
+const removeNetwork = vi.fn<(id: string) => Promise<void>>();
 
 vi.mock("@/lib/ipc", () => ({
   ipc: {
     listNetworkConfigs: () => listNetworkConfigs(),
     saveNetwork: vi.fn(),
     connectNetwork: vi.fn(),
+    removeNetwork: (id: string) => removeNetwork(id),
   },
   onIrcxEvent: vi.fn(),
 }));
@@ -90,6 +92,43 @@ describe("NetworkSetup", () => {
     listNetworkConfigs.mockResolvedValue([]);
     open("libera");
     expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  /**
+   * #130: `ipc.removeNetwork` was called from nowhere, so a network pointed at a
+   * host that did not exist was permanent — and it kept retrying.
+   */
+  describe("removing a network", () => {
+    beforeEach(() => removeNetwork.mockResolvedValue(undefined));
+
+    it("asks before removing, because it disconnects and forgets the settings", async () => {
+      listNetworkConfigs.mockResolvedValue([LIBERA]);
+      open("libera");
+      await screen.findByDisplayValue("irc.libera.chat");
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove this network" }));
+
+      expect(screen.getByRole("button", { name: "Remove Libera.Chat" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
+    });
+
+    it("puts the sheet away once the network is gone", async () => {
+      listNetworkConfigs.mockResolvedValue([LIBERA]);
+      open("libera");
+      await screen.findByDisplayValue("irc.libera.chat");
+      fireEvent.click(screen.getByRole("button", { name: "Remove this network" }));
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Remove Libera.Chat" }));
+      });
+
+      expect(useAppStore.getState().setup).toBeNull();
+    });
+
+    it("offers nothing to remove while a network is being added", () => {
+      open(null);
+      expect(screen.queryByRole("button", { name: "Remove this network" })).toBeNull();
+    });
   });
 
   it("closes on Escape", async () => {

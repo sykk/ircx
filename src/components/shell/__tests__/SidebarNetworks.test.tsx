@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
-import { SERVER_TARGET } from "@/types";
+import { SERVER_TARGET, type Network } from "@/types";
 import { SidebarNetworks } from "../SidebarNetworks";
 import {
   activeTarget,
@@ -17,7 +17,11 @@ import {
  * mock stands in for the command; what the tests assert is what the sidebar
  * does, not that it was called. */
 vi.mock("@/lib/ipc", () => ({
-  ipc: { closeTarget: vi.fn().mockResolvedValue(undefined) },
+  ipc: {
+    closeTarget: vi.fn().mockResolvedValue(undefined),
+    connectNetwork: vi.fn().mockResolvedValue(undefined),
+    disconnectNetwork: vi.fn().mockResolvedValue(undefined),
+  },
   onIrcxEvent: vi.fn(),
 }));
 
@@ -363,5 +367,42 @@ describe("closing a conversation", () => {
 
     expect(screen.queryByRole("treeitem", { name: "sable" })).toBeNull();
     expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
+  });
+});
+
+/**
+ * #130: the only route to either was the command palette, and it offered
+ * Connect while a network was failing — which is exactly when somebody wants to
+ * stop the retry loop. The network row's menu is where they looked.
+ */
+describe("starting and stopping a network", () => {
+  function seedWith(state: Network["status"]) {
+    seedStore([makeNetwork("libera", { name: "Libera.Chat", status: state })]);
+    render(<SidebarNetworks />);
+    fireEvent.click(screen.getByRole("button", { name: "Libera.Chat actions" }));
+  }
+
+  it("offers to stop a network that is connected", () => {
+    seedWith({ state: "connected" });
+    expect(screen.getByRole("menuitem", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  /** The state this was filed for. A failing network alternates between
+   * `failed` and `reconnecting`; both mean there is a loop to stop. */
+  it("offers to stop a network that is failing rather than to start it", () => {
+    seedWith({ state: "failed", detail: { message: "connection refused" } });
+    expect(screen.getByRole("menuitem", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Connect" })).toBeNull();
+  });
+
+  it("offers to start one that is stopped", () => {
+    seedWith({ state: "disconnected" });
+    expect(screen.getByRole("menuitem", { name: "Connect" })).toBeTruthy();
+  });
+
+  it("puts the menu away once the action is taken", () => {
+    seedWith({ state: "connected" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disconnect" }));
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

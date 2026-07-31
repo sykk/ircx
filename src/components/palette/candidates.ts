@@ -200,7 +200,11 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       unread: 0,
     });
 
-    const connected = network.status.state !== "disconnected" && network.status.state !== "failed";
+    // A failed network is still retrying — `failed` and `reconnecting` alternate
+    // — so treating failed as "not connected" hid Disconnect at exactly the
+    // moment somebody wanted to stop the loop. What they want to stop is the
+    // session, and there is one until the state says otherwise.
+    const connected = network.status.state !== "disconnected";
     candidates.push({
       id: `${connected ? "disconnect" : "connect"}:${id}`,
       kind: "action",

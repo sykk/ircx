@@ -101,6 +101,18 @@ export function Onboarding({
     setBusy(false);
   }
 
+  async function remove(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await ipc.removeNetwork(id);
+      onDone();
+    } catch (reason) {
+      setError(reasonOr(reason, "The network could not be removed."));
+      setBusy(false);
+    }
+  }
+
   const submit = () => void save();
   const back = start ? onDone : () => setStep("choose");
 
@@ -138,6 +150,7 @@ export function Onboarding({
             onSubmit={submit}
             onBack={back}
             onAdvanced={() => openForm("advanced")}
+            onRemove={draft.id ? () => void remove(draft.id!) : undefined}
             busy={busy}
             error={error}
           />

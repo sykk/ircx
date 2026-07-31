@@ -158,19 +158,23 @@ impl App {
         Ok(())
     }
 
+    /// Stopping something already stopped is not an error. A network that keeps
+    /// failing alternates between `Failed` and `Reconnecting`, so a user asking
+    /// it to stop may well press at a moment when the handle has already gone —
+    /// and answering "not connected" to somebody trying to disconnect reads as
+    /// a refusal rather than as the thing they wanted.
     pub async fn disconnect(
         &self,
         network: &NetworkId,
         quit_message: Option<String>,
     ) -> Result<(), String> {
-        let handle = self
-            .guard()
-            .remove(network)
-            .ok_or_else(|| self.not_connected(network))?;
-
-        handle
-            .shutdown(Some(quit_message.unwrap_or_else(|| DEFAULT_QUIT.into())))
-            .await;
+        // Bound first: an `if let` would hold the guard across the shutdown.
+        let handle = self.guard().remove(network);
+        if let Some(handle) = handle {
+            handle
+                .shutdown(Some(quit_message.unwrap_or_else(|| DEFAULT_QUIT.into())))
+                .await;
+        }
         self.publish(IrcxEvent::ConnectionChanged {
             network: network.clone(),
             status: ConnectionStatus::Disconnected,
@@ -506,6 +510,22 @@ mod tests {
             "{error}"
         );
         app.shutdown().await;
+    }
+
+    /// #130: a network that keeps failing alternates between `Failed` and
+    /// `Reconnecting`, so somebody asking it to stop may press at a moment when
+    /// the handle has already gone. Answering "not connected" to that reads as a
+    /// refusal rather than as the thing they asked for.
+    #[tokio::test]
+    async fn disconnecting_something_already_stopped_is_not_an_error() {
+        let app = app();
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+
+        app.disconnect(&id, None).await.expect("nothing to stop");
+
+        app.connect(&id).await.unwrap();
+        app.disconnect(&id, None).await.expect("a session to stop");
+        app.disconnect(&id, None).await.expect("stopped twice");
     }
 
     #[tokio::test]

@@ -461,6 +461,40 @@ This one was worth walking because two of the three layers only matter for data
 already written: a fix tested on a fresh archive would have passed while the
 reporter's own history stayed invisible.
 
+## Uploading to a provider
+
+**Walked** on 2026-07-31 against a local file host that stores on `PUT` and
+serves back on `GET`, configured as `http://127.0.0.1:8080/{name}` with no
+credential. A screenshot dropped on the window was confirmed, uploaded, and its
+link posted to the channel; clicking `fetch` on the attachment line drew the
+image.
+
+Confirmed from the host's log rather than from the client's own report:
+
+```text
+PUT  /f774cf144201d5e3-Screenshot_20260731_103915.png  167850 bytes  type=image/png
+GET  /f774cf144201d5e3-Screenshot_20260731_103915.png  167850 bytes
+```
+
+That covers the drop event in the real window, the confirmation, the object
+name, the content type, the request, the link, the message, and the preview
+reading back what had just been written — the whole loop. Two uploads produced
+two names, and the byte counts match the stored files, so nothing was truncated
+or re-encoded on the way.
+
+Worth noting what the walk depended on: a plain-HTTP local address, which an
+upload allows and a preview fetch refuses. The asymmetry is deliberate and this
+is the case it exists for.
+
+**Not walked:**
+
+- **A provider needing a credential.** The token path — header set, token read
+  from the keyring at the moment of the upload — has unit tests and has never
+  been sent to anything.
+- **A file too large, or a provider that refuses.** Both produce sentences no
+  one has read in situ.
+- **S3-compatible**, which is not built.
+
 ## SCRAM
 
 **SCRAM-SHA-256 can be walked here; SCRAM-SHA-512 cannot.** `ergo` advertises

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
-import { applyTheme, storeThemeId } from "@/lib/theme";
+import { applyDensity, applyTheme, storeDensity, storeThemeId } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import {
@@ -41,6 +41,7 @@ function Palette() {
   const themes = useAppStore((s) => s.themes);
   const brokenThemes = useAppStore((s) => s.brokenThemes);
   const themeId = useAppStore((s) => s.themeId);
+  const density = useAppStore((s) => s.density);
 
   const candidates = useMemo(
     () =>
@@ -52,8 +53,9 @@ function Palette() {
         themes,
         brokenThemes,
         themeId,
+        density,
       }),
-    [channels, queries, networks, networkOrder, themes, brokenThemes, themeId],
+    [channels, queries, networks, networkOrder, themes, brokenThemes, themeId, density],
   );
 
   const where = useMemo<CommandContext | null>(() => {
@@ -147,6 +149,11 @@ function Palette() {
       case "theme":
         store.setThemeId(action.id);
         storeThemeId(action.id);
+        break;
+      case "density":
+        store.setDensity(action.id);
+        applyDensity(action.id);
+        storeDensity(action.id);
         break;
       case "themeProblem":
         setError(`${action.id}: ${action.problems.join(" ")}`);

@@ -1,4 +1,6 @@
-export { applyTheme, storedThemeId, storeThemeId } from "./apply";
+export { applyDensity, applyTheme, storedThemeId, storeThemeId } from "./apply";
+export { DENSITIES, DEFAULT_DENSITY, storeDensity, storedDensity } from "./density";
+export type { Density, DensityId } from "./density";
 export {
   BUILT_IN_SOURCES,
   FALLBACK_THEME_ID,

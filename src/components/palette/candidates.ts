@@ -1,5 +1,5 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
-import type { Theme } from "@/lib/theme";
+import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
 import { targetKey, type TargetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
@@ -28,6 +28,7 @@ export type CandidateAction =
   | { type: "openSetup"; network: string }
   | { type: "plugins" }
   | { type: "theme"; id: string }
+  | { type: "density"; id: DensityId }
   /** A theme that failed to load. Running it prints why, which is the only
    * place the reasons can reach the person holding the file. */
   | { type: "themeProblem"; id: string; problems: string[] };
@@ -139,7 +140,14 @@ export function commandLineCandidate(
  * the palette can memoise on exactly these and nothing else. */
 export type CandidateSources = Pick<
   AppState,
-  "channels" | "queries" | "networks" | "networkOrder" | "themes" | "brokenThemes" | "themeId"
+  | "channels"
+  | "queries"
+  | "networks"
+  | "networkOrder"
+  | "themes"
+  | "brokenThemes"
+  | "themeId"
+  | "density"
 >;
 
 /** Rebuilt when the store's channel, query, or network maps change — not per
@@ -239,6 +247,21 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       hay: prepare(`Theme: ${theme.manifest.name}`),
       key: null,
       action: { type: "theme", id: theme.id },
+      unread: 0,
+    });
+  }
+
+  for (const density of DENSITIES) {
+    const label = `Density: ${density.name}`;
+    candidates.push({
+      id: `density:${density.id}`,
+      kind: "action",
+      label,
+      detail:
+        density.id === state.density ? `${density.detail} · in use` : density.detail,
+      hay: prepare(label),
+      key: null,
+      action: { type: "density", id: density.id },
       unread: 0,
     });
   }

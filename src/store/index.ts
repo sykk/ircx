@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { FALLBACK_THEME_ID, type Catalogue } from "@/lib/theme";
+import { DEFAULT_DENSITY, FALLBACK_THEME_ID, type Catalogue, type DensityId } from "@/lib/theme";
 import {
   SERVER_TARGET,
   type ChatMessage,
@@ -97,6 +97,7 @@ export interface AppActions {
 
   setThemeCatalogue: (catalogue: Catalogue) => void;
   setThemeId: (id: string) => void;
+  setDensity: (id: DensityId) => void;
 }
 
 const initialState: AppState = {
@@ -128,6 +129,7 @@ const initialState: AppState = {
   themes: [],
   brokenThemes: [],
   themeId: FALLBACK_THEME_ID,
+  density: DEFAULT_DENSITY,
 };
 
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
@@ -347,6 +349,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
   setThemeId: (id) => set({ themeId: id }),
+  setDensity: (id) => set({ density: id }),
 }));
 
 /**

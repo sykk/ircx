@@ -19,6 +19,12 @@
  * style wins over a stylesheet, and a property declared on the element that
  * consumes it cannot be reached from `:root` at all.
  *
+ * A theme states the comfortable density and keeps it. Compact and read are
+ * the app's, in `src/lib/theme/density.ts`, and override those three
+ * properties when either is chosen — density is a setting rather than a second
+ * theme, so that changing how tightly the conversation is set does not change
+ * its palette.
+ *
  * Components must not hardcode a value a theme needs to reach. A hardcoded
  * colour, border, shadow, scrim, opacity, focus-ring or layout dimension is a
  * hole a theme cannot patch.

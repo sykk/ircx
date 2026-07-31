@@ -115,6 +115,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     themes: [],
     brokenThemes: [],
     themeId: "ircx-dark",
+    density: "comfortable",
     sidebarWidth: 240,
     rawLog: {},
     channelList: {},

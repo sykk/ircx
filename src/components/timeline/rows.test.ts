@@ -391,9 +391,13 @@ describe("buildRows and groups", () => {
     expect(rows[0]!.opensGroup).toBe(false);
   });
 
-  /** A digest of joins between two blocks is not part of what anybody said, so
-   * the rule stops at it and starts again below. */
-  it("is broken by a run of presence between two blocks", () => {
+  /**
+   * A digest of joins is not part of what anybody said, and a group is not over
+   * because somebody arrived. This used to re-open it, so a channel with
+   * ordinary comings and goings drew one group as four, each labelled again —
+   * the rows disagreeing with the model about how many groups there were.
+   */
+  it("survives a run of presence between two blocks", () => {
     const messages = [
       at(0, { id: "a", nick: "phrack" }),
       at(1_000, { id: "j", nick: "wren", kind: "join" as const }),
@@ -411,7 +415,7 @@ describe("buildRows and groups", () => {
       ),
     );
 
-    expect(rows.map((row) => row.opensGroup)).toEqual([true, true]);
+    expect(rows.map((row) => row.opensGroup)).toEqual([true, false]);
   });
 
   /** A rule across the pane says these are not one exchange. A group's line

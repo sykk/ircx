@@ -101,7 +101,6 @@ export interface AppActions {
   upsertPlugin: (plugin: InstalledPlugin) => void;
   dropPlugin: (plugin: string) => void;
   toggleNetworkCollapsed: (network: string) => void;
-  dismissGroup: (key: TargetKey, groupId: string) => void;
   setSidebarWidth: (px: number) => void;
 
   setThemeCatalogue: (catalogue: Catalogue) => void;
@@ -140,7 +139,6 @@ const initialState: AppState = {
   plugins: [],
   pluginsUnavailable: null,
   collapsedNetworks: {},
-  dismissedGroups: {},
   sidebarWidth: 240,
   themes: [],
   brokenThemes: [],
@@ -363,13 +361,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         [network]: !s.collapsedNetworks[network],
       },
     })),
-
-  dismissGroup: (key, groupId) =>
-    set((s) => {
-      const held = s.dismissedGroups[key] ?? [];
-      if (held.includes(groupId)) return {};
-      return { dismissedGroups: { ...s.dismissedGroups, [key]: [...held, groupId] } };
-    }),
 
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
 

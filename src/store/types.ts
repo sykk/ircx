@@ -129,11 +129,6 @@ export interface AppState {
    * list means no plugins; this means the question could not be answered. */
   pluginsUnavailable: string | null;
   collapsedNetworks: Record<string, boolean>;
-  /** Guessed groups the reader has waved away, by the id of the message that
-   * opened each. Only a guess can be dismissed, because only a guess is the
-   * client's own idea. Held for the session and no longer — the whole store is,
-   * and a heuristic corrected once does not earn a schema. */
-  dismissedGroups: Record<TargetKey, string[]>;
   sidebarWidth: number;
   /** Most recent first. Ranks palette results and drives Alt+Left/Right.
    * Recency is a property of the person, not of a pane. */

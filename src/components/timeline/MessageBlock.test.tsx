@@ -1,5 +1,5 @@
-import { fireEvent, render, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { nickColor } from "@/lib/nickColor";
 import { makeMessage } from "./fixtures";
 import type { Group } from "./groups";
@@ -7,10 +7,6 @@ import { MessageBlock } from "./MessageBlock";
 
 function declared(opener = "phrack"): Group {
   return { id: "a", grade: "declared", name: "parser", opener };
-}
-
-function guessed(opener = "nyx"): Group {
-  return { id: "a", grade: "guessed", name: null, opener };
 }
 
 function block(over: Partial<Parameters<typeof MessageBlock>[0]> = {}) {
@@ -26,7 +22,6 @@ function block(over: Partial<Parameters<typeof MessageBlock>[0]> = {}) {
       flashId={null}
       group={null}
       opensGroup={false}
-      onDismissGroup={() => {}}
       {...over}
     />,
   );
@@ -58,17 +53,6 @@ describe("the spine", () => {
 
     expect(spine(container).style.borderLeftColor).toBe("var(--border-strong)");
     expect(spine(container).dataset.spine).toBe("solid");
-  });
-
-  /** Stroke ranks certainty. Nothing else in the timeline is dashed, so dashed
-   * can only ever mean the client grouped this and could be wrong. */
-  it("is dashed only for a guess", () => {
-    expect(spine(block({ group: guessed(), opensGroup: true }).container).dataset.spine).toBe(
-      "dashed",
-    );
-    expect(spine(block({ group: declared(), opensGroup: true }).container).dataset.spine).toBe(
-      "solid",
-    );
   });
 
   /** A mention has nowhere else to go; a group's colour survives in the blocks
@@ -126,19 +110,6 @@ describe("what a group says in words", () => {
     });
 
     expect(container.querySelector("button")).toBeNull();
-  });
-
-  /** Only a guess can be undone, so the offer to undo is what tells the reader
-   * the client did this — no sentence explaining the heuristic. */
-  it("offers a way out of a guess, and only of a guess", () => {
-    const onDismissGroup = vi.fn();
-    const guess = block({ group: guessed(), opensGroup: true, onDismissGroup }).container;
-    const fact = block({ group: declared(), opensGroup: true }).container;
-
-    fireEvent.click(within(guess).getByText("not a group"));
-
-    expect(onDismissGroup).toHaveBeenCalledWith("a");
-    expect(within(fact).queryByText("not a group")).toBeNull();
   });
 });
 

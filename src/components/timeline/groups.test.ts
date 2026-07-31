@@ -140,62 +140,41 @@ describe("addressed", () => {
   });
 });
 
-describe("guessed", () => {
-  it("groups a burst several people took part in", () => {
+describe("a conversation nobody grouped", () => {
+  /**
+   * The guess used to take this, and taking it is why it went. Three people in
+   * one conversation have nothing to separate, so a rule down the side of it
+   * distinguishes nothing and says "not sure" about every line in the channel.
+   * A live run against #test returned twenty messages as one group.
+   */
+  it("is left alone however much of it there is", () => {
     const groups = assignGroups([
       at(7, "nyx", "is the mirror still down"),
       at(8, "jolt", "back up 20 min ago"),
       at(9, "nyx", "thanks"),
+      at(10, "kade", "morning all"),
+      at(11, "rae", "morning"),
+      at(12, "kade", "any news"),
     ]);
 
-    expect(gradeOf(groups, "m7")).toBe("guessed");
-    expect(groups.get("m9")).toBe(groups.get("m7"));
+    expect(groups.size).toBe(0);
   });
 
-  /** One person talking is an author block, which says so already. */
-  it("does not group one person talking to themselves", () => {
+  /** Naming somebody in passing is not addressing them, and the client has no
+   * business inferring that it is. */
+  it("is not grouped by people using each other's names in passing", () => {
     const groups = assignGroups([
-      at(7, "nyx", "one"),
-      at(8, "nyx", "two"),
-      at(9, "nyx", "three"),
+      at(7, "walker", "back, the parser bug is the CRLF handling"),
+      at(8, "syk", "hey walker"),
+      at(9, "syk_", "wb walker"),
     ]);
 
-    expect(gradeOf(groups, "m7")).toBe("none");
-  });
-
-  it("does not group a remark and a reply", () => {
-    const groups = assignGroups([at(7, "nyx", "morning"), at(8, "jolt", "morning")]);
-
-    expect(gradeOf(groups, "m7")).toBe("none");
-  });
-
-  it("is ended by a silence", () => {
-    const groups = assignGroups([
-      at(7, "nyx", "is the mirror still down"),
-      at(8, "jolt", "back up 20 min ago"),
-      at(30, "kade", "morning all"),
-      at(31, "rae", "morning"),
-      at(32, "kade", "any news"),
-    ]);
-
-    expect(gradeOf(groups, "m7")).toBe("none");
-    expect(gradeOf(groups, "m30")).toBe("guessed");
-  });
-
-  it("goes when the reader says it was not a group", () => {
-    const messages = [
-      at(7, "nyx", "is the mirror still down"),
-      at(8, "jolt", "back up 20 min ago"),
-      at(9, "nyx", "thanks"),
-    ];
-    const opener = assignGroups(messages).get("m7")!.id;
-
-    expect(gradeOf(assignGroups(messages, new Set([opener])), "m7")).toBe("none");
+    expect(groups.size).toBe(0);
   });
 });
 
 describe("precedence", () => {
-  /** Declared beats addressed beats guessed, and a message is in one group. */
+  /** Declared beats addressed, and a message is in one group. */
   it("leaves a declared message where its author put it", () => {
     const groups = assignGroups([
       at(2, "phrack", "[parser] tags fail on multiline values"),
@@ -211,7 +190,7 @@ describe("precedence", () => {
     expect(groups.get("m3")).toBe(groups.get("m2"));
   });
 
-  it("does not let a guess take a message an address already claimed", () => {
+  it("leaves an unrelated line out of the exchange beside it", () => {
     const groups = assignGroups([
       at(4, "kade", "standup in 10"),
       at(5, "rae", "kade: can't make it"),
@@ -219,7 +198,7 @@ describe("precedence", () => {
     ]);
 
     expect(gradeOf(groups, "m5")).toBe("addressed");
-    expect(groups.get("m5")).toBe(groups.get("m4"));
+    expect(gradeOf(groups, "m6")).toBe("none");
   });
 });
 

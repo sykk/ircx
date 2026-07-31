@@ -68,15 +68,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   const { messages, unreadFrom } = timeline;
 
-  const key = targetKey(network, target);
-  const dismissedGroups = useAppStore((s) => s.dismissedGroups[key]);
-  const dismissGroup = useAppStore((s) => s.dismissGroup);
-  const dismissed = useMemo(() => new Set(dismissedGroups ?? []), [dismissedGroups]);
-  const groups = useMemo(() => assignGroups(messages, dismissed), [messages, dismissed]);
-  const onDismissGroup = useCallback(
-    (groupId: string) => dismissGroup(key, groupId),
-    [dismissGroup, key],
-  );
+  const groups = useMemo(() => assignGroups(messages), [messages]);
 
   const rows = useMemo(
     () => buildRows(messages, unreadFrom, ownNick, groups),
@@ -250,7 +242,6 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                   onReact: react,
                   onReply: reply,
                   flashId,
-                  onDismissGroup,
                 })}
               </div>
             ))}
@@ -291,7 +282,6 @@ interface RowContext {
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
   flashId: string | null;
-  onDismissGroup: (groupId: string) => void;
 }
 
 function renderRow(row: TimelineRow, context: RowContext) {

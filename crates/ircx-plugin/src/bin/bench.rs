@@ -138,6 +138,7 @@ fn author(root: &Path) -> PathBuf {
         version: "1.0.0".into(),
         description: "One command, one answer".into(),
         entry: "main.js".into(),
+        annotates: false,
         commands: vec![CommandSpec {
             name: "echo".into(),
             summary: "say it back".into(),

@@ -12,7 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ircx_plugin::{CommandRequest, CommandSpec, Fetched, Fetcher, Grants, Manifest, Permission};
+use ircx_plugin::{
+    AnnotateRequest, ArrivedMessage, CommandRequest, CommandSpec, Fetched, Fetcher, Grants,
+    Manifest, Permission,
+};
 
 pub const TARGET: &str = "#ircx";
 
@@ -25,6 +28,7 @@ pub fn author(root: &Path, id: &str, source: &str, requests: Grants) -> PathBuf 
         version: "1.0.0".into(),
         description: String::new(),
         entry: "main.js".into(),
+        annotates: requests.holds(Permission::AnnotateMessages),
         commands: match requests.holds(Permission::AddCommands) {
             true => vec![CommandSpec {
                 name: id.to_owned(),
@@ -86,6 +90,23 @@ impl Requests {
                 body: body.clone(),
             })
         })
+    }
+}
+
+/// A batch of one, which is what most of these tests want to say something
+/// about.
+pub fn arrivals(messages: &[(&str, &str, &str)]) -> AnnotateRequest {
+    AnnotateRequest {
+        target: TARGET.into(),
+        messages: messages
+            .iter()
+            .map(|(id, nick, text)| ArrivedMessage {
+                id: (*id).to_owned(),
+                nick: (*nick).to_owned(),
+                text: (*text).to_owned(),
+                time: "2026-07-31T00:00:00.000Z".into(),
+            })
+            .collect(),
     }
 }
 

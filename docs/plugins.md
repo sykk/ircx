@@ -3,7 +3,8 @@
 A plugin is JavaScript with a manifest. It runs in its own QuickJS runtime on
 its own thread and reaches the client only through the functions its grants
 allow. `docs/plugin-isolation.md` is why QuickJS: a subprocess enforces two of
-the seven permissions the spec names, and this enforces all seven.
+the seven permissions the spec names, and this enforces all seven, plus the
+eighth the annotator adds.
 
 The one extension point built is the **custom slash command**. Message
 renderers, link and attachment providers, notification rules and protocol
@@ -158,7 +159,7 @@ constraints on future work, not things already banked.
   did not write and returns a different one. The text beside a nick is what that
   person sent.
 
-  This is a decision rather than an accident, and it is what the seven
+  This is a decision rather than an accident, and it is what the
   permissions are worth. A plugin that can rewrite a message can make someone
   appear to have said anything, and no sandbox helps: the isolation is sound and
   the lie is in what it was legitimately allowed to return. `render-content`
@@ -189,13 +190,17 @@ constraints on future work, not things already banked.
   QuickJS. `a_plugin_looping_inside_the_regex_engine_is_also_terminated` exists
   to catch a version bump regressing it.
 
-## The annotator, before it is built
+## The annotator
 
-The second extension point, designed here and not built. An annotator is handed
-a message that arrived and answers with its own text, drawn beside that message
-and named with the plugin's id. It is the command shape under a different
-trigger: the host hands a value over, the plugin returns one, the host applies a
-deadline.
+The second extension point. An annotator is handed a message that arrived and
+answers with its own text, drawn beside that message and named with the plugin's
+id. It is the command shape under a different trigger: the host hands a value
+over, the plugin returns one, the host applies a deadline.
+
+**The sandbox half is built**: the permission, the manifest flag, the batch call,
+what the handler cannot reach, and the sanitising. Nothing calls it yet — no
+message reaches an annotator and nothing draws a note. What that still needs is
+in *What is not built*.
 
 ```json
 {
@@ -295,8 +300,7 @@ leave the install dialogue's sentence describing something smaller than what the
 user agreed to.
 
 It is also the eighth. The spec's list is "such as", so an eighth is not a
-departure from it, but this document counts seven twice and both sentences change
-when the annotator lands.
+departure from it.
 
 A notification rule reads on arrival and shows nothing — it answers whether a
 message should reach the user. Same trigger, different consent, so it owns a
@@ -318,8 +322,11 @@ the report and the rest are silence.
 
 ## What is not built
 
-- **The annotator.** Designed above, including the permission it adds and the
-  reason it cannot send or fetch. None of it is written.
+- **Anything that calls an annotator.** `Sandbox::annotate` works and nothing
+  invokes it: messages are not handed over on arrival, notes are not stored
+  beside the message, nothing is drawn, and an annotator that throws on every
+  batch is not yet dropped for the session. The permission is grantable and
+  buys nothing until then.
 - **The other three extension points.** Providers, notification rules and
   protocol adapters.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The

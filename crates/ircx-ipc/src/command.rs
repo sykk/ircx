@@ -137,7 +137,7 @@ pub struct AppSnapshot {
     pub queries: Vec<Query>,
 }
 
-/// The seven permissions a plugin can ask for. Spelled as the manifest spells
+/// The permissions a plugin can ask for. Spelled as the manifest spells
 /// them, so a name here and a name in a `plugin.json` are the same string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -150,6 +150,7 @@ pub enum PluginPermission {
     AccessChannels,
     NetworkRequests,
     RenderContent,
+    AnnotateMessages,
 }
 
 /// A permission and the plain terms the install dialogue shows for it. Sent

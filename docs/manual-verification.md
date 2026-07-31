@@ -467,10 +467,29 @@ event and the count — every layer but the drawing, which is not built.
 Not walked in the application, and the list is short because there is little to
 look at yet:
 
-- **A raised conversation read by a person.** The badge goes loud, the run
-  takes the accent and the message says `raised by deploys`. Whether that is
-  enough to explain a channel that went loud without their name in it is the
-  thing only a person can answer.
+**It runs in the assembled application**, walked by the owner on 2026-07-31
+against local `ergo`. `examples/plugins/deploys` was installed through the
+folder picker and granted, a second client spoke as `buildbot`, and of its two
+lines the one saying a deploy failed was marked and the one saying a build
+started was not. The badge went loud and the run took the accent.
+
+The walk found one defect, and it was the mark rather than the mechanism:
+`raised by deploys` was faint text under the message and read as trailing
+debris — "not visible enough". A mention was never carried by one thing: it
+tints the row, marks the word with an `--accent-muted` chip *and* says why above
+the run. A raise had one of the three, in grey. It now tints the raised row and
+leads it with the same chip, and only the raised row — the line beside it from
+the same sender stays plain.
+
+Worth keeping in mind for the next mark: this is the second time a quiet mark
+had to be made louder after a person looked at it, the first being the link
+arrow in #172. A mark that is obvious to whoever built it is not evidence.
+
+Still not walked:
+
+- **A broken rule being dropped.** Three consecutive failed batches, the first
+  reported and the rest silent — the same gap the annotator has, and now with a
+  second hook keyed separately.
 - **A broken rule being dropped.** Three consecutive failed batches, the first
   reported and the rest silent — the same gap the annotator has, and now with a
   second hook keyed separately.

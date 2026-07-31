@@ -41,6 +41,9 @@ export function MessageRow({
   flashing,
 }: MessageRowProps) {
   const highlight = isHighlight(message, ownNick);
+  // A rule raised this line to the same loudness a mention has, so it is marked
+  // the same way: the row tinted, and the reason said in the words for it.
+  const raised = (message.raisedBy ?? []).length > 0;
   const failed = message.delivery.state === "failed";
   // A reaction and a reply both travel as a `+reply` naming a msgid. Until the
   // server has given this message one there is nothing to name it by, so it can
@@ -57,7 +60,7 @@ export function MessageRow({
         paddingBlock: "var(--timeline-row-pad-y)",
         background: flashing
           ? "var(--surface-active)"
-          : highlight
+          : highlight || raised
             ? "var(--mention-bg)"
             : undefined,
         // The rule marking a mention is the block's spine, which the block
@@ -84,6 +87,8 @@ export function MessageRow({
         }}
       >
         <div>
+          {raised && <RaisedLine by={message.raisedBy ?? []} />}
+
           {/* Prose gets the text face; code and identifiers keep monospace. */}
           <div
             className="selectable font-[family-name:var(--font-ui)]"
@@ -105,8 +110,6 @@ export function MessageRow({
                 : (emoji, active) => onReact(msgid, emoji, active)
             }
           />
-
-          {(message.raisedBy ?? []).length > 0 && <RaisedLine by={message.raisedBy ?? []} />}
 
           {(message.annotations ?? []).map((note) => (
             <AnnotationLine key={note.plugin} note={note} />
@@ -200,12 +203,13 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
  */
 function RaisedLine({ by }: { by: string[] }) {
   return (
-    <div
-      className="mt-0.5 flex items-baseline gap-1.5 font-[family-name:var(--font-ui)] text-[11px]"
-      style={{ color: "var(--text-faint)" }}
-    >
-      <span className="shrink-0">raised by</span>
-      <span className="min-w-0 font-[family-name:var(--font-mono)]">{by.join(", ")}</span>
+    <div className="mb-0.5 font-[family-name:var(--font-ui)] text-[11px]">
+      <span
+        className="rounded-[var(--radius-sm)] px-1 font-semibold"
+        style={{ background: "var(--accent-muted)", color: "var(--text-primary)" }}
+      >
+        raised by <span className="font-[family-name:var(--font-mono)]">{by.join(", ")}</span>
+      </span>
     </div>
   );
 }

@@ -13,6 +13,12 @@ import { writesOwnNick } from "./rows";
 
 interface MessageRowProps {
   message: ChatMessage;
+  /** True when the message above this one in the block already quoted the same
+   * parent. A reply too long for the wire is split into several messages, each
+   * tagged with `+reply` because each has to stand on its own for everybody
+   * else; drawing the quote again under it only splits one paragraph in two.
+   * #138. */
+  quotedAbove: boolean;
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
@@ -29,6 +35,7 @@ const TEXT_INDENT = "calc(var(--nick-col) + var(--timeline-text-gap))";
 
 export function MessageRow({
   message,
+  quotedAbove,
   ownNick,
   parentOf,
   onJump,
@@ -63,7 +70,7 @@ export function MessageRow({
         opacity: message.delivery.state === "pending" ? 0.55 : undefined,
       }}
     >
-      {message.replyTo && (
+      {message.replyTo && !quotedAbove && (
         <div style={{ marginLeft: TEXT_INDENT, maxWidth: "var(--timeline-measure)" }}>
           <ReplyQuote
             msgid={message.replyTo}

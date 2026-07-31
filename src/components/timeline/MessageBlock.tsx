@@ -63,6 +63,25 @@ interface Props {
   flashId: string | null;
 }
 
+/**
+ * Whether the message above this one already quoted the same parent, and so
+ * said what this one is answering.
+ *
+ * A block is a minute rather than a run of one person's lines, so the sender
+ * has to match too: two people answering the same message each need their own
+ * quote, or the second reads as a continuation of the first.
+ */
+function repeatsQuote(messages: ChatMessage[], at: number): boolean {
+  const above = messages[at - 1];
+  const message = messages[at]!;
+  return (
+    above !== undefined &&
+    message.replyTo !== null &&
+    message.replyTo === above.replyTo &&
+    message.sender.nick === above.sender.nick
+  );
+}
+
 /** One minute of the conversation, however many people spoke during it. */
 export function MessageBlock({
   messages,
@@ -76,10 +95,11 @@ export function MessageBlock({
 }: Props) {
   return (
     <Block at={messages[0]!.timestamp} spine nickCh={nickColumnCh(messages)}>
-      {messages.map((message) => (
+      {messages.map((message, at) => (
         <MessageRow
           key={message.id}
           message={message}
+          quotedAbove={repeatsQuote(messages, at)}
           ownNick={ownNick}
           parentOf={parentOf}
           onJump={onJump}

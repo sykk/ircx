@@ -6,7 +6,12 @@ import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
-import { makeAttachment, makeConversation, makeMessage } from "./fixtures";
+import {
+  makeAttachment,
+  makeConversation,
+  makeMessage,
+  type MessageOverrides,
+} from "./fixtures";
 import { formatClock } from "./rows";
 
 const { ipcMock } = vi.hoisted(() => ({
@@ -842,5 +847,67 @@ describe("staging a reply", () => {
 
     expect(screen.getByRole("button", { name: "Reply to this message" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add a reaction" })).toBeTruthy();
+  });
+});
+
+/**
+ * #138: a reply too long for the wire is split into several messages, each
+ * tagged with `+reply` because each has to stand on its own for everybody else.
+ * Drawing the quote under every one of them splits a paragraph in two.
+ */
+describe("drawing a reply quote", () => {
+  function reply(id: string, over: MessageOverrides = {}) {
+    return makeMessage({
+      id,
+      nick: "syk",
+      text: `piece ${id}`,
+      replyTo: "parent-1",
+      ...over,
+    });
+  }
+
+  function quotes() {
+    return screen.queryAllByText("the flag is in the env");
+  }
+
+  function seedWithParent(replies: ChatMessage[]) {
+    seed([
+      makeMessage({ id: "parent-1", nick: "phrack", text: "the flag is in the env" }),
+      ...replies,
+    ]);
+  }
+
+  it("says once what a split reply answered", () => {
+    seedWithParent([reply("a"), reply("b")]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    // The parent's own line, and one quote of it.
+    expect(quotes()).toHaveLength(2);
+    expect(screen.getByText("piece a")).toBeTruthy();
+    expect(screen.getByText("piece b")).toBeTruthy();
+  });
+
+  it("says it again when the parent changes between them", () => {
+    seedWithParent([reply("a"), reply("b", { replyTo: "parent-other" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(quotes()).toHaveLength(2);
+    expect(screen.getByText("in reply to parent-other")).toBeTruthy();
+  });
+
+  /** A block is a minute, not a run of one person's lines. Two people
+   * answering the same message each need their own quote. */
+  it("says it again for a different person answering the same message", () => {
+    seedWithParent([reply("a"), reply("b", { nick: "nyx" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(quotes()).toHaveLength(3);
+  });
+
+  it("leaves a message that answers nothing alone", () => {
+    seedWithParent([reply("a"), reply("b", { replyTo: null })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(quotes()).toHaveLength(2);
   });
 });

@@ -42,8 +42,6 @@ export const ipc = {
 
   joinChannel: (network: string, channel: string, key?: string) =>
     invoke<void>("join_channel", { network, channel, key: key ?? null }),
-  partChannel: (network: string, channel: string, reason?: string) =>
-    invoke<void>("part_channel", { network, channel, reason: reason ?? null }),
   openQuery: (network: string, nick: string) =>
     invoke<Query>("open_query", { network, nick }),
   closeTarget: (network: string, target: string) =>
@@ -61,7 +59,6 @@ export const ipc = {
       target,
       input: `${active ? "/react" : "/unreact"} ${message} ${emoji}`,
     }),
-  sendRaw: (network: string, line: string) => invoke<void>("send_raw", { network, line }),
 
   listMembers: (network: string, channel: string) =>
     invoke<Member[]>("list_members", { network, channel }),

@@ -1,5 +1,6 @@
 import { ipc, onIrcxEvent } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import { targetKey } from "@/store/keys";
 import type { IrcxEvent } from "@/types";
 
 /**
@@ -12,6 +13,7 @@ import type { IrcxEvent } from "@/types";
 export async function startBridge(): Promise<() => void> {
   const held: IrcxEvent[] = [];
   let loaded = false;
+  const stopFollowingFocus = followFocus();
 
   const unlisten = await onIrcxEvent((events) => {
     if (loaded) useAppStore.getState().applyEvents(events);
@@ -26,7 +28,38 @@ export async function startBridge(): Promise<() => void> {
     held.length = 0;
   }
 
-  return unlisten;
+  return () => {
+    stopFollowingFocus();
+    unlisten();
+  };
+}
+
+/**
+ * Tells the backend a conversation has been read when the pane showing it takes
+ * focus.
+ *
+ * `mark_read` is the only thing that resets a conversation's unread count, and
+ * until #133 nothing called it — so a badge in the sidebar only ever grew. The
+ * timeline's unread rule is separate and always did clear on a switch, which is
+ * why the number beside the channel could stay wrong without anybody noticing.
+ *
+ * Focus rather than merely being on screen: a channel sitting in the other half
+ * of a split is not one the user is reading.
+ */
+function followFocus(): () => void {
+  let last: string | null = null;
+
+  return useAppStore.subscribe((state) => {
+    const view = state.activeViewId ? state.views[state.activeViewId] : undefined;
+    if (!view || !view.network || view.target === "") return;
+
+    const at = targetKey(view.network, view.target);
+    if (at === last) return;
+    last = at;
+    // `mark_read` is `tell_if_connected`, so a conversation with no session
+    // costs nothing and cannot fail in a way the user sees.
+    void ipc.markRead(view.network, view.target).catch(() => {});
+  });
 }
 
 /** The snapshot is the same state the events describe, so it goes in as

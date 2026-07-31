@@ -19,6 +19,7 @@ mod message;
 mod numeric;
 pub mod plugins;
 mod sasl;
+mod scram;
 mod session;
 mod task;
 mod text;

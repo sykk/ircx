@@ -2,12 +2,15 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use ircx_ipc::SaslMechanism;
 
-const CHUNK: usize = 400;
+/// Longest `AUTHENTICATE` argument. A shorter one ends the payload, which is
+/// what the incoming side reads too.
+pub const CHUNK: usize = 400;
 
 pub fn mechanism_token(mechanism: SaslMechanism) -> &'static str {
     match mechanism {
         SaslMechanism::Plain => "PLAIN",
         SaslMechanism::External => "EXTERNAL",
+        SaslMechanism::ScramSha512 => "SCRAM-SHA-512",
     }
 }
 

@@ -79,6 +79,14 @@ pub struct SaslConfig {
 pub enum SaslMechanism {
     Plain,
     External,
+    /// The password is never sent: each side proves it knows it, over four
+    /// messages rather than one. `crates/ircx-core/src/scram.rs`.
+    ///
+    /// Named rather than derived: the case convention would spell it
+    /// `SCRAM-SHA512`, and the mechanism's name — the one on the wire and in
+    /// the server's advertised list — has the second hyphen.
+    #[serde(rename = "SCRAM-SHA-512")]
+    ScramSha512,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

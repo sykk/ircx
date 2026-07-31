@@ -16,7 +16,10 @@ use crate::caps::Caps;
 use crate::isupport::ISupport;
 use crate::numeric::{self, *};
 use crate::sasl;
+use crate::scram;
 use crate::text;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 
 /// The network's own tab: connection notes, MOTD, WHOIS output, anything the
 /// server said that was not about a channel.
@@ -164,6 +167,11 @@ pub struct SessionState {
     pub(crate) registered: bool,
     status: ConnectionStatus,
     sasl: SaslStatus,
+    /// The SCRAM exchange in flight, and whatever of a challenge has arrived so
+    /// far. Only SCRAM needs either: the other mechanisms answer in one
+    /// message and have nothing to remember.
+    scram: Option<scram::Scram>,
+    challenge: String,
     cap_ended: bool,
     nick_attempt: usize,
     pending: Vec<PendingSend>,
@@ -197,6 +205,8 @@ impl SessionState {
             registered: false,
             status: ConnectionStatus::Disconnected,
             sasl,
+            scram: None,
+            challenge: String::new(),
             cap_ended: false,
             nick_attempt: 0,
             pending: Vec::new(),
@@ -546,22 +556,93 @@ impl SessionState {
     }
 
     fn handle_authenticate(&mut self, message: &Message) {
-        if message.param(0) != Some("+") {
-            return;
-        }
         let Some(credentials) = self.config.sasl.clone() else {
             return;
         };
-        let payload = match credentials.mechanism {
-            SaslMechanism::Plain => sasl::plain_payload(
+        let Some(param) = message.param(0) else {
+            return;
+        };
+
+        // PLAIN and EXTERNAL answer the empty challenge and are done. SCRAM is
+        // four messages, so everything after the first is data it has to read.
+        if credentials.mechanism != SaslMechanism::ScramSha512 {
+            if param != "+" {
+                return;
+            }
+            let payload = match credentials.mechanism {
+                SaslMechanism::Plain => sasl::plain_payload(
+                    &credentials.account,
+                    credentials.password.as_deref().unwrap_or_default(),
+                ),
+                _ => String::new(),
+            };
+            return self.send_payload(&payload);
+        }
+
+        if param == "+" && self.scram.is_none() {
+            let (exchange, first) = scram::Scram::start(
                 &credentials.account,
                 credentials.password.as_deref().unwrap_or_default(),
-            ),
-            SaslMechanism::External => String::new(),
+                &scram::nonce(&ring::rand::SystemRandom::new()),
+            );
+            self.scram = Some(exchange);
+            return self.send_payload(&STANDARD.encode(first));
+        }
+
+        // A challenge longer than one line arrives in 400-byte pieces, and a
+        // short piece is what ends it — the same rule the outgoing side keeps.
+        // Nothing a real server sends here is that long, but a challenge read
+        // half-way is a signature that fails for the wrong reason.
+        if param != "+" {
+            self.challenge.push_str(param);
+            if param.len() == sasl::CHUNK {
+                return;
+            }
+        }
+        let challenge = std::mem::take(&mut self.challenge);
+        let Ok(decoded) = STANDARD.decode(&challenge) else {
+            return self.abort_scram("the server's SCRAM reply was not base64");
         };
-        for chunk in sasl::chunks(&payload) {
+        let Ok(decoded) = String::from_utf8(decoded) else {
+            return self.abort_scram("the server's SCRAM reply was not text");
+        };
+
+        let Some(exchange) = self.scram.as_mut() else {
+            return;
+        };
+        if exchange.expecting_signature() {
+            match exchange.verify(&decoded) {
+                // The server proved it knew the password too. The empty
+                // response is what tells it we are done, and 903 follows.
+                Ok(()) => self.send_payload(""),
+                Err(why) => self.abort_scram(&why.to_string()),
+            }
+            return;
+        }
+        match exchange.respond(&decoded) {
+            Ok(reply) => self.send_payload(&STANDARD.encode(reply)),
+            Err(why) => self.abort_scram(&why.to_string()),
+        }
+    }
+
+    fn send_payload(&mut self, payload: &str) {
+        for chunk in sasl::chunks(payload) {
             self.send_command("AUTHENTICATE", &[&chunk]);
         }
+    }
+
+    /// A SCRAM exchange that cannot be finished stops the connection, as a
+    /// rejected password does: carrying on would leave the user unauthenticated
+    /// while the client acted as though they were signed in.
+    ///
+    /// `AUTHENTICATE *` first, which is how a client abandons an exchange —
+    /// without it the server is left waiting on a response that is never coming.
+    fn abort_scram(&mut self, why: &str) {
+        self.scram = None;
+        self.challenge.clear();
+        self.send_command("AUTHENTICATE", &["*"]);
+        let message = self.sasl_refused(why);
+        self.abort_sasl(message);
     }
 
     /// A failure the user can fix by editing the network, so it stops the

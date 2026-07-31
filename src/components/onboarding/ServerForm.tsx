@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from "react";
 import type { SaslMechanism } from "@/types";
-import { draftProblems, hasStoredPassword, PLAIN_PORT, TLS_PORT, type Draft } from "./config";
+import {
+  draftProblems,
+  hasStoredPassword,
+  needsPassword,
+  PLAIN_PORT,
+  TLS_PORT,
+  type Draft,
+} from "./config";
 import {
   CheckField,
   Group,
@@ -33,6 +40,7 @@ const MECHANISMS: { value: SaslMechanism | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: "PLAIN", label: "PLAIN — account and password" },
   { value: "EXTERNAL", label: "EXTERNAL — client certificate" },
+  { value: "SCRAM-SHA-512", label: "SCRAM-SHA-512 — password, never sent" },
 ];
 
 export function ServerForm({
@@ -178,7 +186,7 @@ export function ServerForm({
                 hint="Defaults to your nickname."
               />
             )}
-            {draft.mechanism === "PLAIN" &&
+            {needsPassword(draft.mechanism) &&
               (hasStoredPassword(draft) ? (
                 <StoredPassword onReplace={() => onChange({ password: "" })} />
               ) : (

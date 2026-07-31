@@ -449,6 +449,20 @@ Still not walked:
   the report reaches anywhere a person looks — the strike counting is unit
   tested, the reporting is a `warn!` nobody has read in situ.
 
+## SCRAM-SHA-512
+
+**Not walked against a real account.** The exchange has unit tests against
+vectors computed independently in Python, and a session test that answers all
+four messages the way a server does, including a forged signature and a
+replayed nonce. What none of that covers is a real server: `ergo` supports the
+mechanism and Libera does not, so the walk is `ergo` with a registered account,
+and the questions are whether the iteration count a real server names is inside
+the range this client will run and whether the account reads back on `900`.
+
+This is the same gap `sasl.rs` already had — `docs/manual-verification.md` has
+listed SASL against a real account as unwalked since the beginning — and this
+adds a second mechanism to it rather than closing it.
+
 ## The notification rule
 
 **The session half is verified.** `crates/ircx-core/tests/ergo.rs` drives the

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { needsPassword } from "../config";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
@@ -137,5 +138,49 @@ describe("NetworkSetup", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(useAppStore.getState().setup).toBeNull();
+  });
+});
+
+/**
+ * SCRAM-SHA-512 authenticates with a password the same way PLAIN does — the
+ * difference is that it never sends it. Three separate places used to ask
+ * "is this PLAIN?" to mean "does this need a password", so a mechanism added
+ * to the list and missed in one of them would have lost the password silently.
+ */
+describe("a mechanism that needs a password", () => {
+  it("is offered", async () => {
+    open("libera");
+    const picker = (await screen.findByLabelText("SASL mechanism")) as HTMLSelectElement;
+
+    expect([...picker.options].map((option) => option.value)).toContain("SCRAM-SHA-512");
+  });
+
+  /** The drift this removed: switching to SCRAM used to drop the saved
+   * password, because only PLAIN was asked about. */
+  it("keeps the saved password when the mechanism changes to it", async () => {
+    open("libera");
+    await screen.findByRole("heading", { name: "Network settings" });
+    fireEvent.change(screen.getByLabelText("SASL mechanism"), {
+      target: { value: "SCRAM-SHA-512" },
+    });
+
+    expect(screen.getByText("Saved in your system keyring")).toBeTruthy();
+  });
+
+  it("drops it for a mechanism that has no password", async () => {
+    open("libera");
+    await screen.findByRole("heading", { name: "Network settings" });
+    fireEvent.change(screen.getByLabelText("SASL mechanism"), {
+      target: { value: "EXTERNAL" },
+    });
+
+    expect(screen.queryByText("Saved in your system keyring")).toBeNull();
+  });
+
+  it("is asked about in one place, so the answers cannot disagree", () => {
+    expect(needsPassword("SCRAM-SHA-512")).toBe(true);
+    expect(needsPassword("PLAIN")).toBe(true);
+    expect(needsPassword("EXTERNAL")).toBe(false);
+    expect(needsPassword("none")).toBe(false);
   });
 });

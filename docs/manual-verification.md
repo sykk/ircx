@@ -171,6 +171,17 @@ as two messages naming the same parent:
 @msgid=e6but6s3…;+reply=9w5f72rc8dhgggvphsf9mqkdz6 … :the final period at the end of this long …
 ```
 
+**Its quote is drawn once, and only where it should be.** #138: each piece
+carries `+reply`, so the timeline drew the quote under every one of them and
+split a paragraph in two. Verified on ergo on 2026-07-31, all three cases
+visible in one screen:
+
+  - a split reply quotes its parent above the first piece and not the second
+  - a different person answering the same parent, in the same minute, keeps
+    their own quote — a block is a minute rather than a run of one person's
+    lines, which is why the rule checks the sender as well
+  - a reply to a different parent quotes again
+
 Producing one takes more text than it looks. The budget is not a fixed number
 to aim at: `wire_budget` derives it from the nick, ident, host and target,
 because those are what the server prepends to the copy everyone else receives.

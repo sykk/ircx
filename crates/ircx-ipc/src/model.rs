@@ -41,6 +41,13 @@ pub struct ChatMessage {
     /// the client or the server said, which is almost everything — a plugin's
     /// answer is the only text in a conversation that came from neither.
     pub via: Option<String>,
+    /// What plugins said *about* this message, which is not what `via` says:
+    /// `via` is a message a plugin wrote, these are notes beside one somebody
+    /// else wrote. Defaulted for the reason `reactions` is — nothing archived
+    /// before annotators existed has the field.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<Annotation>>", optional)]
+    pub annotations: Vec<Annotation>,
 }
 
 /// One `+draft/react` value and everyone who sent it. The readability studies
@@ -55,6 +62,18 @@ pub struct Reaction {
     pub emoji: String,
     /// Oldest first, cased as each reactor's nick was at the time.
     pub nicks: Vec<String>,
+}
+
+/// One plugin's note about one message. Named with the plugin that said it,
+/// because a reader has to be able to tell somebody else's code from the
+/// person — the same reason a plugin's own message carries `via`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Annotation {
+    /// The plugin's id.
+    pub plugin: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

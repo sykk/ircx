@@ -137,6 +137,7 @@ impl Store {
             page.push(message::from_row(row)?);
         }
         message::attach_reactions(&conn, &mut page)?;
+        message::attach_annotations(&conn, &mut page)?;
         page.reverse();
         Ok(page)
     }
@@ -157,6 +158,19 @@ impl Store {
         active: bool,
     ) -> Result<(), StoreError> {
         message::set_reaction(&self.conn(), network, msgid, nick, emoji, active)
+    }
+
+    /// Records what a plugin said about a message, replacing what that plugin
+    /// said before. `msgid` need not be a message the archive holds — the row
+    /// waits for one, exactly as a reaction's does.
+    pub fn set_annotation(
+        &self,
+        network: &str,
+        msgid: &str,
+        plugin: &str,
+        text: &str,
+    ) -> Result<(), StoreError> {
+        message::set_annotation(&self.conn(), network, msgid, plugin, text)
     }
 
     /// `req.query` is text a person typed, not an FTS5 expression: it is

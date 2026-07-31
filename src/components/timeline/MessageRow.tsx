@@ -1,6 +1,5 @@
 import { useState } from "react";
-import type { ChatMessage } from "@/types";
-import type { Annotation } from "@/store/types";
+import type { Annotation, ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
@@ -20,9 +19,6 @@ interface MessageRowProps {
    * else; drawing the quote again under it only splits one paragraph in two.
    * #138. */
   quotedAbove: boolean;
-  /** What plugins said about this message. Drawn under it and named, because a
-   * reader has to be able to tell somebody else's code from the person. */
-  annotations: readonly Annotation[];
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
@@ -40,7 +36,6 @@ const TEXT_INDENT = "calc(var(--nick-col) + var(--timeline-text-gap))";
 export function MessageRow({
   message,
   quotedAbove,
-  annotations,
   ownNick,
   parentOf,
   onJump,
@@ -124,7 +119,7 @@ export function MessageRow({
             onReply={msgid === null ? null : () => onReply(msgid)}
           />
 
-          {annotations.map((note) => (
+          {(message.annotations ?? []).map((note) => (
             <AnnotationLine key={note.plugin} note={note} />
           ))}
 

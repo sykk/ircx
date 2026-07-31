@@ -33,6 +33,7 @@ export type { PluginGrants } from "./generated/PluginGrants";
 export type { PluginPermission } from "./generated/PluginPermission";
 export type { PluginPermissionInfo } from "./generated/PluginPermissionInfo";
 export type { Query } from "./generated/Query";
+export type { Annotation } from "./generated/Annotation";
 export type { Reaction } from "./generated/Reaction";
 export type { SaslConfig } from "./generated/SaslConfig";
 export type { SaslMechanism } from "./generated/SaslMechanism";

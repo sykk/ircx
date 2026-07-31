@@ -108,7 +108,6 @@ const initialState: AppState = {
   members: {},
   timelines: {},
   typing: {},
-  annotations: {},
   replyTo: {},
   rawLog: {},
   channelList: {},
@@ -503,25 +502,28 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
     }
 
     /** #90. The note arrives after the message it is about, because the
-     * annotator runs on arrival rather than on draw — so the message is
-     * already here, and a note for one that is not is kept anyway: it is
-     * drawn if the message scrolls back in. */
+     * annotator runs on arrival rather than on draw. A note naming a message
+     * outside this window is dropped here and not lost: the archive holds it
+     * and hands it back with the message, exactly as a reaction is. */
     case "messageAnnotated": {
       const key = targetKey(event.network, event.target);
-      const held = s.annotations[key] ?? {};
-      const forMessage = held[event.message] ?? [];
-      // One note per plugin per message. A plugin that answers the same
-      // message twice replaces what it said rather than saying it twice.
-      const next = [
-        ...forMessage.filter((note) => note.plugin !== event.plugin),
-        { plugin: event.plugin, text: event.text },
-      ];
-      return {
-        annotations: {
-          ...s.annotations,
-          [key]: { ...held, [event.message]: next },
-        },
+      const timeline = s.timelines[key];
+      if (!timeline) return {};
+      const at = timeline.messages.findIndex((m) => m.id === event.message);
+      if (at === -1) return {};
+
+      const held = timeline.messages[at]!;
+      const messages = timeline.messages.slice();
+      // One note per plugin per message: a plugin answering the same message
+      // twice replaces what it said rather than saying it twice.
+      messages[at] = {
+        ...held,
+        annotations: [
+          ...(held.annotations ?? []).filter((note) => note.plugin !== event.plugin),
+          { plugin: event.plugin, text: event.text },
+        ],
       };
+      return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
     }
 
     case "reactionChanged": {

@@ -74,12 +74,6 @@ export interface TimelineState {
  * View  — where one pane is looking. Keyed by view id, never global.
  * Chrome — application furniture. Global because there is one of each.
  */
-/** One plugin's note about one message. */
-export interface Annotation {
-  plugin: string;
-  text: string;
-}
-
 export interface AppState {
   // World.
   networks: Record<string, Network>;
@@ -91,10 +85,6 @@ export interface AppState {
   timelines: Record<TargetKey, TimelineState>;
   /** nick -> epoch ms when the indicator expires. */
   typing: Record<TargetKey, Record<string, number>>;
-  /** What plugins have said about a message, keyed by the message's own id and
-   * held beside the timeline rather than on the message: `ChatMessage` is the
-   * IPC contract, and a note is not something anybody sent. */
-  annotations: Record<TargetKey, Record<string, Annotation[]>>;
   /** The server msgid the next message in a conversation answers. Held here
    * rather than in the composer because it is chosen in the timeline, which is
    * a different tree, and shared by every pane on the same conversation. */

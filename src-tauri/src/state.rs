@@ -447,6 +447,7 @@ mod tests {
             version: "1.0.0".into(),
             description: String::new(),
             entry: "main.js".into(),
+            annotates: false,
             commands: vec![CommandSpec {
                 name: id.into(),
                 summary: format!("what {id} does"),

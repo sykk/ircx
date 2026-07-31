@@ -20,7 +20,9 @@ use rquickjs::{CatchResultExt, Context, Ctx, Function, Runtime};
 use crate::data::LocalData;
 use crate::manifest::{Grants, Permission};
 use crate::net::{FetchRequest, Fetcher};
-use crate::{CommandReply, CommandRequest, Failure, Limits, Outgoing};
+use crate::{
+    AnnotateReply, AnnotateRequest, CommandReply, CommandRequest, Failure, Limits, Note, Outgoing,
+};
 
 /// Deep enough for the recursion a plugin has any business doing, shallow
 /// enough that QuickJS unwinds rather than the host thread overflowing.
@@ -33,18 +35,28 @@ const MAX_OUTPUT_LINES: usize = 40;
 /// Messages one command may send. A slash command is one user action, and a
 /// plugin turning it into a flood is the failure mode the spec names.
 const MAX_SENDS: usize = 8;
+/// A note sits beside one line, so a command's forty-line ceiling is the wrong
+/// shape for it.
+const MAX_NOTE_CHARS: usize = 200;
 
 /// The bootstrap. Everything the plugin sees is built here on top of the
 /// functions the host installed, so the ergonomic surface is JavaScript and
 /// the enforced surface is Rust.
 const BOOTSTRAP: &str = r#"
 globalThis.__ircx_commands = Object.create(null);
+globalThis.__ircx_annotator = null;
 globalThis.ircx = {
   command(name, handler) {
     if (typeof handler !== "function") {
       throw new TypeError("ircx.command needs a function");
     }
     __ircx_commands[String(name).toLowerCase()] = handler;
+  },
+  annotate(handler) {
+    if (typeof handler !== "function") {
+      throw new TypeError("ircx.annotate needs a function");
+    }
+    __ircx_annotator = handler;
   },
   send(target, text) {
     __ircx_send(String(target), String(text));
@@ -84,6 +96,25 @@ globalThis.__ircx_dispatch = function (name, json) {
     throw new TypeError("a command must answer with text now, not with a " + kind);
   }
   return String(answer);
+};
+globalThis.__ircx_annotate = function (json) {
+  if (!__ircx_annotator) {
+    throw new Error("this plugin declared annotates and registered no handler");
+  }
+  const batch = JSON.parse(json);
+  const notes = [];
+  for (const message of batch.messages) {
+    const answer = __ircx_annotator(message);
+    if (answer === undefined || answer === null) continue;
+    const kind = typeof answer;
+    // Synchronous for the reason a command is: a promise would be answered by
+    // the job queue rather than by anything the deadline can interrupt.
+    if (kind !== "string" && kind !== "number" && kind !== "boolean") {
+      throw new TypeError("an annotation must be text now, not a " + kind);
+    }
+    notes.push({ message: message.id, text: String(answer) });
+  }
+  return JSON.stringify(notes);
 };
 "#;
 
@@ -132,6 +163,9 @@ enum Refusal {
 /// is all the sharing that is needed.
 struct Host {
     grants: Grants,
+    /// Set for the length of an annotate call. `send` and `fetch` read it
+    /// before they read the grants, because no grant opens them here.
+    annotating: Cell<bool>,
     outbox: RefCell<Vec<Outgoing>>,
     refusal: Cell<Option<Refusal>>,
     data: RefCell<LocalData>,
@@ -145,6 +179,22 @@ impl Host {
         // Thrown rather than returned, so a plugin can catch it and degrade
         // instead of dying — the same shape as a missing IRCv3 capability.
         throw(ctx, &format!("ircx: {} was not granted", permission.name()))
+    }
+
+    /// Why an annotator cannot send: the bound that makes a plugin's sends
+    /// safe is the keystroke, and a send caused by an arrival has no such
+    /// unit. Why it cannot fetch: a fetch per arriving message is the client
+    /// reaching a remote URL on its own, which is the one exclusion this
+    /// milestone made deliberately.
+    /// Thrown rather than recorded as a `Refusal`: a refusal is recorded so a
+    /// plugin cannot fake a denial, and there is nothing here worth faking —
+    /// no grant opens these, so it surfaces as the plugin having thrown, which
+    /// is what it is.
+    fn closed_to_annotators(&self, ctx: &Ctx<'_>, what: &'static str) -> rquickjs::Error {
+        throw(
+            ctx,
+            &format!("ircx: {what} is not available while annotating a message"),
+        )
     }
 
     fn refuse(&self, ctx: &Ctx<'_>, refusal: Refusal, message: &str) -> rquickjs::Error {
@@ -198,6 +248,7 @@ impl Sandbox {
         let context = Context::full(&runtime).map_err(|error| Failure::Host(error.to_string()))?;
         let host = Rc::new(Host {
             grants: grants.clone(),
+            annotating: Cell::new(false),
             outbox: RefCell::new(Vec::new()),
             refusal: Cell::new(None),
             data: RefCell::new(LocalData::open(data_file)),
@@ -233,6 +284,9 @@ impl Sandbox {
                     Function::new(
                         ctx.clone(),
                         move |ctx: Ctx<'_>, target: String, text: String| -> rquickjs::Result<()> {
+                            if send.annotating.get() {
+                                return Err(send.closed_to_annotators(&ctx, "ircx.send"));
+                            }
                             if !send.grants.holds(Permission::SendMessages) {
                                 return Err(send.deny(&ctx, Permission::SendMessages));
                             }
@@ -324,6 +378,9 @@ impl Sandbox {
                     Function::new(
                         ctx.clone(),
                         move |ctx: Ctx<'_>, url: String| -> rquickjs::Result<String> {
+                            if fetch.annotating.get() {
+                                return Err(fetch.closed_to_annotators(&ctx, "ircx.fetch"));
+                            }
                             if !fetch.grants.holds(Permission::NetworkRequests) {
                                 return Err(fetch.deny(&ctx, Permission::NetworkRequests));
                             }
@@ -390,6 +447,71 @@ impl Sandbox {
                 Err(failure)
             }
         }
+    }
+
+    /// One batch through the plugin's annotate handler.
+    ///
+    /// Unlike a command this needs no `render-content`: the note is the whole
+    /// point of the call rather than an optional answer to it, and
+    /// `annotate-messages` already says the plugin shows something.
+    pub fn annotate(&mut self, request: &AnnotateRequest) -> Result<AnnotateReply, Failure> {
+        if let Some(dead) = &self.poisoned {
+            return Err(dead.clone());
+        }
+        if !self.host.grants.holds(Permission::AnnotateMessages) {
+            return Err(Failure::Denied(Permission::AnnotateMessages));
+        }
+        if !self.host.grants.reaches(&request.target) {
+            return Err(Failure::Denied(Permission::AccessChannels));
+        }
+        self.host.refusal.set(None);
+
+        let argument =
+            serde_json::to_string(request).map_err(|error| Failure::Host(error.to_string()))?;
+
+        self.host.annotating.set(true);
+        let answer = self.under_deadline(move |ctx| {
+            let dispatch: Function = ctx.globals().get("__ircx_annotate")?;
+            dispatch.call::<_, String>((argument,))
+        });
+        self.host.annotating.set(false);
+        // An annotator that reached for `ircx.send` also cleared the outbox
+        // check by throwing, but a handler that caught the refusal and carried
+        // on would leave whatever a command before it queued.
+        self.host.outbox.borrow_mut().clear();
+
+        match answer {
+            Ok(json) => {
+                let raw: Vec<Note> = serde_json::from_str(&json)
+                    .map_err(|error| Failure::Host(error.to_string()))?;
+                Ok(AnnotateReply {
+                    notes: raw.into_iter().filter_map(|note| self.note(note)).collect(),
+                })
+            }
+            Err(failure) => {
+                if matches!(failure, Failure::Timeout | Failure::OutOfMemory) {
+                    self.poisoned = Some(failure.clone());
+                }
+                Err(failure)
+            }
+        }
+    }
+
+    /// One note, made safe to draw. Newlines go with the other control
+    /// characters: this sits beside a line rather than under it.
+    fn note(&self, note: Note) -> Option<Note> {
+        let mut text: String = note
+            .text
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(MAX_NOTE_CHARS)
+            .collect();
+        text.truncate(text.trim_end().len());
+        let text = text.trim_start().to_string();
+        (!text.is_empty() && !note.message.is_empty()).then_some(Note {
+            message: note.message,
+            text,
+        })
     }
 
     /// Whatever the plugin returned, made safe to put in the timeline. The

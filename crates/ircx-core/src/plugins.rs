@@ -201,10 +201,11 @@ fn listed(grants: &Grants) -> PluginGrants {
     }
 }
 
-/// The seven permissions are spelled once in `ircx-plugin`, which enforces
-/// them, and once in `ircx-ipc`, which carries them to the window; neither may
-/// depend on the other. Both matches are exhaustive, so an eighth permission
-/// stops the build here until it has been named on both sides.
+/// The permissions are spelled once in `ircx-plugin`, which enforces them, and
+/// once in `ircx-ipc`, which carries them to the window; neither may depend on
+/// the other. Both matches are exhaustive, so a new permission stops the build
+/// here until it has been named on both sides — which is how `annotate-messages`
+/// arrived.
 fn sent(permission: Permission) -> PluginPermission {
     match permission {
         Permission::ReadMessages => PluginPermission::ReadMessages,
@@ -214,6 +215,7 @@ fn sent(permission: Permission) -> PluginPermission {
         Permission::AccessChannels => PluginPermission::AccessChannels,
         Permission::NetworkRequests => PluginPermission::NetworkRequests,
         Permission::RenderContent => PluginPermission::RenderContent,
+        Permission::AnnotateMessages => PluginPermission::AnnotateMessages,
     }
 }
 
@@ -226,6 +228,7 @@ fn enforced(permission: PluginPermission) -> Permission {
         PluginPermission::AccessChannels => Permission::AccessChannels,
         PluginPermission::NetworkRequests => Permission::NetworkRequests,
         PluginPermission::RenderContent => Permission::RenderContent,
+        PluginPermission::AnnotateMessages => Permission::AnnotateMessages,
     }
 }
 

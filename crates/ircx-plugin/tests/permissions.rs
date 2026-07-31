@@ -1,4 +1,5 @@
-//! The seven permissions `ircclient.md` names, one section each.
+//! The permissions `ircclient.md` names, one section each, and the eighth
+//! that `docs/plugins.md` adds for the annotator.
 //!
 //! A permission is only real if the mechanism can refuse the capability when
 //! the grant is withheld, so every one of these grants it, withholds it, and
@@ -13,7 +14,7 @@ use ircx_plugin::{
 };
 
 mod common;
-use common::{author, call, grants, in_channels, on_hosts, Requests, TARGET};
+use common::{arrivals, author, call, grants, in_channels, on_hosts, Requests, TARGET};
 
 fn load(directory: &Path, source: &str, grants: &Grants) -> Sandbox {
     with_host(directory, source, grants, net::refuses())
@@ -438,4 +439,238 @@ fn a_plugin_finds_no_network_or_filesystem_global() {
         globals.iter().any(|name| name == "ircx"),
         "the host surface is there"
     );
+}
+
+/// The eighth permission, and the second extension point. `docs/plugins.md`
+/// designs it; these are the refusals that make the design real.
+mod annotating {
+    use super::*;
+
+    const UNITS: &str = r#"
+        ircx.annotate((message) => {
+          const found = /(-?\d+)F\b/.exec(message.text);
+          if (!found) return;
+          return String(Math.round((Number(found[1]) - 32) * 5 / 9)) + " C";
+        });
+    "#;
+
+    fn annotates() -> Grants {
+        in_channels(grants(&[Permission::AnnotateMessages]), &[TARGET])
+    }
+
+    #[test]
+    fn a_note_names_the_message_it_is_about() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), UNITS, &annotates());
+
+        let reply = plugin
+            .annotate(&arrivals(&[
+                ("m1", "sable", "it is 72F outside"),
+                ("m2", "nyx", "nothing numeric here"),
+            ]))
+            .expect("the batch is annotated");
+
+        assert_eq!(reply.notes.len(), 1, "the second message was passed over");
+        assert_eq!(reply.notes[0].message, "m1");
+        assert_eq!(reply.notes[0].text, "22 C");
+    }
+
+    #[test]
+    fn without_the_grant_it_is_refused() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            UNITS,
+            &in_channels(Grants::default(), &[TARGET]),
+        );
+
+        assert_eq!(
+            plugin.annotate(&arrivals(&[("m1", "sable", "it is 72F outside")])),
+            Err(Failure::Denied(Permission::AnnotateMessages))
+        );
+    }
+
+    /// Scoped by `access-channels`, the way sending and reading are. A grant
+    /// that names one channel does not reach another.
+    #[test]
+    fn it_reaches_only_the_channels_the_grant_names() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), UNITS, &annotates());
+
+        let mut elsewhere = arrivals(&[("m1", "sable", "it is 72F outside")]);
+        elsewhere.target = "#somewhere-else".into();
+
+        assert_eq!(
+            plugin.annotate(&elsewhere),
+            Err(Failure::Denied(Permission::AccessChannels))
+        );
+    }
+
+    /// The bound that makes a plugin's sends safe is the keystroke: `MAX_SENDS`
+    /// is eight a command because a command is one thing a person asked for. A
+    /// send caused by an arrival has no such unit, so the door is shut rather
+    /// than counted.
+    #[test]
+    fn it_cannot_send_however_it_is_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let everything = in_channels(
+            grants(&[
+                Permission::AnnotateMessages,
+                Permission::SendMessages,
+                Permission::AddCommands,
+                Permission::RenderContent,
+            ]),
+            &[TARGET],
+        );
+        let mut plugin = load(
+            root.path(),
+            r##"ircx.annotate(() => { ircx.send("#ircx", "hello"); return "sent"; });"##,
+            &everything,
+        );
+
+        let failure = plugin
+            .annotate(&arrivals(&[("m1", "sable", "anything")]))
+            .expect_err("sending from an annotator is refused");
+        assert!(
+            matches!(&failure, Failure::Raised(why) if why.contains("ircx.send")),
+            "expected the refusal to name what it refused, got {failure:?}"
+        );
+    }
+
+    /// A fetch per arriving message is the client reaching a remote URL on its
+    /// own, which is the one exclusion this milestone made deliberately.
+    #[test]
+    fn it_cannot_fetch_however_it_is_granted() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let everything = on_hosts(
+            in_channels(grants(&[Permission::AnnotateMessages]), &[TARGET]),
+            &["example.com"],
+        );
+        let requests = Requests::default();
+        let mut plugin = with_host(
+            root.path(),
+            r#"ircx.annotate(() => ircx.fetch("https://example.com/x"));"#,
+            &everything,
+            requests.fetcher("{}"),
+        );
+
+        let failure = plugin
+            .annotate(&arrivals(&[("m1", "sable", "anything")]))
+            .expect_err("fetching from an annotator is refused");
+        assert!(
+            matches!(&failure, Failure::Raised(why) if why.contains("ircx.fetch")),
+            "expected the refusal to name what it refused, got {failure:?}"
+        );
+        assert!(
+            requests.seen().is_empty(),
+            "the refusal happens before anything reaches the network"
+        );
+    }
+
+    /// The one host function an annotator keeps, and the only way it remembers
+    /// anything between messages.
+    #[test]
+    fn it_can_still_store_data() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.annotate((message) => {
+                const seen = ircx.store.get("seen") || 0;
+                ircx.store.set("seen", String(Number(seen) + 1));
+                return "seen " + ircx.store.get("seen");
+              });
+            "#,
+            &in_channels(
+                grants(&[Permission::AnnotateMessages, Permission::StoreLocalData]),
+                &[TARGET],
+            ),
+        );
+
+        let reply = plugin
+            .annotate(&arrivals(&[("m1", "sable", "one"), ("m2", "nyx", "two")]))
+            .expect("the batch is annotated");
+        assert_eq!(
+            reply
+                .notes
+                .iter()
+                .map(|n| n.text.as_str())
+                .collect::<Vec<_>>(),
+            ["seen 1", "seen 2"]
+        );
+    }
+
+    /// The handler is handed the message and answers with its own text. Nothing
+    /// in the surface takes a message and returns a different one, which is the
+    /// standing constraint holding as a type rather than as a convention.
+    #[test]
+    fn a_note_cannot_replace_what_somebody_said() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"
+              ircx.annotate((message) => {
+                message.text = "something else entirely";
+                message.nick = "somebody else";
+                return "note";
+              });
+            "#,
+            &annotates(),
+        );
+
+        let batch = arrivals(&[("m1", "sable", "what was actually said")]);
+        let reply = plugin.annotate(&batch).expect("the batch is annotated");
+
+        assert_eq!(reply.notes[0].text, "note");
+        assert_eq!(
+            batch.messages[0].text, "what was actually said",
+            "the handler was handed a copy across the boundary, not the message"
+        );
+    }
+
+    #[test]
+    fn a_note_is_stripped_of_control_characters_and_cut_to_length() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"ircx.annotate(() => "a\nbc" + "x".repeat(400));"#,
+            &annotates(),
+        );
+
+        let reply = plugin
+            .annotate(&arrivals(&[("m1", "sable", "anything")]))
+            .expect("the batch is annotated");
+        let note = &reply.notes[0].text;
+        assert!(note.starts_with("abc"), "control characters go: {note:?}");
+        assert_eq!(note.chars().count(), 200);
+    }
+
+    /// Hooks are synchronous, for the reason a command's are: a promise would
+    /// be answered by the job queue rather than by anything the deadline can
+    /// interrupt.
+    #[test]
+    fn a_promise_is_refused_rather_than_drawn() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(
+            root.path(),
+            r#"ircx.annotate(async () => "later");"#,
+            &annotates(),
+        );
+
+        let failure = plugin
+            .annotate(&arrivals(&[("m1", "sable", "anything")]))
+            .expect_err("a promise is not an annotation");
+        assert!(matches!(failure, Failure::Raised(_)), "got {failure:?}");
+    }
+
+    #[test]
+    fn declaring_it_and_registering_nothing_is_the_plugins_fault_not_a_silent_pass() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let mut plugin = load(root.path(), "ircx.command('x', () => 'y');", &annotates());
+
+        assert!(matches!(
+            plugin.annotate(&arrivals(&[("m1", "sable", "anything")])),
+            Err(Failure::Raised(_))
+        ));
+    }
 }

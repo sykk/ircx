@@ -253,3 +253,48 @@ fn removing_a_plugin_takes_its_commands_with_it() {
     assert!(runtime.installed().is_empty());
     assert!(!root.path().join("plugins/echo").exists());
 }
+
+/// `annotates` is what lets the host skip a conversation without starting a
+/// runtime to find out there is nothing to run, so it has to agree with the
+/// permission — a plugin that declares one and not the other is asking the host
+/// to guess.
+#[test]
+fn a_manifest_that_annotates_without_asking_to_is_refused() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let mut library = Library::open(root.path().join("plugins")).expect("open");
+
+    let source = root.path().join("annotator-source");
+    fs::create_dir_all(&source).expect("write a plugin");
+    fs::write(
+        source.join("plugin.json"),
+        r##"{"id":"noter","name":"n","version":"1","entry":"main.js","annotates":true,
+            "permissions":["access-channels"],"channels":["#ircx"]}"##,
+    )
+    .expect("write the manifest");
+    fs::write(source.join("main.js"), ECHO).expect("write the code");
+
+    assert!(matches!(
+        library.install(&source),
+        Err(LibraryError::Rejected(_))
+    ));
+}
+
+/// Scoped by `access-channels` the way sending and reading are: granted without
+/// it, an annotator reaches no conversation at all, so it is refused at install
+/// rather than allowed and inert.
+#[test]
+fn an_annotator_without_channels_is_refused() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let mut library = Library::open(root.path().join("plugins")).expect("open");
+
+    let source = author(
+        root.path(),
+        "noter",
+        ECHO,
+        grants(&[Permission::AnnotateMessages]),
+    );
+    assert!(matches!(
+        library.install(&source),
+        Err(LibraryError::Rejected(_))
+    ));
+}

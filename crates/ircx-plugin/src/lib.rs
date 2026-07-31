@@ -5,7 +5,8 @@
 //! its grants allow — there is no filesystem, no socket and no clock beyond
 //! what `sandbox.rs` installs. `docs/plugin-isolation.md` is why QuickJS and
 //! not a subprocess or wasm: a subprocess enforces two of the seven
-//! permissions the spec names, and this enforces all seven.
+//! permissions the spec names, and this enforces all seven, plus the eighth
+//! the annotator adds.
 //!
 //! The one extension point built here is the custom slash command. Message
 //! renderers, link and attachment providers, notification rules and protocol
@@ -73,6 +74,44 @@ pub struct CommandRequest {
     /// does not read them otherwise, and the sandbox drops them if it did.
     #[serde(default)]
     pub messages: Vec<ContextMessage>,
+}
+
+/// A batch of messages that arrived in one conversation, handed to every
+/// annotator that reaches it. One call per batch rather than per message: a
+/// netsplit rejoin or a history backfill is hundreds of them, and calling once
+/// each would multiply the call count by the channel's traffic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnotateRequest {
+    pub target: String,
+    pub messages: Vec<ArrivedMessage>,
+}
+
+/// Carries the id the note will be filed under, which `ContextMessage` has no
+/// reason to: a command's history is read, not answered.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArrivedMessage {
+    /// The message's id, as the host knows it. A note names one of these.
+    pub id: String,
+    pub nick: String,
+    pub text: String,
+    /// RFC 3339 UTC, as the archive holds it.
+    pub time: String,
+}
+
+/// What one annotator said about one batch. A message the plugin passed over
+/// is absent rather than present and empty.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AnnotateReply {
+    pub notes: Vec<Note>,
+}
+
+/// Sanitised by the host, for the reason a command's `content` is: no
+/// isolation mechanism makes returned text safe to display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Note {
+    /// The `ArrivedMessage::id` this is about.
+    pub message: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +189,9 @@ fn denied(permission: Permission) -> &'static str {
         Permission::AccessChannels => "act in this conversation",
         Permission::NetworkRequests => "fetch something from the internet",
         Permission::RenderContent => "show text in this conversation",
+        Permission::AnnotateMessages => {
+            "read messages as they arrive and note something beside them"
+        }
     }
 }
 

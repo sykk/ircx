@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { isHighlight } from "@/store/selectors";
 import { MessageRow } from "./MessageRow";
 import { formatClock, writesOwnNick } from "./rows";
 
@@ -8,6 +9,8 @@ const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 
 
 interface BlockProps {
   spine: boolean;
+  /** What the spine is drawn in. The default marks a run of speech and no more. */
+  spineTint?: string | undefined;
   children: ReactNode;
 }
 
@@ -20,7 +23,7 @@ interface BlockProps {
  * before the first word and printed only when the minute changed, so most rows
  * paid for it and left it empty. It is in the block header now.
  */
-export function Block({ spine, children }: BlockProps) {
+export function Block({ spine, spineTint = "var(--border-strong)", children }: BlockProps) {
   return (
     <div
       className="grid"
@@ -31,9 +34,7 @@ export function Block({ spine, children }: BlockProps) {
         paddingTop: "var(--timeline-block-gap)",
       }}
     >
-      {spine && (
-        <div style={{ gridColumn: 1, background: "var(--border-strong)" }} aria-hidden="true" />
-      )}
+      {spine && <div style={{ gridColumn: 1, background: spineTint }} aria-hidden="true" />}
       <div style={{ gridColumn: 3 }}>{children}</div>
     </div>
   );
@@ -94,9 +95,21 @@ export function MessageBlock({
   flashId,
 }: Props) {
   const head = messages[0]!;
+  const addressed = messages.some((message) => isHighlight(message, ownNick));
 
   return (
-    <Block spine>
+    <Block spine spineTint={addressed ? "var(--accent)" : undefined}>
+      {/* Why the run is marked, in the words for it. A tint on its own leaves
+          the reader to work out what the client noticed, and the answer — your
+          name is in here — is the one thing they cannot get from the colour.
+          Certain rather than inferred: it is their own nick, matched by the
+          same pattern that decided to highlight the row at all. */}
+      {addressed && (
+        <div className="text-[11px]" style={{ color: "var(--text-faint)" }}>
+          <span style={{ color: nickColor(head.sender.nick) }}>{head.sender.nick}</span> addressed
+          you by name
+        </div>
+      )}
       {/* An action or a notice writes its own nick into the body, so a header
           would say the name the first line is about to say again. */}
       {!writesOwnNick(head.kind) && (

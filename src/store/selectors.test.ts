@@ -7,6 +7,7 @@ import {
   useNetworks,
   useQueriesFor,
   mentions,
+  splitOnMention,
 } from "./selectors";
 import type { ChatView } from "./types";
 import type { Channel, Network } from "@/types";
@@ -317,5 +318,45 @@ describe("mentions", () => {
   it("ignores case and an empty nick", () => {
     expect(mentions("SABLE: hi", "sable")).toBe(true);
     expect(mentions("anything", "")).toBe(false);
+  });
+});
+
+describe("splitOnMention", () => {
+  const marked = (runs: { text: string; mine: boolean }[]) =>
+    runs.filter((run) => run.mine).map((run) => run.text);
+
+  it("picks the nick out and leaves the rest of the line whole", () => {
+    expect(splitOnMention("hey sable, look", "sable")).toEqual([
+      { text: "hey ", mine: false },
+      { text: "sable", mine: true },
+      { text: ", look", mine: false },
+    ]);
+  });
+
+  /** The trailing boundary is a lookahead for this: consumed, it became the
+   * leading boundary the second occurrence needed and only the first matched. */
+  it("finds every occurrence, including two in a row", () => {
+    expect(marked(splitOnMention("sable sable", "sable"))).toEqual(["sable", "sable"]);
+  });
+
+  it("keeps the casing the sender typed rather than the reader's own", () => {
+    expect(marked(splitOnMention("SABLE: hi", "sable"))).toEqual(["SABLE"]);
+  });
+
+  it("marks nothing when the nick is absent, a substring, or unknown", () => {
+    expect(marked(splitOnMention("sableton is here", "sable"))).toEqual([]);
+    expect(marked(splitOnMention("nothing here", "sable"))).toEqual([]);
+    expect(marked(splitOnMention("hey sable", null))).toEqual([]);
+  });
+
+  // Drawn and decided by one pattern. A row tinted with nothing picked out in
+  // it, or a word picked out in a row that was never tinted, is the drift this
+  // rules out.
+  it("agrees with mentions about what counts as one", () => {
+    for (const text of ["sable: ping", "hey sable", "sableton is here", "unsable", "hi [dev]"]) {
+      for (const nick of ["sable", "[dev]"]) {
+        expect(marked(splitOnMention(text, nick)).length > 0).toBe(mentions(text, nick));
+      }
+    }
   });
 });

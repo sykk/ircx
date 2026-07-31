@@ -125,13 +125,53 @@ export function selectQueriesFor(s: AppState, network: string): Query[] {
 }
 
 
+/** A character no nick can contain. `\w` and RFC 2812's `[]\^{}|-` are what one
+ * can, so the boundary class is everything outside that set. */
+const BOUNDARY = "[^\\w\\[\\]\\\\^{}|-]";
+
+/**
+ * The trailing boundary is a lookahead rather than a match: consumed, it became
+ * the leading boundary the next occurrence needed, so `syk syk` found one
+ * mention instead of two. Nothing about which texts match changes.
+ */
+function mentionPattern(nick: string, flags: string): RegExp {
+  const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|${BOUNDARY})(${escaped})(?=${BOUNDARY}|$)`, flags);
+}
+
 /** Whether `text` mentions `nick` on a word boundary: `sable` matches, `sableton` does not. */
 export function mentions(text: string, nick: string): boolean {
   if (!nick) return false;
-  const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^\\w\\[\\]\\\\^{}|-])${escaped}([^\\w\\[\\]\\\\^{}|-]|$)`, "i").test(
-    text,
-  );
+  return mentionPattern(nick, "i").test(text);
+}
+
+export interface TextRun {
+  text: string;
+  /** True for the reader's own nick, which is drawn as the mention it is. */
+  mine: boolean;
+}
+
+/**
+ * `text` split into runs, marking the ones that are the reader's own nick.
+ *
+ * Shares its pattern with `mentions`, so what a message is highlighted for and
+ * what gets marked inside it cannot come apart — a row tinted with nothing
+ * picked out in it would leave the reader hunting for the word.
+ */
+export function splitOnMention(text: string, nick: string | null): TextRun[] {
+  if (!nick) return [{ text, mine: false }];
+
+  const runs: TextRun[] = [];
+  let at = 0;
+  for (const match of text.matchAll(mentionPattern(nick, "gi"))) {
+    const start = match.index + match[1]!.length;
+    const end = start + match[2]!.length;
+    if (start > at) runs.push({ text: text.slice(at, start), mine: false });
+    runs.push({ text: text.slice(start, end), mine: true });
+    at = end;
+  }
+  if (at < text.length) runs.push({ text: text.slice(at), mine: false });
+  return runs;
 }
 
 export function isHighlight(message: ChatMessage, ownNick: string | null): boolean {

@@ -6,7 +6,7 @@ import { nickColor } from "@/lib/nickColor";
 import { serverMsgid } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
-import { Markdown } from "./Markdown";
+import { Markdown, Mentioned } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
 
@@ -60,7 +60,9 @@ export function MessageRow({
           : highlight
             ? "var(--mention-bg)"
             : undefined,
-        boxShadow: highlight ? "inset 2px 0 0 var(--accent)" : undefined,
+        // The rule marking a mention is the block's spine, which the block
+        // tints. A second one inset here sat a column away from it and said the
+        // same thing twice.
         opacity: message.delivery.state === "pending" ? 0.55 : undefined,
       }}
     >
@@ -87,7 +89,7 @@ export function MessageRow({
             className="selectable font-[family-name:var(--font-ui)]"
             style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
-            <Body message={message} />
+            <Body message={message} mention={highlight ? ownNick : null} />
           </div>
 
           {message.attachments.map((attachment) => (
@@ -139,7 +141,10 @@ function urlsOf(message: ChatMessage): string[] {
   return message.attachments.map((attachment) => attachment.url);
 }
 
-function Body({ message }: { message: ChatMessage }) {
+/** `mention` is the reader's nick only where this message is one; a line the
+ * reader sent that happens to contain their own name is not addressed to
+ * them, and isHighlight already says so. */
+function Body({ message, mention }: { message: ChatMessage; mention: string | null }) {
   if (message.kind === "action") {
     return (
       <span>
@@ -149,7 +154,7 @@ function Body({ message }: { message: ChatMessage }) {
         >
           * {message.sender.nick}{" "}
         </span>
-        {stripIrcFormatting(message.text)}
+        <Mentioned text={stripIrcFormatting(message.text)} mention={mention} />
       </span>
     );
   }
@@ -163,12 +168,12 @@ function Body({ message }: { message: ChatMessage }) {
         >
           -{message.sender.nick}-{" "}
         </span>
-        <Markdown text={message.text} urls={urlsOf(message)} />
+        <Markdown text={message.text} urls={urlsOf(message)} mention={mention} />
       </span>
     );
   }
 
-  return <Markdown text={message.text} urls={urlsOf(message)} />;
+  return <Markdown text={message.text} urls={urlsOf(message)} mention={mention} />;
 }
 
 /**

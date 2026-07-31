@@ -8,7 +8,7 @@ import { targetKey, useMembers, useReplyTarget, useView } from "@/store/selector
 import { plainText } from "@/components/timeline/Markdown";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
-import { matchCommands } from "./commands";
+import { matchCommands, runConnectionCommand } from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
 
 const MAX_HEIGHT_PX = 180;
@@ -125,6 +125,16 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     completionRef.current = null;
     stopTyping();
     void ipc.setDraft(network, target, "");
+
+    // A command about the connection is performed here rather than sent: there
+    // may be no session to send it to, which is the whole of why /connect
+    // exists.
+    try {
+      if (await runConnectionCommand(text, network)) return;
+    } catch (reason) {
+      setError(String(reason));
+      return;
+    }
 
     const outcome = await ipc.submitInput(network, target, text, replying?.msgid);
     // Core hands the local copy of a sent line back to the caller instead of

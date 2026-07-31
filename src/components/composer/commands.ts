@@ -1,3 +1,5 @@
+import { ipc } from "@/lib/ipc";
+
 /**
  * The commands ircx knows, in one place.
  *
@@ -11,6 +13,17 @@
  */
 export interface SlashCommand {
   name: string;
+  /**
+   * Where the command runs.
+   *
+   * Almost everything is `session`: it is typed at a conversation, reaches
+   * `dispatch.rs`, and usually leaves as a line. `connection` is the other
+   * kind — it acts on the connection rather than travelling over it, so the
+   * window performs it and nothing is sent. `/connect` could not be a session
+   * command even in principle: after a disconnect the session is gone, and
+   * there is nothing left to type at.
+   */
+  runs?: "session" | "connection";
   /** `<>` is required and `[]` is optional. The palette reads the angle
    * brackets to tell a command still short of an argument from one ready to
    * run, so the convention is load-bearing rather than decorative. */
@@ -38,12 +51,42 @@ export const COMMANDS: SlashCommand[] = [
   { name: "quit", args: "[reason]", summary: "Disconnect from the network" },
   { name: "raw", args: "<line>", summary: "Send a protocol line unchanged" },
   { name: "close", args: "[target]", summary: "Close this conversation and forget it" },
+  {
+    name: "connect",
+    args: "",
+    summary: "Connect this network",
+    runs: "connection",
+  },
+  {
+    name: "disconnect",
+    args: "[reason]",
+    summary: "Disconnect this network, leaving its conversations open",
+    runs: "connection",
+  },
   { name: "help", args: "", summary: "List the commands ircx knows" },
 ];
 
 /** What the composer prints above the box. */
 export function usage(command: SlashCommand): string {
   return command.args === "" ? `/${command.name}` : `/${command.name} ${command.args}`;
+}
+
+/** What the window does itself, rather than sending. Returns false for
+ * anything that belongs to a session, which the caller then submits as usual. */
+export async function runConnectionCommand(
+  input: string,
+  network: string,
+): Promise<boolean> {
+  if (!input.startsWith("/")) return false;
+  const [typed = "", ...rest] = input.slice(1).split(" ");
+  const command = COMMANDS.find(
+    (known) => known.runs === "connection" && known.name === typed.toLowerCase(),
+  );
+  if (!command) return false;
+
+  if (command.name === "connect") await ipc.connectNetwork(network);
+  else await ipc.disconnectNetwork(network, rest.join(" ").trim() || undefined);
+  return true;
 }
 
 /** The commands to hint for, or null when the caret is not on a bare command word. */

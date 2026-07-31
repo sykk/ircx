@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
+import { runConnectionCommand } from "@/components/composer/commands";
 import { applyDensity, applyTheme, storeDensity, storeThemeId } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
@@ -118,7 +119,23 @@ function Palette() {
         setError(null);
         return;
       case "run":
-        ipc.submitInput(action.network, action.target, action.input).then((outcome) => {
+        void (async () => {
+          // A command about the connection is performed rather than sent:
+          // there may be no session to send it to.
+          try {
+            if (await runConnectionCommand(action.input, action.network)) {
+              close();
+              return;
+            }
+          } catch (reason) {
+            setError(String(reason));
+            return;
+          }
+          const outcome = await ipc.submitInput(
+            action.network,
+            action.target,
+            action.input,
+          );
           if (outcome.kind === "rejected") {
             setError(outcome.value);
             return;
@@ -126,7 +143,7 @@ function Palette() {
           const joined = channelJoinedBy(action.input);
           if (joined) store.showTarget({ network: action.network, target: joined });
           close();
-        }, report);
+        })().catch(report);
         return;
       case "toggleRoster":
         if (store.activeViewId) store.toggleRoster(store.activeViewId);

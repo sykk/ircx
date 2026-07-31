@@ -165,19 +165,34 @@ function Sasl({ status }: { status: SaslStatus }) {
   );
 }
 
+/**
+ * What the indicator says, which is the state rather than the name of the
+ * mechanism that produces it.
+ *
+ * It read `SASL` in all four states, and the only thing separating "signed in
+ * as syk" from "not signed in at all" was the colour of the dot and a tooltip
+ * somebody had to hover. A connection that succeeds without logging you in
+ * looks exactly like one that does — which is how a mechanism the server never
+ * offered got read as a successful login twice in one afternoon.
+ *
+ * The same argument the timeline makes about a mention: a colour says the
+ * client noticed something and cannot say what it noticed.
+ */
 function saslDisplay(status: SaslStatus): [string, string, string] {
   switch (status.state) {
     case "authenticated":
       return [
-        "SASL",
+        `signed in as ${status.detail.account}`,
         "var(--state-connected)",
         `Authenticated as ${status.detail.account}`,
       ];
     case "inProgress":
-      return ["SASL", "var(--state-connecting)", "Authenticating"];
+      return ["signing in", "var(--state-connecting)", "Authenticating"];
     case "failed":
-      return ["SASL", "var(--state-error)", `SASL failed: ${status.detail.message}`];
+      return ["not signed in", "var(--state-error)", `SASL failed: ${status.detail.message}`];
+    // Nothing failed and nothing is signed in: the user did not ask to be.
+    // Saying "not signed in" here would report an absence as a fault.
     case "notConfigured":
-      return ["SASL", "var(--state-disconnected)", "SASL is not configured"];
+      return ["no account", "var(--state-disconnected)", "SASL is not configured"];
   }
 }

@@ -403,11 +403,20 @@ function SidebarRow({
         {...shared}
         aria-level={1}
         aria-selected={selected}
-        aria-label={row.query.nick}
+        aria-label={row.query.online ? row.query.nick : `${row.query.nick}, offline`}
         className={rowClass(selected)}
       >
         <StatusDot network={row.network} />
-        <span className="truncate">{row.query.nick}</span>
+        {/* Quieter rather than badged. `online` is false only because a quit
+            was seen and nothing has been heard since, so this says "there is
+            nobody there to read it" — which is the one thing that changes
+            whether the conversation is worth typing into. */}
+        <span
+          className="truncate"
+          style={row.query.online ? undefined : { color: "var(--text-muted)" }}
+        >
+          {row.query.nick}
+        </span>
         <span className="flex-1" />
         {row.query.unread > 0 && <Badge count={row.query.unread} />}
       </button>

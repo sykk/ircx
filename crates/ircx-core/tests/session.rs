@@ -2017,3 +2017,150 @@ fn a_new_listing_starts_from_nothing() {
         .expect("the second list");
     assert_eq!(names, vec!["#second".to_string()]);
 }
+
+/// #153. The topic of a channel you have just joined was tracked on the
+/// channel and drawn nowhere: the header leaves it out on purpose and no
+/// message carried it, so it was invisible until somebody changed it.
+mod topic_on_join {
+    use super::*;
+
+    fn joined() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+        session
+    }
+
+    fn said(session: &Harness) -> Vec<String> {
+        session
+            .messages()
+            .iter()
+            .filter(|message| message.kind == MessageKind::Topic)
+            .map(|message| message.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_topic_is_said_in_the_channel() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ before asking");
+
+        assert_eq!(
+            said(&session),
+            ["The topic of #ircx is: read the FAQ before asking"]
+        );
+    }
+
+    /// The server sends who and when straight after, so it is a second line
+    /// rather than a rewrite of the first — which would need the first to be
+    /// held back for a reply that not every server sends.
+    #[test]
+    fn who_set_it_and_when_follows_it() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
+        session.feed(":irc.libera.chat 333 sykk #ircx sable 1769683200");
+
+        assert_eq!(
+            said(&session),
+            [
+                "The topic of #ircx is: read the FAQ",
+                "Set by sable on 2026-01-29 at 10:40 UTC",
+            ]
+        );
+    }
+
+    /// `333` carries whole seconds since the epoch and the live path stores
+    /// RFC 3339 from the `time` tag. One field, one format.
+    #[test]
+    fn the_time_is_stored_as_the_live_path_stores_it() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
+        session.feed(":irc.libera.chat 333 sykk #ircx sable 1769683200");
+
+        let channel = session
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                IrcxEvent::ChannelUpdated { channel } => Some(channel.clone()),
+                _ => None,
+            })
+            .expect("the channel is updated");
+        let topic = channel.topic.expect("it has a topic");
+        assert_eq!(topic.set_by.as_deref(), Some("sable"));
+        assert_eq!(topic.set_at.as_deref(), Some("2026-01-29T10:40:00Z"));
+    }
+
+    #[test]
+    fn a_channel_with_no_topic_says_nothing() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 331 sykk #ircx :No topic is set");
+
+        assert!(said(&session).is_empty());
+    }
+
+    /// A server that sends the time as something other than seconds should
+    /// cost the sentence its date, not the whole line.
+    #[test]
+    fn an_unreadable_time_still_names_who_set_it() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
+        session.feed(":irc.libera.chat 333 sykk #ircx sable notatimestamp");
+
+        assert_eq!(said(&session)[1], "Set by sable");
+    }
+}
+
+/// #153. A query with somebody who has quit looked exactly like one with
+/// somebody who is there, which is the one thing that changes whether it is
+/// worth typing into.
+mod query_presence {
+    use super::*;
+
+    fn online(session: &Harness, nick: &str) -> Option<bool> {
+        session.events.iter().rev().find_map(|event| match event {
+            IrcxEvent::QueryUpdated { query } if query.nick == nick => Some(query.online),
+            _ => None,
+        })
+    }
+
+    fn talking() -> Harness {
+        let mut session = registered("");
+        session.feed(":sable!s@h PRIVMSG sykk :are you there");
+        session
+    }
+
+    #[test]
+    fn a_quit_is_seen() {
+        let mut session = talking();
+        assert_eq!(online(&session, "sable"), Some(true));
+
+        session.feed(":sable!s@h QUIT :gone");
+        assert_eq!(online(&session, "sable"), Some(false));
+    }
+
+    /// It latched: `online` was set once when the query was created and
+    /// cleared on `QUIT`, so somebody who quit and came back stayed marked
+    /// gone for the rest of the session.
+    #[test]
+    fn hearing_from_them_again_takes_the_quit_back() {
+        let mut session = talking();
+        session.feed(":sable!s@h QUIT :gone");
+        assert_eq!(online(&session, "sable"), Some(false));
+
+        session.feed(":sable!s@h PRIVMSG sykk :back");
+        assert_eq!(online(&session, "sable"), Some(true));
+    }
+
+    /// Sending to a nick says nothing about whether anyone is there to read
+    /// it, so our own echo is not evidence they returned.
+    #[test]
+    fn our_own_message_is_not_evidence_they_are_back() {
+        let mut session = registered("echo-message");
+        session.feed(":sable!s@h PRIVMSG sykk :are you there");
+        session.feed(":sable!s@h QUIT :gone");
+        session.feed(":sykk!~sykk@user/sykk PRIVMSG sable :are you back?");
+
+        assert_eq!(online(&session, "sable"), Some(false));
+    }
+}

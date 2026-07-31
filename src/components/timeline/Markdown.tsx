@@ -90,7 +90,11 @@ function Link({ url }: { url: string }) {
   return (
     <button
       type="button"
-      onClick={() => void openExternal(url).catch(() => undefined)}
+      onClick={() => {
+        void openExternal(url).catch((reason: unknown) => {
+          console.warn("ircx could not open", url, reason);
+        });
+      }}
       className="underline decoration-from-font underline-offset-2"
       style={{ color: "var(--accent)" }}
     >

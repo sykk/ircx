@@ -460,12 +460,18 @@ through an anchor: the inline link and the attachment line both call
 exists to navigate and that the opener was asked, which is as far as jsdom
 reaches.
 
-**Not verified:** that a link actually opens. Nothing has clicked one in the
-running client, on any platform. Worth knowing that `opener:allow-open-url` was
-granted in `src-tauri/capabilities/default.json` long before anything called it,
-and the attachment line relied on `target="_blank"` until 2026-07-31 — so
-whether a link in this client has *ever* opened is an open question, not a
-regression risk.
+**A link opens**, walked on 2026-07-31. It did not before that day, and the
+reason is worth keeping: `opener:allow-open-url` permits calling the command
+while `opener:allow-default-urls` is the scope that permits `http://` and
+`https://`. The window had the first and not the second, so every call was
+allowed and every URL refused, and the refusal was swallowed by a `.catch` that
+discarded it. #167.
+
+**Not verified:** anything about how it reads. The mark that a link leaves the
+client took three attempts — 10px text, 11px text, then a drawn icon — because
+whether a reader notices it is not something a test can answer. The pointer
+affordance came out of the same walk: a link inherited `cursor: default` from
+the chrome-less window and so looked like text.
 
 ## Density
 

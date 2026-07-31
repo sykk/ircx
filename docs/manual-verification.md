@@ -658,10 +658,20 @@ it works on MinIO and older AWS and fails outright with a 400 on current AWS,
 where ACLs are off by default — trading a dead link for a failed upload on the
 provider most people have.
 
+**A public bucket is walked too**, and it is the path the feature exists for:
+
+```text
+PASS  policy: HTTP 204
+PASS  the client would send this link
+PASS  read back 25 bytes anonymously
+```
+
+Making the bucket readable is a signed `PUT` carrying `?policy=`, which no
+other request here sends — so it is also the only cover the canonical query
+string has. Then the client asks its own question about the address, gets no
+warning, and the object reads back byte for byte with no credential at all.
+
 **Still not walked:**
-- **A bucket that is public.** Every run so far has been against a private one,
-  so the path where `HEAD` answers 200 and the link goes out has never been
-  taken against a real server.
 - **AWS itself.** MinIO accepts any region and signs with what it is told.
   Whether the region a real provider expects is the one its console displays is
   the next thing likely to be wrong.

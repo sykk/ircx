@@ -529,6 +529,9 @@ mod minio {
 
     const ORIGIN: &str = "http://127.0.0.1:9000";
     const BUCKET: &str = "ircx-walk";
+    /// A second bucket, because the first one documents the default and a
+    /// bucket cannot be private and public at once.
+    const PUBLIC_BUCKET: &str = "ircx-walk-public";
     const SECRET: &str = "ircxtestsecret";
 
     fn credentials() -> S3Credentials {
@@ -598,6 +601,60 @@ mod minio {
         let refusal = read.expect_err("a private bucket refuses an anonymous read");
         println!("NOTE  the link is private: {refusal}");
         assert!(refusal.to_string().contains("403"), "{refusal}");
+    }
+
+    /// The other half: a bucket somebody has made readable, which is the
+    /// configuration this feature is for and the path where the link goes out.
+    ///
+    /// Setting the policy is a signed `PUT` carrying a query string, which no
+    /// other request here does — so it is also the only cover the canonical
+    /// query string has.
+    #[tokio::test]
+    #[ignore = "needs a local MinIO on :9000"]
+    async fn a_public_bucket_hands_back_a_link_that_opens() {
+        let bucket = format!("{ORIGIN}/{PUBLIC_BUCKET}");
+        match put(&bucket, b"", "application/octet-stream").await {
+            Ok(status) => println!("PASS  bucket: HTTP {status}"),
+            Err(error) if error.contains("409") => println!("PASS  bucket: already exists"),
+            Err(error) => panic!("the bucket could not be made: {error}"),
+        }
+
+        let policy = format!(
+            r#"{{"Version":"2012-10-17","Statement":[{{"Effect":"Allow","Principal":{{"AWS":["*"]}},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::{PUBLIC_BUCKET}/*"]}}]}}"#
+        );
+        let status = put(
+            &format!("{bucket}?policy="),
+            policy.as_bytes(),
+            "application/json",
+        )
+        .await
+        .expect("the policy is accepted, which is a signature over a query string");
+        println!("PASS  policy: HTTP {status}");
+
+        let name = object_name("public.png", &[1, 2, 3, 4, 5, 6, 7, 8]);
+        let url = endpoint_for(&format!("{bucket}/{{name}}"), &name);
+        let body = b"anybody can read this one";
+        put(&url, body, content_type("public.png"))
+            .await
+            .expect("the object is stored");
+
+        // The whole point, and the path that had never been taken: the client
+        // asks whether the address it is about to hand over will open.
+        let refusal = unreadable(&url).await;
+        assert_eq!(refusal, None, "a readable link is not warned about");
+        println!("PASS  the client would send this link");
+
+        let read = ircx_net::http::fetch(
+            &url,
+            &FetchPolicy {
+                allow_local_addresses: true,
+                ..FetchPolicy::default()
+            },
+        )
+        .await
+        .expect("anybody can read it");
+        assert_eq!(read.body, body, "what came back is what went in");
+        println!("PASS  read back {} bytes anonymously", read.body.len());
     }
 
     /// A wrong secret has to be told apart from a wrong everything else, since

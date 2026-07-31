@@ -472,13 +472,34 @@ twice — `docs/plugins.md` under what an annotator is not handed, and in
 written without reading either. Anything walking an on-arrival hook needs a
 second client.
 
-Still not walked:
+**A broken rule is dropped and says the other sentence**, walked the same way
+on 2026-07-31. A rule that throws was granted `#test` and given three messages
+from a second client:
 
-- **A broken rule being dropped**, which is the same walk against the other
-  hook. See the notification rule's section below.
-- **A plugin whose annotator is dropped keeping a working notification rule**,
-  and the reverse. The counts are keyed separately and unit tested; no run has
-  had one plugin holding both hooks with only one of them broken.
+```text
+The brokenrule plugin failed 3 times in a row, so ircx stopped asking it what
+is worth interrupting you for. Restart ircx to let it try again.
+```
+
+**One plugin's broken hook does not cost it the other**, walked on 2026-07-31
+and the first run to have it. A single plugin holding both hooks, its annotator
+correct and its rule throwing, was granted `#test`, and a second client said
+five things:
+
+```text
+walker  it is 72F outside     annotated 22 °C
+walker  rule one
+walker  rule two
+client  The both plugin failed 3 times in a row, so ircx stopped asking it
+        what is worth interrupting you for.
+walker  and now it is 61F     annotated 16 °C
+```
+
+The rule died on the third batch it was handed and the annotator answered
+after it, which is what `one_hooks_failures_are_not_the_others` asserts and
+what no run had shown. Worth reading the order: the first message was handed to
+both hooks, so the drop lands one message earlier than counting only the ones
+that look like rule traffic would suggest.
 
 ## One conversation, one name
 
@@ -623,13 +644,8 @@ Worth keeping in mind for the next mark: this is the second time a quiet mark
 had to be made louder after a person looked at it, the first being the link
 arrow in #172. A mark that is obvious to whoever built it is not evidence.
 
-Still not walked:
-
-- **A broken rule being dropped.** The annotator's walk is done and the console
-  line reads well, so what is left here is the other hook saying the other
-  sentence — a rule that throws should say ircx stopped asking it what is worth
-  interrupting you for. A rule needs a third client under the nick it looks
-  for, as the run above needed a second.
+**A broken rule being dropped** is walked, under the annotator's section above,
+along with one plugin holding both hooks and only one of them broken.
 
 ## The topic of a channel you have joined
 

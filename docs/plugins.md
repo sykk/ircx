@@ -223,6 +223,12 @@ ircx.annotate((message) => {
 });
 ```
 
+Installable as it stands: `examples/plugins/units`. That directory is the copy
+`crates/ircx-plugin/tests/examples.rs` installs and runs, so an example that
+stopped working fails the build rather than the person who trusted it. The one
+difference from the manifest above is `"channels": ["*"]`, which makes the
+install dialogue ask which conversations it may watch.
+
 `annotates` is declared for the reason commands are: a conversation where no
 installed plugin annotates costs nothing, because nothing has to start a runtime
 to find that out. `Math` is there because the sandbox is a full context — what

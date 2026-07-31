@@ -1,0 +1,10 @@
+{
+  "id": "units",
+  "name": "Units",
+  "version": "1.0.0",
+  "description": "Reads Fahrenheit in Celsius, beside the message that said it",
+  "entry": "main.js",
+  "annotates": true,
+  "permissions": ["annotate-messages", "access-channels"],
+  "channels": ["*"]
+}

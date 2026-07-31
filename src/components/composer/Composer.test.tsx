@@ -197,10 +197,10 @@ describe("Composer hints", () => {
   it("lists matching commands as they are typed", async () => {
     const box = await mount();
     type(box, "/jo");
-    expect(screen.getByText("/join #channel [key]")).toBeTruthy();
+    expect(screen.getByText("/join <channel> [key]")).toBeTruthy();
 
     type(box, "/join #ctf-ops");
-    expect(screen.queryByText("/join #channel [key]")).toBe(null);
+    expect(screen.queryByText("/join <channel> [key]")).toBe(null);
   });
 });
 

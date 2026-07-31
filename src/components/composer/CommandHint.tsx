@@ -1,4 +1,4 @@
-import type { SlashCommand } from "./commands";
+import { usage, type SlashCommand } from "./commands";
 
 export function CommandHint({ commands }: { commands: SlashCommand[] }) {
   return (
@@ -24,7 +24,7 @@ export function CommandHint({ commands }: { commands: SlashCommand[] }) {
             className="font-[family-name:var(--font-mono)] shrink-0"
             style={{ color: "var(--text-primary)" }}
           >
-            {command.usage}
+            {usage(command)}
           </span>
           <span className="truncate" style={{ color: "var(--text-muted)" }}>
             {command.summary}

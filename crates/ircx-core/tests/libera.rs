@@ -1569,6 +1569,7 @@ impl Live {
         self.send(SessionCommand::Submit {
             target: target.into(),
             input: input.into(),
+            reply_to: None,
             reply,
         })
         .await;

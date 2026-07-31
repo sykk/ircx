@@ -45,6 +45,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     members: {},
     timelines: {},
     typing: {},
+    replyTo: {},
     views: {},
     viewOrder: [],
     activeViewId: null,

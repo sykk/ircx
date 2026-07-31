@@ -99,7 +99,13 @@ impl Harness {
     }
 
     fn submit(&mut self, target: &str, input: &str) -> CommandOutcome {
-        let (outcome, actions) = self.state.submit(target, input);
+        let (outcome, actions) = self.state.submit(target, input, None);
+        self.apply(actions);
+        outcome
+    }
+
+    fn reply(&mut self, target: &str, input: &str, parent: &str) -> CommandOutcome {
+        let (outcome, actions) = self.state.submit(target, input, Some(parent));
         self.apply(actions);
         outcome
     }
@@ -956,6 +962,115 @@ fn membership_and_topic_changes_move_the_member_list() {
             MessageKind::Topic
         ]
     );
+}
+
+/// #112: the timeline drew a reply quote long before anything could compose
+/// one. The tag ircx sends is the one it already reads.
+mod replying {
+    use super::*;
+
+    fn in_channel(caps: &str) -> Harness {
+        let mut session = registered(caps);
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session
+    }
+
+    #[test]
+    fn a_reply_names_its_parent_on_the_wire() {
+        let mut session = in_channel("message-tags");
+        let outcome = session.reply("#ircx", "it is in the env", "abc123");
+
+        assert!(matches!(outcome, CommandOutcome::Sent(_)));
+        assert_eq!(
+            session.sent(),
+            vec!["@+reply=abc123 PRIVMSG #ircx :it is in the env"]
+        );
+    }
+
+    #[test]
+    fn the_local_copy_quotes_what_it_answered() {
+        let mut session = in_channel("message-tags");
+        let CommandOutcome::Sent(copy) = session.reply("#ircx", "it is in the env", "abc123")
+        else {
+            panic!("expected a sent message");
+        };
+        assert_eq!(copy.reply_to.as_deref(), Some("abc123"));
+    }
+
+    /// An action is a reply like any other; a `/join` typed with a parent
+    /// staged says nothing, so there is nothing to attach it to.
+    #[test]
+    fn an_action_carries_it_and_a_command_that_says_nothing_does_not() {
+        let mut session = in_channel("message-tags");
+        session.reply("#ircx", "/me nods", "abc123");
+        session.reply("#ircx", "/join #elsewhere", "abc123");
+
+        assert_eq!(
+            session.sent(),
+            vec![
+                "@+reply=abc123 PRIVMSG #ircx :\u{1}ACTION nods\u{1}",
+                "JOIN #elsewhere",
+            ]
+        );
+    }
+
+    /// `/msg` addresses somebody else, so a parent staged in this conversation
+    /// does not follow it there.
+    #[test]
+    fn a_message_to_another_target_leaves_the_parent_behind() {
+        let mut session = in_channel("message-tags");
+        session.reply("#ircx", "/msg sable in private", "abc123");
+
+        assert_eq!(session.sent(), vec!["PRIVMSG sable :in private"]);
+    }
+
+    /// Every piece answers the same message. Tagging only the first would leave
+    /// the rest looking like they answered nothing.
+    #[test]
+    fn every_piece_of_a_split_names_the_parent() {
+        let mut session = in_channel("message-tags");
+        session.reply("#ircx", &"wide ".repeat(200), "abc123");
+
+        let lines = session.sent_starting("@+reply=abc123 PRIVMSG");
+        assert!(lines.len() > 1, "the text was long enough to split");
+        assert_eq!(lines.len(), session.sent_starting("@").len());
+    }
+
+    /// A tag the server will not carry names a parent nobody else was shown,
+    /// and a quote only this client can see is worse than none.
+    #[test]
+    fn without_message_tags_the_line_goes_plain() {
+        let mut session = in_channel("");
+        let CommandOutcome::Sent(copy) = session.reply("#ircx", "it is in the env", "abc123")
+        else {
+            panic!("expected a sent message");
+        };
+
+        assert_eq!(session.sent(), vec!["PRIVMSG #ircx :it is in the env"]);
+        assert_eq!(copy.reply_to, None);
+    }
+
+    /// The echo replaces tags, raw and time and keeps the rest of the local
+    /// copy, so what the quote is drawn from has to survive it.
+    #[test]
+    fn the_quote_survives_the_echo() {
+        let mut session = in_channel("echo-message message-tags");
+        let CommandOutcome::Sent(copy) = session.reply("#ircx", "it is in the env", "abc123")
+        else {
+            panic!("expected a sent message");
+        };
+
+        session.feed("@msgid=def456 :sykk!~sykk@user/sykk PRIVMSG #ircx :it is in the env");
+        let updated = session.events.iter().find_map(|event| match event {
+            IrcxEvent::MessageUpdated { message } if message.id == copy.id => Some(message),
+            _ => None,
+        });
+        assert_eq!(
+            updated.and_then(|message| message.reply_to.as_deref()),
+            Some("abc123")
+        );
+    }
 }
 
 #[test]

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
+import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
-import { targetKey, useMembers, useView } from "@/store/selectors";
+import { targetKey, useMembers, useReplyTarget, useView } from "@/store/selectors";
+import { plainText } from "@/components/timeline/Markdown";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
 import { matchCommands } from "./commands";
@@ -23,6 +26,7 @@ export function Composer({ view }: { view: ViewId | null }) {
 
 function ComposerFor({ network, target }: { network: string; target: string }) {
   const members = useMembers(network, target);
+  const replying = useReplyTarget(network, target);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -122,12 +126,15 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     stopTyping();
     void ipc.setDraft(network, target, "");
 
-    const outcome = await ipc.submitInput(network, target, text);
+    const outcome = await ipc.submitInput(network, target, text, replying?.msgid);
     // Core hands the local copy of a sent line back to the caller instead of
     // emitting it, so nothing else will draw it. A server with `echo-message`
     // confirms it later as an update to this same id; one without it never
     // says anything more, and this stays the only copy.
     if (outcome.kind === "sent") {
+      // Only a line that was said consumes the reply. A `/join` typed with one
+      // staged said nothing, so the parent is still waiting to be answered.
+      useAppStore.getState().setReplyTo(network, target, null);
       const message = outcome.value;
       useAppStore.getState().applyEvent({
         type: "messagesAppended",
@@ -180,6 +187,7 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     if (e.key === "Escape") {
       completionRef.current = null;
       setError(null);
+      useAppStore.getState().setReplyTo(network, target, null);
     }
   };
 
@@ -188,6 +196,14 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
   return (
     <div className="relative px-3 pb-2">
       {hints && <CommandHint commands={hints} />}
+
+      {replying && (
+        <ReplyBar
+          parent={replying.parent}
+          msgid={replying.msgid}
+          onClear={() => useAppStore.getState().setReplyTo(network, target, null)}
+        />
+      )}
 
       {error && (
         <div className="px-1 pb-1 text-[11px]" style={{ color: "var(--danger)" }}>
@@ -230,6 +246,57 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
         <span>Markdown is supported</span>
         <span>Shift+Enter for new line</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What the next line will answer, over the box that will say it. Drawn with the
+ * same connector as a `ReplyQuote` in the timeline, so the thing being staged
+ * looks like the thing it becomes.
+ */
+function ReplyBar({
+  parent,
+  msgid,
+  onClear,
+}: {
+  parent: ChatMessage | undefined;
+  msgid: string;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      className="mb-1 flex items-baseline gap-2 overflow-hidden pl-2 font-[family-name:var(--font-ui)] text-[12px]"
+      style={{
+        borderLeft: "var(--timeline-quote-width) solid var(--border-strong)",
+        color: "var(--text-faint)",
+      }}
+    >
+      <span className="shrink-0">Replying to</span>
+      {parent ? (
+        <>
+          <span
+            className="shrink-0 font-[family-name:var(--font-mono)] font-semibold"
+            style={{ color: nickColor(parent.sender.nick) }}
+          >
+            {parent.sender.nick}
+          </span>
+          <span className="truncate">{plainText(parent.text)}</span>
+        </>
+      ) : (
+        // Scrolled out of the loaded window. The msgid still names it on the
+        // wire, so the reply is not cancelled by having nothing to quote.
+        <span className="truncate">{msgid}</span>
+      )}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label="Cancel reply"
+        className="ml-auto shrink-0 px-1"
+        style={{ color: "var(--text-muted)" }}
+      >
+        ✕
+      </button>
     </div>
   );
 }

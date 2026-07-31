@@ -29,6 +29,7 @@ beforeEach(() => {
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     timelines: {},
+    replyTo: {},
     members: {
       [KEY]: ["sable", "sableton", "phrack", "nyx"].map((nick) => ({
         nick,
@@ -71,6 +72,7 @@ describe("Composer sending", () => {
       "libera",
       "#ctf-ops",
       "the flag is in the env",
+      undefined,
     );
     await waitFor(() => expect(box.value).toBe(""));
   });
@@ -243,5 +245,110 @@ describe("Composer drafts and typing", () => {
     type(box, "x");
     type(box, "");
     expect(ipcMock.setTyping).toHaveBeenLastCalledWith("libera", "#ctf-ops", false);
+  });
+});
+
+/**
+ * #112. The parent is chosen in the timeline and consumed here, so what the
+ * composer has to get right is which message the next line names, and when it
+ * stops naming it.
+ */
+describe("Composer replying", () => {
+  function stage(msgid: string, inWindow = true) {
+    useAppStore.setState({
+      replyTo: { [KEY]: msgid },
+      timelines: inWindow
+        ? {
+            [KEY]: {
+              messages: [
+                makeMessage({ id: "123", nick: "phrack", text: "the flag is in the env" }),
+              ],
+              unreadFrom: null,
+              hasMore: false,
+              loadingOlder: false,
+            },
+          }
+        : {},
+    });
+  }
+
+  function staged() {
+    return useAppStore.getState().replyTo[KEY];
+  }
+
+  it("says who is being answered and with what", async () => {
+    stage("123");
+    await mount();
+
+    expect(screen.getByText("phrack")).toBeTruthy();
+    expect(screen.getByText("the flag is in the env")).toBeTruthy();
+  });
+
+  /** The msgid alone is enough to send with, so a parent scrolled out of the
+   * loaded window leaves nothing to quote and cancels nothing. */
+  it("falls back to the msgid when the parent is out of the window", async () => {
+    stage("123", false);
+    await mount();
+
+    expect(screen.getByText("123")).toBeTruthy();
+  });
+
+  it("sends the parent alongside the line", async () => {
+    ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+    stage("123");
+    const box = await mount();
+    type(box, "it is in the env");
+    press(box, "Enter");
+
+    await waitFor(() =>
+      expect(ipcMock.submitInput).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "it is in the env",
+        "123",
+      ),
+    );
+  });
+
+  it("stops naming the parent once a line has said it", async () => {
+    ipcMock.submitInput.mockResolvedValue({
+      kind: "sent",
+      value: makeMessage({ id: "sent-1", nick: "sable", text: "it is in the env" }),
+    });
+    stage("123");
+    const box = await mount();
+    type(box, "it is in the env");
+    press(box, "Enter");
+
+    await waitFor(() => expect(staged()).toBeUndefined());
+  });
+
+  /** A command that says nothing has not answered anybody, so the parent is
+   * still waiting when it returns. */
+  it("keeps the parent when the input was a command", async () => {
+    ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+    stage("123");
+    const box = await mount();
+    type(box, "/join #elsewhere");
+    press(box, "Enter");
+
+    await waitFor(() => expect(ipcMock.submitInput).toHaveBeenCalled());
+    expect(staged()).toBe("123");
+  });
+
+  it("drops the parent on Escape", async () => {
+    stage("123");
+    const box = await mount();
+    press(box, "Escape");
+
+    expect(staged()).toBeUndefined();
+  });
+
+  it("drops the parent when the reply is cancelled", async () => {
+    stage("123");
+    await mount();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reply" }));
+
+    expect(staged()).toBeUndefined();
   });
 });

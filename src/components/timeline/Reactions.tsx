@@ -26,6 +26,9 @@ interface Props {
    * record of what other people sent rather than a control.
    */
   onToggle: ((emoji: string, active: boolean) => void) | null;
+  /** Null on the same terms as `onToggle`: a reply travels as a `+reply` tag
+   * naming a msgid, so it needs both the capability and the id. */
+  onReply: (() => void) | null;
 }
 
 /**
@@ -33,26 +36,30 @@ interface Props {
  * metric, and in a nine-person channel the names are the information. They
  * arrive with the reaction, so every chip carries them.
  */
-export function Reactions({ reactions, ownNick, onToggle }: Props) {
-  if (reactions.length === 0) {
-    if (onToggle === null) return null;
-    return <AddReaction alone onPick={(emoji) => onToggle(emoji, true)} />;
-  }
+export function Reactions({ reactions, ownNick, onToggle, onReply }: Props) {
+  const alone = reactions.length === 0;
+  const pick = onToggle === null ? null : (emoji: string) => onToggle(emoji, true);
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-      {reactions.map((reaction) => (
-        <Chip
-          key={reaction.emoji}
-          reaction={reaction}
-          ownNick={ownNick}
-          onToggle={onToggle}
-        />
-      ))}
-      {onToggle !== null && (
-        <AddReaction alone={false} onPick={(emoji) => onToggle(emoji, true)} />
+    <>
+      {(onReply !== null || (alone && pick !== null)) && (
+        // The picker only sits up here while there are no chips to sit among.
+        <RowControls alone onReply={onReply} onPick={alone ? pick : null} />
       )}
-    </div>
+      {!alone && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {reactions.map((reaction) => (
+            <Chip
+              key={reaction.emoji}
+              reaction={reaction}
+              ownNick={ownNick}
+              onToggle={onToggle}
+            />
+          ))}
+          {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} />}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -100,6 +107,8 @@ function Chip({
 }
 
 /**
+ * The controls that answer a message: reply to it, react to it, or both.
+ *
  * `alone` is a message nobody has reacted to yet. The mockup draws no control
  * there, so it appears with the pointer, and with focus landing anywhere in the
  * row — which makes a link or a reply quote a route to it.
@@ -108,7 +117,15 @@ function Chip({
  * control that took up room would move every message below the one being
  * pointed at, and sweeping down the timeline would make it jump.
  */
-function AddReaction({ alone, onPick }: { alone: boolean; onPick: (emoji: string) => void }) {
+function RowControls({
+  alone,
+  onReply,
+  onPick,
+}: {
+  alone: boolean;
+  onReply: (() => void) | null;
+  onPick: ((emoji: string) => void) | null;
+}) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
 
@@ -130,48 +147,68 @@ function AddReaction({ alone, onPick }: { alone: boolean; onPick: (emoji: string
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
     >
-      <span className="relative inline-flex">
-        <button
-          ref={anchor}
-          type="button"
-          aria-expanded={open}
-          aria-label="Add a reaction"
-          onClick={() => setOpen((was) => !was)}
-          className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")}
-          style={{ color: "var(--text-muted)" }}
-        >
-          <span
-            aria-hidden="true"
-            className="font-[family-name:var(--font-mono)] text-[14px] leading-none"
+      <span className="relative inline-flex gap-0.5">
+        {onReply !== null && (
+          <button
+            type="button"
+            aria-label="Reply to this message"
+            onClick={onReply}
+            className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")}
+            style={{ color: "var(--text-muted)" }}
           >
-            +
-          </span>
-        </button>
-
-        {open && (
-          <span
-            role="group"
-            aria-label="React with"
-            className="absolute bottom-full left-0 z-10 mb-1 flex w-max gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
-          >
-            {OFFERED.map((emoji, index) => (
-              <button
-                key={emoji}
-                type="button"
-                // The picker opens under the keyboard as well as the pointer,
-                // so the first choice takes focus and Tab walks the rest.
-                autoFocus={index === 0}
-                onClick={() => {
-                  onPick(emoji);
-                  setOpen(false);
-                  anchor.current?.focus();
-                }}
-                className="rounded-[var(--radius-sm)] px-1.5 py-1 text-[15px] leading-none hover:bg-[var(--surface-hover)]"
+            <span
+              aria-hidden="true"
+              className="font-[family-name:var(--font-mono)] text-[14px] leading-none"
+            >
+              ↩
+            </span>
+          </button>
+        )}
+        {onPick !== null && (
+          <>
+            <button
+              ref={anchor}
+              type="button"
+              aria-expanded={open}
+              aria-label="Add a reaction"
+              onClick={() => setOpen((was) => !was)}
+              className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")}
+              style={{ color: "var(--text-muted)" }}
+            >
+              <span
+                aria-hidden="true"
+                className="font-[family-name:var(--font-mono)] text-[14px] leading-none"
               >
-                {emoji}
-              </button>
-            ))}
-          </span>
+                +
+              </span>
+            </button>
+
+            {open && (
+              <span
+                role="group"
+                aria-label="React with"
+                className="absolute bottom-full left-0 z-10 mb-1 flex w-max gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
+              >
+                {OFFERED.map((emoji, index) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    // The picker opens under the keyboard as well as the pointer,
+                    // so the first choice takes focus and Tab walks the rest.
+                    autoFocus={index === 0}
+                    onClick={() => {
+                      onPick(emoji);
+                      setOpen(false);
+                      anchor.current?.focus();
+                    }}
+                    className="rounded-[var(--radius-sm)] px-1.5 py-1 text-[15px] leading-none hover:bg-[var(--surface-hover)]"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </span>
+            )}
+          </>
         )}
       </span>
     </span>

@@ -68,8 +68,9 @@ describe("nick colour across surfaces", () => {
           ownNick={null}
           parentOf={() => undefined}
           onJump={() => {}}
-          canReact={false}
+          canTag={false}
           onReact={() => {}}
+          onReply={() => {}}
           flashing={false}
         />,
       );

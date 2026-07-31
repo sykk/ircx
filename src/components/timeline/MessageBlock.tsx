@@ -57,8 +57,9 @@ interface Props {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
-  canReact: boolean;
+  canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
+  onReply: (msgid: string) => void;
   flashId: string | null;
 }
 
@@ -68,8 +69,9 @@ export function MessageBlock({
   ownNick,
   parentOf,
   onJump,
-  canReact,
+  canTag,
   onReact,
+  onReply,
   flashId,
 }: Props) {
   return (
@@ -81,8 +83,9 @@ export function MessageBlock({
           ownNick={ownNick}
           parentOf={parentOf}
           onJump={onJump}
-          canReact={canReact}
+          canTag={canTag}
           onReact={onReact}
+          onReply={onReply}
           flashing={message.id === flashId}
         />
       ))}

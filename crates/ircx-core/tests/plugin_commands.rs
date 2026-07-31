@@ -202,7 +202,7 @@ async fn submit(
             let answer = run_plugin(Arc::clone(runtime), &call).await;
             session.apply_plugin(&call, answer)
         }
-        None => session.submit(CHANNEL, input),
+        None => session.submit(CHANNEL, input, None),
     }
 }
 
@@ -476,7 +476,7 @@ fn every_built_in_command_is_answered_by_the_client() {
         "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "help",
     ] {
         let mut session = session();
-        let (outcome, _) = session.submit(CHANNEL, &format!("/{name}"));
+        let (outcome, _) = session.submit(CHANNEL, &format!("/{name}"), None);
         let rejected = match &outcome {
             CommandOutcome::Rejected(why) => why.contains("not a command ircx knows"),
             _ => false,

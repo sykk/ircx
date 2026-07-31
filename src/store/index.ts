@@ -69,6 +69,10 @@ export interface AppActions {
    * the root, which is what the component drawing the divider holds. */
   setSplitRatio: (path: SplitPath, ratio: number) => void;
 
+  /** Stages the message the next line in this conversation answers, or clears
+   * it with a null msgid. */
+  setReplyTo: (network: string, target: string, msgid: string | null) => void;
+
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
   togglePalette: (open?: boolean) => void;
@@ -103,6 +107,7 @@ const initialState: AppState = {
   members: {},
   timelines: {},
   typing: {},
+  replyTo: {},
   rawLog: {},
   channelList: {},
   views: {},
@@ -281,6 +286,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const timeline = s.timelines[key];
       if (!timeline) return {};
       return { timelines: { ...s.timelines, [key]: { ...timeline, unreadFrom: null } } };
+    }),
+
+  setReplyTo: (network, target, msgid) =>
+    set((s) => {
+      const key = targetKey(network, target);
+      if (msgid === null) {
+        const { [key]: _cleared, ...replyTo } = s.replyTo;
+        return { replyTo };
+      }
+      return { replyTo: { ...s.replyTo, [key]: msgid } };
     }),
 
   toggleRoster: (view, shown) =>

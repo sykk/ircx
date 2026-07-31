@@ -85,6 +85,10 @@ export interface AppState {
   timelines: Record<TargetKey, TimelineState>;
   /** nick -> epoch ms when the indicator expires. */
   typing: Record<TargetKey, Record<string, number>>;
+  /** The server msgid the next message in a conversation answers. Held here
+   * rather than in the composer because it is chosen in the timeline, which is
+   * a different tree, and shared by every pane on the same conversation. */
+  replyTo: Record<TargetKey, string>;
   /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
   /** The last `LIST` a network answered, whole. Not `channels`: these are

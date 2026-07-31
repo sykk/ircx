@@ -130,6 +130,36 @@ What is left:
     a client that draws it. IRCCloud does not implement the tag; the entry here
     used to say it did, and that was wrong.
 
+## Composing a reply
+
+#112 built the send half: a `+reply` naming the parent's `msgid` goes on the
+`PRIVMSG`, and `crates/ircx-core/tests/session.rs` asserts the line, every piece
+of a split, the local copy's quote and the plain fallback without
+`message-tags`.
+
+**The wire is verified.** The probe above proved `ergo` relays `+reply` on a
+`TAGMSG`, which is what a reaction rides on; a reply rides on a `PRIVMSG`
+instead, and a server allowlisting client tags could treat the two differently.
+Two raw sockets on a local `ergo` on 2026-07-31, ircx not involved:
+
+```text
+answerer >> @+reply=vcgd7gp6dgd7hp4347ajqaqk6a PRIVMSG #replyprivmsg :it is, thanks
+author   << @time=…;msgid=m3i6rz7yv…;+reply=vcgd7gp6dgd7hp4347ajqaqk6a
+            :answerer!~u@… PRIVMSG #replyprivmsg :it is, thanks
+```
+
+The tag reaches the other client naming the same msgid byte for byte, and the
+sender's own echo carries it back as well.
+
+**Not yet verified:** ircx driving that itself. Nothing has yet clicked reply in
+the timeline, sent a line and watched the quote appear in a second client.
+
+**On Libera it will not work**, and the client cannot tell in advance. Client
+tags there are an allowlist holding only `+typing`, and `message-tags` is
+negotiated all the same — so ircx attaches `+reply`, draws the quote on the
+sender's own copy, and Libera strips the tag before anyone else sees it. That is
+exactly the position reactions are in, and for the same reason.
+
 ## The preview fetch over TLS
 
 `crates/ircx-net/tests/http_loopback.rs` drives the whole fetch — framing,

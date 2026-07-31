@@ -53,7 +53,7 @@ interface TimelineForProps {
 function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
-  const canReact = useAppStore(
+  const canTag = useAppStore(
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -190,6 +190,11 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     [network, target],
   );
 
+  const reply = useCallback(
+    (msgid: string) => useAppStore.getState().setReplyTo(network, target, msgid),
+    [network, target],
+  );
+
   const items = virtualizer.getVirtualItems();
 
   return (
@@ -229,8 +234,9 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                   ownNick,
                   parentOf,
                   onJump: jump,
-                  canReact,
+                  canTag,
                   onReact: react,
+                  onReply: reply,
                   flashId,
                 })}
               </div>
@@ -268,8 +274,9 @@ interface RowContext {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
-  canReact: boolean;
+  canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
+  onReply: (msgid: string) => void;
   flashId: string | null;
 }
 

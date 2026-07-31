@@ -486,11 +486,25 @@ Worth noting what the walk depended on: a plain-HTTP local address, which an
 upload allows and a preview fetch refuses. The asymmetry is deliberate and this
 is the case it exists for.
 
-**Not walked:**
+**The credential is walked too**, on 2026-07-31, against the same host with
+`EXPECT_TOKEN` set. Both directions, from the host's log:
 
-- **A provider needing a credential.** The token path — header set, token read
-  from the keyring at the moment of the upload — has unit tests and has never
-  been sent to anything.
+```text
+PUT  /0142f8f2c577dbf9-Screenshot…png  168368 bytes  type=image/png  auth=Bearer walkme
+PUT  /bde6fc7208bb041c-Screenshot…png  REFUSED 401   auth='Bearer walkme,'
+```
+
+The token is read from the keyring at the moment of the upload and arrives
+byte-exact — the second line is a token edited to be wrong, and the edit
+survived the trip, which is the same evidence in the other direction.
+
+The walk found one defect, in the words rather than the mechanism: a refused
+upload reported `returned HTTP 401 — open it in your browser to see what it
+says`. `HttpError` is shared with the preview fetch, and that advice is good
+about a link somebody posted and useless about an upload, because a browser
+sends a `GET`. Fixed to name the credential and where to change it.
+
+**Not walked:**
 - **A file too large, or a provider that refuses.** Both produce sentences no
   one has read in situ.
 - **S3-compatible**, which is not built.

@@ -2,7 +2,14 @@ use rusqlite::Connection;
 
 use crate::StoreError;
 
-const MIGRATIONS: &[&str] = &[INITIAL, MESSAGE_ID_INDEX, OPEN_TARGETS, REACTIONS, VIA];
+const MIGRATIONS: &[&str] = &[
+    INITIAL,
+    MESSAGE_ID_INDEX,
+    OPEN_TARGETS,
+    REACTIONS,
+    VIA,
+    ANNOTATIONS,
+];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
 /// database at any earlier version, including an empty one.
@@ -174,6 +181,23 @@ const VIA: &str = r#"
 ALTER TABLE messages ADD COLUMN via TEXT;
 "#;
 
+/// What a plugin said about a message. Keyed by the message and the plugin, so
+/// a plugin that answers the same message twice replaces what it said: the
+/// annotator runs on arrival, and a history backfill can hand it the same
+/// message a second time.
+///
+/// A row can name a message the archive does not hold, exactly as a reaction
+/// can, and waits for one.
+const ANNOTATIONS: &str = r#"
+CREATE TABLE annotations (
+    network TEXT NOT NULL,
+    msgid   TEXT NOT NULL,
+    plugin  TEXT NOT NULL,
+    text    TEXT NOT NULL,
+    PRIMARY KEY (network, msgid, plugin)
+);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +216,51 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(versions, (1..=MIGRATIONS.len() as u32).collect::<Vec<_>>());
+    }
+
+    /// The upgrade a user with an existing archive takes. Every earlier
+    /// migration has to still apply on top of real rows, and the new table has
+    /// to arrive without touching them.
+    #[test]
+    fn an_archive_from_before_annotations_gains_the_table_and_keeps_its_rows() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in MIGRATIONS.iter().take(MIGRATIONS.len() - 1) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS schema_version (
+                 version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
+        )
+        .unwrap();
+        for version in 1..MIGRATIONS.len() as u32 {
+            conn.execute(
+                "INSERT INTO schema_version (version, applied_at) VALUES (?1, '')",
+                [version],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO messages (message_id, network, target, kind, sender_nick,
+                                   sender_is_self, timestamp, timestamp_is_local, text,
+                                   tags, delivery, attachments, encryption, raw)
+             VALUES ('m1','libera','#ircx','privmsg','sable',0,'2026-01-01T00:00:00Z',0,
+                     'hello','[]','\"delivered\"','[]','plaintext','')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&mut conn).unwrap();
+
+        let held: u32 = conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(held, 1, "the upgrade keeps what was already archived");
+        conn.execute(
+            "INSERT INTO annotations (network, msgid, plugin, text)
+             VALUES ('libera','m1','units','22 C')",
+            [],
+        )
+        .unwrap();
     }
 
     #[test]

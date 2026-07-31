@@ -274,6 +274,7 @@ mod tests {
             text: "hello".into(),
             tags: vec![],
             reactions: vec![],
+            annotations: vec![],
             reply_to: None,
             batch: None,
             delivery: Delivery::Sent,

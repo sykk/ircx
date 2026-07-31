@@ -520,6 +520,7 @@ impl Context {
 
         let events = self.events.clone();
         let network = self.network.clone();
+        let store = Arc::clone(&self.store);
         tokio::spawn(async move {
             for annotator in annotators {
                 let request = AnnotateRequest {
@@ -546,6 +547,15 @@ impl Context {
                 strike_cleared(&strikes, &plugin);
 
                 for note in reply.notes {
+                    // Written before it is sent, for the reason a reaction is:
+                    // the archive is the only place a note outside the open
+                    // window survives, and a conversation reopened tomorrow
+                    // reads it back rather than running the annotator again.
+                    if let Err(error) =
+                        store.set_annotation(&network, &note.message, &plugin, &note.text)
+                    {
+                        warn!(%error, "could not write an annotation to the archive");
+                    }
                     let event = IrcxEvent::MessageAnnotated {
                         network: network.clone(),
                         target: target.clone(),

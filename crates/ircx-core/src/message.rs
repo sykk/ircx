@@ -47,6 +47,7 @@ impl SessionState {
             text,
             tags: source.tags.clone(),
             reactions: Vec::new(),
+            annotations: Vec::new(),
             reply_to: reply_to(source),
             source: batch
                 .as_deref()
@@ -87,6 +88,7 @@ impl SessionState {
             text,
             tags: Vec::new(),
             reactions: Vec::new(),
+            annotations: Vec::new(),
             reply_to: None,
             batch: None,
             delivery: Delivery::Delivered,

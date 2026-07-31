@@ -1,6 +1,7 @@
 use ircx_ipc::{
-    Attachment, AttachmentPreview, ChatMessage, Delivery, EncryptionState, HistoryRequest,
-    MessageKind, MessageSource, NetworkConfig, SaslConfig, SaslMechanism, SearchRequest, Sender,
+    Annotation, Attachment, AttachmentPreview, ChatMessage, Delivery, EncryptionState,
+    HistoryRequest, MessageKind, MessageSource, NetworkConfig, SaslConfig, SaslMechanism,
+    SearchRequest, Sender,
 };
 use ircx_store::{OpenTarget, Store};
 
@@ -30,6 +31,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
         text: text.into(),
         tags: vec![],
         reactions: vec![],
+        annotations: vec![],
         reply_to: None,
         batch: None,
         delivery: Delivery::Delivered,
@@ -109,6 +111,7 @@ fn a_round_trip_preserves_every_field() {
         // Reactions are not part of the row: they are written by
         // `set_reaction` and read back from their own table.
         reactions: vec![],
+        annotations: vec![],
         reply_to: Some("earlier".into()),
         batch: Some("batch-1".into()),
         delivery: Delivery::Failed("no such channel".into()),
@@ -984,4 +987,100 @@ fn deleting_a_target_takes_its_draft_and_nothing_else() {
         store.get_draft("libera", "#other").unwrap().as_deref(),
         Some("also unsent")
     );
+}
+
+/// #90. A note is held nowhere but the archive once the window has moved on,
+/// so a conversation reopened tomorrow reads it back rather than running the
+/// annotator again over history.
+#[test]
+fn an_annotation_comes_back_with_the_message() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message("m1", "#ircx", "2026-01-01T00:00:00Z", "it is 72F")])
+        .unwrap();
+    store
+        .set_annotation("libera", "m1", "units", "22 C")
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(
+        read[0].annotations,
+        vec![Annotation {
+            plugin: "units".into(),
+            text: "22 C".into()
+        }]
+    );
+}
+
+/// One note per plugin per message. The annotator runs on arrival and a
+/// history backfill can hand it the same message a second time, so the second
+/// answer replaces the first rather than doubling it.
+#[test]
+fn a_plugin_annotating_twice_replaces_what_it_said() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message("m1", "#ircx", "2026-01-01T00:00:00Z", "it is 72F")])
+        .unwrap();
+    store
+        .set_annotation("libera", "m1", "units", "22 C")
+        .unwrap();
+    store
+        .set_annotation("libera", "m1", "units", "22.2 C")
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].annotations.len(), 1);
+    assert_eq!(read[0].annotations[0].text, "22.2 C");
+}
+
+#[test]
+fn two_plugins_each_keep_their_own_note() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "m1",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "see example.com",
+        )])
+        .unwrap();
+    store
+        .set_annotation("libera", "m1", "units", "22 C")
+        .unwrap();
+    store
+        .set_annotation("libera", "m1", "links", "Example Domain")
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    // Ordered by plugin, so two annotators racing do not swap places between
+    // one page load and the next.
+    assert_eq!(
+        read[0]
+            .annotations
+            .iter()
+            .map(|note| note.plugin.as_str())
+            .collect::<Vec<_>>(),
+        ["links", "units"]
+    );
+}
+
+/// The row waits for a message the archive does not hold, exactly as a
+/// reaction's does — the annotator can answer a backfill that has not landed.
+#[test]
+fn an_annotation_can_be_written_before_the_message_it_names() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_annotation("libera", "later", "units", "22 C")
+        .unwrap();
+    store
+        .append_messages(&[message(
+            "later",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "it is 72F",
+        )])
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].annotations[0].text, "22 C");
 }

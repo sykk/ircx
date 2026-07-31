@@ -104,9 +104,8 @@ function seedTimelines(timelines: AppState["timelines"]) {
       },
     },
     timelines,
-    // Cleared with the timelines it belongs to: `setState` merges, so a note
-    // left by one test would be drawn against another's messages.
-    annotations: {},
+    // Cleared with the timelines it belongs to: `setState` merges, so state
+    // left by one test would apply to another's messages.
     replyTo: {},
   });
 }
@@ -989,16 +988,30 @@ describe("plugin annotations", () => {
   });
 
   /** The annotator runs on arrival, so a note can name a message that has
-   * scrolled out of the loaded window. Holding it costs nothing and means it
-   * is there if the message scrolls back in. */
-  it("keeps a note for a message that is not loaded", () => {
+   * scrolled out of the loaded window. Dropped here rather than held, because
+   * the archive keeps it and hands it back with the message — which is what
+   * `reactionChanged` already does for the same reason. */
+  it("drops a note for a message that is not loaded", () => {
     seed([makeMessage({ id: "m1", nick: "phrack", text: "here" })]);
     annotate("gone", "units", "22 C");
     render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.queryByText("22 C")).toBeNull();
-    expect(useAppStore.getState().annotations[KEY]?.gone).toEqual([
-      { plugin: "units", text: "22 C" },
+  });
+
+  /** The archive's copy, arriving with the message rather than as an event. */
+  it("draws a note the archive handed back with the message", () => {
+    seed([
+      makeMessage({
+        id: "m1",
+        nick: "phrack",
+        text: "it is 72F outside",
+        annotations: [{ plugin: "units", text: "22 C" }],
+      }),
     ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("22 C")).toBeTruthy();
+    expect(screen.getByText("units")).toBeTruthy();
   });
 });

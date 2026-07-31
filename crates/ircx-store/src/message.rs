@@ -1,4 +1,4 @@
-use ircx_ipc::{ChatMessage, MessageSource, Reaction, Sender};
+use ircx_ipc::{Annotation, ChatMessage, MessageSource, Reaction, Sender};
 use rusqlite::{params, Connection, Row, Transaction};
 
 use crate::{from_json_column, to_json, StoreError};
@@ -105,6 +105,9 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         // row here; `attach_reactions` fills them in for a page that has been
         // read.
         reactions: Vec::new(),
+        // Same: `attach_annotations` fills these in for a page that has been
+        // read.
+        annotations: Vec::new(),
         reply_to: row.get(13)?,
         batch: row.get(14)?,
         delivery: from_json_column(row, 15)?,
@@ -165,6 +168,47 @@ pub(crate) fn attach_reactions(
             }
         }
         message.reactions = reactions;
+    }
+    Ok(())
+}
+
+const SET_ANNOTATION: &str =
+    "INSERT INTO annotations (network, msgid, plugin, text) VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT (network, msgid, plugin) DO UPDATE SET text = excluded.text";
+
+pub(crate) fn set_annotation(
+    conn: &Connection,
+    network: &str,
+    msgid: &str,
+    plugin: &str,
+    text: &str,
+) -> Result<(), StoreError> {
+    conn.execute(SET_ANNOTATION, params![network, msgid, plugin, text])?;
+    Ok(())
+}
+
+const ANNOTATIONS: &str =
+    "SELECT plugin, text FROM annotations WHERE network = ?1 AND msgid = ?2 ORDER BY plugin";
+
+/// Fills in the notes for messages already read. Ordered by plugin rather than
+/// by arrival, because two annotators race and a reader should not find the
+/// same two notes swapping places between one page load and the next.
+pub(crate) fn attach_annotations(
+    conn: &Connection,
+    messages: &mut [ChatMessage],
+) -> Result<(), StoreError> {
+    let mut stmt = conn.prepare_cached(ANNOTATIONS)?;
+    for message in messages {
+        let (network, key) = (message.network.clone(), message.id.clone());
+        let mut rows = stmt.query(params![network, key])?;
+        let mut annotations = Vec::new();
+        while let Some(row) = rows.next()? {
+            annotations.push(Annotation {
+                plugin: row.get(0)?,
+                text: row.get(1)?,
+            });
+        }
+        message.annotations = annotations;
     }
     Ok(())
 }

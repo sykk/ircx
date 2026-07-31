@@ -4,16 +4,13 @@ import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, useAppStore } from "@/store";
 import { targetKey, useTimelineForView, useView } from "@/store/selectors";
-import type { Annotation, TimelineState, ViewId } from "@/store/types";
+import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
 import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { buildRows, rowIndexOfMessage, type TimelineRow } from "./rows";
 
-/** One stable empty map, so a conversation nobody annotates does not hand the
- * timeline a fresh object on every store read. */
-const NO_NOTES: Record<string, Annotation[]> = {};
 import { usePrependAnchor } from "./scrollAnchor";
 
 const PAGE_SIZE = 200;
@@ -57,7 +54,6 @@ interface TimelineForProps {
 function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
-  const annotations = useAppStore((s) => s.annotations[targetKey(network, target)] ?? NO_NOTES);
   const canTag = useAppStore(
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
@@ -242,7 +238,6 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                   canTag,
                   onReact: react,
                   onReply: reply,
-                  annotations,
                   flashId,
                 })}
               </div>
@@ -283,7 +278,6 @@ interface RowContext {
   canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
-  annotations: Record<string, Annotation[]>;
   flashId: string | null;
 }
 

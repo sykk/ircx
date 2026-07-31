@@ -197,11 +197,10 @@ answers with its own text, drawn beside that message and named with the plugin's
 id. It is the command shape under a different trigger: the host hands a value
 over, the plugin returns one, the host applies a deadline.
 
-**Built**: the permission, the manifest flag, the batch call, what the handler
-cannot reach, the sanitising, the host handing arrivals over on the batch that
-drew them, and the note drawn under the message and named with the plugin. What
-is missing is in *What is not built* — chiefly that a note does not survive a
-restart.
+**Built**, end to end: the permission, the manifest flag, the batch call, what
+the handler cannot reach, the sanitising, the host handing arrivals over on the
+batch that drew them, the note drawn under the message and named with the
+plugin, and the note surviving a restart.
 
 ```json
 {
@@ -239,7 +238,8 @@ Three properties, and the first is what makes the other two affordable.
   question about the plugin rather than about message latency.
 - **It runs once per message.** The answer is stored beside the message, keyed by
   the message and the plugin, so scrolling redraws it instead of recomputing it,
-  and a restart still has it — the way `via` survives one. The 0.022 ms in
+  and a restart still has it — an `annotations` table keyed by the network, the
+  message and the plugin, alongside the one reactions use. The 0.022 ms in
   `docs/measurements.md` is per slash command, something a person types; calling
   into QuickJS while a timeline scrolls is not an option at any figure.
 - **Messages are handed over in batches.** A netsplit rejoin or a history
@@ -323,13 +323,8 @@ the report and the rest are silence.
 
 ## What is not built
 
-- **A note that survives a restart.** It is held in the window and nowhere
-  else, so closing the client loses every note and reopening a conversation
-  does not bring them back — the annotator does not run again over history.
-  What it needs is a table keyed by the message and the plugin, the way `via`
-  is a column on the message.
-- **The other three extension points.** Providers, notification rules and
-  protocol adapters.
+- **The other three extension points' shapes.** Providers, notification rules
+  and protocol adapters are still only described.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The
   install dialogue offers the channels the manifest named, and lets the user
   type one when the manifest asked for `*`. Neither is a list of the channels

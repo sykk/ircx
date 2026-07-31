@@ -12,10 +12,23 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use ircx_plugin::{
-    net, CommandRequest, CommandSpec, Grants, Limits, Manifest, Permission, PluginRuntime, Sandbox,
+    net, AnnotateRequest, ArrivedMessage, CommandRequest, CommandSpec, Grants, Limits, Manifest,
+    Permission, PluginRuntime, Sandbox,
 };
 
 const ECHO: &str = r#"ircx.command("echo", (call) => "pong: " + call.args);"#;
+
+/// The example in `docs/plugins.md`, which is the shape an annotator is
+/// expected to be: one regex against the text, and silence for most messages.
+const UNITS: &str = r#"
+ircx.annotate((message) => {
+  const found = /(-?\d+(?:\.\d+)?)\s?F\b/.exec(message.text);
+  if (!found) return;
+  return String(Math.round(((Number(found[1]) - 32) * 5) / 9)) + " C";
+});
+"#;
+
+const CHANNEL: &str = "#ircx";
 
 fn main() {
     let root = std::env::temp_dir().join(format!("ircx-bench-{}", std::process::id()));
@@ -94,7 +107,96 @@ fn main() {
         took
     });
 
+    // Annotators. The load-bearing row here is the first: it is what every
+    // conversation pays on every batch of arrivals, whether or not anything
+    // annotates.
+    let notes = root.join("annotators");
+    let annotator_source = author_annotator(&root);
+    let runtime =
+        PluginRuntime::open(notes.clone(), Limits::default(), net::refuses()).expect("open");
+    report("look for annotators, none installed", 10_000, || {
+        let at = Instant::now();
+        let found = runtime.annotators(CHANNEL);
+        let took = at.elapsed();
+        assert!(found.is_empty(), "nothing annotates");
+        took
+    });
+
+    runtime.install(&annotator_source).expect("install");
+    runtime.set_grants("units", annotates()).expect("grant");
+    report("look for annotators, one installed", 10_000, || {
+        let at = Instant::now();
+        let found = runtime.annotators(CHANNEL);
+        let took = at.elapsed();
+        assert_eq!(found.len(), 1, "one annotates");
+        took
+    });
+
+    let annotator = runtime.annotators(CHANNEL).remove(0);
+    runtime
+        .annotate(&annotator, batch(1))
+        .expect("the batch is annotated");
+    report("annotate a batch of 1, warm plugin", 5_000, || {
+        let at = Instant::now();
+        runtime.annotate(&annotator, batch(1)).expect("annotates");
+        at.elapsed()
+    });
+    report("annotate a batch of 50, warm plugin", 500, || {
+        let at = Instant::now();
+        runtime.annotate(&annotator, batch(50)).expect("annotates");
+        at.elapsed()
+    });
+    drop(runtime);
+
     let _ = fs::remove_dir_all(&root);
+}
+
+fn annotates() -> Grants {
+    Grants {
+        permissions: [Permission::AnnotateMessages, Permission::AccessChannels]
+            .into_iter()
+            .collect(),
+        channels: vec![CHANNEL.into()],
+        hosts: Vec::new(),
+    }
+}
+
+/// A batch as a channel produces one: mostly messages with nothing to annotate,
+/// because that is what a conversation is. Every fifth carries a temperature.
+fn batch(messages: usize) -> AnnotateRequest {
+    AnnotateRequest {
+        target: CHANNEL.into(),
+        messages: (0..messages)
+            .map(|n| ArrivedMessage {
+                id: format!("m{n}"),
+                nick: "sable".into(),
+                text: match n % 5 {
+                    0 => format!("it is {}F outside", 60 + n),
+                    _ => "nothing worth a note in this one".into(),
+                },
+                time: "2026-07-31T00:00:00Z".into(),
+            })
+            .collect(),
+    }
+}
+
+fn author_annotator(root: &Path) -> PathBuf {
+    let directory = root.join("annotator-source");
+    fs::create_dir_all(&directory).expect("write a plugin to measure");
+    let manifest = Manifest {
+        id: "units".into(),
+        name: "Units".into(),
+        version: "1.0.0".into(),
+        description: "Reads Fahrenheit in Celsius".into(),
+        entry: "main.js".into(),
+        annotates: true,
+        commands: Vec::new(),
+        requests: annotates(),
+    };
+    let json = serde_json::to_vec_pretty(&manifest).expect("a manifest serialises");
+    fs::write(directory.join("plugin.json"), json).expect("write the manifest");
+    fs::write(directory.join("main.js"), UNITS).expect("write the code");
+    directory
 }
 
 fn report(what: &str, runs: usize, mut once: impl FnMut() -> Duration) {

@@ -96,19 +96,41 @@ one process on the release profile, from
 |---|---|---|
 | open the library, no plugins installed | 200 | 0.0038 ms |
 | look a command up, nothing installed | 10,000 | 0.0014 ms |
-| install one plugin | 50 | 0.066 ms |
-| first call, cold plugin | 50 | 0.338 ms |
-| call, warm plugin | 5,000 | 0.022 ms |
-| build a QuickJS runtime and load one plugin | 200 | 0.200 ms |
+| install one plugin | 50 | 0.063 ms |
+| first call, cold plugin | 50 | 0.374 ms |
+| call, warm plugin | 5,000 | 0.021 ms |
+| build a QuickJS runtime and load one plugin | 200 | 0.214 ms |
+| look for annotators, none installed | 10,000 | 0.0014 ms |
+| look for annotators, one installed | 10,000 | 0.0018 ms |
+| annotate a batch of 1, warm plugin | 5,000 | 0.026 ms |
+| annotate a batch of 50, warm plugin | 500 | 0.207 ms |
+
+Every row is from one run of the command above, on 2026-07-31. Taken together
+rather than accumulated, because a table with rows from different days compares
+nothing.
 
 **The first row is the load-bearing one.** It is the whole of what a user with
 no plugins pays at runtime: one listing of a directory that is usually not
 there. No QuickJS runtime is built and no thread is spawned until a plugin's
 command is actually typed, which is the third and fourth rows.
 
+**The seventh is the annotator's version of it**, and it is paid more often: a
+command is typed, while a batch of arrivals happens whenever anyone talks. At
+0.0014 ms it is the same map lookup as the second row, and it is what a
+conversation costs when nothing annotates it — which is every conversation for
+a user with no plugins.
+
+**The last two rows are why a batch is a batch.** Fifty messages handed over
+one at a time would be fifty crossings at 0.026 ms, about 1.3 ms; handed over
+together they cost 0.207 ms, which is 6 times cheaper. The marginal message is
+0.0037 ms — the boundary dominates, and a netsplit rejoin or a history backfill
+is exactly where that matters.
+
 **Covers:** in-process work only. **Excludes:** process start, and anything a
 real plugin does with its argument — the fifth row is boundary cost, not the
-cost of a plugin.
+cost of a plugin. The annotator rows carry one regex against each message,
+which is the shape `docs/plugins.md` gives as the example, so they are a
+plausible plugin rather than an empty one.
 
 What it adds to the binary is under [size](#size). A user with no plugins never
 touches that text; the spike measured the demand-paging cost of unused text at

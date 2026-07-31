@@ -12,9 +12,6 @@ interface BlockProps {
   spine: boolean;
   /** What the spine is drawn in. The default marks a run of speech and no more. */
   spineTint?: string | undefined;
-  /** Dashed says the client grouped this and could be wrong. Nothing else in
-   * the timeline is dashed, so dashed can only ever mean that. */
-  spineDashed?: boolean;
   /** This block continues a group the block above opened, so its spine has to
    * climb through the gap between them. Without it a group's rule breaks once
    * per author and a solid group reads as a dashed one. */
@@ -34,7 +31,6 @@ interface BlockProps {
 export function Block({
   spine,
   spineTint = "var(--border-strong)",
-  spineDashed = false,
   spineContinues = false,
   children,
 }: BlockProps) {
@@ -55,12 +51,12 @@ export function Block({
     >
       {spine && (
         <div
-          data-spine={spineDashed ? "dashed" : "solid"}
+          data-spine="solid"
           style={{
             gridColumn: 1,
             // A border rather than a fill: only a border can be dashed.
             borderLeftWidth: "var(--timeline-spine-width)",
-            borderLeftStyle: spineDashed ? "dashed" : "solid",
+            borderLeftStyle: "solid",
             borderLeftColor: spineTint,
             // Overlap the block above by a pixel. Block heights are fractional,
             // so a boundary rounds either way and leaves a hairline of
@@ -108,7 +104,6 @@ interface Props {
   flashId: string | null;
   group: Group | null;
   opensGroup: boolean;
-  onDismissGroup: (groupId: string) => void;
 }
 
 /**
@@ -125,26 +120,6 @@ function GroupName({ name, tint }: { name: string; tint: string }) {
         {name}
       </span>
     </div>
-  );
-}
-
-/**
- * The way out of a guess, above the first block in it.
- *
- * The affordance is the label: only a guess can be undone, so an offer to undo
- * is what tells the reader the client did this — without a sentence explaining
- * the heuristic, which is the client talking about itself at length.
- */
-function DismissGuess({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onDismiss}
-      className="text-[11px] hover:underline"
-      style={{ color: "var(--text-faint)" }}
-    >
-      not a group
-    </button>
   );
 }
 
@@ -179,7 +154,6 @@ export function MessageBlock({
   flashId,
   group,
   opensGroup,
-  onDismissGroup,
 }: Props) {
   const head = messages[0]!;
   const addressed = messages.some((message) => isHighlight(message, ownNick));
@@ -199,14 +173,10 @@ export function MessageBlock({
     <Block
       spine
       spineTint={spineTint}
-      spineDashed={group?.grade === "guessed"}
       spineContinues={group !== null && !opensGroup}
     >
       {opensGroup && group !== null && group.name !== null && (
         <GroupName name={group.name} tint={groupTint ?? "var(--text-faint)"} />
-      )}
-      {opensGroup && group?.grade === "guessed" && (
-        <DismissGuess onDismiss={() => onDismissGroup(group.id)} />
       )}
       {/* Why the run is marked, in the words for it. A tint on its own leaves
           the reader to work out what the client noticed, and the answer — your

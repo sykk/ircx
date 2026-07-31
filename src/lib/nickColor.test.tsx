@@ -76,7 +76,6 @@ describe("nick colour across surfaces", () => {
           flashId={null}
           group={null}
           opensGroup={false}
-          onDismissGroup={() => {}}
         />,
       );
 

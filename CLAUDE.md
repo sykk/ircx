@@ -18,11 +18,19 @@ nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`; a
 message in no group keeps a neutral spine where the study draws nothing; and a
 message naming you takes the accent, outranking the colour of any group it is in.
 
-The spine carries grouping, in the three grades
-`readability/ircx-live-studies.html` sets out — declared, addressed, guessed.
-Hue says which group, taken from whoever opened it; stroke says how sure the
-client is, and dashed can mean nothing but a guess.
-`src/components/timeline/groups.ts` assigns each message to at most one.
+The spine carries grouping, and its hue names the group — taken from whoever
+opened it. `src/components/timeline/groups.ts` assigns each message to at most
+one, on the evidence of what people typed: a `[topic]` somebody declared, or a
+leading `nick:` addressing somebody who has spoken.
+
+`readability/ircx-live-studies.html` names a third grade, guessed, from timing
+and participants. **It shipped and was taken out again**, and the reason is the
+useful part: grouping separates conversations happening at once, so a channel
+where everybody is in the same conversation has nothing to separate. A live run
+returned twenty messages between three people as one group spanning the lot. No
+threshold fixes it — a shorter gap only chops one conversation into arbitrary
+pieces. A guess worth drawing fires only where it separates two disjoint sets of
+people in one window, which is clustering rather than a timer.
 
 `docs/multiwindow.md` describes split panes and per-pane context. The layout
 tree is built, and every pane on a channel draws its own member list inside it —

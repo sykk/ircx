@@ -179,10 +179,14 @@ export function buildRows(
     // Named for the message that opened the run, message ids being unique
     // already. The id used to name the bucket, and there is no bucket now.
     if (system) {
+      // The group is not over: `assignGroups` never saw this line, because
+      // nobody said it. A digest of joins draws no rule, and the exchange
+      // either side of it is still one exchange, so `openGroupId` stands.
+      //
+      // Resetting it here is what made a channel with ordinary comings and
+      // goings draw the same group four times, each with its own name and its
+      // own dismiss chip — the model saying one group and the rows saying four.
       open = { kind: "system", id: `s:${message.id}`, messages: [message] };
-      // Anything between two blocks of a group breaks the rule: a digest of
-      // joins is not part of what anybody was saying.
-      openGroupId = null;
     } else {
       // The head message decides, because a block is one person's run inside
       // one exchange and its lines nearly always share a group. Where they do

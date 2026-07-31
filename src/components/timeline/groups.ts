@@ -1,19 +1,28 @@
 import type { ChatMessage } from "@/types";
 
 /**
- * Which messages belong together, and how sure the client is that they do.
+ * Which messages belong together, on the evidence of what people typed.
  *
- * `readability/ircx-live-studies.html` argues grouping is three grades rather
- * than two: a bracketed topic the sender typed is a fact, IRC's `nick:`
- * convention is near-certain, and everything else is a guess. Drawing all three
- * at one strength is the interface claiming to know more than it does.
+ * `readability/ircx-live-studies.html` names three grades: a bracketed topic
+ * the sender typed is a fact, IRC's `nick:` convention is near-certain, and
+ * everything else is a guess from timing and participants. Two are built.
  *
- * Stroke ranks certainty and hue names the group — `READABILITY.md:236`. Hue
- * has no order, so it cannot carry "how sure"; certainty is ordinal, so it
- * cannot be a colour. The two questions are independent and are answered by
- * two properties that cannot be mistaken for one another.
+ * **The guess is not, and the reason is worth keeping.** It shipped, and a run
+ * against a real channel showed what it does: grouping exists to separate
+ * conversations happening at once, and a channel where everybody is in the same
+ * conversation has nothing to separate. Twenty messages between three people
+ * came back as one group spanning the lot — a rule down the whole screen,
+ * distinguishing nothing, and saying "not sure" about every line in the
+ * channel. No threshold fixes that; a shorter gap only chops one conversation
+ * into arbitrary pieces. The version worth building fires only when it
+ * separates two disjoint sets of people in the same window, and that is
+ * clustering rather than a timer.
+ *
+ * So the spine is coloured where somebody's own words grouped it, and stays
+ * neutral otherwise. Hue names the group — `READABILITY.md:236` — taken from
+ * whoever opened it.
  */
-export type Grade = "declared" | "addressed" | "guessed";
+export type Grade = "declared" | "addressed";
 
 export interface Group {
   /** The id of the message that opened it, and the group's identity. */
@@ -46,12 +55,9 @@ const ADDRESSED = /^([A-Za-z0-9_[\]\\`^{}|-]{2,16})[:,]\s/;
 /** How far back a nick must have spoken for an address to it to mean anything. */
 const ADDRESS_LOOKBACK_MS = 15 * 60 * 1000;
 
-/** Silence that ends a guessed group. Longer than a pause, shorter than a topic. */
-const GUESS_GAP_MS = 2 * 60 * 1000;
-
 /**
- * Silence that ends a declared one. Longer than a guess, because somebody named
- * this topic and a pause in a named conversation is still that conversation.
+ * Silence that ends a declared group. Long enough that a pause in a named
+ * conversation is still that conversation.
  *
  * Not much longer, though, and the first draft of this had it at ten minutes.
  * A declared group runs forward until something stops it, so a window wide
@@ -61,18 +67,6 @@ const GUESS_GAP_MS = 2 * 60 * 1000;
  * says what this is about, not that the channel is yours until you say stop.
  */
 const DECLARED_GAP_MS = 5 * 60 * 1000;
-
-/**
- * The floor a guess has to clear, below which it is not drawn at all.
- *
- * One person talking is an author block, which already draws its own edge and
- * states their name — grouping it says nothing the reader did not have. Two
- * messages is a remark and a reply, which is what a conversation looks like
- * when nothing is happening. The study's rule is that a guess below a size and
- * confidence floor is not drawn, and this is where that floor sits.
- */
-const GUESS_MIN_MESSAGES = 3;
-const GUESS_MIN_PEOPLE = 2;
 
 /** The topic a sender declared, or null. */
 export function declaredName(text: string): string | null {
@@ -106,17 +100,11 @@ function fold(nick: string): string {
 /**
  * Every message that belongs to a group, mapped to the group it belongs to.
  *
- * Declared beats addressed beats guessed, and a message is in at most one
- * group — the study's rule, and the reason this is one pass in precedence order
- * rather than three passes that would have to argue about overlaps.
- *
- * `dismissed` holds group ids the reader has waved away. Only a guess can be
- * dismissed, because only a guess is the client's own idea.
+ * Declared beats addressed and a message is in at most one group — the study's
+ * rule, and the reason this is one pass in precedence order rather than two
+ * that would have to argue about overlaps.
  */
-export function assignGroups(
-  messages: readonly ChatMessage[],
-  dismissed: ReadonlySet<string> = new Set(),
-): Map<string, Group> {
+export function assignGroups(messages: readonly ChatMessage[]): Map<string, Group> {
   const groups = new Map<string, Group>();
   const speech = messages.filter(isSpeech);
 
@@ -177,40 +165,5 @@ export function assignGroups(
     groups.set(message.id, group);
   }
 
-  // Guessed. Runs of speech with no long silence in them, kept only when
-  // several people said several things — and dropped the moment the reader says
-  // it was not a group.
-  for (const run of runsByTiming(speech)) {
-    const free = run.filter((message) => !groups.has(message.id));
-    if (free.length < GUESS_MIN_MESSAGES) continue;
-    if (new Set(free.map((message) => fold(message.sender.nick))).size < GUESS_MIN_PEOPLE) continue;
-
-    const opener = free[0]!;
-    if (dismissed.has(opener.id)) continue;
-    const group: Group = {
-      id: opener.id,
-      grade: "guessed",
-      name: null,
-      opener: opener.sender.nick,
-    };
-    for (const message of free) groups.set(message.id, group);
-  }
-
   return groups;
-}
-
-/** Consecutive speech with no `GUESS_GAP_MS` of silence inside it. */
-function runsByTiming(speech: readonly ChatMessage[]): ChatMessage[][] {
-  const runs: ChatMessage[][] = [];
-  let open: ChatMessage[] = [];
-  for (const message of speech) {
-    const previous = open[open.length - 1];
-    if (previous !== undefined && at(message) - at(previous) > GUESS_GAP_MS) {
-      runs.push(open);
-      open = [];
-    }
-    open.push(message);
-  }
-  if (open.length > 0) runs.push(open);
-  return runs;
 }

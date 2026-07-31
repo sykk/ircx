@@ -736,21 +736,35 @@ impl SessionState {
         self.emit_channel(&key);
     }
 
+    /// The topic a channel already had, which arrives on every join.
+    ///
+    /// Said in the timeline rather than drawn as chrome: the header leaves the
+    /// topic out on purpose, and a change to it already reads as a line in the
+    /// conversation. Without this the topic of a channel you just joined is
+    /// tracked and shown nowhere at all.
     fn on_topic_reply(&mut self, params: &[String]) {
         let (Some(name), Some(topic)) = (params.first(), params.get(1)) else {
             return;
         };
-        let key = self.fold(name);
+        let (name, key) = (name.clone(), self.fold(params[0].as_str()));
         let topic = topic.clone();
         let Some(channel) = self.channels.get_mut(&key) else {
             return;
         };
         channel.topic = Some(Topic {
-            text: topic,
+            text: topic.clone(),
             set_by: None,
             set_at: None,
         });
         self.emit_channel(&key);
+
+        if !topic.trim().is_empty() {
+            self.note(
+                &name,
+                MessageKind::Topic,
+                format!("The topic of {name} is: {topic}"),
+            );
+        }
     }
 
     fn on_no_topic(&mut self, params: &[String]) {
@@ -763,18 +777,37 @@ impl SessionState {
         self.emit_channel(&key);
     }
 
+    /// Who set that topic and when, which the server sends straight after it.
+    ///
+    /// The seconds are turned into the same RFC 3339 the live path stores from
+    /// the `time` tag. They were kept as the raw epoch before, so one field
+    /// held two formats and whichever drew it would have shown a number half
+    /// the time.
     fn on_topic_who_time(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
-        let key = self.fold(name);
-        let (set_by, set_at) = (params.get(1).cloned(), params.get(2).cloned());
+        let (name, key) = (name.clone(), self.fold(name));
+        let set_by = params.get(1).cloned();
+        let set_at = params.get(2).and_then(|epoch| rfc3339(epoch));
         let Some(channel) = self.channels.get_mut(&key) else {
             return;
         };
+        if channel.topic.is_none() {
+            return;
+        }
         if let Some(topic) = channel.topic.as_mut() {
-            topic.set_by = set_by;
-            topic.set_at = set_at;
+            topic.set_by.clone_from(&set_by);
+            topic.set_at.clone_from(&set_at);
         }
         self.emit_channel(&key);
+
+        if let Some(who) = set_by {
+            let when = set_at
+                .as_deref()
+                .and_then(readable)
+                .map(|when| format!(" on {when}"))
+                .unwrap_or_default();
+            self.note(&name, MessageKind::Topic, format!("Set by {who}{when}"));
+        }
     }
 
     fn on_channel_modes(&mut self, params: &[String]) {
@@ -1696,6 +1729,33 @@ impl SessionState {
         self.next_label += 1;
         label
     }
+}
+
+/// `333` carries the time as whole seconds since the epoch. The live path
+/// stores RFC 3339 from the `time` tag, so this is what keeps one field in one
+/// format.
+fn rfc3339(epoch: &str) -> Option<String> {
+    let seconds: i64 = epoch.trim().parse().ok()?;
+    time::OffsetDateTime::from_unix_timestamp(seconds)
+        .ok()?
+        .format(&time::format_description::well_known::Rfc3339)
+        .ok()
+}
+
+/// A date a person can read, for a sentence a person will read. The timeline
+/// formats the times it draws in its own gutter; this one is inside prose that
+/// core writes, like every other system line.
+fn readable(rfc3339: &str) -> Option<String> {
+    let at = time::OffsetDateTime::parse(rfc3339, &time::format_description::well_known::Rfc3339)
+        .ok()?;
+    Some(format!(
+        "{}-{:02}-{:02} at {:02}:{:02} UTC",
+        at.year(),
+        u8::from(at.month()),
+        at.day(),
+        at.hour(),
+        at.minute(),
+    ))
 }
 
 fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {

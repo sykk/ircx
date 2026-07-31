@@ -330,6 +330,23 @@ neither direction is a message anything could miss.
 which is #93 seen from the other side: the refusal is an `Error` and a plugin
 that degrades can say why it did.
 
+## Unread counts
+
+`mark_read` is the only thing that resets a conversation's unread count, and
+until #133 nothing called it — a badge in the sidebar only ever grew. It is told
+now when the pane showing a conversation takes focus.
+
+Which moment counts as *read* is a judgement, so a test can only assert whichever
+rule was chosen. What a running window has to answer is whether the rule is the
+right one:
+
+- A channel in the other half of a split keeps its count until that pane is
+  focused, which is deliberate — being on screen is not being read — and may
+  still feel wrong when both panes are plainly visible.
+- A conversation left focused while messages arrive is marked read once, on
+  arrival at it. Whether a badge should reappear underneath a pane the user is
+  looking at but not reading is not settled.
+
 ## Schema migrations
 
 `migrations.rs` is covered by two tests — that migrating is idempotent on

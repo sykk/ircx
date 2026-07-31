@@ -512,6 +512,17 @@ fn parse_head(buffer: &[u8], host: &str) -> Result<Option<Head>, HttpError> {
     Ok(Some(head))
 }
 
+/// The `Host` header and request path this client will send for `url`.
+///
+/// Exposed for signing. An AWS signature covers the host and the path exactly
+/// as they go on the wire, so deriving them a second time in the caller would
+/// be two parsers that have to agree — and the failure when they stop agreeing
+/// is a signature the provider rejects with no clue why.
+pub fn signing_target(url: &str) -> Result<(String, String), HttpError> {
+    let target = Target::parse(url)?;
+    Ok((target.host_header(), target.path.clone()))
+}
+
 #[derive(Debug)]
 struct Target {
     https: bool,
@@ -567,6 +578,16 @@ impl Target {
         self.port == if self.https { 443 } else { 80 }
     }
 
+    /// The `Host` header exactly as it goes on the wire. One definition of it,
+    /// because a signature that covers a different one signs nothing.
+    fn host_header(&self) -> String {
+        if self.default_port() {
+            self.host.clone()
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
+    }
+
     fn origin(&self) -> String {
         if self.default_port() {
             format!("{}://{}", self.scheme(), self.host)
@@ -591,11 +612,7 @@ impl Target {
     /// here beyond the framing: a header carrying a newline would let the user
     /// write a second request into their own, so that is refused.
     fn upload_head(&self, length: usize, policy: &UploadPolicy) -> Vec<u8> {
-        let host = if self.default_port() {
-            self.host.clone()
-        } else {
-            format!("{}:{}", self.host, self.port)
-        };
+        let host = self.host_header();
         let mut head = format!(
             "{} {} HTTP/1.1\r\n\
              Host: {host}\r\n\
@@ -621,11 +638,7 @@ impl Target {
     }
 
     fn request_bytes(&self, accept: &str) -> Vec<u8> {
-        let host = if self.default_port() {
-            self.host.clone()
-        } else {
-            format!("{}:{}", self.host, self.port)
-        };
+        let host = self.host_header();
         format!(
             "GET {} HTTP/1.1\r\n\
              Host: {host}\r\n\

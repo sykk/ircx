@@ -11,6 +11,7 @@ const MIGRATIONS: &[&str] = &[
     ANNOTATIONS,
     RAISED,
     UPLOAD_PROVIDER,
+    UPLOAD_S3,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -219,6 +220,14 @@ CREATE TABLE upload_provider (
     method      TEXT NOT NULL,
     auth_header TEXT
 );
+"#;
+
+/// S3-compatible storage signs the request instead of sending a token, so it
+/// needs two more things stored and the same one secret. Null in both columns
+/// is the provider kind that was here before.
+const UPLOAD_S3: &str = r#"
+ALTER TABLE upload_provider ADD COLUMN s3_region TEXT;
+ALTER TABLE upload_provider ADD COLUMN s3_access_key_id TEXT;
 "#;
 
 const RAISED: &str = r#"

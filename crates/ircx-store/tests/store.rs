@@ -1211,7 +1211,7 @@ fn history_keeps_two_different_conversations_apart() {
 /// #90. Where an attachment goes before its link is sent.
 mod upload_provider {
     use super::*;
-    use ircx_ipc::{UploadMethod, UploadProvider};
+    use ircx_ipc::{S3Credentials, UploadMethod, UploadProvider};
 
     fn provider() -> UploadProvider {
         UploadProvider {
@@ -1219,7 +1219,61 @@ mod upload_provider {
             method: UploadMethod::Put,
             auth_header: Some("Authorization".into()),
             token: Some("Bearer sekrit".into()),
+            s3: None,
         }
+    }
+
+    /// Signing needs two more things stored and the same one secret, and the
+    /// secret goes where the token goes rather than beside them.
+    #[test]
+    fn an_s3_provider_reads_back_its_region_and_key_but_not_its_secret() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                endpoint: "https://s3.example.com/bucket/{name}".into(),
+                auth_header: None,
+                token: Some("wJalrXUtnFEMI".into()),
+                s3: Some(S3Credentials {
+                    region: "eu-west-1".into(),
+                    access_key_id: "AKIAIOSFODNN7EXAMPLE".into(),
+                }),
+                ..provider()
+            })
+            .unwrap();
+
+        let read = store.upload_provider().unwrap().expect("a provider");
+        let s3 = read.s3.expect("the signing details");
+        assert_eq!(s3.region, "eu-west-1");
+        assert_eq!(s3.access_key_id, "AKIAIOSFODNN7EXAMPLE");
+        assert_eq!(read.token, None, "a secret only ever travels one way");
+        assert_eq!(
+            store.upload_token().unwrap().as_deref(),
+            Some("wJalrXUtnFEMI")
+        );
+    }
+
+    /// Switching a provider back to one that carries a token must not leave a
+    /// region behind for a signer nothing uses.
+    #[test]
+    fn dropping_the_signing_details_drops_them() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                s3: Some(S3Credentials {
+                    region: "eu-west-1".into(),
+                    access_key_id: "AKIA".into(),
+                }),
+                ..provider()
+            })
+            .unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+
+        assert!(store
+            .upload_provider()
+            .unwrap()
+            .expect("a provider")
+            .s3
+            .is_none());
     }
 
     /// "No provider" is a configuration the spec names, and it is the absence

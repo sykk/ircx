@@ -32,6 +32,7 @@ export type { PluginCommand } from "./generated/PluginCommand";
 export type { PluginGrants } from "./generated/PluginGrants";
 export type { FileToUpload } from "./generated/FileToUpload";
 export type { UploadMethod } from "./generated/UploadMethod";
+export type { S3Credentials } from "./generated/S3Credentials";
 export type { UploadProvider } from "./generated/UploadProvider";
 export type { PluginPermission } from "./generated/PluginPermission";
 export type { PluginPermissionInfo } from "./generated/PluginPermissionInfo";

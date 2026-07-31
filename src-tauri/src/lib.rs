@@ -1,6 +1,7 @@
 mod commands;
 mod events;
 mod preview;
+mod sigv4;
 mod state;
 mod themes;
 mod upload;

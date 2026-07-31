@@ -82,6 +82,7 @@ export interface AppActions {
   openSetup: (network: string | null) => void;
   closeSetup: () => void;
   togglePlugins: (open?: boolean) => void;
+  toggleUpload: (open?: boolean) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
@@ -121,6 +122,7 @@ const initialState: AppState = {
   searchOpen: false,
   setup: null,
   pluginsOpen: false,
+  uploadOpen: false,
   channelsOpen: null,
   plugins: [],
   pluginsUnavailable: null,
@@ -318,6 +320,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   closeSetup: () => set({ setup: null }),
 
   togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
+  toggleUpload: (open) => set((s) => ({ uploadOpen: open ?? !s.uploadOpen })),
   showChannels: (network) => set({ channelsOpen: network }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),

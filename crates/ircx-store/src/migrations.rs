@@ -10,6 +10,7 @@ const MIGRATIONS: &[&str] = &[
     VIA,
     ANNOTATIONS,
     RAISED,
+    UPLOAD_PROVIDER,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -205,6 +206,21 @@ CREATE TABLE annotations (
 ///
 /// There is no row for a message a rule passed over: a rule raises and cannot
 /// lower, so absence is the only thing "not raised" could mean.
+/// Where an attachment goes before its link is sent. One row or none: "no
+/// provider" is a configuration the spec names, and it is the absence of the
+/// row rather than a flag on it.
+///
+/// The token is not here. It goes to the OS keyring beside the SASL passwords,
+/// for the same reason.
+const UPLOAD_PROVIDER: &str = r#"
+CREATE TABLE upload_provider (
+    only        INTEGER PRIMARY KEY CHECK (only = 0),
+    endpoint    TEXT NOT NULL,
+    method      TEXT NOT NULL,
+    auth_header TEXT
+);
+"#;
+
 const RAISED: &str = r#"
 CREATE TABLE raised (
     network TEXT NOT NULL,

@@ -1207,3 +1207,127 @@ fn history_keeps_two_different_conversations_apart() {
     assert_eq!(read.len(), 1);
     assert_eq!(read[0].text, "identified");
 }
+
+/// #90. Where an attachment goes before its link is sent.
+mod upload_provider {
+    use super::*;
+    use ircx_ipc::{UploadMethod, UploadProvider};
+
+    fn provider() -> UploadProvider {
+        UploadProvider {
+            endpoint: "https://files.example.com/{name}".into(),
+            method: UploadMethod::Put,
+            auth_header: Some("Authorization".into()),
+            token: Some("Bearer sekrit".into()),
+        }
+    }
+
+    /// "No provider" is a configuration the spec names, and it is the absence
+    /// of a row rather than a flag on one.
+    #[test]
+    fn there_is_none_until_one_is_saved() {
+        let store = Store::open_in_memory().unwrap();
+        assert!(store.upload_provider().unwrap().is_none());
+    }
+
+    #[test]
+    fn a_saved_provider_reads_back_without_its_token() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+
+        let read = store.upload_provider().unwrap().expect("a provider");
+        assert_eq!(read.endpoint, "https://files.example.com/{name}");
+        assert_eq!(read.method, UploadMethod::Put);
+        assert_eq!(read.auth_header.as_deref(), Some("Authorization"));
+        assert_eq!(read.token, None, "a token only ever travels one way");
+        assert_eq!(
+            store.upload_token().unwrap().as_deref(),
+            Some("Bearer sekrit")
+        );
+    }
+
+    #[test]
+    fn there_is_only_ever_one() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                endpoint: "https://other.example.com/upload".into(),
+                method: UploadMethod::Post,
+                ..provider()
+            })
+            .unwrap();
+
+        let read = store.upload_provider().unwrap().expect("a provider");
+        assert_eq!(read.endpoint, "https://other.example.com/upload");
+        assert_eq!(read.method, UploadMethod::Post);
+    }
+
+    /// The user cannot see the token, so a screen that saves an endpoint change
+    /// must not take it away.
+    #[test]
+    fn saving_without_a_token_keeps_the_one_stored() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                endpoint: "https://moved.example.com/{name}".into(),
+                token: None,
+                ..provider()
+            })
+            .unwrap();
+
+        assert_eq!(
+            store.upload_token().unwrap().as_deref(),
+            Some("Bearer sekrit")
+        );
+    }
+
+    /// Leaving it behind would keep a credential for something the user said
+    /// they no longer use.
+    #[test]
+    fn removing_the_provider_takes_the_token_with_it() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+        store.remove_upload_provider().unwrap();
+
+        assert!(store.upload_provider().unwrap().is_none());
+        assert_eq!(store.upload_token().unwrap(), None);
+    }
+
+    /// A network's SASL password and the provider's token share a keyring. The
+    /// provider's key is a name no generated network id can equal.
+    #[test]
+    fn the_token_does_not_collide_with_a_networks_password() {
+        let store = Store::open_in_memory().unwrap();
+        let id = store
+            .save_network(&ircx_ipc::NetworkConfig {
+                id: None,
+                name: "Libera".into(),
+                host: "irc.libera.chat".into(),
+                port: 6697,
+                tls: true,
+                tls_verify: true,
+                nick: "sable".into(),
+                alt_nicks: vec![],
+                username: "sable".into(),
+                realname: "sable".into(),
+                sasl: Some(ircx_ipc::SaslConfig {
+                    mechanism: ircx_ipc::SaslMechanism::Plain,
+                    account: "sable".into(),
+                    password: Some("hunter2".into()),
+                }),
+                connect_commands: vec![],
+                autojoin: vec![],
+                auto_connect: false,
+            })
+            .unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+
+        assert_eq!(
+            store.upload_token().unwrap().as_deref(),
+            Some("Bearer sekrit")
+        );
+        assert_ne!(id, "upload-provider");
+    }
+}

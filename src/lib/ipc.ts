@@ -18,6 +18,7 @@ import type {
   SearchHit,
   SearchRequest,
   ThemeSource,
+  UploadProvider,
 } from "@/types";
 import { SERVER_TARGET } from "@/types";
 
@@ -36,6 +37,11 @@ export const ipc = {
   saveNetwork: (config: NetworkConfig) =>
     invoke<string>("save_network", { config }),
   removeNetwork: (network: string) => invoke<void>("remove_network", { network }),
+
+  getUploadProvider: () => invoke<UploadProvider | null>("get_upload_provider"),
+  saveUploadProvider: (provider: UploadProvider) =>
+    invoke<void>("save_upload_provider", { provider }),
+  removeUploadProvider: () => invoke<void>("remove_upload_provider"),
 
   connectNetwork: (network: string) => invoke<void>("connect_network", { network }),
   disconnectNetwork: (network: string, quitMessage?: string) =>

@@ -8,6 +8,8 @@ function text(spans: Span[]): string {
         case "text":
         case "code":
           return span.text;
+        case "link":
+          return span.url;
         default:
           return text(span.spans);
       }
@@ -90,5 +92,60 @@ describe("parseMarkdown", () => {
 
   it("drops nothing on an empty message", () => {
     expect(parseMarkdown("")).toEqual([]);
+  });
+});
+
+/**
+ * #14. A URL in a message was plain text: reachable only through the
+ * attachment line under it, which is a different affordance from clicking the
+ * thing you are reading.
+ */
+describe("links", () => {
+  const URL = "https://example.com/a";
+
+  it("writes a known URL out as a link", () => {
+    expect(parseSpans(`see ${URL} for it`, [URL])).toEqual([
+      { type: "text", text: "see " },
+      { type: "link", url: URL },
+      { type: "text", text: " for it" },
+    ]);
+  });
+
+  /** The backend decided what a URL is when it built the attachments. Finding
+   * them again here would let the two disagree about where one ends. */
+  it("leaves a URL nobody listed as text", () => {
+    expect(parseSpans(`see ${URL} for it`, [])).toEqual([
+      { type: "text", text: `see ${URL} for it` },
+    ]);
+  });
+
+  it("links one inside emphasis", () => {
+    expect(parseSpans(`*${URL}*`, [URL])).toEqual([
+      { type: "em", spans: [{ type: "link", url: URL }] },
+    ]);
+  });
+
+  /** A URL in code is code. Someone showing a link rather than offering one is
+   * the whole reason to write it in backticks. */
+  it("leaves one inside code alone", () => {
+    expect(parseSpans(`\`${URL}\``, [URL])).toEqual([{ type: "code", text: URL }]);
+  });
+
+  /** An underscore or an asterisk in a path is part of the path. Matching the
+   * whole URL first is what stops emphasis cutting it in half. */
+  it("keeps a URL whole when it contains a marker", () => {
+    const tricky = "https://example.com/a_b_c";
+    expect(parseSpans(`see ${tricky}`, [tricky])).toEqual([
+      { type: "text", text: "see " },
+      { type: "link", url: tricky },
+    ]);
+  });
+
+  it("links every occurrence, not only the first", () => {
+    expect(parseSpans(`${URL} and ${URL}`, [URL])).toEqual([
+      { type: "link", url: URL },
+      { type: "text", text: " and " },
+      { type: "link", url: URL },
+    ]);
   });
 });

@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { stripIrcFormatting } from "@/lib/ircFormat";
+import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
 
 /**
@@ -22,14 +23,19 @@ function blockText(block: Block): string {
 
 function spansText(spans: Span[]): string {
   return spans
-    .map((span) => (span.type === "text" || span.type === "code" ? span.text : spansText(span.spans)))
+    .map((span) => {
+      if (span.type === "text" || span.type === "code") return span.text;
+      // A link is written out in full, so its text is its destination.
+      if (span.type === "link") return span.url;
+      return spansText(span.spans);
+    })
     .join("");
 }
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, urls = [] }: { text: string; urls?: readonly string[] }) {
   return (
     <>
-      {parseMarkdown(stripIrcFormatting(text)).map((block, i) => (
+      {parseMarkdown(stripIrcFormatting(text), urls).map((block, i) => (
         <BlockView key={i} block={block} />
       ))}
     </>
@@ -75,6 +81,25 @@ function BlockView({ block }: { block: Block }) {
   );
 }
 
+/**
+ * Written out in full and opened outside this window. An anchor with an `href`
+ * would be a navigation the webview might take, so there is no `href` at all —
+ * what a middle click or "copy link address" would offer is not worth a page
+ * that replaced the client.
+ */
+function Link({ url }: { url: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => void openExternal(url).catch(() => undefined)}
+      className="underline decoration-from-font underline-offset-2"
+      style={{ color: "var(--accent)" }}
+    >
+      {url}
+    </button>
+  );
+}
+
 function Spans({ spans }: { spans: Span[] }) {
   return (
     <>
@@ -110,6 +135,8 @@ function renderSpan(span: Span) {
           <Spans spans={span.spans} />
         </em>
       );
+    case "link":
+      return <Link url={span.url} />;
     case "strike":
       return (
         <s style={{ color: "var(--text-muted)" }}>

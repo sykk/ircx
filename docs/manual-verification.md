@@ -432,6 +432,21 @@ step.
   the report reaches anywhere a person looks — the strike counting is unit
   tested, the reporting is a `warn!` nobody has read in situ.
 
+## Opening a link
+
+Every URL a message carries now leaves through the system opener rather than
+through an anchor: the inline link and the attachment line both call
+`openExternal`, and neither renders an `href`. The tests assert that no `href`
+exists to navigate and that the opener was asked, which is as far as jsdom
+reaches.
+
+**Not verified:** that a link actually opens. Nothing has clicked one in the
+running client, on any platform. Worth knowing that `opener:allow-open-url` was
+granted in `src-tauri/capabilities/default.json` long before anything called it,
+and the attachment line relied on `target="_blank"` until 2026-07-31 — so
+whether a link in this client has *ever* opened is an open question, not a
+regression risk.
+
 ## Density
 
 Chosen in the palette and remembered in `localStorage`, verified that far on

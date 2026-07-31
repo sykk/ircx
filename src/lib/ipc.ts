@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AppSnapshot,
   Attachment,
@@ -103,6 +104,22 @@ export const ipc = {
     invoke<InstalledPlugin>("set_plugin_grants", { plugin, grants }),
   removePlugin: (plugin: string) => invoke<void>("remove_plugin", { plugin }),
 };
+
+/**
+ * Hands a URL to the system browser.
+ *
+ * A link in a message is a link to somewhere else, and the one thing it must
+ * never do is navigate this window: the webview is the client, and a page
+ * loaded over it has no way back. `target="_blank"` is not that guarantee —
+ * what a webview does with it is the webview's business — so the destination
+ * leaves through the opener, which is a different process by construction.
+ *
+ * Refusing is the safe direction. A URL that does not open is a link that did
+ * not work; one that opens something unexpected is worse.
+ */
+export async function openExternal(url: string): Promise<void> {
+  await openUrl(url);
+}
 
 /** The native folder picker, or null if it was dismissed. Wrapped here for the
  * reason `invoke` is: a component does not reach for a Tauri plugin itself. */

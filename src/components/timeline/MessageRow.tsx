@@ -130,6 +130,12 @@ export function MessageRow({
   );
 }
 
+/** The links the backend already found when it built the attachments, so the
+ * line and the attachment under it agree about where a URL ends. */
+function urlsOf(message: ChatMessage): string[] {
+  return message.attachments.map((attachment) => attachment.url);
+}
+
 function Body({ message }: { message: ChatMessage }) {
   if (message.kind === "action") {
     return (
@@ -154,12 +160,12 @@ function Body({ message }: { message: ChatMessage }) {
         >
           -{message.sender.nick}-{" "}
         </span>
-        <Markdown text={message.text} />
+        <Markdown text={message.text} urls={urlsOf(message)} />
       </span>
     );
   }
 
-  return <Markdown text={message.text} />;
+  return <Markdown text={message.text} urls={urlsOf(message)} />;
 }
 
 /**

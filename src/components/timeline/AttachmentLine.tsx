@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Attachment, AttachmentPreview } from "@/types";
-import { ipc } from "@/lib/ipc";
+import { ipc, openExternal } from "@/lib/ipc";
 import { formatClock } from "./rows";
 
 const UNITS = ["B", "KB", "MB", "GB"];
@@ -78,15 +78,18 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
         <span className="translate-y-px" style={{ color: "var(--text-faint)" }}>
           <Paperclip />
         </span>
-        <a
-          href={attachment.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="truncate font-[family-name:var(--font-mono)]"
+        {/* Opened outside this window rather than linked into it. An `href`
+            with `target="_blank"` leaves what happens to the webview, and a
+            page loaded over the client has no way back. */}
+        <button
+          type="button"
+          onClick={() => void openExternal(attachment.url).catch(() => undefined)}
+          title={attachment.url}
+          className="truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2"
           style={{ color: "var(--text-secondary)" }}
         >
           {filenameOf(attachment)}
-        </a>
+        </button>
         {size && <span className="shrink-0 font-[family-name:var(--font-mono)]">{size}</span>}
         {fetchedAt && (
           <span className="shrink-0" style={{ color: "var(--text-faint)" }}>

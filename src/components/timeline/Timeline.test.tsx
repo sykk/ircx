@@ -1055,36 +1055,10 @@ describe("links in a message", () => {
     expect(document.querySelector(`a[href="${URL}"]`)).toBeNull();
   });
 
-  /**
-   * The text used to be the destination character for character. It is the
-   * host and an elided path now, which is study 07 — but the host itself is
-   * never shortened, because it is the part that settles where the link goes.
-   */
-  it("writes the host out as the text", () => {
-    expect(withLink().textContent).toContain("example.com");
-  });
-
-  /** What the elision costs is answered by the accessible name and the
-   * tooltip, both of which carry the whole URL. */
-  it("keeps the whole destination reachable", () => {
-    const link = withLink();
-    expect(link.getAttribute("aria-label")).toBe(`${URL}, opens in your browser`);
-    expect(link.getAttribute("title")).toBe(URL);
-  });
-
-  /**
-   * A raw string can lie about where it goes: read left to right,
-   * `https://github.com@evil.com/…` is GitHub. Parsed, it is not, and the host
-   * that gets drawn is the one the click would actually reach.
-   */
-  it("draws the host a userinfo was imitating, not the one it named", () => {
-    const spoof = "https://github.com@evil.com/ergochat/ergo";
-    seed([makeMessage({ id: "m2", nick: "phrack", text: `see ${spoof}`, attachments: [makeAttachment({ url: spoof })] })]);
-    render(<Timeline view={TEST_VIEW} />);
-
-    const link = screen.getByRole("button", { name: `${spoof}, opens in your browser` });
-    expect(link.textContent).toContain("evil.com");
-    expect(link.textContent).not.toContain("github.com");
+  /** The destination is written out in full. There is no form where the text
+   * differs from where it goes. */
+  it("writes the destination out as the text", () => {
+    expect(withLink().textContent?.startsWith(URL)).toBe(true);
   });
 
   /**

@@ -1,4 +1,14 @@
 import { readFileSync, readdirSync } from "node:fs";
+import {
+  AA_BODY,
+  COOL_MAX,
+  COOL_MIN,
+  DISABLED_FLOOR,
+  SURFACES,
+  contrast,
+  flatten,
+  hue,
+} from "@/lib/theme/contrast";
 
 // readability/READABILITY.md finding 1: an unconstrained nick palette collides
 // with the security and connection colours, and a nick rendered in the colour
@@ -11,25 +21,6 @@ import { readFileSync, readdirSync } from "node:fs";
 
 // Relative to the vitest root, which is the project root.
 const THEMES_DIR = "src/styles/themes";
-
-const COOL_MIN = 180;
-const COOL_MAX = 350;
-const AA_BODY = 4.5;
-
-/** A disabled control is exempt from the AA floor, but not from being seen.
- * Below this the accent fades into its own surface and the control reads as
- * missing rather than as present and unavailable. */
-const DISABLED_FLOOR = 2.5;
-
-/** The surfaces a nickname can be drawn on. Contrast is checked against all of
- * them, so a hue only has to clear the worst one. */
-const SURFACES = [
-  "surface-base",
-  "surface-sidebar",
-  "surface-raised",
-  "surface-hover",
-  "surface-active",
-];
 
 const THEMES = readdirSync(THEMES_DIR, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -64,48 +55,6 @@ function readNumber(css: string, name: string): number {
   const match = new RegExp(`--${name}:\\s*([0-9.]+)\\s*;`).exec(css);
   if (!match) throw new Error(`missing --${name}`);
   return Number(match[1]);
-}
-
-function channels(hex: string): [number, number, number] {
-  const n = hex.slice(1);
-  return [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255) as [
-    number,
-    number,
-    number,
-  ];
-}
-
-function hue(hex: string): number {
-  const [r, g, b] = channels(hex);
-  const max = Math.max(r, g, b);
-  const delta = max - Math.min(r, g, b);
-  if (delta === 0) return 0;
-  const sextant =
-    max === r ? (((g - b) / delta) % 6) : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
-  return ((sextant * 60) % 360 + 360) % 360;
-}
-
-function luminance(hex: string): number {
-  const [r, g, b] = channels(hex).map((c) =>
-    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
-  ) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** The colour the compositor ends up painting for `hex` drawn at `alpha` over
- * `over` — an opacity is only ever seen through the surface behind it. */
-function flatten(hex: string, over: string, alpha: number): string {
-  const front = channels(hex);
-  const back = channels(over);
-  return `#${front
-    .map((c, i) => Math.round((c * alpha + back[i]! * (1 - alpha)) * 255))
-    .map((c) => c.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
-  return (hi + 0.05) / (lo + 0.05);
 }
 
 it("ships the two built-in themes", () => {

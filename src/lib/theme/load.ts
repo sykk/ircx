@@ -1,5 +1,6 @@
 import type { ThemeSource } from "@/types";
 import { parseManifest, parseStylesheet } from "./parse";
+import { REQUIRED_TOKENS } from "./tokens";
 import type { Theme, ThemeLoad } from "./types";
 
 import darkManifest from "@/styles/themes/ircx-dark/theme.json?raw";
@@ -7,12 +8,10 @@ import darkStylesheet from "@/styles/themes/ircx-dark/theme.css?raw";
 import lightManifest from "@/styles/themes/ircx-light/theme.json?raw";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
-/** Every custom property the UI reads, taken from the theme that defines them
- * all. Deriving the list rather than writing it down is what keeps a token
- * added to the dark theme from being optional everywhere else. */
-export const REQUIRED_TOKENS: readonly string[] = Object.keys(
-  parseStylesheet(darkStylesheet).tokens,
-).sort();
+/* The list is derived in `./tokens`, beside the groups and kinds the editor
+ * arranges it by, and re-exported here because this is where every caller has
+ * always read it from. */
+export { REQUIRED_TOKENS };
 
 /** The theme every failure lands on, and the only one global.css imports
  * statically. */

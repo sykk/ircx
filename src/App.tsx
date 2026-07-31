@@ -4,6 +4,7 @@ import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
 import { ChannelList } from "@/components/channels";
+import { AppearanceSheet } from "@/components/appearance";
 import { PluginSheet } from "@/components/plugins";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { UploadSheet } from "@/components/uploads/UploadSheet";
@@ -55,6 +56,7 @@ export function App() {
       <SearchOverlay />
       <NetworkSetup />
       <PluginSheet />
+      <AppearanceSheet />
       <UploadSheet />
       <DropToUpload />
       <ChannelList />

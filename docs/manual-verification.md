@@ -731,3 +731,18 @@ the loader, the validator and the picker are covered. What is not:
 - **`color-scheme` on a real window.** The manifest's `appearance` is written to
   the root element, which is what makes native scrollbars and form controls flip.
   Headless Chrome does not draw either, so nobody has seen it take effect.
+- **What a browser does with a value it cannot parse.** The appearance editor
+  refuses a value holding a stray `;` or `!` because `setProperty` is specified
+  to ignore a custom property whose value is not a `<declaration-value>` —
+  silently, leaving the token unset and uncovering the dark theme `global.css`
+  imports statically. jsdom's `cssstyle` stores such a value verbatim instead,
+  so the tests pin the gate's behaviour and nothing pins the behaviour it is
+  premised on. Paste `#0969da;` into a colour field on `ircx-light` with the app
+  running: the editor should refuse it in a sentence, and nothing should change
+  on the window. The same paste with the gate removed is what it is protecting
+  against — that surface should go dark.
+- **The sheet against a theme installed on disk.** Every component test uses the
+  two built-ins. An edit is keyed by theme id and kept in `localStorage`, so a
+  theme that arrives after first paint takes its edits a frame later than the
+  built-ins do. Install a theme, edit a colour in it, relaunch, and the edit
+  should be there; the window should not flash the theme's own value first.

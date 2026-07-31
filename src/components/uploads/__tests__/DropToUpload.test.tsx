@@ -48,7 +48,10 @@ beforeEach(() => {
       })),
     ),
   );
-  ipcMock.uploadFile.mockResolvedValue("https://files.example.com/ab-photo.png");
+  ipcMock.uploadFile.mockResolvedValue({
+    link: "https://files.example.com/ab-photo.png",
+    unreadable: null,
+  });
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
 });
 
@@ -175,5 +178,62 @@ describe("what the confirmation says about the file", () => {
     expect(await screen.findByText("cannot be read")).toBeTruthy();
     expect(screen.getByText("1 KB")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload" })).toHaveProperty("disabled", true);
+  });
+});
+
+/** #90. A stored file is not a readable one: an S3 bucket is private until
+ * somebody makes it otherwise, so an upload can succeed and hand back an
+ * address that opens for nobody. Found by walking one against MinIO. */
+describe("an address that will not open", () => {
+  const WHY =
+    "The file was stored, but the address is not public (403), so this link will not open " +
+    "for anyone you send it to.";
+
+  beforeEach(() => {
+    ipcMock.uploadFile.mockResolvedValue({
+      link: "https://s3.example.com/bucket/ab-photo.png",
+      unreadable: WHY,
+    });
+  });
+
+  /** The Upload button is disabled until the provider has been read, so the
+   * host appearing is what says the click will land. */
+  async function dropAndConfirm() {
+    render(<DropToUpload />);
+    drop(["/home/sable/photo.png"]);
+    await screen.findByText("files.example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+  }
+
+  it("is not sent, and says why", async () => {
+    await dropAndConfirm();
+
+    expect(await screen.findByText(WHY)).toBeTruthy();
+    expect(ipcMock.submitInput).not.toHaveBeenCalled();
+  });
+
+  /** Shown in full, because the file is there and the address is worth keeping
+   * once the bucket is fixed. */
+  it("shows the address it did not send", async () => {
+    await dropAndConfirm();
+
+    expect(
+      await screen.findByText("https://s3.example.com/bucket/ab-photo.png"),
+    ).toBeTruthy();
+  });
+
+  /** The client is wrong about this sometimes — a provider can serve a link it
+   * refuses a HEAD for — so the reader is told, not overruled. */
+  it("can be sent anyway", async () => {
+    await dropAndConfirm();
+    fireEvent.click(await screen.findByRole("button", { name: "Send it anyway" }));
+
+    await waitFor(() =>
+      expect(ipcMock.submitInput).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "https://s3.example.com/bucket/ab-photo.png",
+      ),
+    );
   });
 });

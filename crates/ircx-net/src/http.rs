@@ -285,6 +285,44 @@ pub async fn fetch(url: &str, policy: &FetchPolicy) -> Result<Fetched, HttpError
         })?
 }
 
+/// What a server answers for `url` without sending the body.
+///
+/// For one question only: whether an address this client just handed somebody
+/// can be opened by them. No redirect is followed — a redirect is a different
+/// address, and the caller asked about this one.
+pub async fn head(url: &str, policy: &FetchPolicy) -> Result<u16, HttpError> {
+    let target = Target::parse(url)?;
+    let host = target.host.clone();
+    timeout(policy.timeout, head_status(target, policy))
+        .await
+        .map_err(|_| HttpError::Timeout {
+            host,
+            timeout: policy.timeout,
+        })?
+}
+
+async fn head_status(target: Target, policy: &FetchPolicy) -> Result<u16, HttpError> {
+    let mut stream = connect(&target, policy.allow_local_addresses).await?;
+    let io = |source| HttpError::Connect {
+        host: target.host.clone(),
+        source,
+    };
+    stream.write_all(&target.head_bytes()).await.map_err(io)?;
+    stream.flush().await.map_err(io)?;
+
+    let mut buffer = Vec::with_capacity(READ_CHUNK);
+    loop {
+        if let Some(head) = parse_head(&buffer, &target.host)? {
+            return Ok(head.status);
+        }
+        if buffer.len() > MAX_HEAD_BYTES || !fill(&mut stream, &mut buffer).await.map_err(io)? {
+            return Err(HttpError::Malformed {
+                host: target.host.clone(),
+            });
+        }
+    }
+}
+
 async fn follow(mut target: Target, policy: &FetchPolicy) -> Result<Fetched, HttpError> {
     let first = target.url();
     for _ in 0..=policy.max_redirects {
@@ -635,6 +673,23 @@ impl Target {
         }
         head.push_str("\r\n");
         head.into_bytes()
+    }
+
+    /// A `HEAD` for the same address, for asking whether a URL can be read
+    /// without reading it. A file the user just uploaded may be 25 MB, and the
+    /// question is only what the server answers.
+    fn head_bytes(&self) -> Vec<u8> {
+        format!(
+            "HEAD {} HTTP/1.1\r\n\
+             Host: {}\r\n\
+             User-Agent: ircx/{}\r\n\
+             Accept: */*\r\n\
+             Connection: close\r\n\r\n",
+            self.path,
+            self.host_header(),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .into_bytes()
     }
 
     fn request_bytes(&self, accept: &str) -> Vec<u8> {

@@ -4,7 +4,7 @@ use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, Attachment, ChatMessage, CommandOutcome, FileToUpload, HistoryRequest,
     InstalledPlugin, Member, NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query,
-    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
+    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
 };
 use tauri::State;
 
@@ -53,7 +53,7 @@ pub async fn describe_uploads(paths: Vec<String>) -> Result<Vec<FileToUpload>, S
 /// Sends a file to the configured provider and answers with its address. The
 /// window puts that address in the conversation; nothing is sent from here.
 #[tauri::command]
-pub async fn upload_file(app: State<'_, App>, path: String) -> Result<String, String> {
+pub async fn upload_file(app: State<'_, App>, path: String) -> Result<UploadedFile, String> {
     crate::upload::send_file(&app, &path).await
 }
 

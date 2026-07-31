@@ -21,6 +21,7 @@ import type {
   SearchRequest,
   ThemeSource,
   UploadProvider,
+  UploadedFile,
 } from "@/types";
 import { SERVER_TARGET } from "@/types";
 
@@ -68,7 +69,7 @@ export const ipc = {
     invoke<void>("save_upload_provider", { provider }),
   removeUploadProvider: () => invoke<void>("remove_upload_provider"),
   describeUploads: (paths: string[]) => invoke<FileToUpload[]>("describe_uploads", { paths }),
-  uploadFile: (path: string) => invoke<string>("upload_file", { path }),
+  uploadFile: (path: string) => invoke<UploadedFile>("upload_file", { path }),
 
   connectNetwork: (network: string) => invoke<void>("connect_network", { network }),
   disconnectNetwork: (network: string, quitMessage?: string) =>

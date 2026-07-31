@@ -23,6 +23,9 @@ export function DropToUpload() {
   const [host, setHost] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** An address that was stored and will not open, held so it can be read and
+   * copied rather than sent. */
+  const [dead, setDead] = useState<{ link: string; why: string } | null>(null);
 
   useEffect(() => {
     const stop = onFileDrop((event) => {
@@ -76,8 +79,17 @@ export function DropToUpload() {
       // One at a time, in the order they were dropped, so the links arrive in
       // the conversation in the order the user sees them listed.
       for (const file of pending) {
-        const link = await ipc.uploadFile(file.path);
-        await ipc.submitInput(active.network, active.target, link);
+        const uploaded = await ipc.uploadFile(file.path);
+        // A stored file is not a readable one, and sending an address that
+        // opens for nobody is worse than not sending it: the sender finds out
+        // from whoever they sent it to. Found by walking an upload to a bucket
+        // that was private, which is what every bucket is until it is not.
+        if (uploaded.unreadable !== null) {
+          setDead({ link: uploaded.link, why: uploaded.unreadable });
+          setBusy(false);
+          return;
+        }
+        await ipc.submitInput(active.network, active.target, uploaded.link);
       }
       setPending(null);
     } catch (reason) {
@@ -100,7 +112,49 @@ export function DropToUpload() {
         </div>
       )}
 
-      {pending !== null && (
+      {/* Stored, and it opens for nobody. Shown instead of sent, with the
+          address in full so it can be copied once the bucket is fixed. */}
+      {dead !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-[var(--scrim)]" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="The link was not sent"
+            className="relative flex w-[min(520px,92vw)] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] p-6 shadow-[var(--shadow-overlay)]"
+          >
+            <h2 className="text-[15px] font-semibold">The link was not sent</h2>
+            <p role="alert" className="text-[12px] text-[var(--warning)]">
+              {dead.why}
+            </p>
+            <p className="selectable break-all font-[family-name:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
+              {dead.link}
+            </p>
+            <div className="flex items-center gap-2">
+              <PrimaryButton
+                onClick={() => {
+                  setDead(null);
+                  setPending(null);
+                }}
+              >
+                Close
+              </PrimaryButton>
+              <SecondaryButton
+                onClick={() => {
+                  if (active === null) return;
+                  void ipc.submitInput(active.network, active.target, dead.link);
+                  setDead(null);
+                  setPending(null);
+                }}
+              >
+                Send it anyway
+              </SecondaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pending !== null && dead === null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-[var(--scrim)]" />
           <div

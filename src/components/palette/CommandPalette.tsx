@@ -157,6 +157,9 @@ function Palette() {
       case "plugins":
         store.togglePlugins(true);
         break;
+      case "uploads":
+        store.toggleUpload(true);
+        break;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;

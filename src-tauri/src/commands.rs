@@ -4,7 +4,7 @@ use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, Attachment, ChatMessage, CommandOutcome, HistoryRequest, InstalledPlugin, Member,
     NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query, SearchHit, SearchRequest,
-    TargetName, ThemeSource,
+    TargetName, ThemeSource, UploadProvider,
 };
 use tauri::State;
 
@@ -18,6 +18,36 @@ pub async fn get_snapshot(app: State<'_, App>) -> Result<AppSnapshot, String> {
 #[tauri::command]
 pub async fn list_network_configs(app: State<'_, App>) -> Result<Vec<NetworkConfig>, String> {
     app.store().list_networks().map_err(describe)
+}
+
+/// The upload provider, or nothing when none is configured — which the spec
+/// names as a choice rather than a fault. The token is never sent to the
+/// window; it is read at the moment of an upload.
+#[tauri::command]
+pub async fn get_upload_provider(app: State<'_, App>) -> Result<Option<UploadProvider>, String> {
+    app.store().upload_provider().map_err(describe)
+}
+
+#[tauri::command]
+pub async fn save_upload_provider(
+    app: State<'_, App>,
+    provider: UploadProvider,
+) -> Result<(), String> {
+    app.store()
+        .save_upload_provider(&provider)
+        .map_err(describe)
+}
+
+#[tauri::command]
+pub async fn remove_upload_provider(app: State<'_, App>) -> Result<(), String> {
+    app.store().remove_upload_provider().map_err(describe)
+}
+
+/// Sends a file to the configured provider and answers with its address. The
+/// window puts that address in the conversation; nothing is sent from here.
+#[tauri::command]
+pub async fn upload_file(app: State<'_, App>, path: String) -> Result<String, String> {
+    crate::upload::send_file(&app, &path).await
 }
 
 #[tauri::command]

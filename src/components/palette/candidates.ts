@@ -28,6 +28,7 @@ export type CandidateAction =
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
   | { type: "plugins" }
+  | { type: "uploads" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** A theme that failed to load. Running it prints why, which is the only
@@ -290,5 +291,10 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Plugins",
     detail: "Install a plugin, or change what one is allowed to do",
     action: { type: "plugins" },
+  },
+  {
+    label: "Upload provider",
+    detail: "Where files go before their link is sent",
+    action: { type: "uploads" },
   },
 ];

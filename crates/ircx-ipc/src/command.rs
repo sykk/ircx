@@ -147,6 +147,37 @@ pub struct AppSnapshot {
     pub queries: Vec<Query>,
 }
 
+/// Where an attachment is uploaded before its link is sent.
+///
+/// `None` from `get_upload_provider` is "no provider", which the spec names as
+/// a configuration rather than a failure: the user sends links they made
+/// elsewhere.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadProvider {
+    /// Where the file goes. `{name}` is replaced with a generated object name,
+    /// which is what storage addressed by path needs; an endpoint without it is
+    /// used as it stands, which is what a host that names the object itself
+    /// wants.
+    pub endpoint: String,
+    pub method: UploadMethod,
+    /// The header the token is sent in, `Authorization` for most. `None` when
+    /// the provider needs no credential — a self-hosted box behind a VPN.
+    pub auth_header: Option<String>,
+    /// Write-only, as the SASL password is: `Some` when the user sets it,
+    /// always `None` when read back.
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum UploadMethod {
+    Put,
+    Post,
+}
+
 /// The permissions a plugin can ask for. Spelled as the manifest spells
 /// them, so a name here and a name in a `plugin.json` are the same string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

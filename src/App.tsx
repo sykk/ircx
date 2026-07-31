@@ -5,6 +5,8 @@ import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
 import { ChannelList } from "@/components/channels";
 import { PluginSheet } from "@/components/plugins";
+import { DropToUpload } from "@/components/uploads/DropToUpload";
+import { UploadSheet } from "@/components/uploads/UploadSheet";
 import { AppShell } from "@/components/shell/AppShell";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
@@ -53,6 +55,8 @@ export function App() {
       <SearchOverlay />
       <NetworkSetup />
       <PluginSheet />
+      <UploadSheet />
+      <DropToUpload />
       <ChannelList />
     </>
   );

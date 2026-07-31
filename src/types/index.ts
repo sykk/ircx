@@ -30,6 +30,8 @@ export type { Network } from "./generated/Network";
 export type { NetworkConfig } from "./generated/NetworkConfig";
 export type { PluginCommand } from "./generated/PluginCommand";
 export type { PluginGrants } from "./generated/PluginGrants";
+export type { UploadMethod } from "./generated/UploadMethod";
+export type { UploadProvider } from "./generated/UploadProvider";
 export type { PluginPermission } from "./generated/PluginPermission";
 export type { PluginPermissionInfo } from "./generated/PluginPermissionInfo";
 export type { Query } from "./generated/Query";

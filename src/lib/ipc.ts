@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type {
   AppSnapshot,
   Attachment,
@@ -18,8 +19,32 @@ import type {
   SearchHit,
   SearchRequest,
   ThemeSource,
+  UploadProvider,
 } from "@/types";
 import { SERVER_TARGET } from "@/types";
+
+/** A file dragged onto the window, with the path the upload needs. */
+export interface FileDrop {
+  kind: "over" | "drop" | "leave";
+  paths: string[];
+}
+
+/**
+ * The window's own drop events, not the webview's.
+ *
+ * Tauri intercepts the drop before the page sees it and hands over real paths.
+ * An HTML5 drop inside a webview gives a `File` with no path, which the upload
+ * command cannot open.
+ */
+export function onFileDrop(handler: (event: FileDrop) => void): Promise<() => void> {
+  return getCurrentWebview().onDragDropEvent((event) => {
+    const payload = event.payload;
+    handler({
+      kind: payload.type === "enter" ? "over" : (payload.type as FileDrop["kind"]),
+      paths: "paths" in payload ? payload.paths : [],
+    });
+  });
+}
 
 const EVENT_CHANNEL = "ircx://event";
 const THEMES_CHANNEL = "ircx://themes";
@@ -36,6 +61,12 @@ export const ipc = {
   saveNetwork: (config: NetworkConfig) =>
     invoke<string>("save_network", { config }),
   removeNetwork: (network: string) => invoke<void>("remove_network", { network }),
+
+  getUploadProvider: () => invoke<UploadProvider | null>("get_upload_provider"),
+  saveUploadProvider: (provider: UploadProvider) =>
+    invoke<void>("save_upload_provider", { provider }),
+  removeUploadProvider: () => invoke<void>("remove_upload_provider"),
+  uploadFile: (path: string) => invoke<string>("upload_file", { path }),
 
   connectNetwork: (network: string) => invoke<void>("connect_network", { network }),
   disconnectNetwork: (network: string, quitMessage?: string) =>

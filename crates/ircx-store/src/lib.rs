@@ -14,7 +14,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ircx_ipc::{
     ChatMessage, HistoryRequest, NetworkConfig, NetworkId, SaslConfig, SearchHit, SearchRequest,
-    TargetName,
+    TargetName, UploadProvider,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::de::DeserializeOwned;
@@ -186,6 +186,64 @@ impl Store {
     /// record for a message a rule passed over: a rule raises and cannot lower.
     pub fn set_raised(&self, network: &str, msgid: &str, plugin: &str) -> Result<(), StoreError> {
         message::set_raised(&self.conn(), network, msgid, plugin)
+    }
+
+    /// The configured upload provider, or `None` when there is not one — which
+    /// the spec names as a configuration rather than a failure.
+    ///
+    /// The token is never read back, for the reason the SASL password is not:
+    /// a value that only travels one way cannot be leaked by a screen that
+    /// shows what is stored.
+    pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
+        let conn = self.conn();
+        let mut stmt = conn
+            .prepare("SELECT endpoint, method, auth_header FROM upload_provider WHERE only = 0")?;
+        let mut rows = stmt.query([])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        Ok(Some(UploadProvider {
+            endpoint: row.get(0)?,
+            method: serde_json::from_str(&row.get::<_, String>(1)?)?,
+            auth_header: row.get(2)?,
+            token: None,
+        }))
+    }
+
+    /// The token the provider is called with, read at the moment of an upload
+    /// rather than held anywhere it could be shown.
+    pub fn upload_token(&self) -> Result<Option<String>, StoreError> {
+        self.credentials.get(credentials::UPLOAD_PROVIDER)
+    }
+
+    /// Replaces the provider. A `token` of `None` leaves whatever is stored
+    /// alone, so saving an endpoint change does not silently drop the
+    /// credential the user cannot see.
+    pub fn save_upload_provider(&self, provider: &UploadProvider) -> Result<(), StoreError> {
+        if let Some(token) = provider.token.as_deref().filter(|t| !t.is_empty()) {
+            self.credentials.set(credentials::UPLOAD_PROVIDER, token)?;
+        }
+        self.conn().execute(
+            "INSERT INTO upload_provider (only, endpoint, method, auth_header)
+             VALUES (0, ?1, ?2, ?3)
+             ON CONFLICT (only) DO UPDATE SET
+                 endpoint = excluded.endpoint,
+                 method = excluded.method,
+                 auth_header = excluded.auth_header",
+            params![
+                provider.endpoint,
+                to_json(&provider.method)?,
+                provider.auth_header
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets the provider and its token together. Leaving the token behind
+    /// would keep a credential for something the user said they no longer use.
+    pub fn remove_upload_provider(&self) -> Result<(), StoreError> {
+        self.conn().execute("DELETE FROM upload_provider", [])?;
+        self.credentials.delete(credentials::UPLOAD_PROVIDER)
     }
 
     /// `req.query` is text a person typed, not an FTS5 expression: it is

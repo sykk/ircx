@@ -2289,3 +2289,167 @@ mod closing {
         ));
     }
 }
+
+/// A whole SCRAM-SHA-512 exchange, answered the way a server answers it.
+///
+/// The salt, iteration count and server nonce are the ones in `scram.rs`'s
+/// vector; the client's nonce is not, because it is generated, so the reply is
+/// built around whatever the client actually sent. What this covers that the
+/// unit tests cannot is the four messages arriving as four lines, in order,
+/// with the session holding the exchange between them.
+mod scram_over_a_session {
+    use super::*;
+
+    const SALT: &str = "W22ZaJ0SNY7soEsUEjb6gQ==";
+    const SERVER_PART: &str = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0";
+
+    fn authenticating() -> Harness {
+        let mut config = config();
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::ScramSha512,
+            account: "user".into(),
+            password: Some("pencil".into()),
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(&format!(":irc.libera.chat CAP * LS :{LIBERA_CAPS}"));
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+        // `sent` drains, so registration is cleared here and every assertion
+        // below is about the exchange rather than about what came before it.
+        let sent = session.sent();
+        assert_eq!(
+            sent.last().map(String::as_str),
+            Some("AUTHENTICATE SCRAM-SHA-512"),
+            "the mechanism is named before anything is sent: {sent:?}"
+        );
+        session
+    }
+
+    /// What the client sent, decoded, with the `AUTHENTICATE ` stripped.
+    fn payload(line: &str) -> String {
+        let argument = line.trim_start_matches("AUTHENTICATE ");
+        String::from_utf8(STANDARD.decode(argument).expect("base64")).expect("text")
+    }
+
+    fn nonce_from(client_first: &str) -> String {
+        payload(client_first)
+            .rsplit_once("r=")
+            .expect("a nonce")
+            .1
+            .to_owned()
+    }
+
+    #[test]
+    fn the_exchange_runs_to_a_verified_signature() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        let first = session.sent();
+        assert_eq!(first.len(), 1);
+        let client_first = payload(&first[0]);
+        assert!(
+            client_first.starts_with("n,,n=user,r="),
+            "no channel binding, and the account named: {client_first}"
+        );
+
+        let nonce = nonce_from(&first[0]);
+        let combined = format!("{nonce}{SERVER_PART}");
+        let server_first = format!("r={combined},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+
+        let second = session.sent();
+        assert_eq!(second.len(), 1);
+        let client_final = payload(&second[0]);
+        assert!(
+            client_final.starts_with(&format!("c=biws,r={combined},p=")),
+            "the proof carries the gs2 header and the joined nonce: {client_final}"
+        );
+
+        // The server's own half of the proof, computed the way a server does.
+        let auth = format!("n=user,r={nonce},{server_first},c=biws,r={combined}",);
+        let signature = server_signature("pencil", SALT, 4096, &auth);
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode(format!("v={signature}"))
+        ));
+
+        assert_eq!(
+            session.sent(),
+            vec!["AUTHENTICATE +"],
+            "an empty response is what says the client is satisfied"
+        );
+
+        session.feed(":irc.libera.chat 900 sykk user!~u@host user :You are now logged in");
+        session.feed(":irc.libera.chat 903 sykk :SASL authentication successful");
+        assert!(
+            matches!(
+                session.sasl_states().last(),
+                Some(SaslStatus::Authenticated { account }) if account == "user"
+            ),
+            "{:?}",
+            session.sasl_states().last()
+        );
+    }
+
+    /// The check that makes it mutual. A server that cannot prove it knew the
+    /// password must not end up with the client reporting a successful login.
+    #[test]
+    fn a_server_that_cannot_prove_it_knew_the_password_stops_the_connection() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        let nonce = nonce_from(&session.sent()[0]);
+        let server_first = format!("r={nonce}{SERVER_PART},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+        session.sent();
+
+        let forged = STANDARD.encode([0u8; 64]);
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode(format!("v={forged}"))
+        ));
+
+        assert_eq!(
+            session.sent(),
+            vec!["AUTHENTICATE *"],
+            "the exchange is abandoned rather than left open"
+        );
+        let failed = matches!(
+            session.sasl_states().last(),
+            Some(SaslStatus::Failed { .. })
+        );
+        assert!(failed, "{:?}", session.sasl_states().last());
+    }
+
+    /// A server nonce that does not extend the client's is another exchange
+    /// being replayed, and it is caught before any proof is sent.
+    #[test]
+    fn a_replayed_challenge_sends_no_proof() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        session.sent();
+
+        let replayed = format!("r=somebodyElsesNonce{SERVER_PART},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&replayed)));
+
+        assert_eq!(session.sent(), vec!["AUTHENTICATE *"]);
+    }
+
+    /// What a server computes to prove it knew the password.
+    fn server_signature(password: &str, salt: &str, rounds: u32, auth: &str) -> String {
+        use ring::{hmac, pbkdf2};
+        let salt = STANDARD.decode(salt).expect("base64 salt");
+        let mut salted = [0u8; 64];
+        pbkdf2::derive(
+            pbkdf2::PBKDF2_HMAC_SHA512,
+            std::num::NonZeroU32::new(rounds).expect("a positive count"),
+            &salt,
+            password.as_bytes(),
+            &mut salted,
+        );
+        let server_key = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA512, &salted), b"Server Key");
+        let signature = hmac::sign(
+            &hmac::Key::new(hmac::HMAC_SHA512, server_key.as_ref()),
+            auth.as_bytes(),
+        );
+        STANDARD.encode(signature.as_ref())
+    }
+}

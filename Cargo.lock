@@ -1848,6 +1848,7 @@ dependencies = [
  "ircx-plugin",
  "ircx-proto",
  "ircx-store",
+ "ring",
  "serde",
  "serde_json",
  "tempfile",

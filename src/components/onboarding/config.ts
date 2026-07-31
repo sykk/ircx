@@ -113,9 +113,21 @@ export function draftOf(config: NetworkConfig): Draft {
   };
 }
 
+/**
+ * Whether the mechanism authenticates with a password the user has to give.
+ *
+ * Asked in one place because three asked it separately — whether to draw the
+ * field, whether the saved one counts, and whether to send it — and a fourth
+ * mechanism would have had to be added to all three or silently lose its
+ * password in whichever was missed.
+ */
+export function needsPassword(mechanism: Draft["mechanism"]): boolean {
+  return mechanism === "PLAIN" || mechanism === "SCRAM-SHA-512";
+}
+
 /** Whether the password field should say "saved" instead of standing empty. */
 export function hasStoredPassword(draft: Draft): boolean {
-  return draft.id !== null && draft.mechanism === "PLAIN" && draft.password === null;
+  return draft.id !== null && needsPassword(draft.mechanism) && draft.password === null;
 }
 
 export function toConfig(draft: Draft): NetworkConfig {
@@ -140,7 +152,7 @@ export function toConfig(draft: Draft): NetworkConfig {
         : {
             mechanism: draft.mechanism,
             account,
-            password: draft.mechanism === "PLAIN" ? draft.password : null,
+            password: needsPassword(draft.mechanism) ? draft.password : null,
           },
     connectCommands: lines(draft.connectCommands),
     autojoin: parseChannels(draft.autojoin),

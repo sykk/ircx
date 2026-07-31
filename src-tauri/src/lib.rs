@@ -3,6 +3,7 @@ mod events;
 mod preview;
 mod state;
 mod themes;
+mod upload;
 
 use std::sync::Arc;
 
@@ -71,6 +72,7 @@ pub fn run() {
             commands::get_upload_provider,
             commands::save_upload_provider,
             commands::remove_upload_provider,
+            commands::upload_file,
             commands::remove_network,
             commands::connect_network,
             commands::disconnect_network,

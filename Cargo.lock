@@ -1826,6 +1826,7 @@ dependencies = [
  "ircx-ipc",
  "ircx-net",
  "ircx-store",
+ "ring",
  "serde",
  "serde_json",
  "tauri",

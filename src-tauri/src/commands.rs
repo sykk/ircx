@@ -43,6 +43,13 @@ pub async fn remove_upload_provider(app: State<'_, App>) -> Result<(), String> {
     app.store().remove_upload_provider().map_err(describe)
 }
 
+/// Sends a file to the configured provider and answers with its address. The
+/// window puts that address in the conversation; nothing is sent from here.
+#[tauri::command]
+pub async fn upload_file(app: State<'_, App>, path: String) -> Result<String, String> {
+    crate::upload::send_file(&app, &path).await
+}
+
 #[tauri::command]
 pub async fn save_network(app: State<'_, App>, config: NetworkConfig) -> Result<NetworkId, String> {
     app.save_network(config).await

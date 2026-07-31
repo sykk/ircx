@@ -1,0 +1,10 @@
+{
+  "id": "deploys",
+  "name": "Deploys",
+  "version": "1.0.0",
+  "description": "Interrupts you when a build bot says something failed",
+  "entry": "main.js",
+  "notifies": true,
+  "permissions": ["raise-notifications", "access-channels"],
+  "channels": ["*"]
+}

@@ -130,6 +130,20 @@ pub enum IrcxEvent {
         plugin: String,
         text: String,
     },
+    /// A rule thought a message worth interrupting the user for. Sent after the
+    /// message, for the reason a note is: nothing is waiting on a plugin.
+    ///
+    /// There is no event for a message a rule passed over. A rule raises and
+    /// cannot lower, so nothing it answers can take a raise back.
+    MessageRaised {
+        network: NetworkId,
+        target: TargetName,
+        /// The id of the message that was raised.
+        message: String,
+        /// Which rule raised it, so a reader can tell why a conversation went
+        /// loud without a word of it naming them.
+        plugin: String,
+    },
     LagChanged {
         network: NetworkId,
         lag_ms: u32,

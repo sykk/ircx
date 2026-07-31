@@ -49,4 +49,11 @@ via: string | null,
  * else wrote. Defaulted for the reason `reactions` is — nothing archived
  * before annotators existed has the field.
  */
-annotations?: Array<Annotation>, };
+annotations?: Array<Annotation>, 
+/**
+ * The plugins that thought this message worth interrupting the user for.
+ * Empty is the ordinary case and means nothing raised it — a rule raises
+ * and cannot lower, so there is no third state. Defaulted for the reason
+ * `annotations` is.
+ */
+raisedBy?: Array<string>, };

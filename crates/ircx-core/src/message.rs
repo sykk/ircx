@@ -6,6 +6,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::plugins;
 use crate::session::{Action, BatchState, SessionState};
 use crate::text;
 
@@ -48,6 +49,7 @@ impl SessionState {
             tags: source.tags.clone(),
             reactions: Vec::new(),
             annotations: Vec::new(),
+            raised_by: Vec::new(),
             reply_to: reply_to(source),
             source: batch
                 .as_deref()
@@ -89,6 +91,7 @@ impl SessionState {
             tags: Vec::new(),
             reactions: Vec::new(),
             annotations: Vec::new(),
+            raised_by: Vec::new(),
             reply_to: None,
             batch: None,
             delivery: Delivery::Delivered,
@@ -155,11 +158,19 @@ impl SessionState {
         }
         self.count_towards_unread(&message);
         let target = message.target.clone();
+        let ask = plugins::worth_raising(std::slice::from_ref(&message), &self.nick);
         self.emit(IrcxEvent::MessagesAppended {
             network: self.config.network.clone(),
-            target,
+            target: target.clone(),
             messages: vec![message],
         });
+        // After the emit, so the conversation is drawn before any rule runs.
+        if !ask.is_empty() {
+            self.actions.push(Action::Notify {
+                target,
+                messages: ask,
+            });
+        }
     }
 
     pub(crate) fn note(&mut self, target: &str, kind: MessageKind, text: String) {
@@ -220,28 +231,44 @@ impl SessionState {
             return;
         };
         let mut run: Vec<ChatMessage> = Vec::new();
+        // A backfill is not an interruption: it is the conversation the user
+        // asked to see, and the messages in it already happened.
+        let live = batch.source == MessageSource::Live;
         for message in batch.messages {
-            if batch.source == MessageSource::Live {
+            if live {
                 self.count_towards_unread(&message);
             }
             if run.last().is_some_and(|last| last.target != message.target) {
-                self.flush_run(&mut run);
+                self.flush_run(&mut run, live);
             }
             run.push(message);
         }
-        self.flush_run(&mut run);
+        self.flush_run(&mut run, live);
     }
 
-    fn flush_run(&mut self, run: &mut Vec<ChatMessage>) {
+    fn flush_run(&mut self, run: &mut Vec<ChatMessage>, live: bool) {
         let Some(target) = run.first().map(|message| message.target.clone()) else {
             return;
         };
         let messages = std::mem::take(run);
+        // Which messages a rule is worth asking about, worked out before the
+        // batch is given away.
+        let ask = match live {
+            true => plugins::worth_raising(&messages, &self.nick),
+            false => Vec::new(),
+        };
         self.emit(IrcxEvent::MessagesAppended {
             network: self.config.network.clone(),
-            target,
+            target: target.clone(),
             messages,
         });
+        // After the emit, so the conversation is drawn before any rule runs.
+        if !ask.is_empty() {
+            self.actions.push(Action::Notify {
+                target,
+                messages: ask,
+            });
+        }
     }
 
     fn count_towards_unread(&mut self, message: &ChatMessage) {

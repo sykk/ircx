@@ -7,6 +7,7 @@ use ircx_ipc::{
     SaslStatus, Severity, TargetName, Topic,
 };
 use ircx_net::TlsInfo;
+use ircx_plugin::ArrivedMessage;
 use ircx_proto::{Command, Message, MessageBuilder, Prefix};
 use ircx_store::OpenTarget;
 use tracing::debug;
@@ -36,6 +37,16 @@ pub enum Action {
     Remember(OpenTarget),
     /// The user left this conversation or closed it; drop it from that set.
     Forget(TargetName),
+    /// Ask the notification rules about these messages. Pushed after the
+    /// `Emit` that draws them, because a rule runs on arrival rather than on
+    /// draw and nothing waits for one.
+    ///
+    /// The batch is built here rather than by the caller because deciding who
+    /// is worth asking needs the user's own nick, which is session state.
+    Notify {
+        target: TargetName,
+        messages: Vec<ArrivedMessage>,
+    },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -332,6 +343,21 @@ impl SessionState {
             self.next_label += 1;
             self.ping = Some((token.clone(), Instant::now()));
             self.send_command("PING", &[&token]);
+        }
+        self.drain()
+    }
+
+    /// A rule thought something in this conversation worth interrupting the
+    /// user for, so the channel goes as loud as it would for their own nick.
+    ///
+    /// Additive only. A rule is never asked about a message that already
+    /// mentions the user, so this cannot double-count one, and there is
+    /// nothing it could be asked to take back.
+    pub fn raise(&mut self, target: &str) -> Vec<Action> {
+        let key = self.fold(target);
+        if let Some(channel) = self.channels.get_mut(&key) {
+            channel.highlights += 1;
+            self.emit_channel(&key);
         }
         self.drain()
     }

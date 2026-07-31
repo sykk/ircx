@@ -449,6 +449,31 @@ Still not walked:
   the report reaches anywhere a person looks — the strike counting is unit
   tested, the reporting is a `warn!` nobody has read in situ.
 
+## The notification rule
+
+**The session half is verified.** `crates/ircx-core/tests/ergo.rs` drives the
+real stack against a local `ergo` with `examples/plugins/deploys` installed and
+granted, under a third client whose nick is `buildbot`:
+
+```text
+PASS  rule: deploys raised phxy5sykgp5tx43gk98nb44wrw
+PASS  rule: the channel went loud: 1
+PASS  rule: the build starting was left alone
+```
+
+That covers install, grant, arrival, the batch, the call, the archive, the
+event and the count — every layer but the drawing, which is not built.
+
+Not walked in the application, and the list is short because there is little to
+look at yet:
+
+- **A raised channel read by a person.** The badge goes loud with no message in
+  the conversation that mentions them. Until the timeline draws the raise, that
+  is by design and it is worth seeing how it feels: it may read as a bug.
+- **A broken rule being dropped.** Three consecutive failed batches, the first
+  reported and the rest silent — the same gap the annotator has, and now with a
+  second hook keyed separately.
+
 ## The topic of a channel you have joined
 
 **Verified in the application** on 2026-07-31. A second client set the topic on

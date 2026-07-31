@@ -32,6 +32,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
         tags: vec![],
         reactions: vec![],
         annotations: vec![],
+        raised_by: vec![],
         reply_to: None,
         batch: None,
         delivery: Delivery::Delivered,
@@ -112,6 +113,7 @@ fn a_round_trip_preserves_every_field() {
         // `set_reaction` and read back from their own table.
         reactions: vec![],
         annotations: vec![],
+        raised_by: vec![],
         reply_to: Some("earlier".into()),
         batch: Some("batch-1".into()),
         delivery: Delivery::Failed("no such channel".into()),
@@ -1083,4 +1085,81 @@ fn an_annotation_can_be_written_before_the_message_it_names() {
 
     let read = store.load_history(&history("#ircx", None, 10)).unwrap();
     assert_eq!(read[0].annotations[0].text, "22 C");
+}
+
+/// A raise is written before it is sent, as a note is: the archive is where a
+/// raise outside the open window survives, so a conversation reopened tomorrow
+/// still shows what was worth reading in it.
+#[test]
+fn a_raise_comes_back_with_the_message() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "m1",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "deploy failed",
+        )])
+        .unwrap();
+    store.set_raised("libera", "m1", "deploys").unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].raised_by, vec!["deploys".to_string()]);
+}
+
+/// The same rule raising twice is one raise, so a history backfill handing a
+/// rule the same message again cannot double it.
+#[test]
+fn a_rule_raising_twice_raises_once() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "m1",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "deploy failed",
+        )])
+        .unwrap();
+    store.set_raised("libera", "m1", "deploys").unwrap();
+    store.set_raised("libera", "m1", "deploys").unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(read[0].raised_by, vec!["deploys".to_string()]);
+}
+
+/// Two rules can each think so, and a reader is told both: which rule raised a
+/// conversation is how they decide whether it should have.
+#[test]
+fn two_rules_each_keep_their_own_raise() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "m1",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "deploy failed",
+        )])
+        .unwrap();
+    store.set_raised("libera", "m1", "oncall").unwrap();
+    store.set_raised("libera", "m1", "deploys").unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert_eq!(
+        read[0].raised_by,
+        vec!["deploys", "oncall"],
+        "ordered by plugin"
+    );
+}
+
+/// A message nothing raised is the ordinary case, and says so by being empty
+/// rather than by carrying a third state.
+#[test]
+fn a_message_nothing_raised_comes_back_empty() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message("m1", "#ircx", "2026-01-01T00:00:00Z", "morning")])
+        .unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    assert!(read[0].raised_by.is_empty());
 }

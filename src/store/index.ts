@@ -526,6 +526,26 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
     }
 
+    case "messageRaised": {
+      const key = targetKey(event.network, event.target);
+      const timeline = s.timelines[key];
+      if (!timeline) return {};
+      const at = timeline.messages.findIndex((m) => m.id === event.message);
+      if (at === -1) return {};
+
+      const held = timeline.messages[at]!;
+      const raisedBy = held.raisedBy ?? [];
+      // A rule raising the same message twice raises it once, as the archive
+      // records it once. Applied here as well as read back from the archive,
+      // so a message raised while the window is open and the same message
+      // after a restart look the same.
+      if (raisedBy.includes(event.plugin)) return {};
+
+      const messages = timeline.messages.slice();
+      messages[at] = { ...held, raisedBy: [...raisedBy, event.plugin] };
+      return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
+    }
+
     case "reactionChanged": {
       const key = targetKey(event.network, event.target);
       const timeline = s.timelines[key];

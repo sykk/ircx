@@ -48,6 +48,13 @@ pub struct ChatMessage {
     #[serde(default)]
     #[ts(as = "Option<Vec<Annotation>>", optional)]
     pub annotations: Vec<Annotation>,
+    /// The plugins that thought this message worth interrupting the user for.
+    /// Empty is the ordinary case and means nothing raised it — a rule raises
+    /// and cannot lower, so there is no third state. Defaulted for the reason
+    /// `annotations` is.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<String>>", optional)]
+    pub raised_by: Vec<String>,
 }
 
 /// One `+draft/react` value and everyone who sent it. The readability studies

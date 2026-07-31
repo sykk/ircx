@@ -108,6 +108,8 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         // Same: `attach_annotations` fills these in for a page that has been
         // read.
         annotations: Vec::new(),
+        // Same, from `attach_raised`.
+        raised_by: Vec::new(),
         reply_to: row.get(13)?,
         batch: row.get(14)?,
         delivery: from_json_column(row, 15)?,
@@ -209,6 +211,40 @@ pub(crate) fn attach_annotations(
             });
         }
         message.annotations = annotations;
+    }
+    Ok(())
+}
+
+const SET_RAISED: &str =
+    "INSERT OR IGNORE INTO raised (network, msgid, plugin) VALUES (?1, ?2, ?3)";
+
+pub(crate) fn set_raised(
+    conn: &Connection,
+    network: &str,
+    msgid: &str,
+    plugin: &str,
+) -> Result<(), StoreError> {
+    conn.execute(SET_RAISED, params![network, msgid, plugin])?;
+    Ok(())
+}
+
+const RAISED: &str = "SELECT plugin FROM raised WHERE network = ?1 AND msgid = ?2 ORDER BY plugin";
+
+/// Fills in who raised each message on a page already read, ordered by plugin
+/// for the reason the notes are.
+pub(crate) fn attach_raised(
+    conn: &Connection,
+    messages: &mut [ChatMessage],
+) -> Result<(), StoreError> {
+    let mut stmt = conn.prepare_cached(RAISED)?;
+    for message in messages {
+        let (network, key) = (message.network.clone(), message.id.clone());
+        let mut rows = stmt.query(params![network, key])?;
+        let mut raised = Vec::new();
+        while let Some(row) = rows.next()? {
+            raised.push(row.get(0)?);
+        }
+        message.raised_by = raised;
     }
     Ok(())
 }

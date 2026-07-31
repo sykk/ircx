@@ -28,15 +28,16 @@ use ircx_plugin::{
 
 use crate::dispatch;
 use crate::session::{Action, SessionState};
+use crate::text;
 
 /// How many recent messages a plugin granted `read-messages` is handed.
 pub const CONTEXT_MESSAGES: u32 = 50;
 
-/// Consecutive failed batches before an annotator is dropped for the session.
-/// `docs/plugins.md` says a broken one is dropped and does not say when; one
-/// bad batch is a message the plugin did not expect, three in a row is the
-/// plugin.
-pub const ANNOTATOR_STRIKES: u32 = 3;
+/// Consecutive failed batches before an on-arrival hook is dropped for the
+/// session. `docs/plugins.md` says a broken one is dropped and does not say
+/// when; one bad batch is a message the plugin did not expect, three in a row
+/// is the plugin.
+pub const HOOK_STRIKES: u32 = 3;
 
 /// An answer a plugin reads, not a download.
 const MAX_FETCH_BYTES: usize = 256 * 1024;
@@ -49,19 +50,45 @@ const MAX_FETCH_BYTES: usize = 256 * 1024;
 pub fn spoken(messages: &[ChatMessage]) -> Vec<ArrivedMessage> {
     messages
         .iter()
-        .filter(|message| {
-            matches!(
-                message.kind,
-                MessageKind::Privmsg | MessageKind::Notice | MessageKind::Action
-            )
-        })
-        .map(|message| ArrivedMessage {
-            id: message.id.clone(),
-            nick: message.sender.nick.clone(),
-            text: message.text.clone(),
-            time: message.timestamp.clone(),
-        })
+        .filter(|message| is_speech(message))
+        .map(arrived)
         .collect()
+}
+
+/// What a notification rule is asked about: the messages in one batch it could
+/// still change the answer for.
+///
+/// Two more are left out. The user's own lines, because interrupting somebody
+/// with their own words is not something a rule should decide. And anything
+/// that already mentions their nick, because the host raised that one and a
+/// rule cannot lower it, so the call could not change the outcome.
+///
+/// A rule is therefore handed strictly less than an annotator, and the
+/// difference is the part where the answer was already known.
+pub fn worth_raising(messages: &[ChatMessage], nick: &str) -> Vec<ArrivedMessage> {
+    messages
+        .iter()
+        .filter(|message| {
+            is_speech(message) && !message.sender.is_self && !text::mentions(&message.text, nick)
+        })
+        .map(arrived)
+        .collect()
+}
+
+fn is_speech(message: &ChatMessage) -> bool {
+    matches!(
+        message.kind,
+        MessageKind::Privmsg | MessageKind::Notice | MessageKind::Action
+    )
+}
+
+fn arrived(message: &ChatMessage) -> ArrivedMessage {
+    ArrivedMessage {
+        id: message.id.clone(),
+        nick: message.sender.nick.clone(),
+        text: message.text.clone(),
+        time: message.timestamp.clone(),
+    }
 }
 
 /// A command on its way to the plugin that owns it.

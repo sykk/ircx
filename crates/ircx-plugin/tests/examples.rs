@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use ircx_plugin::{
-    net, AnnotateRequest, ArrivedMessage, Grants, Limits, Permission, PluginRuntime,
+    net, AnnotateRequest, ArrivedMessage, Grants, Limits, NotifyRequest, Permission, PluginRuntime,
 };
 
 const CHANNEL: &str = "#ircx";
@@ -35,10 +35,28 @@ fn arrivals(texts: &[&str]) -> AnnotateRequest {
     }
 }
 
+/// The same batch on its way to a notification rule, one nick per message
+/// because who said it is half of what a rule decides on.
+fn said(lines: &[(&str, &str)]) -> NotifyRequest {
+    NotifyRequest {
+        target: CHANNEL.into(),
+        messages: lines
+            .iter()
+            .enumerate()
+            .map(|(n, (nick, text))| ArrivedMessage {
+                id: format!("m{n}"),
+                nick: (*nick).to_owned(),
+                text: (*text).to_owned(),
+                time: "2026-07-31T00:00:00Z".into(),
+            })
+            .collect(),
+    }
+}
+
 /// Installs the example, grants it what its manifest asks for, and reads the
-/// notes back. The grant is written here rather than taken from the manifest
+/// answers back. The grant is written here rather than taken from the manifest
 /// wholesale because `*` is a choice the user makes, and this is that choice.
-fn install(name: &str) -> (PluginRuntime, tempfile::TempDir) {
+fn install(name: &str, hook: Permission) -> (PluginRuntime, tempfile::TempDir) {
     let root = tempfile::tempdir().expect("a temporary directory");
     let runtime = PluginRuntime::open(
         root.path().join("plugins"),
@@ -53,9 +71,7 @@ fn install(name: &str) -> (PluginRuntime, tempfile::TempDir) {
         .set_grants(
             name,
             Grants {
-                permissions: [Permission::AnnotateMessages, Permission::AccessChannels]
-                    .into_iter()
-                    .collect(),
+                permissions: [hook, Permission::AccessChannels].into_iter().collect(),
                 channels: vec![CHANNEL.into()],
                 hosts: Vec::new(),
             },
@@ -66,7 +82,7 @@ fn install(name: &str) -> (PluginRuntime, tempfile::TempDir) {
 
 #[test]
 fn units_reads_fahrenheit_in_celsius() {
-    let (runtime, _root) = install("units");
+    let (runtime, _root) = install("units", Permission::AnnotateMessages);
     let annotator = runtime.annotators(CHANNEL).remove(0);
 
     let reply = runtime
@@ -91,7 +107,7 @@ fn units_reads_fahrenheit_in_celsius() {
 /// something empty.
 #[test]
 fn units_says_nothing_about_a_message_with_no_temperature() {
-    let (runtime, _root) = install("units");
+    let (runtime, _root) = install("units", Permission::AnnotateMessages);
     let annotator = runtime.annotators(CHANNEL).remove(0);
 
     let reply = runtime
@@ -110,5 +126,53 @@ fn units_says_nothing_about_a_message_with_no_temperature() {
         reply.notes.is_empty(),
         "expected silence, got {:?}",
         reply.notes
+    );
+}
+
+/// The third extension point's example. A rule answers whether a message is
+/// worth interrupting you for; what it cannot do is make one quiet.
+#[test]
+fn deploys_raises_a_build_bot_saying_something_failed() {
+    let (runtime, _root) = install("deploys", Permission::RaiseNotifications);
+    let rule = runtime.notifiers(CHANNEL).remove(0);
+
+    let reply = runtime
+        .notify(
+            &rule,
+            said(&[
+                ("buildbot", "deploy failed on main"),
+                ("CI", "the nightly broke"),
+                ("drone", "build is failing again"),
+            ]),
+        )
+        .expect("the batch is read");
+
+    assert_eq!(reply.raised, ["m0", "m1", "m2"]);
+}
+
+/// The half a rule is easy to get wrong: most of a channel is not worth
+/// interrupting anybody for, and a rule that raises everything is a rule the
+/// user turns off.
+#[test]
+fn deploys_leaves_the_rest_of_the_channel_alone() {
+    let (runtime, _root) = install("deploys", Permission::RaiseNotifications);
+    let rule = runtime.notifiers(CHANNEL).remove(0);
+
+    let reply = runtime
+        .notify(
+            &rule,
+            said(&[
+                ("buildbot", "deploy finished on main"),
+                ("sable", "my deploy failed earlier"),
+                ("nyx", "morning"),
+                ("buildbot", "starting a build"),
+            ]),
+        )
+        .expect("the batch is read");
+
+    assert!(
+        reply.raised.is_empty(),
+        "a person saying it failed is not the bot saying so: {:?}",
+        reply.raised
     );
 }

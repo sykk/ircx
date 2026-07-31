@@ -461,6 +461,7 @@ fn message(nick: &str, text: &str) -> ircx_ipc::ChatMessage {
         delivery: ircx_ipc::Delivery::Delivered,
         reactions: Vec::new(),
         annotations: Vec::new(),
+        raised_by: Vec::new(),
         attachments: Vec::new(),
         encryption: ircx_ipc::EncryptionState::Plaintext,
         via: None,
@@ -518,4 +519,88 @@ fn only_what_a_person_said_reaches_an_annotator() {
         ["hello", "waves", "heads up"],
         "the join and the part are not things a person said"
     );
+}
+
+/// The nick a rule is asked about things on behalf of.
+const OWN_NICK: &str = "sykk";
+
+/// Every `Action::Notify` a run of lines produced, flattened.
+fn asked(session: &mut SessionState, lines: &[String]) -> Vec<String> {
+    let mut asked = Vec::new();
+    for line in lines {
+        for emitted in session.on_line(line) {
+            if let Action::Notify { messages, .. } = emitted {
+                asked.extend(messages.into_iter().map(|message| message.text));
+            }
+        }
+    }
+    asked
+}
+
+/// What a rule is handed, on top of what an annotator is: not the user's own
+/// lines, and not anything that already mentions them. The host raised that one
+/// already and a rule cannot lower it, so the call could not change the answer.
+#[test]
+fn a_rule_is_not_asked_about_what_was_already_decided() {
+    let mut session = session();
+    let lines = [
+        format!(":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"),
+        format!(":sable!s@h PRIVMSG {CHANNEL} :{OWN_NICK}: are you there"),
+        format!(":{OWN_NICK}!s@example PRIVMSG {CHANNEL} :yes"),
+        format!(":nyx!n@h JOIN {CHANNEL}"),
+        format!(":kade!k@h PRIVMSG {CHANNEL} :morning"),
+    ];
+
+    assert_eq!(
+        asked(&mut session, &lines),
+        ["deploy failed on main", "morning"],
+        "the mention was raised without asking, and the echo is the user's own"
+    );
+}
+
+/// A backfill is not an interruption. The messages in it already happened, and
+/// the user asked to see them.
+#[test]
+fn a_rule_is_not_asked_about_history() {
+    let mut session = session();
+    let lines = [
+        format!("@batch=1 :serv BATCH +1 chathistory {CHANNEL}"),
+        format!("@batch=1 :buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"),
+        "@batch=1 :serv BATCH -1".to_string(),
+    ];
+
+    assert!(
+        asked(&mut session, &lines).is_empty(),
+        "a rule is asked about what arrives, not about what is read back"
+    );
+}
+
+/// What a raise is for: the channel goes as loud as it would for the user's own
+/// nick, which is the only interruption this client has.
+#[test]
+fn a_raise_makes_the_channel_as_loud_as_a_mention() {
+    let mut session = session();
+    session.on_line(&format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"
+    ));
+
+    let before = highlights(&session.mark_read(CHANNEL));
+    assert_eq!(before, Some(0), "nothing has raised it yet");
+
+    let raised = session.raise(CHANNEL);
+    assert_eq!(highlights(&raised), Some(1));
+}
+
+/// The count the sidebar draws its badge from, out of whatever the actions
+/// last said about the channel.
+fn highlights(actions: &[Action]) -> Option<u32> {
+    actions.iter().rev().find_map(|action| match action {
+        Action::Emit(event) => match event.as_ref() {
+            IrcxEvent::ChannelUpdated { channel } if channel.name == CHANNEL => {
+                Some(channel.highlights)
+            }
+            _ => None,
+        },
+        _ => None,
+    })
 }

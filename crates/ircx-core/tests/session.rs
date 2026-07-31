@@ -2453,3 +2453,93 @@ mod scram_over_a_session {
         STANDARD.encode(signature.as_ref())
     }
 }
+
+/// #190. Messaging NickServ opened the query and showed nothing in it: the
+/// replies were filed under the casing the server used, and the query under the
+/// casing the user typed, so one conversation was two.
+mod one_conversation_one_name {
+    use super::*;
+
+    fn talking() -> Harness {
+        let mut session = Harness::new(config());
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :");
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+        session.feed(
+            ":irc.libera.chat 005 sykk CHANTYPES=# PREFIX=(ov)@+ CASEMAPPING=rfc1459 \
+             :are supported by this server",
+        );
+        session.sent();
+        session
+    }
+
+    /// Every target an appended message named, for the conversation asked
+    /// about.
+    fn named(session: &Harness, like: &str) -> Vec<String> {
+        session
+            .messages()
+            .iter()
+            .map(|message| message.target.clone())
+            .filter(|target| target.eq_ignore_ascii_case(like))
+            .collect()
+    }
+
+    /// What the local copy of an outgoing message was filed under.
+    fn filed_under(outcome: &CommandOutcome) -> String {
+        match outcome {
+            CommandOutcome::Sent(message) => message.target.clone(),
+            other => panic!("expected a sent message, got {other:?}"),
+        }
+    }
+
+    /// The report: a query opened as `nickserv`, answered as `NickServ`, and
+    /// the reply landing where nobody was looking.
+    #[test]
+    fn a_reply_in_another_casing_lands_in_the_conversation_that_is_open() {
+        let mut session = talking();
+        let (_, actions) = session.state.open_query("nickserv");
+        session.apply(actions);
+        session.feed(":NickServ!NickServ@services. NOTICE sykk :NickServ lets you register");
+
+        assert_eq!(
+            named(&session, "nickserv"),
+            ["nickserv"],
+            "the conversation keeps the name it was opened under"
+        );
+    }
+
+    /// The other order, which is how a query usually starts: the server names
+    /// it first, and what the user types afterwards has to go to the same
+    /// place.
+    #[test]
+    fn a_message_typed_in_another_casing_joins_the_conversation_already_open() {
+        let mut session = talking();
+        session.feed(":NickServ!NickServ@services. NOTICE sykk :you are now identified");
+
+        let outcome = session.submit("NICKSERV", "STATUS");
+        assert_eq!(filed_under(&outcome), "NickServ");
+    }
+
+    /// The line on the wire keeps what was typed. The server does its own
+    /// folding, and a target it does not know is its answer to give.
+    #[test]
+    fn the_wire_keeps_what_the_user_typed() {
+        let mut session = talking();
+        session.feed(":NickServ!NickServ@services. NOTICE sykk :hello");
+        session.sent();
+        session.submit("NICKSERV", "STATUS");
+
+        assert_eq!(session.sent(), vec!["PRIVMSG NICKSERV STATUS"]);
+    }
+
+    /// A channel is a target too, and a server answering `#TEST` to a `#test`
+    /// join would split it the same way.
+    #[test]
+    fn a_channel_answered_in_another_casing_is_the_same_channel() {
+        let mut session = talking();
+        session.feed(":sykk!s@h JOIN #test");
+        session.feed(":phrack!p@h PRIVMSG #TEST :hello");
+
+        assert_eq!(named(&session, "#test"), ["#test", "#test"]);
+    }
+}

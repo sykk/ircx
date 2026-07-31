@@ -1163,3 +1163,47 @@ fn a_message_nothing_raised_comes_back_empty() {
     let read = store.load_history(&history("#ircx", None, 10)).unwrap();
     assert!(read[0].raised_by.is_empty());
 }
+
+/// #190. Rows written before one conversation had one name hold whichever
+/// casing arrived, so reading by the name the window knows has to find them.
+/// A lookup that cannot find a message it holds is worse than one that finds a
+/// message twice.
+#[test]
+fn history_finds_a_conversation_whatever_case_it_was_written_under() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message(
+                "m1",
+                "NickServ",
+                "2026-01-01T00:00:00Z",
+                "you are now identified",
+            ),
+            message("m2", "nickserv", "2026-01-01T00:00:01Z", "STATUS"),
+            message("m3", "NICKSERV", "2026-01-01T00:00:02Z", "HELP"),
+        ])
+        .unwrap();
+
+    let read = store.load_history(&history("nickserv", None, 10)).unwrap();
+    assert_eq!(
+        read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["you are now identified", "STATUS", "HELP"],
+        "one conversation, however its rows were spelled"
+    );
+}
+
+/// The folding is not so wide that it merges conversations that are not one.
+#[test]
+fn history_keeps_two_different_conversations_apart() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message("m1", "NickServ", "2026-01-01T00:00:00Z", "identified"),
+            message("m2", "ChanServ", "2026-01-01T00:00:01Z", "op granted"),
+        ])
+        .unwrap();
+
+    let read = store.load_history(&history("nickserv", None, 10)).unwrap();
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0].text, "identified");
+}

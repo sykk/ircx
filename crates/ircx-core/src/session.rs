@@ -1095,6 +1095,10 @@ impl SessionState {
             false => sender.nick.clone(),
         };
 
+        if self.isupport.is_channel(&target) {
+            target = self.canonical(&target);
+        }
+
         let (kind, text) = match text::ctcp(body) {
             Some(("ACTION", action)) => (MessageKind::Action, action.to_string()),
             Some((request, _)) => {
@@ -1127,6 +1131,10 @@ impl SessionState {
 
         if !self.isupport.is_channel(&target) && target != SERVER_TARGET {
             self.touch_query(&target, sender.account.clone());
+            // After `touch_query`, so a first sighting names the conversation
+            // and every later one is filed under that name rather than under
+            // its own casing.
+            target = self.canonical(&target);
             // Hearing from somebody is the only evidence this client gets that
             // they came back. Our own echo is not: sending to a nick says
             // nothing about whether anyone is there to read it.
@@ -1848,6 +1856,28 @@ impl SessionState {
 
     pub(crate) fn is_me(&self, nick: &str) -> bool {
         self.isupport.casemapping.equal(nick, &self.nick)
+    }
+
+    /// The name this conversation is already known by, for a target that may
+    /// have arrived under a different casing.
+    ///
+    /// IRC compares targets case-insensitively and the casing is display only,
+    /// so `nickserv` and `NickServ` are one conversation. Everything below this
+    /// point keys on the string — the archive row, the event, the window's
+    /// timeline map — so a message filed under the casing it happened to arrive
+    /// with becomes a second conversation nobody is reading. #190.
+    ///
+    /// A target nothing is open for keeps the casing it came with: that is the
+    /// first sighting, and it is what the display name is taken from.
+    pub(crate) fn canonical(&self, target: &str) -> String {
+        let key = self.fold(target);
+        if let Some(channel) = self.channels.get(&key) {
+            return channel.name.clone();
+        }
+        if let Some(query) = self.queries.get(&key) {
+            return query.nick.clone();
+        }
+        target.to_string()
     }
 
     pub(crate) fn fold(&self, name: &str) -> String {

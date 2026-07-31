@@ -106,7 +106,7 @@ function Link({ url }: { url: string }) {
             setRefused(String(reason));
           });
         }}
-        className="underline decoration-from-font underline-offset-2"
+        className="cursor-pointer underline decoration-from-font underline-offset-2 hover:decoration-2"
         style={{ color: "var(--accent)" }}
       >
         {url}

@@ -26,9 +26,6 @@ interface Props {
    * record of what other people sent rather than a control.
    */
   onToggle: ((emoji: string, active: boolean) => void) | null;
-  /** Null on the same terms as `onToggle`: a reply travels as a `+reply` tag
-   * naming a msgid, so it needs both the capability and the id. */
-  onReply: (() => void) | null;
 }
 
 /**
@@ -36,30 +33,22 @@ interface Props {
  * metric, and in a nine-person channel the names are the information. They
  * arrive with the reaction, so every chip carries them.
  */
-export function Reactions({ reactions, ownNick, onToggle, onReply }: Props) {
-  const alone = reactions.length === 0;
+export function Reactions({ reactions, ownNick, onToggle }: Props) {
+  if (reactions.length === 0) return null;
   const pick = onToggle === null ? null : (emoji: string) => onToggle(emoji, true);
 
   return (
-    <>
-      {(onReply !== null || (alone && pick !== null)) && (
-        // The picker only sits up here while there are no chips to sit among.
-        <RowControls alone onReply={onReply} onPick={alone ? pick : null} />
-      )}
-      {!alone && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {reactions.map((reaction) => (
-            <Chip
-              key={reaction.emoji}
-              reaction={reaction}
-              ownNick={ownNick}
-              onToggle={onToggle}
-            />
-          ))}
-          {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} />}
-        </div>
-      )}
-    </>
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {reactions.map((reaction) => (
+        <Chip
+          key={reaction.emoji}
+          reaction={reaction}
+          ownNick={ownNick}
+          onToggle={onToggle}
+        />
+      ))}
+      {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} />}
+    </div>
   );
 }
 
@@ -109,15 +98,15 @@ function Chip({
 /**
  * The controls that answer a message: reply to it, react to it, or both.
  *
- * `alone` is a message nobody has reacted to yet. The mockup draws no control
- * there, so it appears with the pointer, and with focus landing anywhere in the
- * row — which makes a link or a reply quote a route to it.
+ * The mockup draws no control at rest, so the pair appears with the pointer,
+ * and with focus landing anywhere in the row — which makes a link or a reply
+ * quote a route to it.
  *
- * Positioned over the empty end of the measure rather than under the text: a
- * control that took up room would move every message below the one being
- * pointed at, and sweeping down the timeline would make it jump.
+ * They used to be laid over the far end of the measure to avoid taking room.
+ * A long line then ran underneath them and could not be clicked, so they have
+ * a column of their own and the room is reserved whether or not they are drawn.
  */
-function RowControls({
+export function RowControls({
   alone,
   onReply,
   onPick,
@@ -132,7 +121,8 @@ function RowControls({
   return (
     <span
       className={clsx(
-        alone && "absolute top-0 right-0",
+        // `alone` is the pair in their own column, which appears with the
+        // pointer. The chips' own `+` sits among them and is always drawn.
         alone && !open && "hidden group-focus-within:block group-hover:block",
       )}
       onKeyDown={(event) => {

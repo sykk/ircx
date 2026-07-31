@@ -100,7 +100,7 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
           }}
           aria-label={leavingLabel(filenameOf(attachment))}
           title={attachment.url}
-          className="truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2"
+          className="cursor-pointer truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2 hover:decoration-2"
           style={{ color: "var(--text-secondary)" }}
         >
           {filenameOf(attachment)}

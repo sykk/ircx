@@ -1061,6 +1061,41 @@ describe("links in a message", () => {
     expect(withLink().textContent?.startsWith(URL)).toBe(true);
   });
 
+  /**
+   * The reply and react controls were laid over the far end of the measure, so
+   * a long link ran underneath them and the part under a control could not be
+   * clicked. They have a column of their own now.
+   */
+  it("keeps the controls out of the text", () => {
+    withLink();
+    // The controls exist only where a message can be named on the wire.
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "capsChanged",
+        network: "libera",
+        enabled: ["message-tags"],
+      });
+    });
+
+    const reply = screen.getByRole("button", { name: "Reply to this message" });
+    const body = screen.getByRole("button", {
+      name: `${URL}, opens in your browser`,
+    });
+
+    // jsdom lays nothing out, so overlap itself cannot be measured. What can
+    // be checked is the structure that caused it: the controls sat inside the
+    // cell holding the text, over its far end. They are a separate cell now.
+    const row = body.closest("[data-msgid]");
+    const cellOf = (node: Element) =>
+      [...(row?.querySelector(".grid")?.children ?? [])].find((cell) =>
+        cell.contains(node),
+      );
+
+    expect(cellOf(body)).toBeTruthy();
+    expect(cellOf(reply)).toBeTruthy();
+    expect(cellOf(body)).not.toBe(cellOf(reply));
+  });
+
   /** Said before the click rather than reported after it. A reader deciding
    * whether to follow a link is looking at it now. */
   it("marks that it leaves the client", () => {

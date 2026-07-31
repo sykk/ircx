@@ -74,6 +74,9 @@ describe("nick colour across surfaces", () => {
           onReact={() => {}}
           onReply={() => {}}
           flashId={null}
+          group={null}
+          opensGroup={false}
+          onDismissGroup={() => {}}
         />,
       );
 

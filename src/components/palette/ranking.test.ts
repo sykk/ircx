@@ -61,6 +61,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     plugins: [],
     pluginsUnavailable: null,
     collapsedNetworks: {},
+    dismissedGroups: {},
     themes: [],
     brokenThemes: [],
     themeId: "ircx-dark",

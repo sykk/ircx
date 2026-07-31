@@ -364,3 +364,64 @@ describe("buildRows at scale", () => {
     expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
   });
 });
+
+describe("buildRows and groups", () => {
+  const GROUP = { id: "a", grade: "declared" as const, name: "parser", opener: "phrack" };
+
+  /** A group spans several author blocks, so which block opens it cannot be
+   * read off the block alone — only the one above it. */
+  it("marks the first block of a group and not the ones that continue it", () => {
+    const messages = [
+      at(0, { id: "a", nick: "phrack" }),
+      at(1_000, { id: "b", nick: "sable" }),
+      at(2_000, { id: "c", nick: "phrack" }),
+    ];
+    const rows = blocks(
+      buildRows(messages, null, null, new Map(messages.map((m) => [m.id, GROUP]))),
+    );
+
+    expect(rows.map((row) => row.opensGroup)).toEqual([true, false, false]);
+    expect(rows.every((row) => row.group === GROUP)).toBe(true);
+  });
+
+  it("leaves a block in no group carrying none", () => {
+    const rows = blocks(buildRows([at(0, { id: "a" })], null, null, new Map()));
+
+    expect(rows[0]!.group).toBeNull();
+    expect(rows[0]!.opensGroup).toBe(false);
+  });
+
+  /** A digest of joins between two blocks is not part of what anybody said, so
+   * the rule stops at it and starts again below. */
+  it("is broken by a run of presence between two blocks", () => {
+    const messages = [
+      at(0, { id: "a", nick: "phrack" }),
+      at(1_000, { id: "j", nick: "wren", kind: "join" as const }),
+      at(2_000, { id: "c", nick: "phrack" }),
+    ];
+    const rows = blocks(
+      buildRows(
+        messages,
+        null,
+        null,
+        new Map([
+          ["a", GROUP],
+          ["c", GROUP],
+        ]),
+      ),
+    );
+
+    expect(rows.map((row) => row.opensGroup)).toEqual([true, true]);
+  });
+
+  /** A rule across the pane says these are not one exchange. A group's line
+   * running past it would say they are. */
+  it("is broken by the unread seam", () => {
+    const messages = [at(0, { id: "a", nick: "phrack" }), at(1_000, { id: "b", nick: "sable" })];
+    const rows = blocks(
+      buildRows(messages, "b", null, new Map(messages.map((m) => [m.id, GROUP]))),
+    );
+
+    expect(rows.map((row) => row.opensGroup)).toEqual([true, true]);
+  });
+});

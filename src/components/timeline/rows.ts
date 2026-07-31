@@ -1,5 +1,6 @@
 import type { ChatMessage, MessageKind } from "@/types";
 import { isHighlight } from "@/store/selectors";
+import type { Group } from "./groups";
 
 /**
  * Bounds a run of system messages: a server console holds nothing else, so
@@ -26,7 +27,16 @@ export const RUN_MS = 5 * 60 * 1000;
 
 /** One virtualised item. Blocks and system runs hold several messages each. */
 export type TimelineRow =
-  | { kind: "block"; id: string; messages: ChatMessage[] }
+  | {
+      kind: "block";
+      id: string;
+      messages: ChatMessage[];
+      /** What this run belongs to, which is what colours its spine. */
+      group: Group | null;
+      /** First block of that group: the one that draws the name or the dismiss
+       * chip, and the only one whose spine starts rather than continues. */
+      opensGroup: boolean;
+    }
   | { kind: "system"; id: string; messages: ChatMessage[] }
   | { kind: "date"; id: string; at: string }
   | { kind: "unread"; id: string; seam: Seam };
@@ -128,23 +138,33 @@ export function buildRows(
   messages: readonly ChatMessage[],
   unreadFrom: string | null,
   ownNick: string | null = null,
+  groups: ReadonlyMap<string, Group> = new Map(),
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
   let open: Extract<TimelineRow, { kind: "block" | "system" }> | null = null;
   let openDay: string | null = null;
+  // The group the block above belonged to. A group spans several author blocks,
+  // so whether this one opens it cannot be read off the block alone.
+  let openGroupId: string | null = null;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!;
 
+    // A rule across the pane ends the group's rule with it: a line that runs
+    // past a date change or the unread seam claims those are one exchange, and
+    // the reader has just been told they are not. The group starts again below,
+    // which is also how its name comes back after the break.
     const day = dayOf(message.timestamp);
     if (day !== null && day !== openDay) {
       openDay = day;
       open = null;
+      openGroupId = null;
       rows.push({ kind: "date", id: `d:${day}`, at: message.timestamp });
     }
 
     if (unreadFrom !== null && message.id === unreadFrom) {
       open = null;
+      openGroupId = null;
       rows.push({ kind: "unread", id: "unread", seam: measureSeam(messages.slice(i), ownNick) });
     }
 
@@ -158,9 +178,25 @@ export function buildRows(
 
     // Named for the message that opened the run, message ids being unique
     // already. The id used to name the bucket, and there is no bucket now.
-    open = system
-      ? { kind: "system", id: `s:${message.id}`, messages: [message] }
-      : { kind: "block", id: `b:${message.id}`, messages: [message] };
+    if (system) {
+      open = { kind: "system", id: `s:${message.id}`, messages: [message] };
+      // Anything between two blocks of a group breaks the rule: a digest of
+      // joins is not part of what anybody was saying.
+      openGroupId = null;
+    } else {
+      // The head message decides, because a block is one person's run inside
+      // one exchange and its lines nearly always share a group. Where they do
+      // not, the head is the one whose name and time the block already states.
+      const group = groups.get(message.id) ?? null;
+      open = {
+        kind: "block",
+        id: `b:${message.id}`,
+        messages: [message],
+        group,
+        opensGroup: group !== null && group.id !== openGroupId,
+      };
+      openGroupId = group?.id ?? null;
+    }
     rows.push(open);
   }
 

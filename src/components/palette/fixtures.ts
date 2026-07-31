@@ -114,6 +114,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     plugins: [],
     pluginsUnavailable: null,
     collapsedNetworks: {},
+    dismissedGroups: {},
     themes: [],
     brokenThemes: [],
     themeId: "ircx-dark",

@@ -35,6 +35,45 @@ function applicationSources(dir = SRC): string[] {
   return found;
 }
 
+const GENERATED = join(SRC, "types", "generated");
+const IPC_CRATE = resolve(process.cwd(), "crates", "ircx-ipc", "src");
+
+/**
+ * Why nothing in the window reads a field the backend sends. Every entry has
+ * to be a decision somebody made, not a list of things nobody got round to —
+ * the test fails if one of these turns out to be read after all, so the list
+ * cannot quietly become wallpaper.
+ */
+const UNREAD_FIELDS: Record<string, string> = {
+  batch:
+    "The IRCv3 batch id. The timeline groups by time bucket rather than by batch, and the archive keeps it for anything that later wants to.",
+  encryption:
+    "Always Plaintext this milestone. The field is the extension point, and CLAUDE.md says no encryption UI ships.",
+  timestampIsLocal:
+    "Whether the time came from server-time or from receipt. Nothing draws the difference between the two.",
+  user: "The ident out of the mask. A message is written under a nick; nothing shows the rest of it.",
+  online: "Tracked and never drawn — #153.",
+  setAt: "Tracked and never drawn — #153.",
+  setBy: "Tracked and never drawn — #153.",
+};
+
+/** Fields declared on the types that cross the boundary, camelCased the way
+ * serde renames them. */
+function ipcFields(): Map<string, string[]> {
+  const fields = new Map<string, string[]>();
+  for (const entry of readdirSync(IPC_CRATE)) {
+    if (!entry.endsWith(".rs")) continue;
+    const source = readFileSync(join(IPC_CRATE, entry), "utf8");
+    for (const struct of source.matchAll(/pub struct (\w+)\s*\{([\s\S]*?)\n\}/g)) {
+      for (const field of struct[2]!.matchAll(/^\s*pub (\w+):/gm)) {
+        const name = field[1]!.replace(/_(\w)/g, (_, c: string) => c.toUpperCase());
+        fields.set(name, [...(fields.get(name) ?? []), struct[1]!]);
+      }
+    }
+  }
+  return fields;
+}
+
 /** The command names `ipc` asks the backend for. */
 function invokedCommands(): string[] {
   const source = readFileSync(IPC_FILE, "utf8");
@@ -86,6 +125,37 @@ describe("the IPC contract", () => {
     expect(invokedCommands().length).toBeGreaterThan(0);
     const registered = registeredCommands();
     expect(invokedCommands().filter((name) => !registered.has(name))).toEqual([]);
+  });
+
+  /**
+   * A field is the third shape this has taken. `part_channel` was a command
+   * nothing invoked, `opener:allow-open-url` was a permission nothing called,
+   * and `Attachment.mime` was a field nothing read — which is why every URL in
+   * a message carried a `fetch` control that could only fail on most of them.
+   *
+   * The window is allowed not to draw something. What it is not allowed to do
+   * is leave nobody able to say which.
+   */
+  it("reads every field the backend sends, or says why not", () => {
+    const window = [...applicationSources(), IPC_FILE]
+      .filter((path) => !path.startsWith(GENERATED))
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
+    // Property access or a destructuring, rather than the bare word: a field
+    // called `text` would otherwise match every line in the application.
+    const reads = (field: string) =>
+      new RegExp(String.raw`\.\s*${field}\b`).test(window) ||
+      new RegExp(String.raw`[{,]\s*${field}\s*[,}:=]`).test(window);
+
+    const fields = ipcFields();
+    expect(fields.size).toBeGreaterThan(50);
+
+    const unread = [...fields.keys()].filter((field) => !reads(field));
+    expect(unread.filter((field) => !(field in UNREAD_FIELDS))).toEqual([]);
+
+    // And the other way: an entry that is read again is a reason nobody needs.
+    expect(Object.keys(UNREAD_FIELDS).filter(reads)).toEqual([]);
   });
 
   /**

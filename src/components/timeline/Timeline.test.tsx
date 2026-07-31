@@ -1096,6 +1096,20 @@ describe("links in a message", () => {
     expect(cellOf(body)).not.toBe(cellOf(reply));
   });
 
+  /**
+   * A `<button>` is inline-block and sizes to its content, so a long URL took
+   * whatever width it wanted and ran out of the pane — over the column beside
+   * it in a split, which is where it was seen.
+   *
+   * jsdom measures nothing, so this asks for the rules that let it wrap rather
+   * than for the width it ends up at. The wrapping itself needs an eye.
+   */
+  it("lets a long link wrap inside the pane", () => {
+    const link = withLink();
+    expect(link.className).toContain("max-w-full");
+    expect(link.className).toContain("break-all");
+  });
+
   /** Said before the click rather than reported after it. A reader deciding
    * whether to follow a link is looking at it now. */
   it("marks that it leaves the client", () => {

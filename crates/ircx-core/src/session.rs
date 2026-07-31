@@ -540,6 +540,34 @@ impl SessionState {
 
     /// A failure the user can fix by editing the network, so it stops the
     /// connection instead of quietly leaving them unauthenticated.
+    /// What a rejected login says to the person who has to fix it.
+    ///
+    /// The server's own words go in the middle rather than at the end, because
+    /// Libera answers `904` with "SASL authentication failed" and a sentence
+    /// built around it read "SASL authentication with Libera.Chat failed —
+    /// SASL authentication failed". Naming the account matters: it is as
+    /// likely to be wrong as the password, and it is not on screen anywhere.
+    fn sasl_refused(&self, reason: &str) -> String {
+        let account = self
+            .config
+            .sasl
+            .as_ref()
+            .map(|sasl| sasl.account.as_str())
+            .unwrap_or_default();
+        let who = match account.is_empty() {
+            true => String::new(),
+            false => format!(" the account {account}"),
+        };
+        let said = match reason.trim().is_empty() {
+            true => String::new(),
+            false => format!(" — {reason}"),
+        };
+        format!(
+            "{} rejected{who}{said}. Check the account name and password in this network's settings.",
+            self.network_name()
+        )
+    }
+
     fn abort_sasl(&mut self, message: String) {
         self.set_sasl(SaslStatus::Failed {
             message: message.clone(),
@@ -592,10 +620,7 @@ impl SessionState {
             RPL_SASLSUCCESS => self.end_negotiation(),
             ERR_SASLFAIL | ERR_SASLTOOLONG | ERR_SASLABORTED | ERR_NICKLOCKED => {
                 let reason = params.last().cloned().unwrap_or_default();
-                self.abort_sasl(format!(
-                    "SASL authentication with {} failed — {reason}",
-                    self.network_name()
-                ));
+                self.abort_sasl(self.sasl_refused(&reason));
             }
             ERR_SASLALREADY => self.end_negotiation(),
             RPL_SASLMECHS => {

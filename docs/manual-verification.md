@@ -22,9 +22,18 @@ completing after it.
 
 What that leaves:
 
-- **A wrong password on a registered account**, as opposed to a nonexistent one.
-  Libera answers `904` either way and the client cannot tell them apart, so this
-  is thin — but nobody has run it.
+**A wrong password on a registered account is verified** by the owner on
+2026-07-31: `904`, `SaslStatus::Failed`, `ConnectionStatus::Failed`, and no
+`001` — registration abandoned rather than continuing as a stranger, the same
+as for a nonexistent account.
+
+It found the wording. Libera answers `904` with "SASL authentication failed",
+and the sentence built around it read "SASL authentication with Libera.Chat
+failed — SASL authentication failed". It now names the account and says where
+to change it.
+
+What that leaves:
+
 - **Mechanisms other than PLAIN.** Libera also offers `EXTERNAL`,
   `ECDSA-NIST256P-CHALLENGE` and `SCRAM-SHA-512`. ircx requests PLAIN only.
 
@@ -429,10 +438,12 @@ in #164 — nothing is granted now that was not confirmed.
 
 Still not walked, and worth doing when there is reason to:
 
-- **A note surviving a restart.** The archive is the only place one lives once
-  the window has moved on. `crates/ircx-store/tests/store.rs` covers the round
-  trip; what is unseen is the note coming back with the message on a reopened
-  conversation.
+**A note survives a restart**, walked on 2026-07-31: the client was closed and
+the conversation reopened, and the note came back with the message without the
+annotator running again.
+
+Still not walked:
+
 - **A broken annotator being dropped.** Three consecutive failed batches, the
   first reported and the rest silent. An example that throws would show whether
   the report reaches anywhere a person looks — the strike counting is unit

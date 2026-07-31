@@ -1056,10 +1056,30 @@ arrow in #172. A mark that is obvious to whoever built it is not evidence.
 **A broken rule being dropped** is walked, under the annotator's section above,
 along with one plugin holding both hooks and only one of them broken.
 
-**A dropped hook coming back** is walked on 2026-08-01, against local `ergo`,
-as a step in `crates/ircx-core/tests/ergo.rs`. A plugin written to throw is
-installed and granted, a second client says three things, and the hook is
-dropped into the server console:
+**A dropped hook coming back is walked twice**, by different means, and the
+first run is the one that carries the claim.
+
+**By the owner on 2026-07-31**, on one connection that was never restarted:
+
+```text
+21:05:10  dropped               a plugin that throws, three messages
+21:06     installed and granted through the sheet
+21:07:53  dropped a second time still the broken code, three more messages
+21:08     installed and granted  the code now fixed
+21:09:37  it is 72F outside      revive: 22 °C
+```
+
+The second drop is what carries it. A working plugin answering could be
+explained by almost anything — a fresh runtime, a reconnect, a coincidence of
+timing. A hook reporting *twice* cannot: a struck-out hook is filtered out
+before it is called, so it can never fail again and never report again. Seeing
+the same plugin drop a second time on the same connection means the count was
+cleared between the two, which is the only thing the change claims.
+
+**As a step in `crates/ircx-core/tests/ergo.rs` on 2026-08-01**, so it runs
+again without anybody watching. A plugin written to throw is installed and
+granted, a second client says three things, and the hook is dropped into the
+server console:
 
 ```text
 The flaky plugin failed 3 times in a row, so ircx stopped asking it to annotate
@@ -1067,32 +1087,35 @@ messages. Install it again from Plugins once it is fixed.
 ```
 
 Repaired, installed over — the same call the sheet makes — and told the network
-it changed, it answers on the next message without a restart.
+it changed, it answers on the next message without a restart. **Checked against
+a build with the clearing taken out**, which is the only reason a passing step
+is worth anything: it failed there, with `the repaired plugin was never asked
+again — the strikes outlived the install`.
 
-**The step was checked against a build with the clearing taken out**, which is
-the only reason it is worth anything: it failed there, with `the repaired
-plugin was never asked again — the strikes outlived the install`. A step that
-passes either way says nothing about the mechanism it names.
+**And in the assembled application again on 2026-08-01**, because the ergo step
+sends `PluginChanged` itself and the sheet is what sends it in the client.
+Installed through the folder picker, granted, three messages three seconds
+apart, dropped; then a repaired build installed over it, granted again, and the
+next message came back annotated. So the whole path is joined: the click, the
+grant, the strikes, the drop, the repair and the return.
 
-**The half above the core is walked too**, by the owner in the assembled
-application on 2026-08-01, against local `ergo` with a second client in
-`#test`. The ergo run sends `PluginChanged` itself; this is the path where the
-plugins sheet sends it.
+Three things worth knowing before running this again.
 
-A plugin written to throw was installed through the folder picker and granted
-the channel. Three messages, three seconds apart — spaced because a strike is
-counted per batch of arrivals, and three lines landing together count once. The
-console said the plugin had been dropped. A repaired build was then installed
-over it, granted again, and the next message came back annotated, with no
-restart.
+**Give the walker a path a file picker can reach.** The instructions named a
+folder under the session scratchpad; the owner copied it somewhere pickable and
+installed from there, so the repair went to a folder nobody was using and the
+broken code was installed a second time. That is where the second drop came
+from, and it is the only reason that walk had the evidence it did — a mistake
+worth more than the run it interrupted.
 
-So the whole path is joined: the click, the grant, the strikes, the drop, the
-repair and the return.
+**Reinstalling is two steps and the walk needs both.** Installing over a plugin
+resets its grants, so the plugin comes back ungranted and does nothing until it
+is granted again. A walk that stops after the install sees no note and reads it
+as a failure to revive — and nothing on the screen tells that apart from strikes
+that outlived the install, except whether the sheet shows the channel granted.
 
-Worth keeping for the next run of this: installing over a plugin resets its
-grants, so a repaired plugin that is not granted again annotates nothing and
-looks exactly like strikes that outlived the install. The two are told apart by
-whether the sheet shows the channel granted, and nothing on the screen says so.
+**Space the messages.** A strike is counted per batch of arrivals, so three
+lines said at once count once and the hook never drops.
 
 ## The topic of a channel you have joined
 

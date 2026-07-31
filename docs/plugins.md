@@ -239,12 +239,15 @@ Three properties, and the first is what makes the other two affordable.
 - **It runs once per message.** The answer is stored beside the message, keyed by
   the message and the plugin, so scrolling redraws it instead of recomputing it,
   and a restart still has it — an `annotations` table keyed by the network, the
-  message and the plugin, alongside the one reactions use. The 0.022 ms in
+  message and the plugin, alongside the one reactions use. The 0.021 ms in
   `docs/measurements.md` is per slash command, something a person types; calling
   into QuickJS while a timeline scrolls is not an option at any figure.
 - **Messages are handed over in batches.** A netsplit rejoin or a history
   backfill is hundreds of messages, and one call per batch keeps the call count
   near the command path's rather than multiplying it by the channel's traffic.
+  Measured: fifty messages cost 0.207 ms together against about 1.3 ms one at a
+  time, and a conversation nothing annotates costs the 0.0014 ms map lookup and
+  no runtime at all. `docs/measurements.md` has the method.
 
 ### What an annotate handler cannot reach
 

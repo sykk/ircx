@@ -9,7 +9,7 @@
 use std::path::Path;
 
 use ircx_ipc::{FileToUpload, UploadMethod, UploadProvider};
-use ircx_net::http::{upload, UploadMethod as NetMethod, UploadPolicy};
+use ircx_net::http::{upload, HttpError, UploadMethod as NetMethod, UploadPolicy};
 
 use crate::state::App;
 
@@ -166,11 +166,48 @@ pub async fn send_file(app: &App, path: &str) -> Result<String, String> {
     getrandom(&mut random)?;
     let url = endpoint_for(&provider.endpoint, &object_name(&name, &random));
 
+    let host = host_of(&provider.endpoint);
     let answer = upload(&url, &bytes, &policy(&provider, &name, app)?)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| refusal(&name, &host, error))?;
 
     Ok(link_from(&answer.body, &url))
+}
+
+/// Why the provider would not take it, for whoever has to fix it.
+///
+/// `HttpError` is shared with the preview fetch, whose wording tells the reader
+/// to open the URL in a browser. That is good advice about a link somebody
+/// posted and useless about an upload: a browser sends a `GET`, which cannot
+/// say why a `PUT` was refused, and the reader is left without the one thing
+/// they can act on. Found by walking it.
+fn refusal(name: &str, host: &str, error: HttpError) -> String {
+    match error {
+        HttpError::Status {
+            status: status @ (401 | 403),
+            ..
+        } => format!(
+            "{host} would not accept the credential ({status}). Check the header and token in \
+             the upload provider settings."
+        ),
+        HttpError::Status { status: 413, .. } => {
+            format!("{host} refused {name} as too large for it to store.")
+        }
+        HttpError::Status { status, .. } => {
+            format!("{host} refused {name} with HTTP {status}.")
+        }
+        other => other.to_string(),
+    }
+}
+
+/// The host, for a sentence that names where the file was going. A malformed
+/// endpoint is repeated whole rather than hidden.
+fn host_of(endpoint: &str) -> String {
+    endpoint
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split(['/', '?']).next())
+        .unwrap_or(endpoint)
+        .to_owned()
 }
 
 fn policy(provider: &UploadProvider, name: &str, app: &App) -> Result<UploadPolicy, String> {
@@ -291,6 +328,82 @@ mod tests {
             link_from("stored ok", "https://files.example.com/01-a.png"),
             "https://files.example.com/01-a.png"
         );
+    }
+
+    /// The walk that found this got fetch advice — "open it in your browser to
+    /// see what it says" — for an upload a browser cannot even attempt.
+    #[test]
+    fn a_refused_credential_says_so_and_where_to_fix_it() {
+        let said = refusal(
+            "a.png",
+            "127.0.0.1:8080",
+            HttpError::Status {
+                url: "http://127.0.0.1:8080/x-a.png".into(),
+                status: 401,
+            },
+        );
+
+        assert!(said.contains("credential"), "{said}");
+        assert!(said.contains("upload provider settings"), "{said}");
+        assert!(!said.contains("browser"), "{said}");
+    }
+
+    #[test]
+    fn a_provider_that_thinks_it_too_large_says_that_rather_than_a_number() {
+        let said = refusal(
+            "a.png",
+            "files.example.com",
+            HttpError::Status {
+                url: "https://files.example.com/x".into(),
+                status: 413,
+            },
+        );
+
+        assert!(said.contains("too large"), "{said}");
+    }
+
+    /// Anything else names the host, the file and the status, which is what a
+    /// person has to go on when the provider said nothing useful.
+    #[test]
+    fn any_other_refusal_names_what_it_can() {
+        let said = refusal(
+            "a.png",
+            "files.example.com",
+            HttpError::Status {
+                url: "https://files.example.com/x".into(),
+                status: 500,
+            },
+        );
+
+        assert!(said.contains("files.example.com"), "{said}");
+        assert!(said.contains("a.png"), "{said}");
+        assert!(said.contains("500"), "{said}");
+    }
+
+    /// A failure that is not a status keeps the wording `ircx-net` wrote for
+    /// it: a timeout or a refused connection says the same thing either way.
+    #[test]
+    fn a_failure_that_is_not_a_status_is_left_alone() {
+        let said = refusal(
+            "a.png",
+            "files.example.com",
+            HttpError::Redirected {
+                url: "https://files.example.com/x".into(),
+                to: "https://elsewhere/x".into(),
+            },
+        );
+
+        assert!(said.contains("elsewhere"), "{said}");
+    }
+
+    #[test]
+    fn the_host_is_read_out_of_the_endpoint() {
+        assert_eq!(host_of("http://127.0.0.1:8080/{name}"), "127.0.0.1:8080");
+        assert_eq!(
+            host_of("https://files.example.com/a/b"),
+            "files.example.com"
+        );
+        assert_eq!(host_of("not a url"), "not a url");
     }
 
     #[test]

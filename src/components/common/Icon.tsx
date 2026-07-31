@@ -6,6 +6,7 @@ const PATHS = {
   close: "m4 4 8 8M12 4l-8 8",
   sidebar: "M2.5 3h11v10h-11zM6.5 3v10",
   plus: "M8 3.75v8.5M3.75 8h8.5",
+  external: "M12.5 9.5v3h-9v-9h3M9.5 3.5h3v3M12.5 3.5 7.5 8.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

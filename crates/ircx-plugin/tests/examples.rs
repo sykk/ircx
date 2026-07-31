@@ -1,9 +1,9 @@
 //! The plugins under `examples/plugins`, installed and run the way a user
 //! would install them.
 //!
-//! An example is a promise: somebody reads it, trusts it, and writes their own
-//! against it. One that quietly stopped working is worse than none, so the
-//! shipped file is what runs here — not a copy of it in a string.
+//! The shipped file is what runs here rather than a copy of it in a string, so
+//! an example that stopped working fails the build rather than the person who
+//! trusted it.
 
 use std::path::PathBuf;
 

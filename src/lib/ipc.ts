@@ -113,9 +113,6 @@ export const ipc = {
  * loaded over it has no way back. `target="_blank"` is not that guarantee —
  * what a webview does with it is the webview's business — so the destination
  * leaves through the opener, which is a different process by construction.
- *
- * Refusing is the safe direction. A URL that does not open is a link that did
- * not work; one that opens something unexpected is worse.
  */
 export async function openExternal(url: string): Promise<void> {
   await openUrl(url);

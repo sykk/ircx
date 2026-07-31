@@ -177,9 +177,6 @@ describe("the IPC contract", () => {
    * nothing invoked, `opener:allow-open-url` was a permission nothing called,
    * and `Attachment.mime` was a field nothing read — which is why every URL in
    * a message carried a `fetch` control that could only fail on most of them.
-   *
-   * The window is allowed not to draw something. What it is not allowed to do
-   * is leave nobody able to say which.
    */
   it("reads every field the backend sends, or says why not", () => {
     const window = [...applicationSources(), IPC_FILE]

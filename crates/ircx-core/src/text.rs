@@ -136,9 +136,9 @@ fn filename(url: &str) -> Option<String> {
 ///
 /// Only what `src-tauri/src/preview.rs` can actually render, which is why AVIF
 /// and SVG are absent: naming a type here that comes back as "not an image
-/// ircx can show" offers the reader an action that cannot work. SVG is not
-/// merely unimplemented — it is a document with scripting rather than a
-/// bitmap, and the previewer excludes it deliberately.
+/// ircx can show" offers the reader an action that cannot work. SVG is excluded
+/// on purpose rather than unimplemented: it is a document with scripting, not a
+/// bitmap.
 fn mime(url: &str) -> Option<String> {
     let name = filename(url)?.to_ascii_lowercase();
     let kind = match name.rsplit('.').next()? {

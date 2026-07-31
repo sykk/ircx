@@ -843,6 +843,43 @@ fn sasl_failure_stops_the_connection_rather_than_connecting_as_a_stranger() {
     ));
 }
 
+/// Walked with a real wrong password on 2026-07-31, which is how the wording
+/// was found: Libera answers `904` with "SASL authentication failed", and the
+/// sentence built around it read "SASL authentication with Libera.Chat failed —
+/// SASL authentication failed".
+#[test]
+fn a_rejected_login_says_what_to_fix_without_repeating_the_server() {
+    let mut config = config();
+    config.sasl = Some(SaslCredentials {
+        mechanism: SaslMechanism::Plain,
+        account: "sykk".into(),
+        password: Some("wrong".into()),
+    });
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN");
+    session.feed(":irc.libera.chat CAP * ACK :sasl");
+    session.feed("AUTHENTICATE +");
+    session.feed(":irc.libera.chat 904 sykk :SASL authentication failed");
+
+    let Some(SaslStatus::Failed { message }) = session.sasl_states().last() else {
+        panic!("expected a failure");
+    };
+
+    // The account is as likely to be wrong as the password, and it is on
+    // screen nowhere else.
+    assert!(message.contains("sykk"), "names the account: {message}");
+    assert!(
+        message.contains("network's settings"),
+        "says where to fix it: {message}"
+    );
+    assert!(
+        !message.contains("SASL authentication with"),
+        "does not restate what the server just said: {message}"
+    );
+    assert_eq!(message.matches("SASL authentication failed").count(), 1);
+}
+
 #[test]
 fn a_server_without_sasl_degrades_to_a_plain_connection() {
     let mut config = config();

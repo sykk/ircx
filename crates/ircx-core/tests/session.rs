@@ -78,6 +78,9 @@ impl Harness {
                     self.open.push(target);
                 }
                 Action::Forget(target) => self.open.retain(|held| held.name() != target),
+                // Nothing here drives plugins, so a batch on its way to a
+                // rule is not something this harness can act on.
+                Action::Notify { .. } => {}
                 Action::Close => self.closed = true,
             }
         }

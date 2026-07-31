@@ -9,6 +9,7 @@ const MIGRATIONS: &[&str] = &[
     REACTIONS,
     VIA,
     ANNOTATIONS,
+    RAISED,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -198,6 +199,21 @@ CREATE TABLE annotations (
 );
 "#;
 
+/// Which messages a notification rule thought worth interrupting the user for,
+/// and which rule thought so. Keyed the same way an annotation is, so a plugin
+/// answering the same message twice raises it once.
+///
+/// There is no row for a message a rule passed over: a rule raises and cannot
+/// lower, so absence is the only thing "not raised" could mean.
+const RAISED: &str = r#"
+CREATE TABLE raised (
+    network TEXT NOT NULL,
+    msgid   TEXT NOT NULL,
+    plugin  TEXT NOT NULL,
+    PRIMARY KEY (network, msgid, plugin)
+);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,7 +238,7 @@ mod tests {
     /// migration has to still apply on top of real rows, and the new table has
     /// to arrive without touching them.
     #[test]
-    fn an_archive_from_before_annotations_gains_the_table_and_keeps_its_rows() {
+    fn an_archive_one_version_behind_gains_the_table_and_keeps_its_rows() {
         let mut conn = Connection::open_in_memory().unwrap();
         for sql in MIGRATIONS.iter().take(MIGRATIONS.len() - 1) {
             conn.execute_batch(sql).unwrap();
@@ -256,8 +272,7 @@ mod tests {
             .unwrap();
         assert_eq!(held, 1, "the upgrade keeps what was already archived");
         conn.execute(
-            "INSERT INTO annotations (network, msgid, plugin, text)
-             VALUES ('libera','m1','units','22 C')",
+            "INSERT INTO raised (network, msgid, plugin) VALUES ('libera','m1','deploys')",
             [],
         )
         .unwrap();

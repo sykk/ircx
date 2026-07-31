@@ -138,6 +138,7 @@ impl Store {
         }
         message::attach_reactions(&conn, &mut page)?;
         message::attach_annotations(&conn, &mut page)?;
+        message::attach_raised(&conn, &mut page)?;
         page.reverse();
         Ok(page)
     }
@@ -171,6 +172,13 @@ impl Store {
         text: &str,
     ) -> Result<(), StoreError> {
         message::set_annotation(&self.conn(), network, msgid, plugin, text)
+    }
+
+    /// Records that a rule thought this message worth interrupting the user
+    /// for. Recording it twice is recording it once, and there is nothing to
+    /// record for a message a rule passed over: a rule raises and cannot lower.
+    pub fn set_raised(&self, network: &str, msgid: &str, plugin: &str) -> Result<(), StoreError> {
+        message::set_raised(&self.conn(), network, msgid, plugin)
     }
 
     /// `req.query` is text a person typed, not an FTS5 expression: it is

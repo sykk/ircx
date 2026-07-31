@@ -343,10 +343,14 @@ whether it is worth interrupting the user for. Same trigger as the annotator and
 a different consent — it reads on arrival and shows nothing — so it owns a
 permission of its own rather than borrowing `annotate-messages`.
 
-**The plugin half is built**: the permission, the manifest flag, the batch call,
-what the handler cannot reach, and the check that a rule may only speak about
-the batch it was handed. What the host does with a raised message is #90's
-next slice.
+**Built**, end to end: the permission, the manifest flag, the batch call, what
+the handler cannot reach, the check that a rule may only speak about the batch
+it was handed, the host asking rules on arrival, the raise surviving a restart,
+and the channel going loud.
+
+Installable as it stands: `examples/plugins/deploys`, which
+`crates/ircx-plugin/tests/examples.rs` installs and runs, and which
+`crates/ircx-core/tests/ergo.rs` drives against a real server.
 
 ```json
 {
@@ -364,6 +368,34 @@ next slice.
 ```js
 ircx.notify((message) => message.nick === "buildbot" && message.text.includes("failed"));
 ```
+
+### What a raise does
+
+The channel goes as loud as it would for the user's own nick — the badge the
+sidebar already draws for a mention, which is the only interruption this client
+has. The message carries which rule raised it, archived beside it, so a
+conversation reopened tomorrow still says why it went loud.
+
+A raise arrives *after* the message is drawn, because a rule runs on arrival
+rather than on draw and nothing waits for a plugin. The badge therefore moves a
+beat later than the message. That is the cost of the conversation never
+stalling on somebody else's code, and it is the same trade the annotator makes.
+
+### Which messages a rule is asked about
+
+Less than an annotator gets. On top of the joins and server chatter neither one
+sees, a rule is not handed:
+
+| what | why |
+|---|---|
+| the user's own lines | interrupting somebody with their own words is not a rule's to decide |
+| anything already mentioning their nick | the host raised it, and a rule cannot lower it, so the call could not change the answer |
+| a history backfill | a backfill is not an interruption: it already happened, and the user asked to see it |
+
+The last one is the difference between a rule and an annotator worth knowing:
+an annotator is handed history, because a note about an old message is still
+worth having. A raise about an old message is a notification for something that
+happened yesterday.
 
 ### It raises and cannot lower
 
@@ -403,9 +435,9 @@ more than the message in front of it, such as the third failure this hour.
 
 ## What is not built
 
-- **What the host does with a raised message.** The plugin half of the
-  notification rule is built and nothing drives it: no arrival reaches a rule,
-  and nothing is raised.
+- **A raised message drawn as anything.** The channel's badge goes loud and the
+  message records which rule raised it; nothing in the timeline draws that yet,
+  so a reader who opens the conversation cannot see which message it was.
 - **The other two extension points' shapes.** Providers and protocol adapters
   are still only described.
 - **Which channels a plugin may reach, chosen from the ones it is in.** The

@@ -61,7 +61,7 @@ async fn against_ergo() {
         }
     };
 
-    let plugins = annotator(&mut report, room.path());
+    let plugins = on_arrival_plugins(&mut report, room.path());
     let mut live = Live::start(config("ergo", "ircx-drive"), Arc::clone(&store), plugins);
 
     // A second client, because one session alone cannot exercise any of this.
@@ -78,16 +78,33 @@ async fn against_ergo() {
     };
     let mut other = Live::start(config("ergo-2", "ircx-other"), other_store, None);
 
-    if !registered(&mut report, &mut live).await || !registered(&mut report, &mut other).await {
+    // A third, under the nick `deploys` looks for. A rule decides on who said
+    // it as much as on what was said, so the run needs a build bot to be one.
+    let bot_store = match Store::open(&room.path().join("bot.sqlite3")) {
+        Ok(store) => Arc::new(store),
+        Err(error) => {
+            report.fail("archive", &format!("third Store::open failed: {error}"));
+            report.finish();
+            return;
+        }
+    };
+    let mut bot = Live::start(config("ergo-3", "buildbot"), bot_store, None);
+
+    if !registered(&mut report, &mut live).await
+        || !registered(&mut report, &mut other).await
+        || !registered(&mut report, &mut bot).await
+    {
         live.stop().await;
         other.stop().await;
+        bot.stop().await;
         report.finish();
         return;
     }
-    if !other.join(CHANNEL).await {
-        report.fail("setup", "the second client never joined");
+    if !other.join(CHANNEL).await || !bot.join(CHANNEL).await {
+        report.fail("setup", "a second client never joined");
         live.stop().await;
         other.stop().await;
+        bot.stop().await;
         report.finish();
         return;
     }
@@ -96,6 +113,7 @@ async fn against_ergo() {
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
+    a_rule_raises_what_it_was_asked_about(&mut report, &mut live, &mut bot).await;
 
     if report.failed() {
         println!("\n--- transcript");
@@ -106,14 +124,14 @@ async fn against_ergo() {
 
     live.stop().await;
     other.stop().await;
+    bot.stop().await;
     report.finish();
 }
 
-/// The example plugin from `examples/plugins/units`, installed and granted the
-/// channel this run uses. `None` leaves the annotator step to report that it
-/// could not run rather than silently passing.
-fn annotator(report: &mut Report, room: &Path) -> Option<Arc<PluginRuntime>> {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/units");
+/// Both example plugins that run on arrival, installed and granted the channel
+/// this run uses. `None` leaves their steps to report that they could not run
+/// rather than silently passing.
+fn on_arrival_plugins(report: &mut Report, room: &Path) -> Option<Arc<PluginRuntime>> {
     let runtime = match PluginRuntime::open(
         room.join("plugins"),
         PluginLimits::default(),
@@ -125,22 +143,29 @@ fn annotator(report: &mut Report, room: &Path) -> Option<Arc<PluginRuntime>> {
             return None;
         }
     };
-    if let Err(error) = runtime.install(&source) {
-        report.fail("plugins", &format!("could not install units: {error}"));
-        return None;
+
+    for (id, hook) in [
+        ("units", Permission::AnnotateMessages),
+        ("deploys", Permission::RaiseNotifications),
+    ] {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/plugins")
+            .join(id);
+        if let Err(error) = runtime.install(&source) {
+            report.fail("plugins", &format!("could not install {id}: {error}"));
+            return None;
+        }
+        let grants = Grants {
+            permissions: [hook, Permission::AccessChannels].into_iter().collect(),
+            channels: vec![CHANNEL.into()],
+            hosts: Vec::new(),
+        };
+        if let Err(error) = runtime.set_grants(id, grants) {
+            report.fail("plugins", &format!("could not grant {id}: {error}"));
+            return None;
+        }
+        report.pass("plugins", &format!("{id} installed and granted"));
     }
-    let grants = Grants {
-        permissions: [Permission::AnnotateMessages, Permission::AccessChannels]
-            .into_iter()
-            .collect(),
-        channels: vec![CHANNEL.into()],
-        hosts: Vec::new(),
-    };
-    if let Err(error) = runtime.set_grants("units", grants) {
-        report.fail("plugins", &format!("could not grant units: {error}"));
-        return None;
-    }
-    report.pass("plugins", "units installed and granted");
     Some(Arc::new(runtime))
 }
 
@@ -283,6 +308,73 @@ async fn an_annotator_sees_what_arrives(report: &mut Report, live: &mut Live, ot
             "annotator",
             "no note came back — the plugin ran on nothing, or not at all",
         ),
+    }
+}
+
+/// #90's third extension point, and the thing its unit tests cannot reach: an
+/// arrival driving a rule, the raise reaching the archive, and the badge going
+/// loud — every layer, in the order they really run.
+///
+/// Both halves matter. `deploys` has to raise the failure, and it has to leave
+/// the line beside it alone: a rule that raises everything is one the user
+/// turns off.
+async fn a_rule_raises_what_it_was_asked_about(
+    report: &mut Report,
+    live: &mut Live,
+    bot: &mut Live,
+) {
+    bot.submit(CHANNEL, "starting a build of main").await;
+    bot.submit(CHANNEL, "deploy failed on main").await;
+
+    let raised = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::MessageRaised {
+                plugin, message, ..
+            } => Some((plugin.clone(), message.clone())),
+            _ => None,
+        })
+        .await;
+
+    let Some((plugin, message)) = raised else {
+        report.fail(
+            "rule",
+            "nothing was raised — the rule ran on nothing, or not at all",
+        );
+        return;
+    };
+    report.pass("rule", &format!("{plugin} raised {message}"));
+
+    // The raise arrives after the message is drawn, so the badge moves a beat
+    // later. That it moves at all is the whole of what a rule is for.
+    let loud = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::ChannelUpdated { channel } if channel.name == CHANNEL => {
+                (channel.highlights > 0).then_some(channel.highlights)
+            }
+            _ => None,
+        })
+        .await;
+
+    match loud {
+        Some(count) => report.pass("rule", &format!("the channel went loud: {count}")),
+        None => report.fail("rule", "the raise never reached the channel's count"),
+    }
+
+    // The message the rule passed over must not have been raised too. Only one
+    // of the two lines said anything failed.
+    let again = live
+        .wait(Duration::from_secs(2), |event| match event {
+            IrcxEvent::MessageRaised { message: id, .. } if *id != message => Some(id.clone()),
+            _ => None,
+        })
+        .await;
+
+    match again {
+        Some(id) => report.fail(
+            "rule",
+            &format!("it also raised {id}, which said nothing failed"),
+        ),
+        None => report.pass("rule", "the build starting was left alone"),
     }
 }
 

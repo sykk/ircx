@@ -37,4 +37,13 @@ message: string,
  * command's answer is named: it is how a reader tells what somebody
  * else's code said from what the person said.
  */
-plugin: string, text: string, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };
+plugin: string, text: string, } | { "type": "messageRaised", network: string, target: string, 
+/**
+ * The id of the message that was raised.
+ */
+message: string, 
+/**
+ * Which rule raised it, so a reader can tell why a conversation went
+ * loud without a word of it naming them.
+ */
+plugin: string, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };

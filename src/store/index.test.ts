@@ -306,3 +306,64 @@ describe("a batch of events", () => {
     expect(store().channels).toBe(before);
   });
 });
+
+/**
+ * A raise is what a notification rule produces. It is not drawn yet; what has
+ * to hold now is that the window's copy of a message says the same thing the
+ * archive would after a restart.
+ */
+describe("a message a notification rule raised", () => {
+  function seed() {
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: {
+          messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
+          unreadFrom: null,
+          hasMore: true,
+          loadingOlder: false,
+        },
+      },
+    }));
+  }
+
+  function raise(plugin: string): IrcxEvent {
+    return {
+      type: "messageRaised",
+      network: "libera",
+      target: "#ctf-ops",
+      message: "m1",
+      plugin,
+    };
+  }
+
+  it("records which rule raised it", () => {
+    seed();
+    useAppStore.getState().applyEvent(raise("deploys"));
+
+    expect(timeline()?.messages[0]?.raisedBy).toEqual(["deploys"]);
+  });
+
+  it("keeps both when two rules raise the same message", () => {
+    seed();
+    useAppStore.getState().applyEvent(raise("deploys"));
+    useAppStore.getState().applyEvent(raise("oncall"));
+
+    expect(timeline()?.messages[0]?.raisedBy).toEqual(["deploys", "oncall"]);
+  });
+
+  /** The archive holds one row per rule per message, so the window has to
+   * agree: a rule raising twice is a rule raising once. */
+  it("raises once for a rule that says so twice", () => {
+    seed();
+    useAppStore.getState().applyEvent(raise("deploys"));
+    useAppStore.getState().applyEvent(raise("deploys"));
+
+    expect(timeline()?.messages[0]?.raisedBy).toEqual(["deploys"]);
+  });
+
+  it("leaves a message nothing raised alone", () => {
+    seed();
+    expect(timeline()?.messages[0]?.raisedBy).toBeUndefined();
+  });
+});

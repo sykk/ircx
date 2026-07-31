@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -8,44 +8,70 @@ use ircx_ipc::{
     Query, Severity, TargetName,
 };
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
-use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, PluginRuntime};
+use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, NotifyRequest, PluginRuntime};
 use ircx_store::Store;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
 
-use crate::plugins::{self, PluginCall, ANNOTATOR_STRIKES, CONTEXT_MESSAGES};
+use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
 use crate::session::{Action, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
 
-/// How many batches in a row this annotator has failed.
-fn out(strikes: &Mutex<HashMap<String, u32>>, plugin: &str) -> u32 {
-    strikes
-        .lock()
-        .map(|held| held.get(plugin).copied().unwrap_or(0))
-        .unwrap_or(0)
+/// Which on-arrival hook a strike is against. A plugin can hold both, and one
+/// of them failing says nothing about the other: a rule that throws should not
+/// cost the same plugin its annotator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Hook {
+    Annotate,
+    Notify,
 }
 
-/// Records a failed batch, and says so once. A broken annotator would
-/// otherwise report as often as the channel talks, so the first failure is the
-/// report and the rest are silence — including the one that drops it.
-fn strike(strikes: &Mutex<HashMap<String, u32>>, plugin: &str, failure: Option<&Failure>) {
-    let Ok(mut held) = strikes.lock() else { return };
-    let count = held.entry(plugin.to_owned()).or_insert(0);
-    *count += 1;
-    if *count == 1 {
-        match failure {
-            Some(failure) => warn!(%plugin, %failure, "a plugin could not annotate a message"),
-            None => warn!(%plugin, "the task annotating a message did not finish"),
+impl Hook {
+    /// What the plugin was doing, for the one line a broken one gets.
+    fn doing(self) -> &'static str {
+        match self {
+            Self::Annotate => "annotate a message",
+            Self::Notify => "decide whether a message was worth interrupting you for",
         }
     }
 }
 
-fn strike_cleared(strikes: &Mutex<HashMap<String, u32>>, plugin: &str) {
+type Strikes = Mutex<HashMap<(Hook, String), u32>>;
+
+/// How many batches in a row this plugin has failed at this hook.
+fn out(strikes: &Strikes, hook: Hook, plugin: &str) -> u32 {
+    strikes
+        .lock()
+        .map(|held| {
+            held.get(&(hook, plugin.to_owned()))
+                .copied()
+                .unwrap_or_default()
+        })
+        .unwrap_or(0)
+}
+
+/// Records a failed batch, and says so once. A broken hook would otherwise
+/// report as often as the channel talks, so the first failure is the report and
+/// the rest are silence — including the one that drops it.
+fn strike(strikes: &Strikes, hook: Hook, plugin: &str, failure: Option<&Failure>) {
+    let Ok(mut held) = strikes.lock() else { return };
+    let count = held.entry((hook, plugin.to_owned())).or_insert(0);
+    *count += 1;
+    if *count == 1 {
+        let doing = hook.doing();
+        match failure {
+            Some(failure) => warn!(%plugin, %failure, "a plugin could not {doing}"),
+            None => warn!(%plugin, "the task asking a plugin to {doing} did not finish"),
+        }
+    }
+}
+
+fn strike_cleared(strikes: &Strikes, hook: Hook, plugin: &str) {
     if let Ok(mut held) = strikes.lock() {
-        held.remove(plugin);
+        held.remove(&(hook, plugin.to_owned()));
     }
 }
 const KEEPALIVE: Duration = Duration::from_secs(120);
@@ -99,6 +125,11 @@ pub enum SessionCommand {
     Snapshot {
         reply: oneshot::Sender<(Network, Vec<Channel>, Vec<Query>)>,
     },
+    /// A rule raised a message in this conversation. The count is the
+    /// session's, so the rule asks for it rather than keeping its own.
+    Raised {
+        target: TargetName,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -151,7 +182,8 @@ pub fn spawn_network_with_plugins(
 ) -> NetworkHandle {
     let (commands, inbox) = mpsc::channel(COMMAND_QUEUE);
     let network = config.network.clone();
-    let task = tokio::spawn(supervise(config, store, events, inbox, plugins));
+    let session = commands.downgrade();
+    let task = tokio::spawn(supervise(config, store, events, inbox, plugins, session));
     NetworkHandle {
         network,
         commands,
@@ -167,10 +199,11 @@ async fn supervise(
     events: mpsc::Sender<IrcxEvent>,
     inbox: mpsc::Receiver<SessionCommand>,
     plugins: Option<Arc<PluginRuntime>>,
+    session: mpsc::WeakSender<SessionCommand>,
 ) {
     let network = config.network.clone();
     let name = config.name.clone();
-    let outcome = tokio::spawn(run(config, store, events.clone(), inbox, plugins)).await;
+    let outcome = tokio::spawn(run(config, store, events.clone(), inbox, plugins, session)).await;
 
     if outcome.as_ref().is_err_and(|error| error.is_panic()) {
         let message = format!("The connection to {name} stopped unexpectedly");
@@ -199,6 +232,7 @@ async fn run(
     events: mpsc::Sender<IrcxEvent>,
     mut inbox: mpsc::Receiver<SessionCommand>,
     plugins: Option<Arc<PluginRuntime>>,
+    own_inbox: mpsc::WeakSender<SessionCommand>,
 ) {
     let endpoint = (
         config.host.clone(),
@@ -214,6 +248,7 @@ async fn run(
         events,
         plugins,
         strikes: Arc::default(),
+        own_inbox,
     };
 
     let remembered = match context.store.open_targets(&context.network) {
@@ -380,6 +415,7 @@ async fn apply(
             let _ = reply.send((session.snapshot(), session.channels(), session.queries()));
             Vec::new()
         }
+        SessionCommand::Raised { target } => session.raise(&target),
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -391,9 +427,14 @@ struct Context {
     /// `None` when no runtime was given, which is the whole of what a launch
     /// with no plugins costs on this path.
     plugins: Option<Arc<PluginRuntime>>,
-    /// Consecutive failed batches per annotator. An annotator that fails on
-    /// every message would otherwise report as often as the channel talks.
-    strikes: Arc<Mutex<HashMap<String, u32>>>,
+    /// Consecutive failed batches per plugin per hook. One that fails on every
+    /// message would otherwise report as often as the channel talks.
+    strikes: Arc<Strikes>,
+    /// The session's own inbox, for the one thing that has to reach back into
+    /// it: a rule raising a message after the badge was already counted. Weak,
+    /// because the inbox closing is what stops the session, and a clone held
+    /// here would keep a disconnected network alive for good.
+    own_inbox: mpsc::WeakSender<SessionCommand>,
 }
 
 impl Context {
@@ -489,6 +530,7 @@ impl Context {
                         warn!(%error, "could not forget a closed conversation");
                     }
                 }
+                Action::Notify { target, messages } => self.notify(target, messages),
                 Action::Close => close = true,
             }
         }
@@ -512,7 +554,7 @@ impl Context {
         let annotators: Vec<_> = runtime
             .annotators(&target)
             .into_iter()
-            .filter(|annotator| out(&strikes, &annotator.plugin) < ANNOTATOR_STRIKES)
+            .filter(|annotator| out(&strikes, Hook::Annotate, &annotator.plugin) < HOOK_STRIKES)
             .collect();
         if annotators.is_empty() {
             return;
@@ -536,15 +578,15 @@ impl Context {
                 let reply = match ran {
                     Ok(Ok(reply)) => reply,
                     Ok(Err(failure)) => {
-                        strike(&strikes, &plugin, Some(&failure.failure));
+                        strike(&strikes, Hook::Annotate, &plugin, Some(&failure.failure));
                         continue;
                     }
                     Err(_) => {
-                        strike(&strikes, &plugin, None);
+                        strike(&strikes, Hook::Annotate, &plugin, None);
                         continue;
                     }
                 };
-                strike_cleared(&strikes, &plugin);
+                strike_cleared(&strikes, Hook::Annotate, &plugin);
 
                 for note in reply.notes {
                     // Written before it is sent, for the reason a reaction is:
@@ -565,6 +607,94 @@ impl Context {
                     };
                     if events.send(event).await.is_err() {
                         return;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Hands a batch to every notification rule that reaches this
+    /// conversation, and raises what they name.
+    ///
+    /// Spawned for the reason `annotate` is: the message is drawn, and the
+    /// badge going loud a moment later is the cost of not making a
+    /// conversation wait on a plugin.
+    fn notify(&self, target: TargetName, messages: Vec<ArrivedMessage>) {
+        let Some(runtime) = self.plugins.clone() else {
+            return;
+        };
+        let strikes = Arc::clone(&self.strikes);
+        let rules: Vec<_> = runtime
+            .notifiers(&target)
+            .into_iter()
+            .filter(|rule| out(&strikes, Hook::Notify, &rule.plugin) < HOOK_STRIKES)
+            .collect();
+        if rules.is_empty() {
+            return;
+        }
+
+        let events = self.events.clone();
+        let network = self.network.clone();
+        let store = Arc::clone(&self.store);
+        let own_inbox = self.own_inbox.clone();
+        tokio::spawn(async move {
+            // Two rules raising the same message is one raise. Kept here rather
+            // than in the session, because a message arrives in one batch and
+            // no later batch can hold it again.
+            let mut already: HashSet<String> = HashSet::new();
+            for rule in rules {
+                let request = NotifyRequest {
+                    target: target.clone(),
+                    messages: messages.clone(),
+                };
+                let running = Arc::clone(&runtime);
+                let plugin = rule.plugin.clone();
+                let ran = tokio::task::spawn_blocking(move || running.notify(&rule, request)).await;
+
+                let reply = match ran {
+                    Ok(Ok(reply)) => reply,
+                    Ok(Err(failure)) => {
+                        strike(&strikes, Hook::Notify, &plugin, Some(&failure.failure));
+                        continue;
+                    }
+                    Err(_) => {
+                        strike(&strikes, Hook::Notify, &plugin, None);
+                        continue;
+                    }
+                };
+                strike_cleared(&strikes, Hook::Notify, &plugin);
+
+                for message in reply.raised {
+                    // Written before it is sent, as a note is: the archive is
+                    // where a raise outside the open window survives, so a
+                    // conversation reopened tomorrow still shows what was worth
+                    // reading in it.
+                    if let Err(error) = store.set_raised(&network, &message, &plugin) {
+                        warn!(%error, "could not write a raised message to the archive");
+                    }
+                    let first = already.insert(message.clone());
+                    let event = IrcxEvent::MessageRaised {
+                        network: network.clone(),
+                        target: target.clone(),
+                        message,
+                        plugin: plugin.clone(),
+                    };
+                    if events.send(event).await.is_err() {
+                        return;
+                    }
+                    // The count lives in the session, so the badge is raised by
+                    // asking for it rather than by a second party keeping its
+                    // own tally.
+                    if first {
+                        let Some(inbox) = own_inbox.upgrade() else {
+                            return;
+                        };
+                        let raised = SessionCommand::Raised {
+                            target: target.clone(),
+                        };
+                        if inbox.send(raised).await.is_err() {
+                            return;
+                        }
                     }
                 }
             }
@@ -603,21 +733,21 @@ mod tests {
 
     /// A broken annotator would report as often as the channel talks, so the
     /// first failure is the report and the rest are silence — and after
-    /// `ANNOTATOR_STRIKES` in a row the host stops calling it at all.
+    /// `HOOK_STRIKES` in a row the host stops calling it at all.
     #[test]
     fn an_annotator_is_dropped_only_after_failing_repeatedly() {
         let strikes = Mutex::new(HashMap::new());
 
-        for _ in 0..ANNOTATOR_STRIKES - 1 {
-            strike(&strikes, "units", None);
+        for _ in 0..HOOK_STRIKES - 1 {
+            strike(&strikes, Hook::Annotate, "units", None);
         }
         assert!(
-            out(&strikes, "units") < ANNOTATOR_STRIKES,
+            out(&strikes, Hook::Annotate, "units") < HOOK_STRIKES,
             "one bad batch is a message the plugin did not expect"
         );
 
-        strike(&strikes, "units", None);
-        assert_eq!(out(&strikes, "units"), ANNOTATOR_STRIKES);
+        strike(&strikes, Hook::Annotate, "units", None);
+        assert_eq!(out(&strikes, Hook::Annotate, "units"), HOOK_STRIKES);
     }
 
     /// Consecutive, not cumulative. A plugin that trips over one message every
@@ -626,18 +756,32 @@ mod tests {
     fn a_batch_that_worked_clears_what_came_before_it() {
         let strikes = Mutex::new(HashMap::new());
 
-        strike(&strikes, "units", None);
-        strike(&strikes, "units", None);
-        strike_cleared(&strikes, "units");
-        strike(&strikes, "units", None);
+        strike(&strikes, Hook::Annotate, "units", None);
+        strike(&strikes, Hook::Annotate, "units", None);
+        strike_cleared(&strikes, Hook::Annotate, "units");
+        strike(&strikes, Hook::Annotate, "units", None);
 
-        assert_eq!(out(&strikes, "units"), 1);
+        assert_eq!(out(&strikes, Hook::Annotate, "units"), 1);
     }
 
     #[test]
     fn one_annotators_failures_are_not_anothers() {
         let strikes = Mutex::new(HashMap::new());
-        strike(&strikes, "units", None);
-        assert_eq!(out(&strikes, "links"), 0);
+        strike(&strikes, Hook::Annotate, "units", None);
+        assert_eq!(out(&strikes, Hook::Annotate, "links"), 0);
+    }
+
+    /// One plugin can hold both hooks, and one of them failing says nothing
+    /// about the other: a rule that throws must not cost the plugin its
+    /// annotator, or a user would lose a working note to a broken decision.
+    #[test]
+    fn one_hooks_failures_are_not_the_others() {
+        let strikes = Mutex::new(HashMap::new());
+        for _ in 0..HOOK_STRIKES {
+            strike(&strikes, Hook::Notify, "deploys", None);
+        }
+
+        assert_eq!(out(&strikes, Hook::Notify, "deploys"), HOOK_STRIKES);
+        assert_eq!(out(&strikes, Hook::Annotate, "deploys"), 0);
     }
 }

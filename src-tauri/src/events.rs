@@ -138,8 +138,10 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         // else does, so it shares a lane with nothing.
         | IrcxEvent::ChannelsListed { .. }
         // One note about one message, from one plugin. Sharing the message
-        // lane would fold it into the message it is about and lose it.
+        // lane would fold it into the message it is about and lose it. A raise
+        // is the same, and is a delta besides: nothing supersedes it.
         | IrcxEvent::MessageAnnotated { .. }
+        | IrcxEvent::MessageRaised { .. }
         | IrcxEvent::Notice { .. } => None,
     }
 }
@@ -275,6 +277,7 @@ mod tests {
             tags: vec![],
             reactions: vec![],
             annotations: vec![],
+            raised_by: vec![],
             reply_to: None,
             batch: None,
             delivery: Delivery::Sent,

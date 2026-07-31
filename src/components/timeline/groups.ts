@@ -47,13 +47,24 @@ const DECLARED = /^\[([^\]\n]{1,24})\]\s+/;
  * good share of real nicks.
  *
  * Matching the shape is not enough on its own: `TODO:`, `note:` and the scheme
- * of a bare URL all match it. The nick has to have actually spoken, which is
- * what `assignGroups` checks.
+ * of a bare URL all match it. The name has to belong to somebody in the
+ * channel, which is what `assignGroups` checks against the member list.
  */
 const ADDRESSED = /^([A-Za-z0-9_[\]\\`^{}|-]{2,16})[:,]\s/;
 
-/** How far back a nick must have spoken for an address to it to mean anything. */
-const ADDRESS_LOOKBACK_MS = 15 * 60 * 1000;
+/**
+ * How much other talk a group's rule may reach over to take in the message
+ * being answered.
+ *
+ * This was a clock — fifteen minutes since the addressee last spoke — and a
+ * walk-through found somebody addressing a person who was sitting in the
+ * channel, missing by nine seconds. Time was never the question. The rule is
+ * drawn as one unbroken line, so what matters is how much unrelated
+ * conversation it would swallow on the way: two adjacent blocks read as an
+ * exchange however long the pause between them, and ten lines of other people
+ * talking do not, however recent.
+ */
+const ADDRESS_REACH = 3;
 
 /**
  * Silence that ends a declared group. Long enough that a pause in a named
@@ -103,8 +114,16 @@ function fold(nick: string): string {
  * Declared beats addressed and a message is in at most one group — the study's
  * rule, and the reason this is one pass in precedence order rather than two
  * that would have to argue about overlaps.
+ *
+ * `members` is who is in the channel, and it is what makes an address an
+ * address rather than a colon. Empty for a conversation with no roster, which
+ * costs the addressed grade there and takes nothing else with it.
  */
-export function assignGroups(messages: readonly ChatMessage[]): Map<string, Group> {
+export function assignGroups(
+  messages: readonly ChatMessage[],
+  members: readonly string[] = [],
+): Map<string, Group> {
+  const present = new Set(members.map(fold));
   const groups = new Map<string, Group>();
   const speech = messages.filter(isSpeech);
 
@@ -139,30 +158,39 @@ export function assignGroups(messages: readonly ChatMessage[]): Map<string, Grou
   // Addressed. The message joins whatever the person it names is already in;
   // if they are in nothing, they open a group and it takes their colour, since
   // theirs is the message that started the exchange.
-  const lastSpoke = new Map<string, ChatMessage>();
-  for (const message of speech) {
+  const spokeAt = new Map<string, number>();
+  for (let i = 0; i < speech.length; i++) {
+    const message = speech[i]!;
     const spokenTo = ADDRESSED.exec(message.text)?.[1];
-    const previous = spokenTo === undefined ? undefined : lastSpoke.get(fold(spokenTo));
-    lastSpoke.set(fold(message.sender.nick), message);
+    const answering = spokenTo === undefined ? undefined : spokeAt.get(fold(spokenTo));
+    spokeAt.set(fold(message.sender.nick), i);
 
-    if (previous === undefined || groups.has(message.id)) continue;
-    if (at(message) - at(previous) > ADDRESS_LOOKBACK_MS) continue;
+    if (spokenTo === undefined || answering === undefined) continue;
+    if (groups.has(message.id)) continue;
+    // A colon after a word only means an address if the word is somebody here.
+    if (!present.has(fold(spokenTo))) continue;
+    // How much other talk the rule would have to reach over.
+    if (i - answering - 1 > ADDRESS_REACH) continue;
+
+    const previous = speech[answering]!;
     // Answering yourself is not an exchange.
     if (fold(previous.sender.nick) === fold(message.sender.nick)) continue;
 
-    const existing = groups.get(previous.id);
-    if (existing !== undefined) {
-      groups.set(message.id, existing);
-      continue;
-    }
-    const group: Group = {
+    const group: Group = groups.get(previous.id) ?? {
       id: previous.id,
       grade: "addressed",
       name: null,
       opener: previous.sender.nick,
     };
-    groups.set(previous.id, group);
-    groups.set(message.id, group);
+    // Everything from the message being answered to the answer, because the
+    // rule is one unbroken line and a line with a neutral block in the middle
+    // of it is two rules. `ADDRESS_REACH` is what keeps that claim small.
+    // Anything already declared keeps its own group and breaks the line there,
+    // which is the right way round: somebody said that one was about a topic.
+    for (let k = answering; k <= i; k++) {
+      const between = speech[k]!;
+      if (!groups.has(between.id)) groups.set(between.id, group);
+    }
   }
 
   return groups;

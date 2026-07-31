@@ -13,6 +13,12 @@ function at(minute: number, nick: string, text: string, id = `m${minute}`): Chat
   });
 }
 
+/** Everyone who speaks in a fixture is in the channel, which is the ordinary
+ * case and keeps the membership rule out of tests that are not about it. */
+function assign(messages: ChatMessage[], members?: string[]): Map<string, Group> {
+  return assignGroups(messages, members ?? messages.map((m) => m.sender.nick));
+}
+
 function gradeOf(groups: Map<string, Group>, id: string): string {
   return groups.get(id)?.grade ?? "none";
 }
@@ -38,7 +44,7 @@ describe("declared", () => {
    * them and print its name again each time, which is what the first render
    * of this did. */
   it("takes in what follows without the bracket being typed again", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(2, "phrack", "[parser] tags fail on multiline values"),
       at(3, "sable", "confirmed, it is the CRLF handling"),
       at(6, "phrack", "patch in 8f2ad10"),
@@ -53,7 +59,7 @@ describe("declared", () => {
    * into whatever the channel turned to next, so a standup eight minutes later
    * was drawn as part of a parser bug. */
   it("does not swallow the conversation that follows it", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(2, "phrack", "[parser] tags fail on multiline values"),
       at(6, "phrack", "patch in 8f2ad10"),
       at(14, "kade", "standup in 10"),
@@ -66,7 +72,7 @@ describe("declared", () => {
   });
 
   it("lets go after the conversation has stopped for long enough", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(2, "phrack", "[parser] tags fail on multiline values"),
       at(3, "sable", "confirmed, it is the CRLF handling"),
       at(40, "tsutomu", "morning all"),
@@ -77,7 +83,7 @@ describe("declared", () => {
   });
 
   it("puts the same name said again into the same group", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(2, "phrack", "[parser] tags fail on multiline values"),
       at(3, "sable", "unrelated"),
       at(4, "sable", "[parser] confirmed, it is the CRLF handling"),
@@ -91,7 +97,7 @@ describe("declared", () => {
 
 describe("addressed", () => {
   it("joins the person it names, and takes their colour", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(4, "kade", "standup in 10"),
       at(5, "rae", "kade: can't make it"),
     ]);
@@ -108,11 +114,11 @@ describe("addressed", () => {
    * Two messages, so the guess floor cannot be reached and the only grade this
    * could come back as is the one under test. */
   it("needs the nick to have actually spoken", () => {
-    const written = assignGroups([
+    const written = assign([
       at(4, "kade", "standup in 10"),
       at(5, "rae", "TODO: write the changelog"),
     ]);
-    const linked = assignGroups([
+    const linked = assign([
       at(4, "kade", "standup in 10"),
       at(5, "rae", "https://example.com/thing"),
     ]);
@@ -122,7 +128,7 @@ describe("addressed", () => {
   });
 
   it("does not group somebody answering themselves", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(4, "kade", "standup in 10"),
       at(5, "kade", "kade: actually make that 15"),
     ]);
@@ -130,13 +136,57 @@ describe("addressed", () => {
     expect(gradeOf(groups, "m5")).toBe("none");
   });
 
-  it("lets go after long enough that the address means nothing", () => {
-    const groups = assignGroups([
+  /**
+   * This used to be bounded by a clock — fifteen minutes since the addressee
+   * spoke — and a walk found somebody addressing a person sitting in the
+   * channel and missing by nine seconds. Two blocks with nothing between them
+   * read as an exchange however long the pause, so the bound is reach rather
+   * than time.
+   */
+  it("reaches back however long ago it was, if nothing is in the way", () => {
+    const groups = assign([
       at(0, "kade", "standup in 10"),
       at(59, "rae", "kade: can't make it"),
     ]);
 
-    expect(gradeOf(groups, "m59")).toBe("none");
+    expect(gradeOf(groups, "m59")).toBe("addressed");
+  });
+
+  /** The rule is one line, so it takes in what it reaches over. Past a few
+   * lines that is a claim about other people's conversation. */
+  it("does not reach over a stretch of other people talking", () => {
+    const groups = assign([
+      at(0, "kade", "standup in 10"),
+      at(1, "nyx", "one"),
+      at(2, "jolt", "two"),
+      at(3, "nyx", "three"),
+      at(4, "jolt", "four"),
+      at(5, "rae", "kade: can't make it"),
+    ]);
+
+    expect(gradeOf(groups, "m5")).toBe("none");
+  });
+
+  /** What makes it an address rather than a colon: the name is somebody here.
+   * `TODO:` groups nothing, and neither does a nick that has left. */
+  it("needs the name to belong to somebody in the channel", () => {
+    const messages = [at(4, "kade", "standup in 10"), at(5, "rae", "kade: can't make it")];
+
+    expect(gradeOf(assign(messages, ["rae"]), "m5")).toBe("none");
+    expect(gradeOf(assign(messages, ["kade", "rae"]), "m5")).toBe("addressed");
+  });
+
+  /** Everything from the answer back to what it answers, or the line would be
+   * two rules with a neutral block between them. */
+  it("takes in what its rule reaches over", () => {
+    const groups = assign([
+      at(0, "kade", "standup in 10"),
+      at(1, "nyx", "unrelated remark"),
+      at(2, "rae", "kade: can't make it"),
+    ]);
+
+    expect(gradeOf(groups, "m1")).toBe("addressed");
+    expect(groups.get("m1")).toBe(groups.get("m0"));
   });
 });
 
@@ -148,7 +198,7 @@ describe("a conversation nobody grouped", () => {
    * A live run against #test returned twenty messages as one group.
    */
   it("is left alone however much of it there is", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(7, "nyx", "is the mirror still down"),
       at(8, "jolt", "back up 20 min ago"),
       at(9, "nyx", "thanks"),
@@ -163,7 +213,7 @@ describe("a conversation nobody grouped", () => {
   /** Naming somebody in passing is not addressing them, and the client has no
    * business inferring that it is. */
   it("is not grouped by people using each other's names in passing", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(7, "walker", "back, the parser bug is the CRLF handling"),
       at(8, "syk", "hey walker"),
       at(9, "syk_", "wb walker"),
@@ -176,7 +226,7 @@ describe("a conversation nobody grouped", () => {
 describe("precedence", () => {
   /** Declared beats addressed, and a message is in one group. */
   it("leaves a declared message where its author put it", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(2, "phrack", "[parser] tags fail on multiline values"),
       at(3, "sable", "phrack: confirmed"),
       at(4, "phrack", "[parser] patch in 8f2ad10"),
@@ -191,7 +241,7 @@ describe("precedence", () => {
   });
 
   it("leaves an unrelated line out of the exchange beside it", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(4, "kade", "standup in 10"),
       at(5, "rae", "kade: can't make it"),
       at(6, "nyx", "unrelated"),
@@ -205,7 +255,7 @@ describe("precedence", () => {
 describe("what is in no group", () => {
   /** The ordinary case, and it has to stay ordinary. */
   it("leaves a lone message alone", () => {
-    const groups = assignGroups([
+    const groups = assign([
       at(7, "nyx", "is the mirror still down"),
       at(8, "jolt", "back up 20 min ago"),
       at(9, "nyx", "thanks"),
@@ -216,7 +266,7 @@ describe("what is in no group", () => {
   });
 
   it("groups no joins, parts or server output", () => {
-    const groups = assignGroups([
+    const groups = assign([
       makeMessage({ id: "j1", nick: "nyx", kind: "join", text: "nyx joined" }),
       makeMessage({ id: "j2", nick: "jolt", kind: "join", text: "jolt joined" }),
       makeMessage({ id: "j3", nick: "kade", kind: "quit", text: "kade quit" }),

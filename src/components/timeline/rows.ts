@@ -108,6 +108,7 @@ function dayOf(timestamp: string): string | null {
 function continuesRun(
   open: Extract<TimelineRow, { kind: "block" | "system" }>,
   message: ChatMessage,
+  group: Group | null = null,
 ): boolean {
   const head = open.messages[0]!;
 
@@ -130,7 +131,14 @@ function continuesRun(
   return (
     head.sender.nick === message.sender.nick &&
     writesOwnNick(head.kind) === writesOwnNick(message.kind) &&
-    at - start <= RUN_MS
+    at - start <= RUN_MS &&
+    // One block draws one spine, so a run that spans two groups can only show
+    // one of them. It used to show the head's, which hid every `walker: …`
+    // typed in the middle of somebody's own run — the message was grouped and
+    // the block it landed in was not. Splitting costs a repeated name and time
+    // where a person says two things about two conversations, which is what
+    // has happened when it does.
+    group === open.group
   );
 }
 
@@ -170,8 +178,9 @@ export function buildRows(
 
     const system = isSystemKind(message.kind);
     const wanted = system ? "system" : "block";
+    const group = system ? null : (groups.get(message.id) ?? null);
 
-    if (open !== null && open.kind === wanted && continuesRun(open, message)) {
+    if (open !== null && open.kind === wanted && continuesRun(open, message, group)) {
       open.messages.push(message);
       continue;
     }
@@ -188,10 +197,8 @@ export function buildRows(
       // own dismiss chip — the model saying one group and the rows saying four.
       open = { kind: "system", id: `s:${message.id}`, messages: [message] };
     } else {
-      // The head message decides, because a block is one person's run inside
-      // one exchange and its lines nearly always share a group. Where they do
-      // not, the head is the one whose name and time the block already states.
-      const group = groups.get(message.id) ?? null;
+      // Every message in the block shares this group: `continuesRun` will not
+      // add one that does not.
       open = {
         kind: "block",
         id: `b:${message.id}`,

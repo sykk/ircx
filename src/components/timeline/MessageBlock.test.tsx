@@ -55,14 +55,30 @@ describe("the spine", () => {
     expect(spine(container).dataset.spine).toBe("solid");
   });
 
-  /** A mention has nowhere else to go; a group's colour survives in the blocks
-   * either side of the one that broke it. */
-  it("goes accent when the run names you, whatever group it is in", () => {
+  /**
+   * A mention keeps the spine only where there is no group to lose.
+   *
+   * The other way round was tried and watched. A reply to you names you —
+   * that is what replying on IRC is — so the accent took the second block of
+   * every exchange the reader was in, and the hue survived only on
+   * conversations between other people. The mention is marked twice over
+   * without it: the header line above the run, and the tint on the row.
+   */
+  it("leaves a grouped run its colour even when it names you", () => {
     const { container } = block({
       messages: [makeMessage({ id: "a", nick: "phrack", text: "sykk: look at this" })],
       ownNick: "sykk",
       group: declared("phrack"),
       opensGroup: true,
+    });
+
+    expect(spine(container).style.borderLeftColor).toBe(nickColor("phrack"));
+  });
+
+  it("still goes accent when a run naming you belongs to no group", () => {
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: "phrack", text: "sykk: look at this" })],
+      ownNick: "sykk",
     });
 
     expect(spine(container).style.borderLeftColor).toBe("var(--accent)");

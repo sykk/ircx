@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, useAppStore } from "@/store";
-import { targetKey, useTimelineForView, useView } from "@/store/selectors";
+import { targetKey, useMembers, useTimelineForView, useView } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, UnreadDivider } from "./Divider";
 import { assignGroups } from "./groups";
@@ -68,7 +68,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   const { messages, unreadFrom } = timeline;
 
-  const groups = useMemo(() => assignGroups(messages), [messages]);
+  // Who is in the channel, which is what tells an address from a colon.
+  const members = useMembers(network, target);
+  const present = useMemo(() => members.map((member) => member.nick), [members]);
+  const groups = useMemo(() => assignGroups(messages, present), [messages, present]);
 
   const rows = useMemo(
     () => buildRows(messages, unreadFrom, ownNick, groups),

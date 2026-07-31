@@ -429,3 +429,48 @@ describe("buildRows and groups", () => {
     expect(rows.map((row) => row.opensGroup)).toEqual([true, true]);
   });
 });
+
+describe("a run that spans two groups", () => {
+  const TALK = { id: "g1", grade: "addressed" as const, name: null, opener: "walker" };
+
+  /**
+   * One block draws one spine, so a run holding two groups can only show one.
+   * It used to show the head's, which hid every `walker: …` typed in the middle
+   * of somebody's own run: the message was grouped and the block it landed in
+   * was not, so nothing was drawn. Found by typing exactly that and watching
+   * nothing happen.
+   */
+  it("is split so each side can draw its own", () => {
+    const messages = [
+      at(0, { id: "a", nick: "syk", text: "thanks bud" }),
+      at(1_000, { id: "b", nick: "syk", text: "walker: still there?" }),
+      at(2_000, { id: "c", nick: "syk", text: "anyway" }),
+    ];
+    const rows = blocks(buildRows(messages, null, null, new Map([["b", TALK]])));
+
+    expect(rows.map((row) => row.messages.map((m) => m.id))).toEqual([["a"], ["b"], ["c"]]);
+    expect(rows.map((row) => row.group)).toEqual([null, TALK, null]);
+  });
+
+  /** The split costs a repeated name and time, so it only happens where the
+   * groups genuinely differ. */
+  it("is not split when every line is in the same one", () => {
+    const messages = [
+      at(0, { id: "a", nick: "syk", text: "one" }),
+      at(1_000, { id: "b", nick: "syk", text: "two" }),
+    ];
+    const rows = blocks(
+      buildRows(
+        messages,
+        null,
+        null,
+        new Map([
+          ["a", TALK],
+          ["b", TALK],
+        ]),
+      ),
+    );
+
+    expect(rows).toHaveLength(1);
+  });
+});

@@ -449,6 +449,18 @@ Still not walked:
   the report reaches anywhere a person looks — the strike counting is unit
   tested, the reporting is a `warn!` nobody has read in situ.
 
+## One conversation, one name
+
+**Verified in the application** on 2026-07-31, on the archive that produced the
+bug. The NickServ query came back with its backlog — the 118 notices that had
+been filed under `NickServ` while the open query was `nickserv` — without a
+migration, because the archive is read without case. `#test` and `#wtf` read
+normally afterwards, which is what the folded timeline key had to not break.
+
+This one was worth walking because two of the three layers only matter for data
+already written: a fix tested on a fresh archive would have passed while the
+reporter's own history stayed invisible.
+
 ## SCRAM-SHA-512
 
 **Not walked against a real account.** The exchange has unit tests against

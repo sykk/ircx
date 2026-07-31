@@ -35,6 +35,18 @@ function applicationSources(dir = SRC): string[] {
   return found;
 }
 
+/** The command names `ipc` asks the backend for. */
+function invokedCommands(): string[] {
+  const source = readFileSync(IPC_FILE, "utf8");
+  return [...source.matchAll(/invoke<[^>]*>\("([a-z_]+)"/g)].map((match) => match[1]!);
+}
+
+/** The command names the backend answers to. */
+function registeredCommands(): Set<string> {
+  const wiring = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
+  return new Set([...wiring.matchAll(/commands::(\w+)/g)].map((match) => match[1]!));
+}
+
 /** The methods on the `ipc` object, which are the commands the window can run. */
 function ipcMethods(source: string): string[] {
   const from = source.indexOf("export const ipc = {");
@@ -71,15 +83,22 @@ describe("the IPC contract", () => {
   /** A name misspelled here fails at runtime and nowhere else: `invoke` takes a
    * string, and the handler list is Rust the frontend never sees. */
   it("invokes only commands the backend registered", () => {
-    const source = readFileSync(IPC_FILE, "utf8");
-    const invoked = [...source.matchAll(/invoke<[^>]*>\("([a-z_]+)"/g)].map((m) => m[1]!);
-    expect(invoked.length).toBeGreaterThan(0);
+    expect(invokedCommands().length).toBeGreaterThan(0);
+    const registered = registeredCommands();
+    expect(invokedCommands().filter((name) => !registered.has(name))).toEqual([]);
+  });
 
-    const wiring = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
-    const registered = new Set(
-      [...wiring.matchAll(/commands::(\w+)/g)].map((match) => match[1]!),
-    );
-
-    expect(invoked.filter((name) => !registered.has(name))).toEqual([]);
+  /**
+   * The same drift in the other direction. A handler nothing invokes compiles,
+   * registers and runs; it is simply never reached, which is how `part_channel`
+   * and `send_raw` outlived the wrappers that called them.
+   *
+   * Less costly than a command with no caller — that one is a missing feature,
+   * this one is only weight — but it is the same silence, and a check that
+   * catches one direction and not the other is half a check.
+   */
+  it("registers only commands the window invokes", () => {
+    const invoked = new Set(invokedCommands());
+    expect([...registeredCommands()].filter((name) => !invoked.has(name))).toEqual([]);
   });
 });

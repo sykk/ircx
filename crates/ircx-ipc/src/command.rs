@@ -11,11 +11,9 @@
 //! connect_network(network: NetworkId)         -> ()
 //! disconnect_network(network, quit_message)   -> ()
 //! join_channel(network, channel, key)         -> ()
-//! part_channel(network, channel, reason)      -> ()
 //! open_query(network, nick)                   -> Query
 //! close_target(network, target)               -> ()
 //! submit_input(network, target, input)        -> CommandOutcome
-//! send_raw(network, line)                     -> ()
 //! list_members(network, channel)              -> Vec<Member>
 //! load_history(req: HistoryRequest)           -> Vec<ChatMessage>
 //! search_history(req: SearchRequest)          -> Vec<SearchHit>

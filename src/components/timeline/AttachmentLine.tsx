@@ -89,10 +89,11 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
         <button
           type="button"
           onClick={() => {
-        void openExternal(attachment.url).catch((reason: unknown) => {
-          console.warn("ircx could not open", attachment.url, reason);
-        });
-      }}
+            setError(null);
+            void openExternal(attachment.url).catch((reason: unknown) => {
+              setError(`could not open — ${String(reason)}`);
+            });
+          }}
           title={attachment.url}
           className="truncate font-[family-name:var(--font-mono)] underline decoration-from-font underline-offset-2"
           style={{ color: "var(--text-secondary)" }}

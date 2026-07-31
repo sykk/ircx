@@ -1,17 +1,22 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentLine, formatSize } from "./AttachmentLine";
 import { makeAttachment } from "./fixtures";
 
 const { ipcMock } = vi.hoisted(() => ({ ipcMock: { loadPreview: vi.fn() } }));
 
+const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn() }));
+
 vi.mock("@/lib/ipc", () => ({
   ipc: ipcMock,
   onIrcxEvent: vi.fn(),
-  openExternal: vi.fn().mockResolvedValue(undefined),
+  openExternal: openExternalMock,
 }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  openExternalMock.mockResolvedValue(undefined);
+});
 
 describe("formatSize", () => {
   it("scales to the largest unit that stays readable", () => {
@@ -102,5 +107,35 @@ describe("what a preview is offered for", () => {
   it("still offers one for an image", () => {
     render(<AttachmentLine attachment={makeAttachment()} />);
     expect(screen.getByText("fetch")).toBeTruthy();
+  });
+});
+
+/**
+ * The opener refuses a URL its capability does not cover, and until #167 that
+ * was every `https://` link. The only report was a `console.warn`, which is
+ * invisible to anyone not holding devtools open — so a link that did nothing
+ * was indistinguishable from one that had not been clicked.
+ */
+describe("a link that will not open", () => {
+  it("says so where the reader is looking", async () => {
+    openExternalMock.mockRejectedValue(new Error("url not allowed on the configured scope"));
+    render(<AttachmentLine attachment={makeAttachment()} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("burp-req.png"));
+    });
+
+    expect(screen.getByText(/could not open/)).toBeTruthy();
+    expect(screen.getByText(/not allowed on the configured scope/)).toBeTruthy();
+  });
+
+  it("says nothing when it opens", async () => {
+    render(<AttachmentLine attachment={makeAttachment()} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("burp-req.png"));
+    });
+
+    expect(screen.queryByText(/could not open/)).toBeNull();
   });
 });

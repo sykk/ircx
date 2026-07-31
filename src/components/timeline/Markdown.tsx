@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
@@ -87,19 +87,34 @@ function BlockView({ block }: { block: Block }) {
  * That gives up middle-click and "copy link address", which is the trade.
  */
 function Link({ url }: { url: string }) {
+  /* A link that will not open has to say so where the reader is looking. The
+     only report before this was a `console.warn`, which is invisible to anyone
+     not holding devtools open — the same mistake as swallowing the rejection,
+     one step further along. #167 was a scope the opener refused, and nothing
+     on screen said a word about it. */
+  const [refused, setRefused] = useState<string | null>(null);
+
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void openExternal(url).catch((reason: unknown) => {
-          console.warn("ircx could not open", url, reason);
-        });
-      }}
-      className="underline decoration-from-font underline-offset-2"
-      style={{ color: "var(--accent)" }}
-    >
-      {url}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setRefused(null);
+          void openExternal(url).catch((reason: unknown) => {
+            setRefused(String(reason));
+          });
+        }}
+        className="underline decoration-from-font underline-offset-2"
+        style={{ color: "var(--accent)" }}
+      >
+        {url}
+      </button>
+      {refused !== null && (
+        <span className="ml-1.5 text-[11px]" style={{ color: "var(--danger)" }}>
+          could not open — {refused}
+        </span>
+      )}
+    </>
   );
 }
 

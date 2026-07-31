@@ -385,6 +385,13 @@ good. `Permission::summary` is the one place the wording lives.
   picker, and the one whose message was rewritten for #89. Choosing a folder
   with no `plugin.json` should say which file it went looking for.
 
+**The grant dialogue lost a typed scope** until #164. Naming one conversation
+and pressing Save stored the manifest's `*` instead: the text reached the draft
+only on Enter or Add, and Save read a draft that had never seen it. Found by
+walking it on 2026-07-31, and by reading the grant back off disk rather than
+trusting the screen — the dialogue said nothing either way. Worth remembering
+that a scope is only checkable where it is stored.
+
 **A grant reaching a live session is verified** on the same day. `/greet` and
 `/roster` both answered in an open channel the moment their grants were saved,
 with no reconnect, and revoking `add-commands` took the command back out of the
@@ -410,40 +417,40 @@ messages, which `docs/plugins.md` now records.
 
 What is left is what a person has to look at, below.
 
-Built end to end and **never run in the assembled application.** Every part is
-covered by a test — the sandbox refusals, the runtime, the batch, the store
-round trip, and the shipped example under `examples/plugins/units` — and no
-message has ever reached an annotator inside the running client.
+**It runs in the assembled application**, walked by the owner on 2026-07-31
+against local `ergo`. `examples/plugins/units` was installed through the folder
+picker, granted, and a note appeared under a message somebody else had sent,
+after the message rather than with it.
 
-The path to walk, once there is somebody to walk it. Local `ergo` is the server
-to do it against, and `docs/plugins.md` describes what should happen at each
-step.
+The walk found one defect, and it was in the dialogue rather than the
+annotator: a conversation typed into the grant form and not added was dropped
+on save, so a plugin narrowed to one channel was granted every one. #163, fixed
+in #164 — nothing is granted now that was not confirmed.
 
-- **The install dialogue's eighth line.** `annotate-messages` reads *"Read every
-  message as it arrives in the channels you choose, and show its own note beside
-  them"*, and nothing has ever displayed it. The seven that came before it were
-  read cold by the owner on 2026-07-30 and one of them did not survive the
-  reading, so this one is worth the same treatment rather than an assumption.
-  It is also the first permission whose manifest asks for `"channels": ["*"]`,
-  so the dialogue has to ask which conversations rather than list any.
-- **A note appearing at all.** Install `examples/plugins/units`, grant it a
-  channel, and have somebody say a temperature in it.
-- **The note arriving after the message rather than with it.** This is the
-  whole of the design: the annotator runs on arrival and never on draw, so the
-  conversation is never waiting on a plugin. A note that appears in the same
-  frame as the message would still look right and would mean the ordering is
-  accidental.
-- **The note not reading as part of what was said.** Named with the plugin and
-  set apart from the text. A test asserts the message's own text does not
-  contain the note, which is not the same as a person finding them
-  distinguishable at a glance.
+Still not walked, and worth doing when there is reason to:
+
 - **A note surviving a restart.** The archive is the only place one lives once
-  the window has moved on. Close the client, reopen the conversation, and the
-  note should come back with the message without the annotator running again.
+  the window has moved on. `crates/ircx-store/tests/store.rs` covers the round
+  trip; what is unseen is the note coming back with the message on a reopened
+  conversation.
 - **A broken annotator being dropped.** Three consecutive failed batches, the
   first reported and the rest silent. An example that throws would show whether
   the report reaches anywhere a person looks — the strike counting is unit
   tested, the reporting is a `warn!` nobody has read in situ.
+
+## The topic of a channel you have joined
+
+**Verified in the application** on 2026-07-31. A second client set the topic on
+a channel it owned; joining it drew both lines, in order:
+
+```text
+The topic of #topictest is: read the FAQ before asking, and mind the bots
+Set by phrack on 2026-07-31 at 13:54 UTC
+```
+
+The nick rather than a mask is deliberate: `crates/ircx-core/tests/ergo.rs`
+caught this printing `phrack!~u@f6u3beryjfghu.irc` earlier the same day, because
+ergo sends the whole mask in `333` where Libera sends a bare nick.
 
 ## Opening a link
 

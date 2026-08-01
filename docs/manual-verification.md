@@ -51,6 +51,19 @@ in `crates/ircx-core/tests/libera.rs`: a member list split over 31 replies in
 cold start timed from process exec to the first frame the compositor was handed.
 What is left:
 
+- **A dropped socket is walked** (#246, 2026-08-01), which the first two runs
+  could not provoke. A proxy in front of ergo was cut and restored while the
+  channel kept talking: the status bar counted down, the client reconnected and
+  rejoined, and what was said in the outage came back bounded as history and
+  counted as unread.
+
+  It found the near side of the gap never moving. `restore` runs once, at
+  startup, and the query search read its watermark on every registration — so a
+  reconnect asked from the launch rather than from the drop, a window that only
+  grows against a `TARGETS` limit that does not. Seen by reading the two
+  requests side by side on the wire: the channel's own `AFTER` had moved and the
+  `TARGETS` had not. The near side is taken again when a connection ends.
+
 - **Netsplit recovery.** Nothing can provoke one politely, and none happened
   during either run. The member list half is now scripted instead:
   `a_netsplit_takes_its_half_of_the_channel_and_gives_it_back` in

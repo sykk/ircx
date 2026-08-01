@@ -196,6 +196,15 @@ pub struct SessionState {
     /// seeded from the archive at restore and moved on by every message that
     /// arrives. It is what a `CHATHISTORY` request asks for everything after.
     pub(crate) archived: HashMap<String, String>,
+    /// Where this client's record left off when it started, taken before a
+    /// socket was opened.
+    ///
+    /// Separate from `archived`, which every arriving message moves — including
+    /// the server's own welcome, which lands in the console before anything
+    /// asks what was missed and would otherwise make the gap a millisecond
+    /// wide. This is the near side of "while I was away" and nothing this
+    /// connection does may move it.
+    restored_at: Option<String>,
     /// Conversations whose outstanding request was for a gap rather than for a
     /// first page. What comes back for one of these was missed rather than
     /// merely never seen, which is the whole of the difference to the unread
@@ -234,6 +243,7 @@ impl SessionState {
             lag_ms: None,
             listing: Vec::new(),
             archived: HashMap::new(),
+            restored_at: None,
             gap_fills: HashSet::new(),
         }
     }
@@ -263,6 +273,7 @@ impl SessionState {
                 OpenTarget::Query(nick) => self.touch_query(&nick, None),
             }
         }
+        self.restored_at = self.archived.values().max().cloned();
         self.drain()
     }
 
@@ -445,6 +456,7 @@ impl SessionState {
                         self.send_command("PONG", &[&token]);
                     }
                     "PONG" => self.handle_pong(message),
+                    "CHATHISTORY" => self.handle_chathistory(message),
                     "ERROR" => {
                         let reason = message.params.last().cloned().unwrap_or_default();
                         self.notice(
@@ -819,6 +831,69 @@ impl SessionState {
         }
         for channel in self.channels_to_join() {
             self.send_command("JOIN", &[&channel]);
+        }
+        self.find_missed_queries();
+    }
+
+    /// Asks which conversations were spoken in while this client was away.
+    ///
+    /// Nobody joins a query — it exists because somebody spoke — so a private
+    /// message sent while ircx was closed leaves nothing to ask about, and
+    /// #220's on-join backfill never reaches it. This is the one request that
+    /// can find it. #237.
+    ///
+    /// Only with an archive to ask from. Without one there is no gap, only a
+    /// server's whole memory, and opening a conversation for everybody who ever
+    /// messaged this nick is not what "what did I miss" means.
+    fn find_missed_queries(&mut self) {
+        if !self.caps.is_enabled("draft/chathistory") {
+            return;
+        }
+        let Some(since) = self.restored_at.clone() else {
+            return;
+        };
+        if let Some(line) = history::targets(&since, &crate::message::now()) {
+            self.send_line(line);
+        }
+    }
+
+    /// One conversation named by a `TARGETS` answer.
+    ///
+    /// Channels are passed over: one this client joins is asked about on the
+    /// way in, and being told a channel the user is not in has been busy is not
+    /// the same as having missed something.
+    fn handle_chathistory(&mut self, message: &Message) {
+        if !message
+            .param(0)
+            .is_some_and(|word| word.eq_ignore_ascii_case("TARGETS"))
+        {
+            return;
+        }
+        let (Some(target), Some(spoken_at)) = (message.param(1), message.param(2)) else {
+            return;
+        };
+        if self.isupport.is_channel(target) {
+            return;
+        }
+        let (target, spoken_at) = (target.to_string(), spoken_at.to_string());
+        let key = self.fold(&target);
+        // Already current on this one: the archive holds something at least as
+        // recent, so there is nothing here to fetch.
+        if self
+            .archived
+            .get(&key)
+            .is_some_and(|held| held.as_str() >= spoken_at.as_str())
+        {
+            return;
+        }
+        self.touch_query(&target, None);
+        // Whatever comes back was missed. This conversation is here because the
+        // server said somebody spoke in it while nobody was listening, so #223's
+        // rule applies even where there is no archive to fill a gap between —
+        // a first page of a conversation you were told you missed is not a
+        // conversation you have only just met.
+        if self.backfill(&target) {
+            self.gap_fills.insert(key);
         }
     }
 
@@ -1315,9 +1390,9 @@ impl SessionState {
     /// with different answers, and the difference is remembered: what fills a
     /// gap was missed, and what arrives on a first sight of a conversation was
     /// never anybody's to miss. #223.
-    fn backfill(&mut self, target: &str) {
+    fn backfill(&mut self, target: &str) -> bool {
         if !self.caps.is_enabled("draft/chathistory") {
-            return;
+            return false;
         }
         let limit = self
             .isupport
@@ -1326,12 +1401,12 @@ impl SessionState {
         // A server can say it will answer with nothing, and asking anyway is a
         // request that can only be refused.
         if limit == 0 {
-            return;
+            return false;
         }
         let key = self.fold(target);
         let since = self.archived.get(&key).cloned();
         let Some(line) = history::request(target, since.as_deref(), limit) else {
-            return;
+            return false;
         };
         match since {
             Some(_) => {
@@ -1342,6 +1417,7 @@ impl SessionState {
             }
         }
         self.send_line(line);
+        true
     }
 
     fn handle_part(&mut self, message: &Message) {

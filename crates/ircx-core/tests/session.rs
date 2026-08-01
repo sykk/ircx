@@ -3131,3 +3131,182 @@ mod renaming_in_a_query {
         assert_eq!(named, ["newname"]);
     }
 }
+
+/// #237. Nobody joins a query, so a private message sent while ircx was closed
+/// leaves nothing to ask about and #220's on-join backfill never reaches it.
+mod finding_missed_queries {
+    use super::*;
+
+    fn returning(caps: &str) -> Harness {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Channel("#ircx".into()),
+            newest: Some("2026-07-31T08:00:00.000Z".into()),
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.feed(&format!(":irc.libera.chat CAP * LS :{caps}"));
+        if !caps.is_empty() {
+            session.feed(&format!(":irc.libera.chat CAP * ACK :{caps}"));
+        }
+        session.sent();
+        session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+        session
+    }
+
+    fn answer(session: &mut Harness, lines: &[&str]) {
+        session.feed(":ergo.test BATCH +1 draft/chathistory-targets");
+        for line in lines {
+            session.feed(line);
+        }
+        session.feed(":ergo.test BATCH -1");
+    }
+
+    #[test]
+    fn a_returning_client_asks_what_it_missed() {
+        let session = returning("draft/chathistory");
+
+        // The far bound is now, so the line is asserted at both ends rather
+        // than whole.
+        let asked = session.sent_starting("CHATHISTORY TARGETS");
+        assert_eq!(asked.len(), 1);
+        assert!(asked[0]
+            .starts_with("CHATHISTORY TARGETS timestamp=2026-07-31T08:00:00.000Z timestamp="));
+        assert!(asked[0].ends_with(" 50"));
+    }
+
+    /// Nothing archived is no gap, only the server's whole memory.
+    #[test]
+    fn a_first_run_asks_nothing() {
+        let mut session = Harness::new(config());
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+        session.sent();
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+
+        assert!(session.sent_starting("CHATHISTORY TARGETS").is_empty());
+    }
+
+    #[test]
+    fn a_server_without_the_capability_is_asked_nothing() {
+        let session = returning("");
+
+        assert!(session.sent_starting("CHATHISTORY TARGETS").is_empty());
+    }
+
+    #[test]
+    fn a_conversation_it_names_is_opened_and_asked_about() {
+        let mut session = returning("draft/chathistory");
+        session.sent();
+        answer(
+            &mut session,
+            &["@batch=1 :ergo.test CHATHISTORY TARGETS phrack 2026-07-31T09:00:00.000Z"],
+        );
+
+        assert_eq!(session.state.queries().len(), 1);
+        assert_eq!(
+            session.sent_starting("CHATHISTORY LATEST phrack"),
+            ["CHATHISTORY LATEST phrack * 200"]
+        );
+    }
+
+    /// A channel it names is either one this client joins, which #220 asks about
+    /// on the way in, or one the user is not in.
+    #[test]
+    fn a_channel_it_names_is_passed_over() {
+        let mut session = returning("draft/chathistory");
+        session.sent();
+        answer(
+            &mut session,
+            &["@batch=1 :ergo.test CHATHISTORY TARGETS #elsewhere 2026-07-31T09:00:00.000Z"],
+        );
+
+        assert!(session
+            .sent_starting("CHATHISTORY LATEST #elsewhere")
+            .is_empty());
+        // The channel this client is actually in is untouched; the named one
+        // was never opened.
+        let names: Vec<String> = session
+            .state
+            .channels()
+            .iter()
+            .map(|channel| channel.name.clone())
+            .collect();
+        assert_eq!(names, ["#ircx"]);
+    }
+
+    /// The archive is already at or past what the server says was last said, so
+    /// there is nothing to fetch.
+    #[test]
+    fn a_conversation_already_current_is_left_alone() {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Query("phrack".into()),
+            newest: Some("2026-07-31T10:00:00.000Z".into()),
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+        session.sent();
+        answer(
+            &mut session,
+            &["@batch=1 :ergo.test CHATHISTORY TARGETS phrack 2026-07-31T09:00:00.000Z"],
+        );
+
+        assert!(session.sent_starting("CHATHISTORY").is_empty());
+    }
+
+    /// What arrives was missed, which is the whole reason it was asked for.
+    #[test]
+    fn what_comes_back_counts_as_unread() {
+        let mut session = returning("draft/chathistory");
+        session.sent();
+        answer(
+            &mut session,
+            &["@batch=1 :ergo.test CHATHISTORY TARGETS phrack 2026-07-31T09:00:00.000Z"],
+        );
+        session.feed(":ergo.test BATCH +2 chathistory phrack");
+        session.feed(
+            "@batch=2;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG sykk :did you see this",
+        );
+        session.feed(":ergo.test BATCH -2");
+
+        let unread: Vec<u32> = session
+            .state
+            .queries()
+            .iter()
+            .map(|query| query.unread)
+            .collect();
+        assert_eq!(unread, [1]);
+    }
+}
+
+/// The near side of "while I was away" is where the archive left off when the
+/// client started, and nothing this connection does may move it. Walking #237
+/// found the window one millisecond wide: the server's own welcome lands in the
+/// console before anything asks what was missed, and the console counted.
+#[test]
+fn the_gap_is_measured_from_before_the_socket_was_opened() {
+    let mut session = Harness::new(config());
+    let actions = session.state.restore(vec![Restored {
+        target: OpenTarget::Channel("#ircx".into()),
+        newest: Some("2026-07-31T08:00:00.000Z".into()),
+    }]);
+    session.apply(actions);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+    session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+    session.sent();
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+    let asked = session.sent_starting("CHATHISTORY TARGETS");
+    assert_eq!(asked.len(), 1);
+    assert!(
+        asked[0].contains("timestamp=2026-07-31T08:00:00.000Z timestamp="),
+        "the gap should start where the archive left off, not at the welcome: {}",
+        asked[0]
+    );
+}

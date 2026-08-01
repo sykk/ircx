@@ -14,6 +14,29 @@ use crate::session::build;
 /// same size to a reader.
 pub(crate) const PAGE: u32 = 200;
 
+/// How many conversations one `TARGETS` answer may name.
+///
+/// Smaller than a page of messages because each one costs a request of its own,
+/// and because a nick messaged by a hundred people over a weekend should not
+/// come back to a hundred rows. Whatever is beyond this is still in the
+/// server's memory and still arrives the moment somebody speaks.
+pub(crate) const TARGETS: u32 = 50;
+
+/// Which conversations were spoken in between `since` and now.
+///
+/// Both bounds have to be selectors: a server answers `*` with
+/// `FAIL CHATHISTORY INVALID_PARAMS`, so there is no asking for "everything".
+/// That suits the only question worth asking — what happened while this client
+/// was away — which needs a near side anyway.
+pub(crate) fn targets(since: &str, now: &str) -> Option<String> {
+    let from = selector(since)?;
+    let to = selector(now)?;
+    build(
+        "CHATHISTORY",
+        &["TARGETS", &from, &to, &TARGETS.to_string()],
+    )
+}
+
 /// `since` is when this conversation was last heard from. With one, the ask is
 /// for the gap; without one, for the most recent page, which is what a channel
 /// joined for the first time has to show.

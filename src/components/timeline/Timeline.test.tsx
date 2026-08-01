@@ -324,7 +324,7 @@ describe("Timeline", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText(/joined/).textContent).toBe(
-      "Over 5 minutes: 4 joined. None of it involves you.",
+      "Over 5 minutes: 4 joined.",
     );
   });
 
@@ -351,7 +351,9 @@ describe("Timeline", () => {
     expect(screen.getByText(/joined/).textContent).toBe("2 joined. 1 of them involves you.");
   });
 
-  it("names an access change in the digest and never hides it", () => {
+  /** Modes fold now: a channel handing out ops all day used to read as one
+   * where something was constantly happening, in the protocol's words. */
+  it("counts a mode in the digest, in words rather than in letters", () => {
     const base = Date.parse("2026-07-29T02:00:00.000Z");
     seed([
       makeMessage({ id: "j", nick: "kade", kind: "join", text: "", timestamp: new Date(base).toISOString() }),
@@ -359,7 +361,7 @@ describe("Timeline", () => {
         id: "m",
         nick: "ChanServ",
         kind: "mode",
-        text: "ChanServ set +o kade",
+        text: "took ops",
         timestamp: new Date(base + 1000).toISOString(),
       }),
       makeMessage({
@@ -372,10 +374,11 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    // Present with the fold shut, and still present once it opens.
-    expect(screen.getByText(/ChanServ set \+o kade/)).toBeTruthy();
+    // Counted with the rest, in the words core wrote rather than in `+o`.
+    expect(screen.getByText(/joined/).textContent).toBe("1 joined, 1 took ops, 1 quit.");
     fireEvent.click(screen.getByText("show all"));
-    expect(screen.getByText(/ChanServ set \+o kade/)).toBeTruthy();
+    // Opened, the line names who holds it — which the count cannot.
+    expect(screen.getByText("ChanServ took ops")).toBeTruthy();
     expect(screen.getByText("kade joined")).toBeTruthy();
   });
 

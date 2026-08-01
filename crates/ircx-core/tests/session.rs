@@ -2882,3 +2882,112 @@ mod what_a_backfill_counts {
         );
     }
 }
+
+/// Channel modes said in words. `syk_ set mode +o syk` is the protocol; what
+/// happened is that syk took ops, and the digest counts it with the rest of the
+/// comings and goings.
+mod modes_in_words {
+    use super::*;
+
+    fn in_channel() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk phrack walker");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        session.events.clear();
+        session
+    }
+
+    fn said(session: &Harness) -> Vec<(String, String)> {
+        session
+            .messages()
+            .iter()
+            .filter(|message| message.kind == MessageKind::Mode)
+            .map(|message| (message.sender.nick.clone(), message.text.clone()))
+            .collect()
+    }
+
+    /// About the person who now holds it rather than the person who handed it
+    /// over: the digest counts one clause and the reader wants the holder.
+    #[test]
+    fn giving_ops_is_about_who_took_them() {
+        let mut session = in_channel();
+        session.feed(":phrack!p@h MODE #ircx +o walker");
+
+        assert_eq!(
+            said(&session),
+            [("walker".to_string(), "took ops".to_string())]
+        );
+    }
+
+    #[test]
+    fn taking_ops_away_is_losing_them() {
+        let mut session = in_channel();
+        session.feed(":phrack!p@h MODE #ircx -o walker");
+
+        assert_eq!(
+            said(&session),
+            [("walker".to_string(), "lost ops".to_string())]
+        );
+    }
+
+    #[test]
+    fn voice_is_named_too() {
+        let mut session = in_channel();
+        session.feed(":phrack!p@h MODE #ircx +v walker");
+
+        assert_eq!(
+            said(&session),
+            [("walker".to_string(), "took voice".to_string())]
+        );
+    }
+
+    /// One line can carry several, and each is its own clause to count.
+    #[test]
+    fn one_line_of_several_becomes_one_message_each() {
+        let mut session = in_channel();
+        session.feed(":phrack!p@h MODE #ircx +ov walker sykk");
+
+        assert_eq!(
+            said(&session),
+            [
+                ("walker".to_string(), "took ops".to_string()),
+                ("sykk".to_string(), "took voice".to_string()),
+            ]
+        );
+    }
+
+    /// A mode that grants nobody anything is about the channel, and stays with
+    /// whoever changed it.
+    #[test]
+    fn a_channel_mode_is_about_the_channel() {
+        let mut session = in_channel();
+        session.feed(":irc.libera.chat MODE #ircx +Cnt");
+
+        assert_eq!(
+            said(&session),
+            [(
+                "irc.libera.chat".to_string(),
+                "changed the channel".to_string()
+            )]
+        );
+    }
+
+    /// A standing this client has no name for is still shorter than the letters
+    /// it replaces, and still true.
+    #[test]
+    fn a_standing_with_no_name_keeps_its_letter() {
+        let mut session = registered("");
+        session.feed(":irc.libera.chat 005 sykk PREFIX=(qaohv)~&@%+ :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk walker");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        session.events.clear();
+        session.feed(":phrack!p@h MODE #ircx +a walker");
+
+        assert_eq!(
+            said(&session),
+            [("walker".to_string(), "took admin".to_string())]
+        );
+    }
+}

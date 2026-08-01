@@ -121,6 +121,7 @@ export const TOKEN_CATALOGUE: Readonly<Record<string, TokenSpec>> = {
   "--timeline-rail-pad": { group: "Timeline layout", kind: "length" },
   "--timeline-spine-width": { group: "Timeline layout", kind: "length" },
   "--timeline-spine-gap": { group: "Timeline layout", kind: "length" },
+  "--timeline-rule-gap": { group: "Timeline layout", kind: "length" },
   "--timeline-measure": { group: "Timeline layout", kind: "length" },
   "--timeline-actions-col": { group: "Timeline layout", kind: "length" },
   "--timeline-actions-gap": { group: "Timeline layout", kind: "length" },

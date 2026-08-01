@@ -200,7 +200,7 @@ describe("buildRows system runs", () => {
     expect(buildRows(lines, null).filter((r) => r.kind === "system")).toHaveLength(4);
   });
 
-  it("digests presence but never an access change", () => {
+  it("digests a mode with the rest of the weather, and never a kick", () => {
     const run = partitionSystemRun([
       at(0, { id: "a", kind: "join" }),
       at(1, { id: "b", kind: "join" }),
@@ -210,8 +210,8 @@ describe("buildRows system runs", () => {
       at(5, { id: "f", kind: "server" }),
     ]);
 
-    expect(run.presence.map((m) => m.id)).toEqual(["a", "b", "c"]);
-    expect(run.loud.map((m) => m.id)).toEqual(["d", "e"]);
+    expect(run.presence.map((m) => m.id)).toEqual(["a", "b", "c", "d"]);
+    expect(run.loud.map((m) => m.id)).toEqual(["e"]);
     expect(run.plain.map((m) => m.id)).toEqual(["f"]);
   });
 
@@ -234,14 +234,14 @@ describe("describePresenceRun", () => {
 
   it("leads with how long it ran once that is worth saying", () => {
     expect(describePresenceRun(joins(4, 90_000), null)).toBe(
-      "Over 5 minutes: 4 joined. None of it involves you.",
+      "Over 5 minutes: 4 joined.",
     );
   });
 
   /** A burst inside one minute is a burst. Saying so costs a clause and tells
    * the reader nothing they would act on. */
   it("says nothing about a span under a minute", () => {
-    expect(describePresenceRun(joins(3, 1000), null)).toBe("3 joined. None of it involves you.");
+    expect(describePresenceRun(joins(3, 1000), null)).toBe("3 joined.");
   });
 
   it("counts a line that names the reader", () => {

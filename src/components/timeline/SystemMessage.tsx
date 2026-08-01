@@ -10,6 +10,12 @@ import { describePresenceRun, partitionSystemRun } from "./rows";
  * `join` with no text still reads as a sentence rather than an empty row.
  */
 function systemText(message: ChatMessage): string {
+  // A mode says what happened and the row says who it happened to: core writes
+  // `took ops` so the digest can count two of them as one clause, which leaves
+  // the name to the only place that still holds it.
+  if (message.kind === "mode" && message.text.trim() !== "") {
+    return `${message.sender.nick} ${stripIrcFormatting(message.text)}`;
+  }
   if (message.text.trim() !== "") return stripIrcFormatting(message.text);
   const nick = message.sender.nick;
   switch (message.kind) {
@@ -48,10 +54,18 @@ export function SystemMessage({
 }) {
   const { loud, presence, plain } = partitionSystemRun(messages);
   const [expanded, setExpanded] = useState(false);
+  // The digest is weather between two stretches of conversation, so it is given
+  // the room a rule is given rather than the room a message is. Console output
+  // is not: a run of it is nothing but these lines, and spacing each one apart
+  // would set a whole `/help` as far apart as the channel it printed into.
+  const digest = loud.length > 0 || presence.length > 0;
 
   return (
     <Block spine={false}>
-      <div className="flex items-baseline gap-2 text-[12px]">
+      <div
+        className="flex items-baseline gap-2 text-[12px]"
+        style={digest ? { paddingBlock: "var(--timeline-rule-gap)" } : undefined}
+      >
         <Clock at={messages[0]!.timestamp} />
         {loud.length > 0 && (
           <span style={{ color: "var(--warning)" }}>

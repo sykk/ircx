@@ -64,8 +64,13 @@ const SYSTEM_KINDS = new Set<MessageKind>([
   "client",
 ]);
 
-/** Comings and goings: weather, and the only kinds the digest may fold away. */
-const PRESENCE_KINDS = new Set<MessageKind>(["join", "part", "quit", "nick"]);
+/** Comings and goings: weather, and the only kinds the digest may fold away.
+ *
+ * A mode is in here because a channel where people are handed ops all day
+ * reads as one where something is constantly happening, and the line it drew
+ * was `syk_ set mode +o syk` — the protocol, not the event. Folded, it is one
+ * more clause: `1 took ops`. A kick is not weather and stays out. */
+const PRESENCE_KINDS = new Set<MessageKind>(["join", "part", "quit", "nick", "mode"]);
 
 /** What the client and the server print. A console holds nothing else. */
 const CONSOLE_KINDS = new Set<MessageKind>(["server", "client"]);
@@ -74,7 +79,7 @@ const CONSOLE_KINDS = new Set<MessageKind>(["server", "client"]);
  * Events that change who can read or speak. They are named in the digest's
  * first clause and no control hides them.
  */
-const LOUD_KINDS = new Set<MessageKind>(["mode", "kick"]);
+const LOUD_KINDS = new Set<MessageKind>(["kick"]);
 
 /** Kinds that print their own nick in the body: `* nick` and `-nick-`. */
 const OWN_NICK_KINDS = new Set<MessageKind>(["action", "notice"]);
@@ -321,13 +326,26 @@ const VERBS: Partial<Record<MessageKind, string>> = {
   nick: "renamed",
 };
 
+/**
+ * What one of these did, in the words the digest counts by.
+ *
+ * A mode carries its own: core writes `took ops` rather than `+o`, so two
+ * people being handed ops are one clause and somebody losing voice is another.
+ * Everything else has a verb per kind.
+ */
+function presenceVerb(message: ChatMessage): string {
+  if (message.kind !== "mode") return VERBS[message.kind] ?? "changed";
+  return message.text.trim() === "" ? "changed the channel" : message.text.trim();
+}
+
 /** One line of prose for a run of comings and goings: "3 joined, 1 quit". */
 export function describePresence(messages: readonly ChatMessage[]): string {
-  const counts = new Map<MessageKind, number>();
+  const counts = new Map<string, number>();
   for (const message of messages) {
-    counts.set(message.kind, (counts.get(message.kind) ?? 0) + 1);
+    const verb = presenceVerb(message);
+    counts.set(verb, (counts.get(verb) ?? 0) + 1);
   }
-  return [...counts].map(([kind, n]) => `${n} ${VERBS[kind] ?? "changed"}`).join(", ");
+  return [...counts].map(([verb, n]) => `${n} ${verb}`).join(", ");
 }
 
 /**
@@ -367,11 +385,14 @@ export function describePresenceRun(
 ): string {
   const span = describePresenceSpan(messages);
   const involving = presenceInvolving(messages, ownNick);
+  // Nothing is said when none of it was about the reader. Saying so put a
+  // sentence on every digest to report an absence, and a digest that names
+  // nobody already means nobody.
   const clause =
     involving === 0
-      ? "None of it involves you."
-      : `${involving} of them ${involving === 1 ? "involves" : "involve"} you.`;
-  return `${span === null ? "" : `${span}: `}${describePresence(messages)}. ${clause}`;
+      ? ""
+      : ` ${involving} of them ${involving === 1 ? "involves" : "involve"} you.`;
+  return `${span === null ? "" : `${span}: `}${describePresence(messages)}.${clause}`;
 }
 
 export function describeSpan(ms: number): string {

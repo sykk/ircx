@@ -493,6 +493,28 @@ impl Store {
     }
 
     /// Empty text clears the draft rather than storing a blank one.
+    /// Takes a half-written message with the person it was being written to.
+    ///
+    /// A rename moves everything else about a conversation (#235) and left this
+    /// behind, so the pane that followed somebody to their new name opened with
+    /// an empty composer and the words sat under a name nobody holds. Nothing
+    /// happens when there is no draft, and anything already under the new name
+    /// wins — it is the more recent of the two.
+    pub fn move_draft(&self, network: &str, from: &str, to: &str) -> Result<(), StoreError> {
+        self.conn().execute(
+            "UPDATE OR IGNORE drafts SET target = ?3
+             WHERE network = ?1 AND target = ?2",
+            params![network, from, to],
+        )?;
+        // An ignored update leaves the old row behind, which is a draft for a
+        // name that is now somebody else's.
+        self.conn().execute(
+            "DELETE FROM drafts WHERE network = ?1 AND target = ?2",
+            params![network, from],
+        )?;
+        Ok(())
+    }
+
     pub fn set_draft(&self, network: &str, target: &str, text: &str) -> Result<(), StoreError> {
         let conn = self.conn();
         if text.is_empty() {

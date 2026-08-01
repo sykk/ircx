@@ -867,29 +867,43 @@ vectors, and the exchange, the nonce check and the signature check are shared �
 but until 2026-08-01 no server had answered a SHA-512 exchange this client sent.
 
 **SCRAM-SHA-512 is walked**, that day, against `irc.libera.chat` over TLS 1.3
-with a registered account. The mechanism was switched on an already-working
-SHA-256 connection, which makes the two runs comparable: same account, same
-server, one thing different.
-
-Confirmed from Libera rather than from the client, because the client saying it
-authenticated is the thing under test. `/whois` answered `330` on the new
-connection —
+with a registered account, and the whole exchange is captured. Libera still
+advertises it, which this file previously claimed on a capture from #43:
 
 ```text
-syk brandn is logged in as
+CAP * LS :... sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN,SCRAM-SHA-512 ...
 ```
 
-— and it is the new connection rather than the old one: signon `1785604823`
-against the baseline's `1785604113`, twelve minutes apart, six seconds idle.
-Nothing else could have logged that session in; the NickServ route was not used.
+Note what is *not* in that list. **Libera does not advertise SCRAM-SHA-256**, so
+the SHA-256 walk is ergo's alone and cannot be repeated here. A client
+configured for SHA-256 against Libera gets the quiet path this section warns
+about: a connection that succeeds and a login that does not happen.
 
-**The exchange itself was not captured.** The raw log holds `RAW_LOG_CAP`
-lines — 2000 — and two busy Libera channels rolled registration off the top
-before anybody thought to look. So what is on record is the outcome, not the
-four `AUTHENTICATE` lines. Whoever reconnects next can have them by opening the
-raw view within the first seconds, and it is worth doing: the `sasl=` value
-would also settle whether Libera still advertises the mechanism, which this
-file otherwise claims on the strength of a capture from #43.
+The four-message exchange, with the outgoing payloads redacted by the raw log
+as designed and the server's own halves intact:
+
+```text
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE +
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE r=d0By4OZJiyzO5d1W5sWEI49Nb5AJ444ixOBqnpjFUe9aBHiKTmaJuz9hkfISvlJeB7CTzV930qGWSBJJ8WheFe8d,s=JrlFTroexJQRJ1aFnAz52Vzv5we/NC49YOqPGeUs6eU=,i=10000
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE v=0SIGHcA2N/SXCXgUDcnnK6Yg1/R2B1bvbNglKF3Ii59l6lQBSMJ9oSKrEGtOs9QmnmKX5bKkSpsUiDW8EOVmBA==
+>> AUTHENTICATE +
+<< :molybdenum.libera.chat 900 syk syk!syk@user/brandn brandn :You are now logged in as brandn
+<< :molybdenum.libera.chat 903 syk :SASL authentication successful
+```
+
+A real salt and iteration count, and `v=` — the server proving it knew the
+password — verified by the client before it accepted the login. Then `900` and
+`903` from Libera, which is the server saying it, not ircx. `/whois` on the
+session answered `330` as well.
+
+**What the earlier connection that day was is not established.** It reported
+SHA-256 and `/whois` showed `330`, but Libera does not offer SCRAM-SHA-256, so
+whatever logged that session in was not that. It is recorded as unexplained
+rather than as a baseline, because a comparison against something unidentified
+is not a comparison.
 
 **SCRAM-SHA-256 is walked**, on 2026-07-31, against local `ergo` with a
 registered account. The whole exchange ran against a real server: a real salt

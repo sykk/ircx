@@ -190,6 +190,72 @@ describe("addressed", () => {
   });
 });
 
+describe("one exchange at a time", () => {
+  /**
+   * The failure a live round found and this file could not see: five messages
+   * and two separate question-and-answers drawn as one group. Answering
+   * somebody already in a group put the answerer in it, so every fresh pair
+   * inherited the last pair's rule and the group ran until the channel went
+   * quiet.
+   */
+  it("does not run one pair's rule on into the next pair's", () => {
+    const groups = assign([
+      at(0, "nyx", "is the mirror still down"),
+      at(1, "jolt", "nyx: back up 20 min ago"),
+      at(2, "kade", "jolt: any news on the build"),
+      at(3, "jolt", "kade: green as of an hour ago"),
+      at(4, "rae", "jolt: thanks"),
+    ]);
+
+    expect(groups.get("m1")).toBe(groups.get("m0"));
+    expect(groups.get("m3")).toBe(groups.get("m2"));
+    expect(groups.get("m2")).not.toBe(groups.get("m0"));
+    expect(gradeOf(groups, "m4")).toBe("none");
+  });
+
+  /** The exchange it does carry on is its own. Two people going back and forth
+   * are one conversation however many turns it takes. */
+  it("carries on between the two people already in it", () => {
+    const groups = assign([
+      at(0, "kade", "standup in 10"),
+      at(1, "rae", "kade: can't make it"),
+      at(2, "kade", "rae: no problem"),
+      at(3, "rae", "kade: thanks"),
+    ]);
+
+    expect(groups.get("m1")).toBe(groups.get("m0"));
+    expect(groups.get("m2")).toBe(groups.get("m0"));
+    expect(groups.get("m3")).toBe(groups.get("m0"));
+  });
+
+  /** A message the rule reached over is in the group's span without being in
+   * its conversation, so it is not a way in for whoever wrote it. */
+  it("does not admit somebody its rule only reached over", () => {
+    const groups = assign([
+      at(0, "kade", "standup in 10"),
+      at(1, "nyx", "unrelated remark"),
+      at(2, "rae", "kade: can't make it"),
+      at(3, "nyx", "rae: what time"),
+    ]);
+
+    expect(groups.get("m1")).toBe(groups.get("m0"));
+    expect(gradeOf(groups, "m3")).toBe("none");
+  });
+
+  /** Declared is a fact its author typed rather than a guess off one colon, so
+   * it still takes anybody who joins the topic. */
+  it("lets a named topic take whoever joins it", () => {
+    const groups = assign([
+      at(2, "phrack", "[parser] tags fail on multiline values"),
+      at(3, "sable", "phrack: confirmed"),
+      at(4, "kade", "sable: which branch"),
+    ]);
+
+    expect(groups.get("m3")).toBe(groups.get("m2"));
+    expect(groups.get("m4")).toBe(groups.get("m2"));
+  });
+});
+
 describe("a conversation nobody grouped", () => {
   /**
    * The guess used to take this, and taking it is why it went. Three people in

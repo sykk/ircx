@@ -20,7 +20,11 @@ and a message in no group keeps a neutral spine where the study draws nothing.
 The spine carries grouping, and its hue names the group — taken from whoever
 opened it. `src/components/timeline/groups.ts` assigns each message to at most
 one, on the evidence of what people typed: a `[topic]` somebody declared, or a
-leading `nick:` naming somebody in the channel. A group keeps the spine even
+leading `nick:` naming somebody in the channel. An addressed group is between
+the two people whose exchange opened it: a third person answering into it opens
+their own rather than joining, because admitting them chained one pair's rule
+into the next until a group ran down the screen. A declared topic is a fact its
+author typed and still takes anybody. A group keeps the spine even
 where the run names you; the mention is already marked by the line above the
 run and by the tint on its row, and letting it take the spine cost the accent
 the second block of every exchange the reader was in.

@@ -1161,11 +1161,43 @@ higher than the build supports, so it is a one-way step per install.
 
 What that leaves:
 
-- **Going back.** A profile at version 5 makes `migrate` answer
-  `StoreError::SchemaTooNew` for any earlier build. Nobody has run an older
-  ircx against a migrated profile to see what that failure does to a launch, or
-  what the user is told. It is the one path where a user with a working client
-  ends up with one that will not open their history.
+- **Going back is walked, and it was a panic.** On 2026-08-01, against a
+  throwaway profile created by this build and then marked one schema ahead —
+  which is what any earlier build sees after a migration. It did not open a
+  window and it did not say anything a person would find:
+
+  ```text
+  thread 'main' panicked at tauri-2.11.5/src/app.rs:1425:11:
+  Failed to setup app: error encountered during setup hook: this archive was
+  written by a newer version of ircx (schema 10, this build knows 9)
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  ```
+
+  Exit 101. An error out of the setup hook panics inside Tauri's own `build`,
+  before a window exists, so the client starts and vanishes. The sentence was
+  already written for a person and had nowhere to be read.
+
+  Now: exit 1, no panic, and the four lines `say_why_and_quit` writes. Somebody
+  who launched from a terminal is told what happened, that their history is
+  intact, and what to do. **Somebody who launched from a desktop menu is still
+  told nothing**, and that half is not fixed.
+
+- **A dialog at startup, which is what that half needs.** Two shapes were walked
+  on 2026-08-01 and neither drew anything on screen:
+
+  - `app.dialog()…blocking_show()` in the setup hook. The process stayed alive
+    and no window appeared: setup runs before the event loop, and a dialog with
+    no loop to pump it never reaches the screen. A silent hang is worse than the
+    panic it replaced.
+  - Handing it to the loop with `.show(callback)`, closing the config-built
+    window first so a client that cannot reach its backend is not left behind
+    the dialog. Also drew nothing. The likely reason is the closing: the window
+    is the only one, so closing it asks the loop to exit before the dialog is
+    up. It also panicked on the way out — `state()` before `manage()` — because
+    the exit handler reaches for an `App` that a failed start never managed.
+
+  The shape not tried is showing it over the surviving window. Whoever tries it
+  needs an answer for what the window shows behind, and for that exit handler.
 - **The first four migrations.** Only the fifth has been recorded as run against
   real data. The others presumably were, at some point, by whoever was running
   the client at the time; nothing says so.

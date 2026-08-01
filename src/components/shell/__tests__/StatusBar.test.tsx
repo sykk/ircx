@@ -58,9 +58,10 @@ describe("StatusBar", () => {
     expect(bar.textContent).toContain("Not connected to irc.libera.chat:6697");
   });
 
-  it("carries the failure reason the backend gave", () => {
+  it("names the network that failed rather than half the reason why", () => {
     const bar = mount({ state: "failed", detail: { message: "certificate expired" } });
-    expect(bar.textContent).toContain("certificate expired");
+    expect(bar.textContent).toContain("irc.libera.chat:6697 failed");
+    expect(bar.textContent).not.toContain("certificate expired");
   });
 
   describe("reconnecting", () => {

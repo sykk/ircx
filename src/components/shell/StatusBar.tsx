@@ -94,12 +94,13 @@ function ConnectionSummary({
       return <>Registering with {where}</>;
     case "reconnecting":
       return <>Reconnecting to {where} in {seconds ?? 0}s</>;
+    // The bar gives the whole connection one truncated line, and the sentences
+    // core writes are long enough to be cut mid-word in it — which reports a
+    // failure by showing the first half of why. It says which network failed
+    // and leaves the reason to the two places that have room for it: the setup
+    // screen, and the server buffer every failure is noted into.
     case "failed":
-      return (
-        <span className="text-[var(--danger)]">
-          {where} failed: {network.status.detail.message}
-        </span>
-      );
+      return <span className="text-[var(--danger)]">{where} failed</span>;
     case "disconnected":
       return <span className="text-[var(--text-muted)]">Not connected to {where}</span>;
   }

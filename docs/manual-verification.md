@@ -776,12 +776,55 @@ and iteration count, and the server's signature verifying. Confirmed from
 the first time SASL has been verified against a real account at all; the
 mechanism this milestone shipped first, SHA-512, still has not been.
 
+**The failure paths are walked**, on 2026-08-01 against local `ergo` with a
+registered account, in two halves.
+
+*A wrong password* does not fail at the signature after all. The client sends
+its client-final with a proof the server cannot match, and `ergo` answers `904
+challenge proof invalid` — the same numeric PLAIN gets, through the same code.
+The window said `127.0.0.1 rejected the account scramtest — challenge proof
+invalid. Check the account name and password in this network's settings.`,
+registration was abandoned, and the status bar read `not signed in`. That is
+the behaviour wanted, and it means the interesting path is the other one.
+
+*A server that cannot prove itself* was walked with a proxy on 6669 that
+replaces the `v=` in the server's final message with 32 zero bytes — what a
+server that does not know the password would have to send. It found the defect
+this section was written to look for. The client aborted correctly, and then
+said:
+
+```text
+127.0.0.1 rejected the account scramtest — the server could not prove it knew
+the password, so the account was not signed in and something is answering for
+it. Check the account name and password in this network's settings.
+```
+
+Wrong twice in one sentence. The server rejected nothing — ircx is the side
+that walked away — and no password fixes a server answering for somebody else,
+so the one failure worth reading carefully ends by sending the reader to the
+password field. `ScramError`'s own `Display` says three of its five variants
+are the server's fault "because a user checking their password over a nonce
+mismatch is looking in the wrong place", and then `sasl_refused` appended that
+instruction to all of them. Fixed in #255: the four server-side variants get a
+sentence of their own —
+
+```text
+ircx stopped signing in to 127.0.0.1 as scramtest: the server could not prove
+it knew the password, so the account was not signed in and something is
+answering for it. The password is not what is wrong here — check the address
+and port this network points at.
+```
+
 **Not walked**:
 
 - **SHA-512 against any server.** Libera advertises it and `ergo` does not, so
   the walk is a registered Libera account.
-- **A wrong password.** SCRAM fails at the signature rather than at a numeric,
-  so the sentence a user sees comes from a different path than PLAIN's.
+- **The connection-failure screen repeats itself.** The wrong-password walk drew
+  the same sentence three times in one view: once as `Authentication failed:
+  <sentence>`, once again verbatim below it, and once in the status bar. The
+  bullet above it also reads `Could not connect to 127.0.0.1:6668`, which is not
+  what happened — it connected and was refused a login. Left alone here because
+  it is the connection screen rather than the SASL path.
 
 Also worth knowing, and the reason this section exists: **picking a mechanism the
 server does not offer connects successfully and does not log you in.** The

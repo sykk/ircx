@@ -206,17 +206,36 @@ export function assignGroups(
       name: null,
       opener: previous.sender.nick,
     };
+
+    // The rule is one unbroken line, so a span somebody else's group already
+    // crosses cannot be drawn at all. Filling in around it leaves this group as
+    // two stripes with theirs between — a walk found nyx's colour above and
+    // below kade's, reading as two things that happen to share a hue rather
+    // than as the one conversation it was claiming.
+    //
+    // This is where the line used to be drawn broken instead, on the grounds
+    // that a declared message in the way keeps its own group. It still does:
+    // what changed is that the group around it does not form, which is about
+    // whether the claim can be drawn, not about which grade outranks.
+    let crossed = false;
+    for (let k = answering; k <= i; k++) {
+      const held = groups.get(speech[k]!.id);
+      if (held !== undefined && held !== group) {
+        crossed = true;
+        break;
+      }
+    }
+    if (crossed) continue;
+
     if (open === undefined) {
       between.set(group, new Set([fold(previous.sender.nick), fold(message.sender.nick)]));
     }
-    // Everything from the message being answered to the answer, because the
-    // rule is one unbroken line and a line with a neutral block in the middle
-    // of it is two rules. `ADDRESS_REACH` is what keeps that claim small.
-    // Anything already declared keeps its own group and breaks the line there,
-    // which is the right way round: somebody said that one was about a topic.
+    // Everything from the message being answered to the answer, because a line
+    // with a neutral block in the middle of it is two rules. `ADDRESS_REACH` is
+    // what keeps that claim small.
     for (let k = answering; k <= i; k++) {
-      const between = speech[k]!;
-      if (!groups.has(between.id)) groups.set(between.id, group);
+      const spanned = speech[k]!;
+      if (!groups.has(spanned.id)) groups.set(spanned.id, group);
     }
   }
 

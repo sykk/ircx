@@ -15,6 +15,13 @@ const REFUSED =
   "irc.libera.chat rejected the account sable — challenge proof invalid. " +
   "Check the account name and password in this network's settings.";
 
+/** The step's own colour, which is the only thing telling a join still coming
+ * from one that never will: both say `Joined 0 of 1 channels`. */
+function dotBeside(text: string): string {
+  const dot = screen.getByText(text).closest("li")?.querySelector("span");
+  return dot?.getAttribute("style") ?? "";
+}
+
 function mount(
   patch: Partial<Network> = {},
   { channels = [] as Channel[], error = null as string | null } = {},
@@ -146,6 +153,29 @@ describe("Connecting", () => {
       screen.getByText("Authentication failed: This server does not offer SASL"),
     ).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  /**
+   * Found by walking a live refusal. The step read `Joined 0 of 1 channels` in
+   * the colour of something in progress, under two lines saying the connection
+   * was over. The text cannot tell those apart, so the colour has to.
+   */
+  it("does not leave a join looking like it is still coming", () => {
+    mount(
+      { status: { state: "failed", detail: { message: REFUSED } }, sasl: { state: "failed", detail: { message: REFUSED } } },
+      { channels: [makeChannel("libera", "#linux", { joined: false })] },
+    );
+
+    expect(dotBeside("Joined 0 of 1 channels")).toContain("--state-disconnected");
+  });
+
+  it("keeps a join that has not happened yet looking like it is coming", () => {
+    mount(
+      { status: { state: "registering" } },
+      { channels: [makeChannel("libera", "#linux", { joined: false })] },
+    );
+
+    expect(dotBeside("Joined 0 of 1 channels")).toContain("--state-connecting");
   });
 
   it("offers a retry and a way back to the settings when it fails", () => {

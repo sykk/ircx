@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import type { ConnectionStatus, InstalledPlugin } from "@/types";
@@ -62,6 +62,17 @@ describe("StatusBar", () => {
     const bar = mount({ state: "failed", detail: { message: "certificate expired" } });
     expect(bar.textContent).toContain("irc.libera.chat:6697 failed");
     expect(bar.textContent).not.toContain("certificate expired");
+  });
+
+  it("gives up the reason when asked, the way the rest of the bar does", () => {
+    mount({ state: "failed", detail: { message: "certificate expired" } });
+    const summary = screen.getByLabelText("irc.libera.chat:6697 failed: certificate expired");
+
+    fireEvent.focus(summary);
+    expect(screen.getByRole("tooltip").textContent).toBe("certificate expired");
+
+    fireEvent.blur(summary);
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   describe("reconnecting", () => {

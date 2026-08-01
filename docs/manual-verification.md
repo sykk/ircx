@@ -944,14 +944,41 @@ Four wrapped lines ending in `userhost-in-names`, inside the window on both
 sides. Opened, closed and reopened to check the offset is measured from centre
 each time rather than accumulating: identical geometry on the second open.
 
+**That run proved less than it read like, and the reason is the point of this
+section.** The capability list fits at 320px wherever it is centred, so the
+width cap alone accounted for every number above and the clamp never ran. It
+could not have run: Tailwind's translate utility sets the `translate` property
+and #258 wrote `transform`, so the two composed instead of replacing, and a box
+that needed moving moved twice. A left-anchored tooltip came out at
+
+```text
+{"left":-152,"right":168,"width":320,"offLeft":152}
+```
+
+— further off the edge than centring alone would have put it. Found in #260 by
+walking the edge the earlier run had recorded as not walked, which is the only
+reason it was found at all. A green measurement of the case that does not
+exercise the mechanism is not evidence about the mechanism.
+
+**Both edges are walked** on 2026-08-01, after #260 moved centring into the
+same write as the offset. The status bar's failure summary is anchored 28px
+from the left, and its sentence is long enough to need the clamp:
+
+```text
+{"left":8,"right":328,"width":320,"height":89,"offLeft":0,"offRight":0}
+```
+
+Five wrapped lines, whole, held at the 8px margin. The capability list on the
+right is unchanged at `{"left":861,"right":1181}`, and reopening still gives
+identical geometry.
+
 **Not walked:**
 
-- **The left edge, in the application.** The unit tests cover it and the
-  measured case was the right edge, because after #256 no tooltip is anchored
-  far enough left to overflow. A long reaction list in the first column of the
-  timeline is the one that would.
 - **A window narrow enough for the `100vw` cap to bind.** The width falls back
   from 20rem below a 336px window, which no run has been that small to see.
+- **The vertical edge.** A box tall enough to leave the window is not clamped at
+  all — only the horizontal is. Five lines at the bottom of a 1200x713 window
+  was fine; nothing has tried a longer label in a shorter window.
 
 ## Density
 

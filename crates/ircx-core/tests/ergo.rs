@@ -62,6 +62,7 @@ async fn against_ergo() {
     };
 
     let plugins = on_arrival_plugins(&mut report, room.path());
+    let runtime = plugins.clone();
     let mut live = Live::start(config("ergo", "ircx-drive"), Arc::clone(&store), plugins);
 
     // A second client, because one session alone cannot exercise any of this.
@@ -115,6 +116,14 @@ async fn against_ergo() {
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
     a_rule_raises_what_it_was_asked_about(&mut report, &mut live, &mut bot).await;
     a_backfill_fills_the_gap(&mut report, &mut live, &mut other).await;
+    a_dropped_hook_comes_back(
+        &mut report,
+        &mut live,
+        &mut other,
+        runtime.as_deref(),
+        room.path(),
+    )
+    .await;
 
     if report.failed() {
         println!("\n--- transcript");
@@ -451,6 +460,133 @@ async fn a_backfill_fills_the_gap(report: &mut Report, live: &mut Live, other: &
             &format!("it arrived as {:?} rather than history", message.source),
         ),
         None => report.fail("backfill", "what was said in the gap never came back"),
+    }
+}
+
+/// A hook dropped for failing, and asked again once the plugin is repaired.
+///
+/// The clearing is unit tested at both ends — the strikes go when
+/// `PluginChanged` arrives, and installing sends it — and until this the two
+/// had never run together over a real connection. What that leaves is the
+/// question the unit tests cannot ask: after three real failures against a real
+/// server, does a repaired plugin actually answer again without a restart.
+///
+/// The plugin is written here rather than kept in `examples/`, because what it
+/// is for is throwing. Installing over it is the repair a user makes: it is the
+/// same call the sheet makes, and it replaces the code on disk.
+async fn a_dropped_hook_comes_back(
+    report: &mut Report,
+    live: &mut Live,
+    other: &mut Live,
+    runtime: Option<&PluginRuntime>,
+    room: &Path,
+) {
+    let Some(runtime) = runtime else {
+        report.fail("repair", "no plugin library, so nothing could be broken");
+        return;
+    };
+
+    let source = room.join("flaky-source");
+    let grants = Grants {
+        permissions: [Permission::AnnotateMessages, Permission::AccessChannels]
+            .into_iter()
+            .collect(),
+        channels: vec![CHANNEL.into()],
+        hosts: Vec::new(),
+    };
+    let install = |body: &str| -> Result<(), String> {
+        std::fs::create_dir_all(&source).map_err(|error| error.to_string())?;
+        std::fs::write(
+            source.join("plugin.json"),
+            r#"{"id":"flaky","name":"Flaky","version":"1.0.0",
+               "description":"Throws until it is repaired","entry":"main.js",
+               "annotates":true,
+               "permissions":["annotate-messages","access-channels"],
+               "channels":["*"]}"#,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(source.join("main.js"), body).map_err(|error| error.to_string())?;
+        runtime
+            .install(&source)
+            .map_err(|error| error.to_string())?;
+        runtime
+            .set_grants("flaky", grants.clone())
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    };
+
+    if let Err(error) = install("ircx.annotate(() => { throw new Error('broken on purpose'); });") {
+        report.fail(
+            "repair",
+            &format!("could not install the broken one: {error}"),
+        );
+        return;
+    }
+
+    // One strike per batch, so the drop needs `HOOK_STRIKES` separate arrivals.
+    for round in 0..3 {
+        other
+            .submit(CHANNEL, &format!("breaking it, {round}"))
+            .await;
+        let stopped = live
+            .wait(Duration::from_secs(3), |event| match event {
+                IrcxEvent::MessagesAppended { messages, .. } => messages
+                    .iter()
+                    .find(|message| message.text.contains("stopped asking it"))
+                    .map(|message| message.text.clone()),
+                _ => None,
+            })
+            .await;
+        if let Some(text) = stopped {
+            report.pass(
+                "repair",
+                &format!("dropped after {} said: {text}", round + 1),
+            );
+            break;
+        }
+        if round == 2 {
+            report.fail(
+                "repair",
+                "three failures in a row and the hook was not dropped",
+            );
+            return;
+        }
+    }
+
+    // Repaired, and installed over the broken one exactly as the sheet does.
+    if let Err(error) =
+        install("ircx.annotate((m) => m.text.includes('mended') ? 'mended' : undefined);")
+    {
+        report.fail(
+            "repair",
+            &format!("could not install the repaired one: {error}"),
+        );
+        return;
+    }
+    live.send(SessionCommand::PluginChanged {
+        plugin: "flaky".into(),
+    })
+    .await;
+
+    other.submit(CHANNEL, "mended now").await;
+    let noted = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::MessageAnnotated { plugin, text, .. } if plugin == "flaky" => {
+                Some(text.clone())
+            }
+            _ => None,
+        })
+        .await;
+
+    match noted {
+        Some(text) => report.pass(
+            "repair",
+            &format!("answering again without a restart: {text}"),
+        ),
+        None => report.fail(
+            "repair",
+            "the repaired plugin was never asked again — the strikes outlived the install",
+        ),
     }
 }
 

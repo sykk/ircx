@@ -79,13 +79,52 @@ already carried. None of it is touched at launch by a user with no plugins.
 
 ## Memory
 
+**The application**, measured 2026-08-01 on the release binary, connected to a
+local `ergo` with one channel joined and 45 messages archived — a client with
+nothing in it:
+
+| | PSS | RSS |
+|---|---|---|
+| **whole application** | **176.3 MiB** | 385.6 MiB |
+| `ircx` — Rust, Tauri, GTK | 66.6 MiB | 155.2 MiB |
+| `WebKitWebProcess` | 89.5 MiB | 172.3 MiB |
+| `WebKitNetworkProcess` | 20.2 MiB | 58.1 MiB |
+
+**PSS is the figure to quote.** A WebKitGTK application is three processes
+sharing a great deal of mapped library, so adding their RSS counts those pages
+three times: 385.6 MiB is not what the machine gives up to run this. PSS
+divides each shared page among the processes mapping it, and 176.3 MiB is.
+
+**Covers:** `smaps_rollup` for the whole process tree, 45 seconds after `exec`,
+after the connection settled. Release profile, Linux x86-64, one sample on one
+machine. **Excludes:** any real backlog. WebKit's share moves with what the page
+holds, and this page held nothing.
+
+**Under two fifths of it is ours.** The Rust side is 66.6 MiB of the 176.3 —
+38% — and the two WebKit processes are the rest.
+
+### The row this replaces measured something else
+
+It read:
+
 | | |
 |---|---|
 | RSS, connected, idle | 13.3 MiB |
 | RSS, holding 3,006 messages | 20.5 MiB |
 
-**Upper bound**: measured on a debug build inside the test harness, so the
-release figure is lower. Not re-measured since.
+— labelled an upper bound *"measured on a debug build inside the test harness,
+so the release figure is lower"*, and it is still true of what it measured:
+`ircx-core` in a test process, with no window, no WebKit and no GTK.
+
+What it does not say is that it excludes the whole application. Read as a
+memory figure for ircx — which is what a row headed **Memory** in a file of
+claims about ircx invites — it is out by more than a factor of ten in the
+direction that flatters. The 3,006-message row is the same core-only
+measurement and stays useful for what it is: what an archive of that size costs
+in Rust, which is 7.2 MiB over an empty one.
+
+Both are kept above, relabelled. Neither should be quoted as what running ircx
+costs.
 
 ## Archive
 
@@ -164,5 +203,5 @@ around 0.1 ms.
 
 - macOS and Windows. Everything here is Linux x86-64.
 - Startup with a populated archive and several networks auto-connecting.
-- Memory on a release build, or over a long session.
+- Memory over a long session, or with a real backlog rendered.
 - Anything under netsplit-scale traffic.

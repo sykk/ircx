@@ -41,9 +41,7 @@ export function StatusBar() {
             className="h-2 w-2 shrink-0 rounded-full"
             style={{ background: connectionColor(network.status) }}
           />
-          <span className="truncate">
-            <ConnectionSummary network={network} seconds={seconds} />
-          </span>
+          <ConnectionSummary network={network} seconds={seconds} />
         </span>
       ) : (
         <span className="text-[var(--text-muted)]">No network</span>
@@ -79,30 +77,41 @@ function ConnectionSummary({
   switch (network.status.state) {
     case "connected":
       return (
-        <>
+        <span className="truncate">
           Connected to {where}{" "}
           {network.tls ? (
             <span className="text-[var(--text-muted)]">(TLS)</span>
           ) : (
             <span className="text-[var(--warning)]">(no TLS)</span>
           )}
-        </>
+        </span>
       );
     case "connecting":
-      return <>Connecting to {where}</>;
+      return <span className="truncate">Connecting to {where}</span>;
     case "registering":
-      return <>Registering with {where}</>;
+      return <span className="truncate">Registering with {where}</span>;
     case "reconnecting":
-      return <>Reconnecting to {where} in {seconds ?? 0}s</>;
-    // The bar gives the whole connection one truncated line, and the sentences
-    // core writes are long enough to be cut mid-word in it — which reports a
-    // failure by showing the first half of why. It says which network failed
-    // and leaves the reason to the two places that have room for it: the setup
-    // screen, and the server buffer every failure is noted into.
+      return <span className="truncate">Reconnecting to {where} in {seconds ?? 0}s</span>;
+    // The sentences core writes are longer than this line, so the summary says
+    // which network failed and the tooltip holds why — the same shape as every
+    // other item in the bar. It cannot be truncated like its neighbours: the
+    // overflow that clips a long line clips the tooltip with it.
     case "failed":
-      return <span className="text-[var(--danger)]">{where} failed</span>;
+      return (
+        <Tooltip label={network.status.detail.message} placement="top">
+          <span
+            tabIndex={0}
+            aria-label={`${where} failed: ${network.status.detail.message}`}
+            className="text-[var(--danger)]"
+          >
+            {where} failed
+          </span>
+        </Tooltip>
+      );
     case "disconnected":
-      return <span className="text-[var(--text-muted)]">Not connected to {where}</span>;
+      return (
+        <span className="truncate text-[var(--text-muted)]">Not connected to {where}</span>
+      );
   }
 }
 

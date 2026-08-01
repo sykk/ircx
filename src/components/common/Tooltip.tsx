@@ -44,13 +44,17 @@ export function Tooltip({
   const box = useRef<HTMLSpanElement>(null);
 
   // The box has to exist before it can be measured, and the answer moves it, so
-  // this writes the offset onto the node rather than through a render. Closing
-  // unmounts the box, so each open measures a freshly centred one.
+  // this writes the offset onto the node rather than through a render. It runs
+  // before paint, so the untranslated box it measures is never on screen, and
+  // centring is done here rather than in a class: Tailwind's own translate
+  // utility sets the `translate` property, which a `transform` written here
+  // would compose with instead of replace — the box would move twice.
   useLayoutEffect(() => {
     const node = box.current;
     if (!node) return;
-    const shift = edgeShift(node.getBoundingClientRect(), window.innerWidth);
-    if (shift !== 0) node.style.transform = `translateX(calc(-50% + ${shift}px))`;
+    const rect = node.getBoundingClientRect();
+    const centred = { left: rect.left - rect.width / 2, right: rect.right - rect.width / 2 };
+    node.style.transform = `translateX(calc(-50% + ${edgeShift(centred, window.innerWidth)}px))`;
   }, [open]);
 
   return (
@@ -67,7 +71,7 @@ export function Tooltip({
           ref={box}
           role="tooltip"
           className={clsx(
-            "pointer-events-none absolute left-1/2 z-50 w-max max-w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)]",
+            "pointer-events-none absolute left-1/2 z-50 w-max max-w-[min(20rem,calc(100vw-1rem))] rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)]",
             placement === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
           )}
         >

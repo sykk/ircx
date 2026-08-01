@@ -22,6 +22,12 @@ pub const RPL_WHOISSERVER: u16 = 312;
 pub const RPL_WHOISIDLE: u16 = 317;
 pub const RPL_WHOISCHANNELS: u16 = 319;
 pub const RPL_WHOISACCOUNT: u16 = 330;
+/// A channel and a unix timestamp, with no words at all.
+pub const RPL_CREATIONTIME: u16 = 329;
+/// Both send their figures as parameters *and* in the trailing sentence, so
+/// joining them prints every number twice.
+pub const RPL_LOCALUSERS: u16 = 265;
+pub const RPL_GLOBALUSERS: u16 = 266;
 pub const ERR_NOSUCHNICK: u16 = 401;
 pub const ERR_UNKNOWNCOMMAND: u16 = 421;
 

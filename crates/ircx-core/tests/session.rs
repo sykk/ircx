@@ -2216,6 +2216,85 @@ mod whois {
     }
 }
 
+/// The lines are real, off the same Libera connection the WHOIS ones came from.
+/// Both shapes have the same fault as a WHOIS reply: the numbers arrive before
+/// the words, or without any.
+mod numerics_that_read_as_data {
+    use super::*;
+
+    fn said(session: &Harness) -> Vec<String> {
+        session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessagesAppended { messages, .. } => {
+                    Some(messages.iter().map(|m| m.text.clone()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// `#libera 1619211933` is two facts with no sentence between them, and it
+    /// arrives on every join.
+    #[test]
+    fn says_when_a_channel_was_made_in_words() {
+        let mut session = registered("");
+        session.events.clear();
+        session.feed(":silver.libera.chat 329 sykk #libera 1619211933");
+
+        assert_eq!(
+            said(&session),
+            vec!["#libera was created on 2021-04-23 at 21:05 UTC"]
+        );
+    }
+
+    /// The count is in the parameters and in the sentence, so joining them
+    /// printed `2283 2496 Current local users 2283, max 2496`.
+    #[test]
+    fn does_not_print_the_same_figures_twice() {
+        let mut session = registered("");
+        session.events.clear();
+        session.feed(":silver.libera.chat 265 sykk 2283 2496 :Current local users 2283, max 2496");
+        session.feed(
+            ":silver.libera.chat 266 sykk 31827 32872 :Current global users 31827, max 32872",
+        );
+
+        assert_eq!(
+            said(&session),
+            vec![
+                "Current local users 2283, max 2496",
+                "Current global users 31827, max 32872"
+            ]
+        );
+    }
+
+    /// The neighbours already read well, and the fallback is what makes them.
+    #[test]
+    fn leaves_the_lines_beside_them_alone() {
+        let mut session = registered("");
+        session.events.clear();
+        session.feed(":silver.libera.chat 252 sykk 35 :IRC Operators online");
+        session.feed(":silver.libera.chat 254 sykk 22722 :channels formed");
+
+        assert_eq!(
+            said(&session),
+            vec!["35 IRC Operators online", "22722 channels formed"]
+        );
+    }
+
+    /// A timestamp that will not parse is still the server saying something.
+    #[test]
+    fn keeps_the_servers_words_when_the_clock_makes_no_sense() {
+        let mut session = registered("");
+        session.events.clear();
+        session.feed(":silver.libera.chat 329 sykk #libera later");
+
+        assert_eq!(said(&session), vec!["#libera later"]);
+    }
+}
+
 #[test]
 fn a_channel_list_arrives_once_rather_than_a_line_at_a_time() {
     let mut session = registered("");

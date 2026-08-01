@@ -821,6 +821,8 @@ impl SessionState {
             RPL_TOPIC => self.on_topic_reply(&params),
             RPL_NOTOPIC => self.on_no_topic(&params),
             RPL_TOPICWHOTIME => self.on_topic_who_time(&params),
+            RPL_CREATIONTIME => self.on_creation_time(&params, message),
+            RPL_LOCALUSERS | RPL_GLOBALUSERS => self.server_sentence(message),
             RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
             | RPL_WHOISACCOUNT => self.on_whois(code, &params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(&params),
@@ -1153,6 +1155,50 @@ impl SessionState {
     /// the `time` tag. They were kept as the raw epoch before, so one field
     /// held two formats and whichever drew it would have shown a number half
     /// the time.
+    /// When a channel was made, in words. `329` is the channel and a unix
+    /// timestamp and nothing else, so the fallback prints `#libera 1619211933`
+    /// — two facts and no sentence between them.
+    ///
+    /// Goes to the channel it is about when we are in it, which is where the
+    /// fallback was already putting it.
+    fn on_creation_time(&mut self, params: &[String], message: &Message) {
+        let Some(channel) = params.first() else {
+            return;
+        };
+        let when = params
+            .get(1)
+            .and_then(|epoch| rfc3339(epoch))
+            .as_deref()
+            .and_then(readable);
+        let Some(when) = when else {
+            return self.server_words(SERVER_TARGET, message);
+        };
+        let target = match self.channels.contains_key(&self.fold(channel)) {
+            true => channel.clone(),
+            false => SERVER_TARGET.to_string(),
+        };
+        let sentence = format!("{channel} was created on {when}");
+        let note = self.chat_message(message, &target, MessageKind::Server, sentence);
+        self.append(note);
+    }
+
+    /// A numeric whose trailing text is already the whole sentence, and whose
+    /// parameters are the same figures over again.
+    ///
+    /// `265` arrives as `2283 2496 :Current local users 2283, max 2496`, and
+    /// joining the parameters onto the sentence prints every number twice:
+    /// `2283 2496 Current local users 2283, max 2496`.
+    fn server_sentence(&mut self, message: &Message) {
+        let Some(text) = message.params.last() else {
+            return;
+        };
+        if text.trim().is_empty() {
+            return;
+        }
+        let note = self.chat_message(message, SERVER_TARGET, MessageKind::Server, text.clone());
+        self.append(note);
+    }
+
     /// A WHOIS reply, in a sentence rather than in the order it arrived.
     ///
     /// Every one of these puts its data before the server's trailing text, so

@@ -317,6 +317,49 @@ describe("CommandPalette", () => {
     expect(screen.queryAllByRole("option")).toHaveLength(0);
   });
 
+  /** #224. Splitting worked and had no way in but `Mod+\\`, which is a feature
+   * nobody finds. */
+  describe("splitting from the palette", () => {
+    it("offers both directions and says which key does the same", () => {
+      render(<CommandPalette />);
+      type("split");
+
+      expect(optionLabels()).toEqual([
+        expect.stringContaining("Split pane side by side"),
+        expect.stringContaining("Split pane top and bottom"),
+      ]);
+      expect(optionLabels()[0]).toContain("Ctrl+\\");
+    });
+
+    /** The base state holds no pane at all, and a split needs one to split. */
+    function withOnePane() {
+      useAppStore.setState({
+        ...oneView({ network: "libera", target: "#ctf-ops" }),
+        paletteOpen: true,
+      });
+    }
+
+    it("splits the window", () => {
+      withOnePane();
+      render(<CommandPalette />);
+      type("Split pane side by side");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(Object.keys(useAppStore.getState().views)).toHaveLength(2);
+    });
+
+    it("closes the pane again", () => {
+      withOnePane();
+      useAppStore.getState().splitActiveView("row");
+      useAppStore.setState({ paletteOpen: true });
+      render(<CommandPalette />);
+      type("Close pane");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(Object.keys(useAppStore.getState().views)).toHaveLength(1);
+    });
+  });
+
   describe("choosing a theme", () => {
     const root = document.documentElement;
 

@@ -14,6 +14,7 @@
 mod caps;
 mod casemap;
 mod dispatch;
+mod history;
 mod isupport;
 mod message;
 mod numeric;

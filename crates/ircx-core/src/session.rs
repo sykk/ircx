@@ -13,6 +13,7 @@ use ircx_store::OpenTarget;
 use tracing::debug;
 
 use crate::caps::Caps;
+use crate::history;
 use crate::isupport::ISupport;
 use crate::numeric::{self, *};
 use crate::sasl;
@@ -40,6 +41,15 @@ pub enum Action {
     Remember(OpenTarget),
     /// The user left this conversation or closed it; drop it from that set.
     Forget(TargetName),
+    /// Ask the server for what this conversation said while nobody was here.
+    ///
+    /// Where the archive left off is the one thing the request needs and the
+    /// one thing the session does not hold, so the line is finished by whoever
+    /// can read the archive.
+    Backfill {
+        target: TargetName,
+        limit: u32,
+    },
     /// Ask the notification rules about these messages. Pushed after the
     /// `Emit` that draws them, because a rule runs on arrival rather than on
     /// draw and nothing waits for one.
@@ -1259,6 +1269,7 @@ impl SessionState {
             self.send_command("MODE", &[&name]);
             self.actions
                 .push(Action::Remember(OpenTarget::Channel(name.clone())));
+            self.backfill(&name);
         } else {
             let nick = sender.nick.clone();
             let member = MemberState {
@@ -1278,6 +1289,27 @@ impl SessionState {
         let chat = self.chat_message(message, &name, MessageKind::Join, text);
         self.append(chat);
         self.emit_channel(&key);
+    }
+
+    /// A server that did not grant the capability is asked for nothing, and the
+    /// archive stays the whole history there is.
+    fn backfill(&mut self, target: &str) {
+        if !self.caps.is_enabled("draft/chathistory") {
+            return;
+        }
+        let limit = self
+            .isupport
+            .chathistory
+            .map_or(history::PAGE, |max| max.min(history::PAGE));
+        // A server can say it will answer with nothing, and asking anyway is a
+        // request that can only be refused.
+        if limit == 0 {
+            return;
+        }
+        self.actions.push(Action::Backfill {
+            target: target.to_string(),
+            limit,
+        });
     }
 
     fn handle_part(&mut self, message: &Message) {

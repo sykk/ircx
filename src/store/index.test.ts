@@ -367,3 +367,88 @@ describe("a message a notification rule raised", () => {
     expect(timeline()?.messages[0]?.raisedBy).toBeUndefined();
   });
 });
+
+/**
+ * #219. A server backfill answers the join, and a channel that spoke while the
+ * request was in flight puts a live message ahead of the history it answers.
+ */
+describe("a backfill of what was said while nobody was here", () => {
+  function backfilled(id: string, timestamp: string) {
+    return makeMessage({ id, timestamp, source: "serverHistory" });
+  }
+
+  it("lands at its own time rather than under what arrived first", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [makeMessage({ id: "live", timestamp: "2026-07-30T13:10:00.000Z" })],
+    });
+    applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [
+        backfilled("old-1", "2026-07-30T12:00:00.000Z"),
+        backfilled("old-2", "2026-07-30T12:30:00.000Z"),
+      ],
+    });
+
+    expect(timeline()?.messages.map((m) => m.id)).toEqual(["old-1", "old-2", "live"]);
+  });
+
+  it("interleaves with what was already held", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [
+        makeMessage({ id: "live-1", timestamp: "2026-07-30T12:15:00.000Z" }),
+        makeMessage({ id: "live-2", timestamp: "2026-07-30T13:10:00.000Z" }),
+      ],
+    });
+    applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [
+        backfilled("old-1", "2026-07-30T12:00:00.000Z"),
+        backfilled("old-2", "2026-07-30T12:30:00.000Z"),
+      ],
+    });
+
+    expect(timeline()?.messages.map((m) => m.id)).toEqual([
+      "old-1",
+      "live-1",
+      "old-2",
+      "live-2",
+    ]);
+  });
+
+  it("does not move the seam that says where looking stopped", () => {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [backfilled("old-1", "2026-07-30T12:00:00.000Z")],
+    });
+
+    expect(timeline()?.unreadFrom).toBeNull();
+  });
+
+  it("leaves the seam on the first live message in the same batch", () => {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [
+        backfilled("old-1", "2026-07-30T12:00:00.000Z"),
+        makeMessage({ id: "live", timestamp: "2026-07-30T13:10:00.000Z" }),
+      ],
+    });
+
+    expect(timeline()?.unreadFrom).toBe("live");
+  });
+});

@@ -487,10 +487,14 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       const fresh = event.messages.filter((m) => !known.has(m.id));
       if (fresh.length === 0) return {};
 
-      const merged = [...timeline.messages, ...fresh];
+      const merged = mergeByTime(timeline.messages, fresh);
       const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
       const isActive =
         focused?.network === event.network && focused.target === event.target;
+      // A server backfill is what was said before anybody looked, so it does
+      // not move the seam that says where looking stopped. Core keeps it out
+      // of the unread counts for the same reason.
+      const seam = fresh.find((m) => m.source !== "serverHistory");
 
       return {
         timelines: {
@@ -501,7 +505,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
               merged.length > TIMELINE_CAP ? merged.slice(-TIMELINE_CAP) : merged,
             unreadFrom:
               timeline.unreadFrom ??
-              (isActive || fresh[0]?.sender.isSelf ? null : (fresh[0]?.id ?? null)),
+              (isActive || !seam || seam.sender.isSelf ? null : seam.id),
           },
         },
       };
@@ -703,6 +707,31 @@ function applyReaction(
   if (next.length === 0) reactions.splice(at, 1);
   else reactions[at] = { emoji: event.emoji, nicks: next };
   return reactions;
+}
+
+/**
+ * Arriving messages are almost always newer than everything held, and a
+ * server backfill is the case where they are not: a channel that spoke while
+ * the request was in flight puts a live message ahead of the history that
+ * answers it. Both sides are in order on their own, so the out-of-order case
+ * is one pass rather than a sort.
+ */
+function mergeByTime(
+  held: readonly ChatMessage[],
+  fresh: readonly ChatMessage[],
+): ChatMessage[] {
+  const last = held[held.length - 1];
+  if (!last || Date.parse(fresh[0]!.timestamp) >= Date.parse(last.timestamp)) {
+    return [...held, ...fresh];
+  }
+  const merged: ChatMessage[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < held.length && j < fresh.length) {
+    const takeFresh = Date.parse(fresh[j]!.timestamp) < Date.parse(held[i]!.timestamp);
+    merged.push(takeFresh ? fresh[j++]! : held[i++]!);
+  }
+  return merged.concat(held.slice(i), fresh.slice(j));
 }
 
 /** A timeline is held in the order the conversation happened, so a message that

@@ -917,3 +917,42 @@ the loader, the validator and the picker are covered. What is not:
   theme that arrives after first paint takes its edits a frame later than the
   built-ins do. Install a theme, edit a colour in it, relaunch, and the edit
   should be there; the window should not flash the theme's own value first.
+
+## Asking the server for what was missed
+
+**Verified against a local `ergo` on 2026-08-01**, in
+`crates/ircx-core/tests/ergo.rs`. The client parts, a second client says
+something, the client rejoins and asks:
+
+```text
+> CHATHISTORY AFTER #ircx-drive timestamp=2026-08-01T00:57:21.652Z 200
+```
+
+What comes back arrives inside a `chathistory` batch and is labelled
+`ServerHistory`, which is the whole of what the receive half was already built
+for and had never had a request to answer. #219.
+
+Two things the run settled that were guesses beforehand:
+
+- **Ergo batches every answer**, including a single message and an empty one.
+  The design rests on that: outside a batch there is nothing to tell a replayed
+  message from a live one. Probed directly, labelled and unlabelled.
+- **The step raced itself first.** Waiting for the outgoing line before
+  rejoining says only that this client wrote it — the server had not read it
+  yet, so the message came back live and correctly so. Waiting for the echo is
+  the barrier.
+
+What is left:
+
+- **Nobody has seen this in the assembled application.** Every part has a test
+  and no backfill has reached a window. What to look at: rejoin a channel that
+  has moved on, and the messages should land above what arrived while the
+  request was in flight rather than under it. The reordering is asserted in
+  `src/store/index.test.ts` and jsdom lays nothing out.
+- **A gap wider than the server's limit.** A full page and a truncated page are
+  the same page, so the hole is invisible to the client and would show as a
+  jump in the conversation. Needs a channel left alone longer than 200 messages.
+- **Libera offers no history to ask for.** The capability was not in what
+  `cadmium.libera.chat` advertised on 2026-07-30, so nothing is sent there and
+  the archive stays the whole history. That is the degrade working, and it also
+  means no Libera run can exercise any of this.

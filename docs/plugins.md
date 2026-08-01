@@ -179,6 +179,12 @@ constraints on future work, not things already banked.
   where and which and is never asked for a character. It also finds that the
   rule needs a second half — hiding text is forgery by omission — and
   recommends not building it yet.
+
+  `docs/adapters.md` does the same for protocol capability adapters, the one
+  extension point that could put a plugin in the connection's path. It may
+  read and never write: `ircx.send` is closed because the bound that makes a
+  plugin's sends safe is the keystroke, and that bound does not survive a
+  plugin answering a server.
 - **Hooks are synchronous.** A promise nobody settles leaves the job queue empty
   with no bytecode running, so nothing trips the deadline. Making hooks
   asynchronous means putting a deadline around the microtask pump.

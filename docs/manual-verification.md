@@ -899,11 +899,28 @@ password — verified by the client before it accepted the login. Then `900` and
 `903` from Libera, which is the server saying it, not ircx. `/whois` on the
 session answered `330` as well.
 
-**What the earlier connection that day was is not established.** It reported
-SHA-256 and `/whois` showed `330`, but Libera does not offer SCRAM-SHA-256, so
-whatever logged that session in was not that. It is recorded as unexplained
-rather than as a baseline, because a comparison against something unidentified
-is not a comparison.
+**A mechanism the server does not offer is walked**, the same day, against
+Libera. This section has warned about it from the start — *picking a mechanism
+the server does not offer connects successfully and does not log you in* — and
+a unit test pinned it, but no real network had done it. Configured for
+SCRAM-SHA-256, which Libera does not advertise, the client:
+
+- did not send `AUTHENTICATE` at all, having checked the advertised list first
+- said `Libera.Chat does not accept SASL SCRAM-SHA-256` in the server console
+- connected anyway, because a missing mechanism is not an authentication failure
+- left `/whois` with no `330`
+
+Which is the behaviour wanted, and still the trap the section says it is: a
+connection that looks entirely successful, and a login that did not happen. The
+only thing saying so is one console line and a status indicator reading `not
+signed in`.
+
+**It also settles what the earlier connection was not.** That session reported
+SHA-256 and `/whois` showed `330`. It cannot have been configured for
+SCRAM-SHA-256, because that configuration produces exactly the run above and
+leaves nobody logged in. What it actually used is unidentified — `PLAIN` is the
+only advertised mechanism that fits — and it is recorded as unidentified rather
+than guessed.
 
 **SCRAM-SHA-256 is walked**, on 2026-07-31, against local `ergo` with a
 registered account. The whole exchange ran against a real server: a real salt

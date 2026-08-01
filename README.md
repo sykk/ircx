@@ -35,6 +35,7 @@ npm run tauri build
 crates/ircx-proto    IRC line parsing
 crates/ircx-net      TLS transport and reconnect
 crates/ircx-core     capabilities, SASL, session state
+crates/ircx-plugin   plugin manifests and the QuickJS sandbox
 crates/ircx-store    SQLite archive and credentials
 crates/ircx-ipc      types shared with the frontend
 src-tauri/           Tauri commands and app wiring

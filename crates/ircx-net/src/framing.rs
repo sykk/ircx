@@ -53,7 +53,11 @@ impl Framer {
             if line.is_empty() {
                 continue;
             }
-            return Some(Framed::Line(String::from_utf8_lossy(&line).into_owned()));
+            // Reuses the Vec's allocation for valid UTF-8, which is nearly
+            // every line; `from_utf8_lossy` would copy even then.
+            return Some(Framed::Line(String::from_utf8(line).unwrap_or_else(
+                |invalid| String::from_utf8_lossy(invalid.as_bytes()).into_owned(),
+            )));
         }
     }
 }

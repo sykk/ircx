@@ -156,10 +156,15 @@ impl SessionState {
             batch.messages.push(message);
             return;
         }
-        self.count_towards_unread(&message);
+        let counted = self.count_towards_unread(&message);
         self.remember_newest(&message);
         let target = message.target.clone();
-        let ask = plugins::worth_raising(std::slice::from_ref(&message), &self.nick);
+        // Some(false) is speech from somebody else that mentions nobody — the
+        // one case a rule could still raise. The host already raised the rest.
+        let ask = match counted {
+            Some(false) => vec![plugins::arrived(&message)],
+            _ => Vec::new(),
+        };
         self.emit(IrcxEvent::MessagesAppended {
             network: self.config.network.clone(),
             target: target.clone(),
@@ -359,14 +364,16 @@ impl SessionState {
         }
     }
 
-    fn count_towards_unread(&mut self, message: &ChatMessage) {
+    /// `Some(highlight)` for speech from somebody else, `None` for the rest —
+    /// which is exactly the split `plugins::worth_raising` would recompute.
+    fn count_towards_unread(&mut self, message: &ChatMessage) -> Option<bool> {
         if message.sender.is_self
             || !matches!(
                 message.kind,
                 MessageKind::Privmsg | MessageKind::Notice | MessageKind::Action
             )
         {
-            return;
+            return None;
         }
 
         let highlight = text::mentions(&message.text, &self.nick);
@@ -379,6 +386,7 @@ impl SessionState {
             query.unread += 1;
             self.emit_query(&key);
         }
+        Some(highlight)
     }
 
     pub(crate) fn emit(&mut self, event: IrcxEvent) {

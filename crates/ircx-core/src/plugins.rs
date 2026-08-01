@@ -82,7 +82,7 @@ fn is_speech(message: &ChatMessage) -> bool {
     )
 }
 
-fn arrived(message: &ChatMessage) -> ArrivedMessage {
+pub(crate) fn arrived(message: &ChatMessage) -> ArrivedMessage {
     ArrivedMessage {
         id: message.id.clone(),
         nick: message.sender.nick.clone(),
@@ -199,7 +199,7 @@ pub fn network_for_plugins(handle: tokio::runtime::Handle) -> Fetcher {
             .map_err(|error| error.to_string())?;
         let body = String::from_utf8(fetched.body)
             .map_err(|_| format!("{} answered with something that is not text", request.url))?;
-        Ok(Fetched { status: 200, body })
+        Ok(Fetched { body })
     })
 }
 

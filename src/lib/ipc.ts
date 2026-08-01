@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type {
@@ -193,9 +193,25 @@ export async function chooseFolder(title: string): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
-/** Resolves to an unsubscribe function. */
+/** The native save dialog, or null if it was dismissed. Wrapped as
+ * `chooseFolder` is. Rejects when the dialog could not be asked at all, which
+ * callers report rather than fold into the dismissal — #167. */
+export async function chooseSavePath(
+  defaultPath: string,
+  filters: { name: string; extensions: string[] }[],
+): Promise<string | null> {
+  return await save({ defaultPath, filters });
+}
+
+/** Tauri rejects with the handler's user-facing string; anything else is a bug
+ * in the bridge and gets the caller's sentence instead. */
+export function reasonOr(reason: unknown, fallback: string): string {
+  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
+}
+
 /** The backend delivers a window's worth of events as one message, so the
- * handler takes the batch and the store writes once for it. */
+ * handler takes the batch and the store writes once for it. Resolves to an
+ * unsubscribe function. */
 export function onIrcxEvent(handler: (events: IrcxEvent[]) => void) {
   return listen<IrcxEvent[]>(EVENT_CHANNEL, (e) => handler(e.payload));
 }

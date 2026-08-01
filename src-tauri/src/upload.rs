@@ -15,7 +15,7 @@ use ircx_net::http::{
 use time::OffsetDateTime;
 
 use crate::sigv4::{self, Credentials};
-use crate::state::App;
+use crate::state::{describe, App};
 
 /// The largest file this will read into memory before sending it.
 ///
@@ -58,7 +58,7 @@ fn content_type(name: &str) -> &'static str {
 /// a URL the client then requests. `..` would otherwise let a file name choose
 /// where on the provider it lands.
 pub fn object_name(file_name: &str, random: &[u8]) -> String {
-    let prefix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let prefix = sigv4::hex(random);
     let safe: String = file_name
         .chars()
         .map(|c| match c {
@@ -106,7 +106,7 @@ fn net_method(method: UploadMethod) -> NetMethod {
 ///
 /// Answers for every path rather than failing on the first: a drop of four
 /// files where one has gone is three uploads and one line saying so.
-pub async fn describe(paths: &[String]) -> Vec<FileToUpload> {
+pub async fn describe_files(paths: &[String]) -> Vec<FileToUpload> {
     let mut described = Vec::with_capacity(paths.len());
     for path in paths {
         let file = Path::new(path);
@@ -135,7 +135,7 @@ pub async fn describe(paths: &[String]) -> Vec<FileToUpload> {
 /// Every error is a sentence for whoever has to fix it: the file, the provider
 /// and the size are all things the user chose and can change.
 pub async fn send_file(app: &App, path: &str) -> Result<UploadedFile, String> {
-    let Some(provider) = app.store().upload_provider().map_err(|e| e.to_string())? else {
+    let Some(provider) = app.store().upload_provider().map_err(describe)? else {
         return Err(
             "No upload provider is configured. Set one from the command palette, or paste a \
              link you already have."
@@ -155,9 +155,11 @@ pub async fn send_file(app: &App, path: &str) -> Result<UploadedFile, String> {
         .map_err(|error| format!("{name} could not be read: {error}"))?
         .len();
     if size > MAX_BYTES {
+        // Rounded up: 25.5 MB reported as "25 MB" reads as a contradiction of
+        // the limit it just hit.
         return Err(format!(
             "{name} is {} MB, and ircx uploads files up to {} MB",
-            size / (1024 * 1024),
+            size.div_ceil(1024 * 1024),
             MAX_BYTES / (1024 * 1024)
         ));
     }
@@ -260,7 +262,7 @@ fn policy(
         let secret = app
             .store()
             .upload_token()
-            .map_err(|e| e.to_string())?
+            .map_err(describe)?
             .ok_or_else(|| {
                 "The provider signs with an S3 secret key and none is saved. Set one from the \
                  upload provider settings."
@@ -273,7 +275,7 @@ fn policy(
     if let Some(header) = provider.auth_header.as_deref().filter(|h| !h.is_empty()) {
         // Read at the moment of the upload rather than held anywhere it could
         // be shown, which is the whole reason it is write-only.
-        let token = app.store().upload_token().map_err(|e| e.to_string())?;
+        let token = app.store().upload_token().map_err(describe)?;
         match token {
             Some(token) => headers.push((header.to_owned(), token)),
             None => {

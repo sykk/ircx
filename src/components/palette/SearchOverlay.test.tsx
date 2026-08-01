@@ -95,8 +95,7 @@ describe("SearchOverlay", () => {
   });
 
   it("moves through hits and jumps to the one chosen", async () => {
-    const onJump = vi.fn();
-    render(<SearchOverlay onJump={onJump} />);
+    render(<SearchOverlay />);
     type("lfi");
     await screen.findAllByRole("option");
 
@@ -105,7 +104,6 @@ describe("SearchOverlay", () => {
 
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
 
-    expect(onJump).toHaveBeenCalledWith(hits[1]);
     expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
     expect(useAppStore.getState().searchOpen).toBe(false);
   });

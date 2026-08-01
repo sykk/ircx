@@ -25,12 +25,14 @@ describe("how wide the roster asks to be", () => {
 
   it("never asks for less than the heading above it needs", () => {
     // "MEMBERS — 1" is wider than a one-character nick, so the floor holds.
-    expect(rosterWidth([member("j")], false)).toMatch(/^clamp\(7rem,/);
+    // The whole clamp is pinned: the bounds are constants, so matching only
+    // them passed for any input.
+    expect(rosterWidth([member("j")], false)).toBe("clamp(7rem, 1ch + 2.25rem, 13rem)");
   });
 
   it("stops at the width it used to always be", () => {
     const long = member("a-nick-far-longer-than-any-column-should-carry");
-    expect(rosterWidth([long], false)).toMatch(/13rem\)$/);
+    expect(rosterWidth([long], false)).toBe("clamp(7rem, 46ch + 2.25rem, 13rem)");
   });
 
   it("gives the inspector the whole column, whatever the nicks are", () => {

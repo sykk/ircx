@@ -86,10 +86,7 @@ impl Requests {
             if let Ok(mut seen) = seen.lock() {
                 seen.push((request.url.clone(), request.budget));
             }
-            Ok(Fetched {
-                status: 200,
-                body: body.clone(),
-            })
+            Ok(Fetched { body: body.clone() })
         })
     }
 }

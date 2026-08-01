@@ -48,7 +48,7 @@ pub async fn remove_upload_provider(app: State<'_, App>) -> Result<(), String> {
 /// size, and whether this client will send it at all.
 #[tauri::command]
 pub async fn describe_uploads(paths: Vec<String>) -> Result<Vec<FileToUpload>, String> {
-    Ok(crate::upload::describe(&paths).await)
+    Ok(crate::upload::describe_files(&paths).await)
 }
 
 /// Sends a file to the configured provider and answers with its address. The
@@ -180,8 +180,8 @@ pub async fn set_typing(
     Ok(())
 }
 
-/// The only outbound request ircx makes that is not an IRC connection, and the
-/// only one a user has to ask for by name.
+/// The only fetch ircx makes for a URL somebody else posted, and only because
+/// the user asked for the preview by name.
 #[tauri::command]
 pub async fn load_preview(url: String) -> Result<Attachment, String> {
     crate::preview::load(&url).await
@@ -308,22 +308,24 @@ pub async fn export_archive(
     scope: ArchiveScope,
     path: String,
 ) -> Result<u64, String> {
-    use std::io::Write;
-
-    let mut buffer = Vec::new();
+    // Streamed rather than rendered into memory first: "Everything" on an old
+    // archive is the whole archive.
+    let file = std::fs::File::create(&path)
+        .map_err(|error| format!("{path} could not be written: {error}"))?;
+    let mut out = std::io::BufWriter::new(file);
     let store = app.store();
     match &scope {
         ArchiveScope::Conversation { network, target } => store
-            .export_target(network, target, &mut buffer)
+            .export_target(network, target, &mut out)
             .map_err(describe)?,
-        ArchiveScope::Everything => store.export_everything(&mut buffer).map_err(describe)?,
+        ArchiveScope::Everything => store.export_everything(&mut out).map_err(describe)?,
     }
-    let written = buffer.len() as u64;
-    let mut file = std::fs::File::create(&path)
+    let file = out
+        .into_inner()
         .map_err(|error| format!("{path} could not be written: {error}"))?;
-    file.write_all(&buffer)
-        .map_err(|error| format!("{path} could not be written: {error}"))?;
-    Ok(written)
+    file.metadata()
+        .map(|meta| meta.len())
+        .map_err(|error| format!("{path} could not be written: {error}"))
 }
 
 /// There is no undo. Whatever asks for this has to have said so.

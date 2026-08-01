@@ -582,10 +582,14 @@ impl Context {
                     }
                 }
                 Action::Emit(event) => {
+                    // Only worth building when a runtime exists: a network
+                    // given `None` never looks, and this is the per-batch path.
                     let arrived = match event.as_ref() {
                         IrcxEvent::MessagesAppended {
                             target, messages, ..
-                        } => Some((target.clone(), plugins::spoken(messages))),
+                        } if self.plugins.is_some() => {
+                            Some((target.clone(), plugins::spoken(messages)))
+                        }
                         _ => None,
                     };
                     match event.as_ref() {

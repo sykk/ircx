@@ -340,7 +340,7 @@ describe("closing a conversation", () => {
     expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
   });
 
-  it("puts the menu away once the action is taken", async () => {
+  it("puts the menu away once a conversation is closed", async () => {
     seedOne();
     fireEvent.click(screen.getByRole("button", { name: "sable actions" }));
 

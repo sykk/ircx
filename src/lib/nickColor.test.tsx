@@ -7,10 +7,6 @@ import { MessageBlock } from "@/components/timeline/MessageBlock";
 import { nickColor, nickColorIndex, PALETTE_SIZE } from "./nickColor";
 
 describe("nickColor", () => {
-  it("returns the same colour for the same nick", () => {
-    expect(nickColor("sable")).toBe(nickColor("sable"));
-  });
-
   it("ignores case, because IRC nicks do", () => {
     expect(nickColorIndex("Sable")).toBe(nickColorIndex("sable"));
     expect(nickColorIndex("SABLE")).toBe(nickColorIndex("sable"));

@@ -124,7 +124,6 @@ pub enum HttpError {
     TooLarge { url: String, max: usize },
 }
 
-/// Fetches `url` whole, or fails. Nothing calls this except on a user action.
 /// How a file reaches the provider the user configured.
 ///
 /// Deliberately not a [`FetchPolicy`] with a body bolted on. A fetch follows a
@@ -274,6 +273,7 @@ async fn send(target: Target, body: &[u8], policy: &UploadPolicy) -> Result<Uplo
     })
 }
 
+/// Fetches `url` whole, or fails. Nothing calls this except on a user action.
 pub async fn fetch(url: &str, policy: &FetchPolicy) -> Result<Fetched, HttpError> {
     let target = Target::parse(url)?;
     let host = target.host.clone();
@@ -638,10 +638,6 @@ impl Target {
         format!("{}{}", self.origin(), self.path)
     }
 
-    /// Absent by design: `Cookie`, `Referer`, `Authorization`, and any
-    /// `Accept-Encoding` beyond identity. The User-Agent is honest rather than
-    /// disguised — a blank one is refused by enough hosts to be useless, and
-    /// the server already learns the IP and the URL.
     /// The head of an upload, with the body's length declared so the provider
     /// can refuse it before reading a byte.
     ///
@@ -692,6 +688,10 @@ impl Target {
         .into_bytes()
     }
 
+    /// Absent by design: `Cookie`, `Referer`, `Authorization`, and any
+    /// `Accept-Encoding` beyond identity. The User-Agent is honest rather than
+    /// disguised — a blank one is refused by enough hosts to be useless, and
+    /// the server already learns the IP and the URL.
     fn request_bytes(&self, accept: &str) -> Vec<u8> {
         let host = self.host_header();
         format!(
@@ -901,28 +901,6 @@ mod tests {
     }
 
     #[test]
-    fn a_redirect_to_a_different_site_is_still_refused_by_name() {
-        let from = target("https://www.files.example/a.png");
-        let error = redirect_target(&from, "https://tracker.example/b.png").expect_err("refused");
-        match error {
-            HttpError::CrossHostRedirect { target, .. } => assert_eq!(target, "tracker.example"),
-            other => panic!("expected a cross-site refusal, got {other}"),
-        }
-    }
-
-    /// Dropping `www.` does not also drop the scheme check: the same site over
-    /// plain http would still put the request in the clear.
-    #[test]
-    fn the_same_site_over_http_is_refused_as_it_was_before() {
-        let from = target("https://www.files.example/a.png");
-        let error = redirect_target(&from, "http://files.example/b.png").expect_err("refused");
-        assert!(
-            matches!(error, HttpError::InsecureRedirect { .. }),
-            "{error}"
-        );
-    }
-
-    #[test]
     fn parses_the_pieces_of_a_url() {
         let parsed = target("https://files.example/a/b.png?v=2");
         assert!(parsed.https);
@@ -1008,25 +986,40 @@ mod tests {
         assert_eq!(to.url(), "https://files.example/a/c.png");
     }
 
+    /// From a bare host and from its `www.` twin, since #106 made those the
+    /// same site: forgiving the prefix must not widen what is followed.
     #[test]
     fn refuses_a_redirect_to_another_host() {
-        let from = target("https://files.example/a.png");
-        let error =
-            redirect_target(&from, "https://tracker.example/a.png").expect_err("must refuse");
-        match error {
-            HttpError::CrossHostRedirect { target, .. } => assert_eq!(target, "tracker.example"),
-            other => panic!("expected a cross-host refusal, got {other}"),
+        for origin in [
+            "https://files.example/a.png",
+            "https://www.files.example/a.png",
+        ] {
+            let from = target(origin);
+            let error =
+                redirect_target(&from, "https://tracker.example/a.png").expect_err("must refuse");
+            match error {
+                HttpError::CrossHostRedirect { target, .. } => {
+                    assert_eq!(target, "tracker.example")
+                }
+                other => panic!("expected a cross-host refusal, got {other}"),
+            }
         }
     }
 
     #[test]
     fn refuses_a_redirect_that_drops_to_plain_http() {
-        let from = target("https://files.example/a.png");
-        let error = redirect_target(&from, "http://files.example/a.png").expect_err("must refuse");
-        assert!(
-            matches!(error, HttpError::InsecureRedirect { .. }),
-            "{error}"
-        );
+        for origin in [
+            "https://files.example/a.png",
+            "https://www.files.example/a.png",
+        ] {
+            let from = target(origin);
+            let error =
+                redirect_target(&from, "http://files.example/a.png").expect_err("must refuse");
+            assert!(
+                matches!(error, HttpError::InsecureRedirect { .. }),
+                "{error}"
+            );
+        }
     }
 
     #[test]

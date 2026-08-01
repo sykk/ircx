@@ -188,13 +188,6 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
 }
 
 /**
- * A plugin's note about somebody else's message. Named with the plugin rather
- * than the sender, and set apart from the text, because the one thing it must
- * never do is read as part of what the person wrote — the standing constraint
- * that a plugin cannot change what somebody said would mean little if its note
- * looked like the message.
- */
-/**
  * Why this message made the conversation go loud, when it was not the reader's
  * own name that did it.
  *
@@ -220,6 +213,13 @@ function RaisedLine({ by }: { by: string[] }) {
   );
 }
 
+/**
+ * A plugin's note about somebody else's message. Named with the plugin rather
+ * than the sender, and set apart from the text, because the one thing it must
+ * never do is read as part of what the person wrote — the standing constraint
+ * that a plugin cannot change what somebody said would mean little if its note
+ * looked like the message.
+ */
 function AnnotationLine({ note }: { note: Annotation }) {
   return (
     <div

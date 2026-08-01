@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TextField } from "@/components/onboarding/fields";
-import { ipc } from "@/lib/ipc";
+import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ChannelListing } from "@/types";
 
@@ -33,6 +33,7 @@ function Sheet({ network }: { network: string }) {
   const close = useAppStore((s) => s.showChannels);
   const held = useAppStore((s) => s.channelList[network]);
   const [filter, setFilter] = useState("");
+  const [error, setError] = useState<string | null>(null);
   // Typing stays responsive while twenty-two thousand rows are re-filtered.
   const needle = useDeferredValue(filter).trim().toLowerCase();
 
@@ -57,12 +58,15 @@ function Sheet({ network }: { network: string }) {
     overscan: 10,
   });
 
+  // The sheet stays open on a failure so the reason has somewhere to be read,
+  // as the palette does; a devtools warning is invisible to the person who
+  // clicked.
   async function join(name: string) {
-    close(null);
     try {
       await ipc.joinChannel(network, name);
+      close(null);
     } catch (reason) {
-      console.warn("ircx could not join", name, reason);
+      setError(reasonOr(reason, `${name} could not be joined.`));
     }
   }
 
@@ -141,6 +145,14 @@ function Sheet({ network }: { network: string }) {
             </div>
           )}
         </div>
+        {error !== null && (
+          <p
+            role="alert"
+            className="border-t border-[var(--border-subtle)] px-5 py-3 text-[12px] text-[var(--danger)]"
+          >
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

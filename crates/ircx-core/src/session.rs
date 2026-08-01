@@ -210,12 +210,10 @@ pub struct SessionState {
     /// for the whole session — a window that only grows, against a `TARGETS`
     /// limit that does not. #246.
     away_since: Option<String>,
-    /// Conversations whose outstanding request was for a gap rather than for a
-    /// first page. What comes back for one of these was missed rather than
-    /// merely never seen, which is the whole of the difference to the unread
-    /// count.
     /// Conversations with an outstanding gap request, and how many pages of it
-    /// have come back. A page that arrives full has more behind it.
+    /// have come back. A page that arrives full has more behind it; what comes
+    /// back was missed rather than merely never seen, which is the whole of
+    /// the difference to the unread count.
     pub(crate) gap_fills: HashMap<String, u32>,
 }
 
@@ -729,8 +727,6 @@ impl SessionState {
         self.abort_sasl(message);
     }
 
-    /// A failure the user can fix by editing the network, so it stops the
-    /// connection instead of quietly leaving them unauthenticated.
     /// What a rejected login says to the person who has to fix it.
     ///
     /// The server's own words go in the middle rather than at the end, because
@@ -780,6 +776,8 @@ impl SessionState {
             .filter(|account| !account.is_empty())
     }
 
+    /// A failure the user can fix by editing the network, so it stops the
+    /// connection instead of quietly leaving them unauthenticated.
     fn abort_sasl(&mut self, message: String) {
         self.set_sasl(SaslStatus::Failed {
             message: message.clone(),
@@ -801,33 +799,31 @@ impl SessionState {
 
     fn handle_numeric(&mut self, code: u16, message: &Message) {
         // The first parameter of a numeric is our own nick; nothing below
-        // wants it.
-        let params: Vec<String> = message.params.iter().skip(1).cloned().collect();
+        // wants it. Borrowed, not cloned: a /list is tens of thousands of
+        // numerics through here.
+        let params = message.params.get(1..).unwrap_or_default();
 
         match code {
             RPL_WELCOME => self.on_welcome(message),
             RPL_ISUPPORT => {
-                let tokens = params
-                    .split_last()
-                    .map(|(_, tokens)| tokens.to_vec())
-                    .unwrap_or_default();
-                self.apply_isupport(&tokens);
+                let tokens = params.split_last().map_or(&[][..], |(_, tokens)| tokens);
+                self.apply_isupport(tokens);
             }
             RPL_LISTSTART => self.listing.clear(),
-            RPL_LIST => self.on_list_reply(&params),
+            RPL_LIST => self.on_list_reply(params),
             RPL_LISTEND => self.on_list_end(),
-            RPL_NAMREPLY => self.on_names(&params),
-            RPL_ENDOFNAMES => self.on_end_of_names(&params),
-            RPL_TOPIC => self.on_topic_reply(&params),
-            RPL_NOTOPIC => self.on_no_topic(&params),
-            RPL_TOPICWHOTIME => self.on_topic_who_time(&params),
-            RPL_CREATIONTIME => self.on_creation_time(&params, message),
+            RPL_NAMREPLY => self.on_names(params),
+            RPL_ENDOFNAMES => self.on_end_of_names(params),
+            RPL_TOPIC => self.on_topic_reply(params),
+            RPL_NOTOPIC => self.on_no_topic(params),
+            RPL_TOPICWHOTIME => self.on_topic_who_time(params),
+            RPL_CREATIONTIME => self.on_creation_time(params, message),
             RPL_LOCALUSERS | RPL_GLOBALUSERS => self.server_sentence(message),
             RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
-            | RPL_WHOISACCOUNT => self.on_whois(code, &params, message),
-            RPL_CHANNELMODEIS => self.on_channel_modes(&params),
-            RPL_AWAY => self.on_away_reply(&params),
-            ERR_NICKNAMEINUSE => self.on_nick_in_use(&params, message),
+            | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
+            RPL_CHANNELMODEIS => self.on_channel_modes(params),
+            RPL_AWAY => self.on_away_reply(params),
+            ERR_NICKNAMEINUSE => self.on_nick_in_use(params, message),
             RPL_LOGGEDIN => {
                 let account = params.get(1).cloned().unwrap_or_default();
                 self.account = Some(account.clone());
@@ -847,7 +843,7 @@ impl SessionState {
                 ));
                 self.end_negotiation();
             }
-            _ => self.on_other_numeric(code, &params, message),
+            _ => self.on_other_numeric(code, params, message),
         }
     }
 
@@ -1149,12 +1145,6 @@ impl SessionState {
         self.emit_channel(&key);
     }
 
-    /// Who set that topic and when, which the server sends straight after it.
-    ///
-    /// The seconds are turned into the same RFC 3339 the live path stores from
-    /// the `time` tag. They were kept as the raw epoch before, so one field
-    /// held two formats and whichever drew it would have shown a number half
-    /// the time.
     /// When a channel was made, in words. `329` is the channel and a unix
     /// timestamp and nothing else, so the fallback prints `#libera 1619211933`
     /// — two facts and no sentence between them.
@@ -1273,6 +1263,12 @@ impl SessionState {
         self.append(note);
     }
 
+    /// Who set that topic and when, which the server sends straight after it.
+    ///
+    /// The seconds are turned into the same RFC 3339 the live path stores from
+    /// the `time` tag. They were kept as the raw epoch before, so one field
+    /// held two formats and whichever drew it would have shown a number half
+    /// the time.
     fn on_topic_who_time(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
         let (name, key) = (name.clone(), self.fold(name));
@@ -2034,13 +2030,13 @@ impl SessionState {
         let Some(reference) = message.param(0) else {
             return;
         };
-        match reference.split_at(1) {
-            ("+", reference) => {
-                let kind = message.param(1).unwrap_or_default().to_string();
-                self.open_batch(reference, &kind);
-            }
-            ("-", reference) => self.close_batch(reference),
-            _ => {}
+        // strip_prefix rather than split_at: an empty or non-ASCII reference
+        // is the server's to send, and slicing it would panic the task.
+        if let Some(reference) = reference.strip_prefix('+') {
+            let kind = message.param(1).unwrap_or_default().to_string();
+            self.open_batch(reference, &kind);
+        } else if let Some(reference) = reference.strip_prefix('-') {
+            self.close_batch(reference);
         }
     }
 

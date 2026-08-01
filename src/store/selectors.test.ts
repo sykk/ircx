@@ -43,7 +43,7 @@ function channel(net: string, name: string): Channel {
 }
 
 function view(id: string, network: string, target: string): ChatView {
-  return { id, network, target, scrollPosition: 0, selectedUser: null, raw: false };
+  return { id, network, target, selectedUser: null, raw: false };
 }
 
 /** Two panes on one target, which no action opens yet — splits land in the next
@@ -150,9 +150,9 @@ describe("view state", () => {
     setViewScroll("a", 1200);
     setViewScroll("b", 40);
 
-    const { views } = useAppStore.getState();
-    expect(views.a!.scrollPosition).toBe(1200);
-    expect(views.b!.scrollPosition).toBe(40);
+    const { viewScroll } = useAppStore.getState();
+    expect(viewScroll.a).toBe(1200);
+    expect(viewScroll.b).toBe(40);
   });
 
   it("resets scroll and the inspector when a view is retargeted", () => {
@@ -167,10 +167,10 @@ describe("view state", () => {
       id: "a",
       network: "libera",
       target: "#hackint",
-      scrollPosition: 0,
       selectedUser: null,
       raw: false,
     });
+    expect(useAppStore.getState().viewScroll.a).toBe(0);
   });
 
   it("leaves the other view alone when one is retargeted", () => {
@@ -179,10 +179,8 @@ describe("view state", () => {
 
     useAppStore.getState().setActive({ network: "libera", target: "#hackint" });
 
-    expect(useAppStore.getState().views.b).toEqual({
-      ...view("b", "libera", "#ctf-ops"),
-      scrollPosition: 40,
-    });
+    expect(useAppStore.getState().views.b).toEqual(view("b", "libera", "#ctf-ops"));
+    expect(useAppStore.getState().viewScroll.b).toBe(40);
   });
 
   it("opens a view and focuses it when there is none", () => {
@@ -226,7 +224,6 @@ describe("splitting", () => {
     expect(views[activeViewId!]).toMatchObject({
       network: "libera",
       target: "#ctf-ops",
-      scrollPosition: 0,
     });
     expect(layout).toEqual({
       type: "split",

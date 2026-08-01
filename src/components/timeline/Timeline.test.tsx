@@ -120,9 +120,10 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
  * `scrollPosition` so it is reading history rather than following. */
 function openSecondView(scrollPosition: number) {
   const id = "second-view";
-  const { views, viewOrder } = useAppStore.getState();
+  const { views, viewScroll, viewOrder } = useAppStore.getState();
   useAppStore.setState({
-    views: { ...views, [id]: { ...views[TEST_VIEW]!, id, scrollPosition } },
+    views: { ...views, [id]: { ...views[TEST_VIEW]!, id } },
+    viewScroll: { ...viewScroll, [id]: scrollPosition },
     viewOrder: [...viewOrder, id],
   });
   return id;

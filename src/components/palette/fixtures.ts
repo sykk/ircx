@@ -100,6 +100,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     typing: {},
     replyTo: {},
     views: {},
+    viewScroll: {},
     viewOrder: [],
     activeViewId: null,
     layout: null,

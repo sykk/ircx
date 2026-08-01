@@ -14,7 +14,8 @@ const { ipcMock, drops } = vi.hoisted(() => ({
   drops: { handler: null as ((event: unknown) => void) | null },
 }));
 
-vi.mock("@/lib/ipc", () => ({
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ipc")>()),
   ipc: ipcMock,
   onIrcxEvent: vi.fn(),
   onFileDrop: (handler: (event: unknown) => void) => {
@@ -176,7 +177,7 @@ describe("what the confirmation says about the file", () => {
     drop(["/a/one.png", "/a/gone.png"]);
 
     expect(await screen.findByText("cannot be read")).toBeTruthy();
-    expect(screen.getByText("1 KB")).toBeTruthy();
+    expect(screen.getByText("1.0 KB")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload" })).toHaveProperty("disabled", true);
   });
 });

@@ -6,7 +6,7 @@ import {
   SelectField,
   TextField,
 } from "@/components/onboarding/fields";
-import { ipc } from "@/lib/ipc";
+import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { UploadMethod, UploadProvider } from "@/types";
 
@@ -286,6 +286,3 @@ function fromProvider(provider: UploadProvider): Draft {
   };
 }
 
-function reasonOr(reason: unknown, fallback: string): string {
-  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
-}

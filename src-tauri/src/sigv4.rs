@@ -79,8 +79,8 @@ pub fn signed(
         .map(|(name, value)| format!("{name}:{value}\n"))
         .collect();
 
-    // The query string is empty for every request this makes: the object name
-    // is in the path, and nothing here uses a presigned URL.
+    // A query string, when one is sent, is signed too — the bucket-policy PUT
+    // in the MinIO walk sends `?policy=`.
     let (path, query) = match path.split_once('?') {
         Some((path, query)) => (path, query),
         None => (path, ""),
@@ -95,7 +95,7 @@ pub fn signed(
         sha256_hex(canonical_request.as_bytes())
     );
 
-    let signature = hex(sign(&signing_key(credentials, day), to_sign.as_bytes()).as_ref());
+    let signature = hex(hmac::sign(&signing_key(credentials, day), to_sign.as_bytes()).as_ref());
     let authorization = format!(
         "{ALGORITHM} Credential={}/{scope}, SignedHeaders={signed_headers}, Signature={signature}",
         credentials.access_key_id
@@ -122,10 +122,6 @@ fn timestamp(at: OffsetDateTime) -> String {
     )
 }
 
-fn sign(key: &hmac::Key, message: &[u8]) -> hmac::Tag {
-    hmac::sign(key, message)
-}
-
 /// The key is the secret walked through date, region and service, so a stolen
 /// signature is good for one day in one region for one service and nothing else.
 fn signing_key(credentials: &Credentials, day: &str) -> hmac::Key {
@@ -133,16 +129,16 @@ fn signing_key(credentials: &Credentials, day: &str) -> hmac::Key {
         hmac::HMAC_SHA256,
         format!("AWS4{}", credentials.secret).as_bytes(),
     );
-    let date = sign(&start, day.as_bytes());
-    let region = sign(
+    let date = hmac::sign(&start, day.as_bytes());
+    let region = hmac::sign(
         &hmac::Key::new(hmac::HMAC_SHA256, date.as_ref()),
         credentials.region.as_bytes(),
     );
-    let service = sign(
+    let service = hmac::sign(
         &hmac::Key::new(hmac::HMAC_SHA256, region.as_ref()),
         SERVICE.as_bytes(),
     );
-    let signing = sign(
+    let signing = hmac::sign(
         &hmac::Key::new(hmac::HMAC_SHA256, service.as_ref()),
         b"aws4_request",
     );

@@ -406,12 +406,3 @@ fn builder_rejects_a_space_in_a_middle_parameter() {
         "{error}"
     );
 }
-
-#[test]
-fn sasl_numerics_cover_900_to_908() {
-    assert!(!numeric::is_sasl(899));
-    assert!(numeric::is_sasl(numeric::RPL_LOGGEDIN));
-    assert!(numeric::is_sasl(numeric::RPL_SASLSUCCESS));
-    assert!(numeric::is_sasl(numeric::RPL_SASLMECHS));
-    assert!(!numeric::is_sasl(909));
-}

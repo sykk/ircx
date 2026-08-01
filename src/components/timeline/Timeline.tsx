@@ -63,7 +63,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Read once: after the restore the scroller owns the position, and reading it
   // as a subscription would fight every scroll event with a stale value.
-  const restoreTo = useRef(useAppStore.getState().views[view]?.scrollPosition ?? 0);
+  const restoreTo = useRef(useAppStore.getState().viewScroll[view] ?? 0);
   const followingRef = useRef(restoreTo.current === 0);
 
   const { messages, unreadFrom } = timeline;

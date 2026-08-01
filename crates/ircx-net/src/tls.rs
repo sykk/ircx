@@ -128,8 +128,10 @@ impl ServerCertVerifier for AcceptAnyCertificate {
 mod tests {
     use super::*;
 
+    /// A smoke test: building either config must not panic, and the vendored
+    /// root store must not be empty. Nothing about the configs is asserted.
     #[test]
-    fn both_verification_modes_build() {
+    fn both_verification_modes_build_without_panicking() {
         assert!(!webpki_roots::TLS_SERVER_ROOTS.is_empty());
         client_config(true);
         client_config(false);

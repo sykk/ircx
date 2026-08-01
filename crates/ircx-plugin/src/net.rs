@@ -28,10 +28,10 @@ pub struct FetchRequest {
 }
 
 /// What the host sends back. `Display` on the error is shown to the plugin, so
-/// it is a sentence rather than a code.
+/// it is a sentence rather than a code. No status field: the host's fetch
+/// fails on anything but success, so a status could only ever say 200.
 #[derive(Debug, Clone, Serialize)]
 pub struct Fetched {
-    pub status: u16,
     pub body: String,
 }
 

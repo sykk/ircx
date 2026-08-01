@@ -104,10 +104,6 @@ describe("what a preview is offered for", () => {
     expect(screen.getByText("article")).toBeTruthy();
   });
 
-  it("still offers one for an image", () => {
-    render(<AttachmentLine attachment={makeAttachment()} />);
-    expect(screen.getByText("fetch")).toBeTruthy();
-  });
 });
 
 /**

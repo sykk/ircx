@@ -1093,11 +1093,18 @@ What is left:
   unreachable through a timestamp. A millisecond is not a unique key and a busy
   channel puts several messages in one, so this loses everything that shares the
   last millisecond of a page. It is invisible below the cap only because a gap
-  that fits in one page has no boundary to fall down. `msgid=` is the selector
-  that does not have this problem: `CHATHISTORY AFTER #flood msgid=<id> 3`
-  answered `0202, 0203, 0204` in the same run, and `server_msgid` is already
-  archived. This is the third defect in this area that only a real server run
-  could produce, after #223's window and #239's poisoned resume point.
+  that fits in one page has no boundary to fall down. This is the third defect
+  in this area that only a real server run could produce, after #223's window
+  and #239's poisoned resume point.
+
+  **Fixed and re-walked on 2026-08-01** (#253). A continuation now resumes on
+  the msgid of the last message in the page that arrived, which names one
+  message where a millisecond names several; a page whose server sent no msgid
+  still resumes on the timestamp. The same 2500-message flood into a fresh
+  channel produced one `AFTER … timestamp=` — the first request, which has only
+  the archive's watermark — followed by nine `AFTER … msgid=`, and archived
+  `line 0001` through `line 1999` with nothing missing between them. The cap
+  still stops the eleventh request and still says so.
 
   **What survives the cap is the oldest of what was missed, not the newest.**
   `AFTER` pages forward, so the reader gets lines 1 to 2000 and loses 2001 to

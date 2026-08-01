@@ -921,13 +921,20 @@ impl SessionState {
     /// `AFTER` answers oldest-first, so a full page is the *start* of what was
     /// missed and the rest is still out there. #239.
     ///
-    /// `from` is the newest message in the page that just arrived, and it has to
-    /// be: the conversation's watermark moves with every message including the
-    /// live ones, and a channel that says anything while a page is in flight
-    /// pushes it to now — which asks for the gap from after the end of it and
-    /// silently skips the rest. Found against a real server, where the second
-    /// request went out stamped later than the whole backlog it was chasing.
-    pub(crate) fn continue_gap(&mut self, target: &str, pages: u32, from: &str) {
+    /// `from` and `msgid` are the last message in the page that just arrived,
+    /// and it has to be: the conversation's watermark moves with every message
+    /// including the live ones, and a channel that says anything while a page is
+    /// in flight pushes it to now — which asks for the gap from after the end of
+    /// it and silently skips the rest. Found against a real server, where the
+    /// second request went out stamped later than the whole backlog it was
+    /// chasing.
+    pub(crate) fn continue_gap(
+        &mut self,
+        target: &str,
+        pages: u32,
+        from: &str,
+        msgid: Option<&str>,
+    ) {
         let key = self.fold(target);
         if pages >= history::GAP_PAGES {
             self.gap_fills.remove(&key);
@@ -946,7 +953,11 @@ impl SessionState {
             return;
         }
         let limit = self.page_limit();
-        let Some(line) = history::request(target, Some(from), limit) else {
+        let resume = history::Resume {
+            timestamp: from,
+            msgid,
+        };
+        let Some(line) = history::request(target, Some(resume), limit) else {
             self.gap_fills.remove(&key);
             return;
         };
@@ -1474,7 +1485,15 @@ impl SessionState {
         }
         let key = self.fold(target);
         let since = self.archived.get(&key).cloned();
-        let Some(line) = history::request(target, since.as_deref(), limit) else {
+        // A timestamp even where the archive holds a msgid for that message: the
+        // watermark can be old enough that the server no longer has the message
+        // it names, and an unknown msgid is a request that answers with nothing
+        // where a timestamp always resolves to a place in the history.
+        let resume = since.as_deref().map(|timestamp| history::Resume {
+            timestamp,
+            msgid: None,
+        });
+        let Some(line) = history::request(target, resume, limit) else {
             return false;
         };
         match since {

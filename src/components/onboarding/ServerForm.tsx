@@ -125,12 +125,19 @@ export function ServerForm({
               onChange({ tls, port: String(tls ? TLS_PORT : PLAIN_PORT) })
             }
           />
-          <CheckField
-            label="Verify the server's certificate"
-            hint="Turn this off only for a server with a self-signed certificate you trust."
-            checked={draft.tlsVerify}
-            onChange={(tlsVerify) => onChange({ tlsVerify })}
-          />
+          {/* There is no certificate to verify on a plaintext connection, and
+              a live control that governs nothing leaves the reader working out
+              which of the two settings their connection is actually under. The
+              value it holds is kept rather than cleared: turning TLS back on
+              should restore the choice they made, not a default. */}
+          {draft.tls && (
+            <CheckField
+              label="Verify the server's certificate"
+              hint="Turn this off only for a server with a self-signed certificate you trust."
+              checked={draft.tlsVerify}
+              onChange={(tlsVerify) => onChange({ tlsVerify })}
+            />
+          )}
         </>
       )}
 

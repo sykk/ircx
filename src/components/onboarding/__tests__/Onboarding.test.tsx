@@ -176,8 +176,10 @@ describe("the advanced path", () => {
     type("Network name", "Example");
     type("Server address", "irc.example.org");
     type("Port", "6667");
-    fireEvent.click(screen.getByLabelText("Connect over TLS"));
+    // Certificate verification first: it is only offered while TLS is on, and
+    // the value it holds survives being switched off.
     fireEvent.click(screen.getByLabelText(/Verify the server's certificate/));
+    fireEvent.click(screen.getByLabelText("Connect over TLS"));
     type("Nickname", "sable");
     type(/Alternate nicknames/, "sable_ sable__");
     type(/Username/, "sbl");
@@ -215,6 +217,18 @@ describe("the advanced path", () => {
   it("moves the port with the TLS switch", () => {
     fireEvent.click(screen.getByLabelText("Connect over TLS"));
     expect(screen.getByLabelText("Port").getAttribute("value")).toBe("6667");
+  });
+
+  /** #226. A plaintext connection has no certificate, and a live control that
+   * governs nothing leaves the reader working out which setting they are under. */
+  it("takes the certificate switch away with TLS, and gives back the same answer", () => {
+    fireEvent.click(screen.getByLabelText(/Verify the server's certificate/));
+    fireEvent.click(screen.getByLabelText("Connect over TLS"));
+    expect(screen.queryByLabelText(/Verify the server's certificate/)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Connect over TLS"));
+    const back = screen.getByLabelText(/Verify the server's certificate/);
+    expect((back as HTMLInputElement).checked).toBe(false);
   });
 
   it("asks for an address before it will connect", () => {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
+import { formatClock } from "@/components/timeline/rows";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { useAppStore } from "@/store";
@@ -151,7 +152,7 @@ function Search({ onJump }: Props) {
               <div className="flex items-baseline gap-2 text-[11px] text-[var(--text-muted)]">
                 <span className="text-[var(--text-secondary)]">{hit.message.sender.nick}</span>
                 <span>{hit.message.target}</span>
-                <span className="ml-auto">{clockTime(hit.message.timestamp)}</span>
+                <span className="ml-auto">{formatClock(hit.message.timestamp)}</span>
               </div>
               <p className="selectable text-[var(--text-primary)]">
                 <Snippet snippet={hit.snippet} />
@@ -207,10 +208,4 @@ export function snippetSegments(snippet: string): { text: string; mark: boolean 
   }
 
   return segments;
-}
-
-function clockTime(timestamp: string): string {
-  const at = new Date(timestamp);
-  if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

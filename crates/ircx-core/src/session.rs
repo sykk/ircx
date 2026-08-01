@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use ircx_ipc::{
@@ -41,15 +41,6 @@ pub enum Action {
     Remember(OpenTarget),
     /// The user left this conversation or closed it; drop it from that set.
     Forget(TargetName),
-    /// Ask the server for what this conversation said while nobody was here.
-    ///
-    /// Where the archive left off is the one thing the request needs and the
-    /// one thing the session does not hold, so the line is finished by whoever
-    /// can read the archive.
-    Backfill {
-        target: TargetName,
-        limit: u32,
-    },
     /// Ask the notification rules about these messages. Pushed after the
     /// `Emit` that draws them, because a rule runs on arrival rather than on
     /// draw and nothing waits for one.
@@ -63,6 +54,15 @@ pub enum Action {
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
+}
+
+/// A conversation that was open when the app last ran, and where its record
+/// left off. The timestamp is what separates coming back to a conversation from
+/// meeting one: everything after it was missed rather than never seen.
+#[derive(Debug, Clone)]
+pub struct Restored {
+    pub target: OpenTarget,
+    pub newest: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +192,15 @@ pub struct SessionState {
     /// per channel and a network has tens of thousands, so they are gathered
     /// and sent once rather than becoming an event and a console line each.
     listing: Vec<ChannelListing>,
+    /// Where each conversation's record left off, folded target to timestamp:
+    /// seeded from the archive at restore and moved on by every message that
+    /// arrives. It is what a `CHATHISTORY` request asks for everything after.
+    pub(crate) archived: HashMap<String, String>,
+    /// Conversations whose outstanding request was for a gap rather than for a
+    /// first page. What comes back for one of these was missed rather than
+    /// merely never seen, which is the whole of the difference to the unread
+    /// count.
+    pub(crate) gap_fills: HashSet<String>,
 }
 
 impl SessionState {
@@ -224,6 +233,8 @@ impl SessionState {
             ping: None,
             lag_ms: None,
             listing: Vec::new(),
+            archived: HashMap::new(),
+            gap_fills: HashSet::new(),
         }
     }
 
@@ -235,11 +246,17 @@ impl SessionState {
     /// dialled, so they are in the sidebar while the network is still
     /// connecting. Channels come back unjoined and marked to rejoin, which is
     /// the path a reconnect already takes.
-    pub fn restore(&mut self, targets: Vec<OpenTarget>) -> Vec<Action> {
-        for target in targets {
-            match target {
-                OpenTarget::Channel(name) => {
-                    let key = self.fold(&name);
+    pub fn restore(&mut self, targets: Vec<Restored>) -> Vec<Action> {
+        for restored in targets {
+            let name = restored.target.name().to_string();
+            let key = self.fold(&name);
+            // Before the match: a query's history is worth asking for too, even
+            // though nothing requests one yet.
+            if let Some(newest) = restored.newest {
+                self.archived.insert(key.clone(), newest);
+            }
+            match restored.target {
+                OpenTarget::Channel(_) => {
                     self.channel_entry(&key, &name).rejoin = true;
                     self.emit_channel(&key);
                 }
@@ -1293,6 +1310,11 @@ impl SessionState {
 
     /// A server that did not grant the capability is asked for nothing, and the
     /// archive stays the whole history there is.
+    ///
+    /// Asking for the gap and asking for a first page are different questions
+    /// with different answers, and the difference is remembered: what fills a
+    /// gap was missed, and what arrives on a first sight of a conversation was
+    /// never anybody's to miss. #223.
     fn backfill(&mut self, target: &str) {
         if !self.caps.is_enabled("draft/chathistory") {
             return;
@@ -1306,10 +1328,20 @@ impl SessionState {
         if limit == 0 {
             return;
         }
-        self.actions.push(Action::Backfill {
-            target: target.to_string(),
-            limit,
-        });
+        let key = self.fold(target);
+        let since = self.archived.get(&key).cloned();
+        let Some(line) = history::request(target, since.as_deref(), limit) else {
+            return;
+        };
+        match since {
+            Some(_) => {
+                self.gap_fills.insert(key);
+            }
+            None => {
+                self.gap_fills.remove(&key);
+            }
+        }
+        self.send_line(line);
     }
 
     fn handle_part(&mut self, message: &Message) {

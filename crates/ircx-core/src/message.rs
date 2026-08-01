@@ -157,6 +157,7 @@ impl SessionState {
             return;
         }
         self.count_towards_unread(&message);
+        self.remember_newest(&message);
         let target = message.target.clone();
         let ask = plugins::worth_raising(std::slice::from_ref(&message), &self.nick);
         self.emit(IrcxEvent::MessagesAppended {
@@ -231,19 +232,76 @@ impl SessionState {
             return;
         };
         let mut run: Vec<ChatMessage> = Vec::new();
-        // A backfill is not an interruption: it is the conversation the user
-        // asked to see, and the messages in it already happened.
         let live = batch.source == MessageSource::Live;
+        // Every conversation this batch touched, so the gap each was filling is
+        // closed once rather than per message.
+        let mut filled: Vec<String> = Vec::new();
         for message in batch.messages {
-            if live {
+            // A first page is not an interruption: it is a conversation the
+            // user has only just met, and none of it was theirs to miss. What
+            // fills a gap is the opposite — it is what they were not here for,
+            // which is what unread means. #223.
+            let missed = !live && self.fills_a_gap(&message.target);
+            // In a replay, only somebody in the conversation adds to what there
+            // is to read — the same sentence the mention gate uses, and for the
+            // same case. Ergo narrates the reader's own comings and goings as
+            // messages from a service, and a badge counting those says five
+            // where three things were said. #221.
+            if live || (missed && self.in_conversation(&message.target, &message.sender.nick)) {
                 self.count_towards_unread(&message);
             }
+            if missed && !filled.iter().any(|target| target == &message.target) {
+                filled.push(message.target.clone());
+            }
+            self.remember_newest(&message);
             if run.last().is_some_and(|last| last.target != message.target) {
                 self.flush_run(&mut run, live);
             }
             run.push(message);
         }
         self.flush_run(&mut run, live);
+        for target in filled {
+            let key = self.fold(&target);
+            self.gap_fills.remove(&key);
+        }
+    }
+
+    /// Whether what is arriving for this conversation is the gap the client
+    /// asked for rather than a first page of one it has never held.
+    fn fills_a_gap(&self, target: &str) -> bool {
+        self.gap_fills.contains(&self.fold(target))
+    }
+
+    /// Whether this nick is in the conversation. A roster that has not arrived
+    /// is not a channel nobody is in, so it answers yes; so does anything that
+    /// is not a channel, a query having only its two ends.
+    fn in_conversation(&self, target: &str, nick: &str) -> bool {
+        let Some(channel) = self.channels.get(&self.fold(target)) else {
+            return true;
+        };
+        channel.members.is_empty() || channel.members.contains_key(&self.fold(nick))
+    }
+
+    /// Moves this conversation's watermark, which is where the next request for
+    /// its gap starts.
+    ///
+    /// Only a message the server stamped moves it. The watermark is a point in
+    /// the server's own record and a client-stamped line is a point in this
+    /// machine's clock; letting one move the other means a fast clock asks for
+    /// the gap from after the messages in it, and they are missed for good.
+    /// Asking from too far back only re-fetches what the archive then refuses.
+    fn remember_newest(&mut self, message: &ChatMessage) {
+        if message.timestamp_is_local {
+            return;
+        }
+        let key = self.fold(&message.target);
+        let newer = self
+            .archived
+            .get(&key)
+            .is_none_or(|held| held.as_str() < message.timestamp.as_str());
+        if newer {
+            self.archived.insert(key, message.timestamp.clone());
+        }
     }
 
     fn flush_run(&mut self, run: &mut Vec<ChatMessage>, live: bool) {

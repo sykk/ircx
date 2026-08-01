@@ -1418,6 +1418,30 @@ mod newest_timestamp {
         );
     }
 
+    /// A line this machine stamped is a point in its clock rather than in the
+    /// server's record, and asking for the gap from after it would step over
+    /// the messages in it. #223.
+    #[test]
+    fn a_client_stamped_line_is_not_where_the_record_left_off() {
+        let store = Store::open_in_memory().unwrap();
+        let mut local = message("b", "#ircx", "2999-01-01T00:00:00Z", "typed here");
+        local.timestamp_is_local = true;
+        store
+            .append_messages(&[
+                message("a", "#ircx", "2026-07-31T09:00:00Z", "said there"),
+                local,
+            ])
+            .unwrap();
+
+        assert_eq!(
+            store
+                .newest_timestamp("libera", "#ircx")
+                .unwrap()
+                .as_deref(),
+            Some("2026-07-31T09:00:00Z")
+        );
+    }
+
     /// The same folding `load_history` does, and for the reason #190 gives:
     /// rows written before it hold whichever casing arrived.
     #[test]

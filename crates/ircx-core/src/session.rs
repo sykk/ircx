@@ -1454,9 +1454,18 @@ impl SessionState {
             self.append(chat);
             if let Some(channel) = self.channels.get_mut(&key) {
                 if let Some(mut member) = channel.members.remove(&old) {
-                    member.nick = new_nick.clone();
+                    let was = std::mem::replace(&mut member.nick, new_nick.clone());
                     let folded = self.isupport.casemapping.fold(&new_nick);
                     channel.members.insert(folded.clone(), member);
+                    // The roster is a list of names, so re-keying it here is
+                    // only half the change: without this the old name is left
+                    // beside the new one, and the part or quit that follows
+                    // names the new one and takes only that away.
+                    self.emit(IrcxEvent::MemberRemoved {
+                        network: self.config.network.clone(),
+                        channel: name.clone(),
+                        nick: was,
+                    });
                     self.emit_member(&key, &folded);
                 }
             }

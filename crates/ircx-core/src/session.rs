@@ -821,6 +821,8 @@ impl SessionState {
             RPL_TOPIC => self.on_topic_reply(&params),
             RPL_NOTOPIC => self.on_no_topic(&params),
             RPL_TOPICWHOTIME => self.on_topic_who_time(&params),
+            RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
+            | RPL_WHOISACCOUNT => self.on_whois(code, &params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(&params),
             RPL_AWAY => self.on_away_reply(&params),
             ERR_NICKNAMEINUSE => self.on_nick_in_use(&params, message),
@@ -1151,6 +1153,80 @@ impl SessionState {
     /// the `time` tag. They were kept as the raw epoch before, so one field
     /// held two formats and whichever drew it would have shown a number half
     /// the time.
+    /// A WHOIS reply, in a sentence rather than in the order it arrived.
+    ///
+    /// Every one of these puts its data before the server's trailing text, so
+    /// the fallback every unhandled numeric takes — join the parameters, append
+    /// the trailing — reads backwards. `330` came out as `syk brandn is logged
+    /// in as`, and `317` as `syk 477 1785604113 seconds idle, signon time`: two
+    /// unlabelled numbers, one of them a unix timestamp.
+    ///
+    /// Written here rather than in `numeric::describe` because the idle reply
+    /// needs the same clock `on_topic_who_time` uses, and because these read as
+    /// a block and are easier to keep consistent in one place.
+    ///
+    /// Anything not listed is left to the server's own words, which is the
+    /// right answer where the trailing text is already the whole sentence:
+    /// `671` says "is using a secure connection" and needs nothing from us.
+    fn on_whois(&mut self, code: u16, params: &[String], message: &Message) {
+        let Some(who) = params.first() else { return };
+        let sentence = match code {
+            RPL_WHOISUSER => {
+                let user = params.get(1).map(String::as_str).unwrap_or("");
+                let host = params.get(2).map(String::as_str).unwrap_or("");
+                let real = params.get(4).map(String::as_str).unwrap_or("");
+                // Servers overwhelmingly set the realname to the nick, and
+                // saying it twice in one line is noise.
+                match real.is_empty() || real.eq_ignore_ascii_case(who) {
+                    true => format!("{who} is {user}@{host}"),
+                    false => format!("{who} is {user}@{host}, calling themselves {real}"),
+                }
+            }
+            RPL_WHOISSERVER => {
+                let server = params.get(1).map(String::as_str).unwrap_or("");
+                let about = params.get(2).map(String::as_str).unwrap_or("");
+                match about.is_empty() {
+                    true => format!("{who} is connected to {server}"),
+                    false => format!("{who} is connected to {server} ({about})"),
+                }
+            }
+            RPL_WHOISIDLE => {
+                let idle = params.get(1).and_then(|s| s.trim().parse::<i64>().ok());
+                let since = params.get(2).and_then(|epoch| rfc3339(epoch));
+                let signed_on = since.as_deref().and_then(readable);
+                match (idle, signed_on) {
+                    (Some(idle), Some(when)) => {
+                        format!(
+                            "{who} has been idle {}, and signed on {when}",
+                            idle_for(idle)
+                        )
+                    }
+                    (Some(idle), None) => format!("{who} has been idle {}", idle_for(idle)),
+                    (None, Some(when)) => format!("{who} signed on {when}"),
+                    (None, None) => return self.server_words(SERVER_TARGET, message),
+                }
+            }
+            RPL_WHOISCHANNELS => {
+                let channels = params.get(1).map(String::as_str).unwrap_or("");
+                if channels.trim().is_empty() {
+                    return;
+                }
+                let listed: Vec<&str> = channels.split_whitespace().collect();
+                format!("{who} is in {}", listed.join(", "))
+            }
+            RPL_WHOISACCOUNT => {
+                let account = params.get(1).map(String::as_str).unwrap_or("");
+                if account.is_empty() {
+                    return self.server_words(SERVER_TARGET, message);
+                }
+                format!("{who} is logged in as {account}")
+            }
+            _ => return self.server_words(SERVER_TARGET, message),
+        };
+        let note = self.chat_message(message, SERVER_TARGET, MessageKind::Server, sentence);
+        self.append(note);
+    }
+
     fn on_topic_who_time(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
         let (name, key) = (name.clone(), self.fold(name));
@@ -2302,6 +2378,18 @@ fn readable(rfc3339: &str) -> Option<String> {
         at.hour(),
         at.minute(),
     ))
+}
+
+/// How long somebody has been quiet, coarsely. A WHOIS says 477 and means
+/// eight minutes; nobody reading it wants the seconds.
+fn idle_for(seconds: i64) -> String {
+    match seconds {
+        s if s < 0 => "an unknown time".to_string(),
+        s if s < 90 => format!("{s} seconds"),
+        s if s < 90 * 60 => format!("{} minutes", s / 60),
+        s if s < 48 * 3600 => format!("{} hours", s / 3600),
+        s => format!("{} days", s / 86_400),
+    }
 }
 
 fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {

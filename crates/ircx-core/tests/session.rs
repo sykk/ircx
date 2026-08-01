@@ -2119,6 +2119,103 @@ fn a_connect_command_ircx_does_not_know_is_still_sent() {
     );
 }
 
+/// The lines are real: a `/whois` on `irc.libera.chat` during the SCRAM walk,
+/// which is where this was noticed. Every one of these puts its data before the
+/// server's trailing text, so joining the parameters reads backwards.
+mod whois {
+    use super::*;
+
+    fn whois(session: &mut Harness) -> Vec<String> {
+        session.events.clear();
+        for line in [
+            ":silver.libera.chat 311 sykk syk ~syk user/brandn * :syk",
+            ":silver.libera.chat 312 sykk syk silver.libera.chat :Virginia, US",
+            ":silver.libera.chat 319 sykk syk :#archlinux #libera @#omgwtf",
+            ":silver.libera.chat 317 sykk syk 477 1785604113 :seconds idle, signon time",
+            ":silver.libera.chat 330 sykk syk brandn :is logged in as",
+        ] {
+            session.feed(line);
+        }
+        session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessagesAppended { messages, .. } => {
+                    Some(messages.iter().map(|m| m.text.clone()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// `330` read `syk brandn is logged in as`, because the account arrives
+    /// before the words about it.
+    #[test]
+    fn says_the_account_after_the_words_about_it() {
+        let mut session = registered("");
+        assert!(
+            whois(&mut session).contains(&"syk is logged in as brandn".to_string()),
+            "{:?}",
+            whois(&mut registered(""))
+        );
+    }
+
+    /// `317` read `syk 477 1785604113 seconds idle, signon time` — two numbers
+    /// with no units, one of them a unix timestamp.
+    #[test]
+    fn says_how_long_and_since_when_in_words() {
+        let mut session = registered("");
+        let said = whois(&mut session);
+        assert!(
+            said.iter()
+                .any(|line| line
+                    == "syk has been idle 7 minutes, and signed on 2026-08-01 at 17:08 UTC"),
+            "{said:?}"
+        );
+    }
+
+    #[test]
+    fn says_who_and_where_rather_than_listing_the_fields() {
+        let said = whois(&mut registered(""));
+        assert!(
+            said.contains(&"syk is ~syk@user/brandn".to_string()),
+            "{said:?}"
+        );
+        assert!(
+            said.contains(&"syk is connected to silver.libera.chat (Virginia, US)".to_string()),
+            "{said:?}"
+        );
+        assert!(
+            said.contains(&"syk is in #archlinux, #libera, @#omgwtf".to_string()),
+            "{said:?}"
+        );
+    }
+
+    /// A realname that is only the nick again is not worth a clause.
+    #[test]
+    fn does_not_say_the_name_twice() {
+        let mut session = registered("");
+        session.events.clear();
+        session.feed(":silver.libera.chat 311 sykk syk ~syk user/brandn * :Sam Y");
+        let said: Vec<String> = session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessagesAppended { messages, .. } => {
+                    Some(messages.iter().map(|m| m.text.clone()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert!(
+            said.contains(&"syk is ~syk@user/brandn, calling themselves Sam Y".to_string()),
+            "{said:?}"
+        );
+    }
+}
+
 #[test]
 fn a_channel_list_arrives_once_rather_than_a_line_at_a_time() {
     let mut session = registered("");

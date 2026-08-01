@@ -3323,7 +3323,7 @@ mod finding_missed_queries {
 }
 
 /// The near side of "while I was away" is where the archive left off when the
-/// client started, and nothing this connection does may move it. Walking #237
+/// client last had a connection, and nothing a live connection does may move it. Walking #237
 /// found the window one millisecond wide: the server's own welcome lands in the
 /// console before anything asks what was missed, and the console counted.
 #[test]
@@ -3545,5 +3545,102 @@ mod what_a_channel_is {
         let session = joined_with("+k mistletoe");
 
         assert_eq!(said(&session), ["#ircx is behind a key."]);
+    }
+}
+
+/// #246. A reconnect is the same question as a relaunch with a smaller gap.
+/// Walking a dropped socket found the near side never moving off the launch, so
+/// every reconnect for the rest of the session asked from process start — a
+/// window that only grows, against a `TARGETS` limit that does not.
+mod coming_back_after_a_drop {
+    use super::*;
+
+    fn asked(session: &Harness) -> Vec<String> {
+        session.sent_starting("CHATHISTORY TARGETS")
+    }
+
+    fn register(session: &mut Harness) {
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+        session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+    }
+
+    fn holding(newest: &str) -> Harness {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Channel("#ircx".into()),
+            newest: Some(newest.into()),
+        }]);
+        session.apply(actions);
+        session
+    }
+
+    #[test]
+    fn the_gap_starts_where_the_connection_ended() {
+        let mut session = holding("2026-07-31T08:00:00.000Z");
+        register(&mut session);
+        // A morning's conversation, then the socket goes away.
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed("@time=2026-07-31T11:00:00.000Z :phrack!p@h PRIVMSG #ircx :before the drop");
+        let actions = session.state.on_disconnected("the connection ended");
+        session.apply(actions);
+        session.sent();
+
+        register(&mut session);
+
+        let asked = asked(&session);
+        assert_eq!(asked.len(), 1);
+        assert!(
+            asked[0].contains("timestamp=2026-07-31T11:00:00.000Z timestamp="),
+            "the gap should start where the connection ended, not where the app did: {}",
+            asked[0]
+        );
+    }
+
+    /// The first connection still asks from where the archive left off, which is
+    /// the case #237 was built for.
+    #[test]
+    fn the_first_connection_still_asks_from_the_archive() {
+        let mut session = holding("2026-07-31T08:00:00.000Z");
+        register(&mut session);
+
+        let asked = asked(&session);
+        assert_eq!(asked.len(), 1);
+        assert!(asked[0].contains("timestamp=2026-07-31T08:00:00.000Z timestamp="));
+    }
+
+    /// A client that has heard nothing the server stamped has nothing to ask
+    /// from: there is no gap, only a server's whole memory.
+    #[test]
+    fn nothing_the_server_stamped_is_nothing_to_ask_from() {
+        let mut session = Harness::new(config());
+        register(&mut session);
+        let actions = session.state.on_disconnected("the connection ended");
+        session.apply(actions);
+        session.sent();
+        register(&mut session);
+
+        assert!(asked(&session).is_empty());
+    }
+
+    /// Once it has heard something, a drop is a gap like any other — even on a
+    /// first run with no archive behind it. With `server-time` negotiated the
+    /// console's own lines are stamped, which is what makes this the ordinary
+    /// case rather than the exception.
+    #[test]
+    fn a_first_run_that_heard_something_asks_after_a_drop() {
+        let mut session = Harness::new(config());
+        register(&mut session);
+        session.feed("@time=2026-07-31T11:00:00.000Z :irc.libera.chat NOTICE sykk :still here");
+        let actions = session.state.on_disconnected("the connection ended");
+        session.apply(actions);
+        session.sent();
+
+        register(&mut session);
+
+        let asked = asked(&session);
+        assert_eq!(asked.len(), 1);
+        assert!(asked[0].contains("timestamp=2026-07-31T11:00:00.000Z timestamp="));
     }
 }

@@ -196,15 +196,20 @@ pub struct SessionState {
     /// seeded from the archive at restore and moved on by every message that
     /// arrives. It is what a `CHATHISTORY` request asks for everything after.
     pub(crate) archived: HashMap<String, String>,
-    /// Where this client's record left off when it started, taken before a
-    /// socket was opened.
+    /// The near side of "while I was away": where this client's record left off
+    /// the last time it had a connection.
     ///
     /// Separate from `archived`, which every arriving message moves — including
-    /// the server's own welcome, which lands in the console before anything
-    /// asks what was missed and would otherwise make the gap a millisecond
-    /// wide. This is the near side of "while I was away" and nothing this
-    /// connection does may move it.
-    restored_at: Option<String>,
+    /// the server's own welcome, which lands in the console before anything asks
+    /// what was missed and would otherwise make the gap a millisecond wide.
+    /// Nothing a live connection does may move it.
+    ///
+    /// It is taken twice: before the first socket is opened, and again when a
+    /// connection ends. A reconnect is the same question as a relaunch with a
+    /// smaller gap, and leaving this at the launch value asked every reconnect
+    /// for the whole session — a window that only grows, against a `TARGETS`
+    /// limit that does not. #246.
+    away_since: Option<String>,
     /// Conversations whose outstanding request was for a gap rather than for a
     /// first page. What comes back for one of these was missed rather than
     /// merely never seen, which is the whole of the difference to the unread
@@ -245,7 +250,7 @@ impl SessionState {
             lag_ms: None,
             listing: Vec::new(),
             archived: HashMap::new(),
-            restored_at: None,
+            away_since: None,
             gap_fills: HashMap::new(),
         }
     }
@@ -275,7 +280,7 @@ impl SessionState {
                 OpenTarget::Query(nick) => self.touch_query(&nick, None),
             }
         }
-        self.restored_at = self.archived.values().max().cloned();
+        self.away_since = self.newest_held();
         self.drain()
     }
 
@@ -353,6 +358,10 @@ impl SessionState {
     }
 
     pub fn on_disconnected(&mut self, reason: &str) -> Vec<Action> {
+        // Where the record left off, taken while it is still true: nothing
+        // arrives between here and the next welcome, so this is the moment the
+        // gap starts.
+        self.away_since = self.newest_held();
         self.reset_connection_state();
         self.set_status(ConnectionStatus::Disconnected);
         self.note(
@@ -851,7 +860,7 @@ impl SessionState {
         if !self.caps.is_enabled("draft/chathistory") {
             return;
         }
-        let Some(since) = self.restored_at.clone() else {
+        let Some(since) = self.away_since.clone() else {
             return;
         };
         if let Some(line) = history::targets(&since, &crate::message::now()) {
@@ -2098,6 +2107,13 @@ impl SessionState {
             network: self.config.network.clone(),
             status,
         });
+    }
+
+    /// The newest thing any conversation holds, the console included — the
+    /// console's last line is a server timestamp too, and at the moment a
+    /// connection ends it is the closest thing to when it ended.
+    fn newest_held(&self) -> Option<String> {
+        self.archived.values().max().cloned()
     }
 
     fn reset_connection_state(&mut self) {

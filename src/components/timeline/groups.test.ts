@@ -242,6 +242,45 @@ describe("one exchange at a time", () => {
     expect(gradeOf(groups, "m3")).toBe("none");
   });
 
+  /**
+   * Found by walking the split. Answering two people in a row, older first,
+   * drew nyx's colour above and below kade's — one group as two stripes with
+   * somebody else's between them, reading as two things that share a hue.
+   *
+   * The rule is one line or it is nothing, so the group that cannot be drawn
+   * is not drawn. It costs nyx and jolt's exchange its mark, and the exchange
+   * it would have crossed keeps its own.
+   */
+  it("does not draw a group whose line another group already crosses", () => {
+    const groups = assign([
+      at(0, "nyx", "mirror is down again"),
+      at(1, "kade", "the build is broken too"),
+      at(2, "jolt", "kade: fixed it, bad cache"),
+      at(3, "jolt", "nyx: mirror is back as well"),
+    ]);
+
+    expect(groups.get("m2")).toBe(groups.get("m1"));
+    expect(gradeOf(groups, "m0")).toBe("none");
+    expect(gradeOf(groups, "m3")).toBe("none");
+  });
+
+  /** A declared message in the way keeps its own group, as it always has. What
+   * changed is that the weaker claim around it does not form — precedence is
+   * untouched, and this is about whether a line can be drawn at all. */
+  it("does not reach around a topic somebody named", () => {
+    // The answer is late enough that the declaration has let go of it, so it
+    // is the addressed pass that has to decide, and the topic is in its way.
+    const groups = assign([
+      at(0, "kade", "standup in 10"),
+      at(1, "phrack", "[parser] tags fail on multiline values"),
+      at(10, "rae", "kade: can't make it"),
+    ]);
+
+    expect(gradeOf(groups, "m1")).toBe("declared");
+    expect(gradeOf(groups, "m0")).toBe("none");
+    expect(gradeOf(groups, "m10")).toBe("none");
+  });
+
   /** Declared is a fact its author typed rather than a guess off one colon, so
    * it still takes anybody who joins the topic. */
   it("lets a named topic take whoever joins it", () => {

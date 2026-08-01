@@ -556,15 +556,64 @@ not a way in either. Declared groups are untouched and still take anybody who
 joins the topic — that grade is a fact its author typed, not a guess off one
 colon.
 
+**The split is walked, and it does not stutter — but looking for it found
+something else.** Somebody saying two things about two conversations in one
+breath was never seen in the live rounds. It is easy to construct, and closing
+the chain made it commoner, so it was walked on 2026-08-01: jolt answers kade
+and then nyx, in two consecutive messages.
+
+The stutter itself is mild. The run is broken in two and jolt's name and time
+are drawn again, which costs one header line and reads as what it is — two
+answers to two people. `rows.ts` already argues for that trade against hiding a
+grouped message inside an ungrouped block, and the walk agrees with it. Nothing
+was changed for it.
+
+What the same fixture showed was worse, and had nothing to do with the split.
+Ordering the two answers oldest-first drew
+
+```text
+#4598c9  nyx     mirror is down again
+#a97cd9  kade    the build is broken too
+#a97cd9  jolt    kade: fixed it, bad cache
+#4598c9  jolt    nyx: mirror is back as well
+```
+
+— nyx's colour above and below kade's. One group as two stripes with somebody
+else's between them, which reads as two things that share a hue rather than as
+the one conversation it was claiming. `groups.ts` argues a group must be one
+unbroken line, "and a line with a neutral block in the middle of it is two
+rules"; a whole other group in the middle is the same fault, larger.
+
+This was not the chain fix's doing. The answer reaches back to a message in no
+group, so the pair rule never fires and the span-fill path is the one that was
+always there. It is as old as the addressed grade and no round had provoked it.
+
+Fixed by refusing to draw a group whose line another group already crosses. The
+line is one line or it is nothing, so nyx and jolt's exchange goes unmarked and
+kade's keeps its own:
+
+```text
+neutral  nyx     mirror is down again
+#a97cd9  kade    the build is broken too
+#a97cd9  jolt    kade: fixed it, bad cache
+neutral  jolt    nyx: mirror is back as well
+```
+
+A declared message in the way is refused the same way now, where the line used
+to be drawn broken around it on the grounds that the topic keeps its own group.
+It still keeps it. What changed is that the weaker claim around it does not
+form, which is about whether a line can be drawn rather than which grade
+outranks.
+
 ### Still open
 
 - **Declared grouping has never been seen outside a fixture.** No other client
   reads a `[topic]` prefix, so nothing types one. It is exercised by tests and
   by the preview harness and by nothing else.
-- **Whether the split reads as stutter.** A run that spans two groups is broken
-  in two, repeating the name and the time. It did not come up in these rounds
-  because it needs somebody to say two things about two conversations in one
-  breath.
+- **What an unmarked exchange costs.** Two exchanges now go unmarked where one
+  crosses the other, and no live round has shown how often a real channel puts
+  them that way round. The count is measurable on a busy channel and has not
+  been measured.
 
 ## The annotator
 

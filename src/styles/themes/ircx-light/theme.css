@@ -68,7 +68,8 @@
 
   --timeline-rail-pad: 16px;
   --timeline-spine-width: 2px;
-  --timeline-spine-gap: 14px;
+  --timeline-spine-gap: 28px;
+  --timeline-rule-gap: 20px;
   --timeline-measure: 595px;
   /* Reserved for the reply and react controls, which appear with the pointer.
      They used to sit over the far end of the measure to avoid taking room; a

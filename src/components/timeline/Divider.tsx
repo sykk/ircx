@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
 import { describeDay, describeSpan, type Seam } from "./rows";
 
+/**
+ * A break across the pane. It carries its own room rather than borrowing the
+ * block gap: a rule set as tightly as the messages either side reads as one
+ * more row of conversation, which is the one thing it is not.
+ */
 function Rule({ tint, children }: { tint: string; children: ReactNode }) {
   return (
     <div
-      className="flex items-center gap-3 py-2"
-      style={{ paddingInline: "var(--timeline-rail-pad)" }}
+      className="flex items-center gap-3"
+      style={{
+        paddingInline: "var(--timeline-rail-pad)",
+        paddingBlock: "var(--timeline-rule-gap)",
+      }}
       role="separator"
     >
       <span className="h-px flex-1" style={{ background: tint }} />

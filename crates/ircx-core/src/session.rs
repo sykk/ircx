@@ -4,7 +4,7 @@ use std::time::Instant;
 use ircx_ipc::{
     Channel, ChannelListing, ChatMessage, ConnectionStatus, Delivery, IrcxEvent, Member,
     MessageKind, MessageSource, Network, NetworkConfig, NetworkId, Query, SaslMechanism,
-    SaslStatus, Severity, TargetName, Topic,
+    SaslStatus, Sender, Severity, TargetName, Topic,
 };
 use ircx_net::TlsInfo;
 use ircx_plugin::ArrivedMessage;
@@ -1484,9 +1484,11 @@ impl SessionState {
         };
         let sender = self.sender_of(message);
         let arguments: Vec<String> = message.params.iter().skip(1).cloned().collect();
-        let text = format!("{} set mode {}", sender.nick, arguments.join(" "));
 
         if !self.isupport.is_channel(&target) {
+            // Without the nick, which the row draws from the sender: a mode on
+            // yourself is noted as your own message.
+            let text = format!("set {}", arguments.join(" "));
             self.note(SERVER_TARGET, MessageKind::Mode, text);
             return;
         }
@@ -1495,6 +1497,12 @@ impl SessionState {
         let mut rest = arguments.iter().skip(1);
         let mut adding = true;
         let mut touched = Vec::new();
+        // What to say, and about whom. A standing on a member is about that
+        // member: the digest counts "1 took ops" and the reader wants to know
+        // who now holds it, not who handed it over. Everything else is about
+        // the channel and stays with whoever changed it.
+        let mut said: Vec<(Sender, String)> = Vec::new();
+        let mut channel_modes = Vec::new();
 
         for letter in arguments
             .first()
@@ -1522,20 +1530,47 @@ impl SessionState {
                                 set_prefix(member, prefix, adding);
                                 touched.push(folded);
                             }
+                            said.push((self.member_sender(nick), standing(letter, adding)));
                         }
-                        _ => self.set_channel_mode(&key, letter, adding),
+                        _ => {
+                            self.set_channel_mode(&key, letter, adding);
+                            channel_modes.push(letter);
+                        }
                     }
                 }
             }
         }
 
-        let chat = self.chat_message(message, &target, MessageKind::Mode, text);
-        self.append(chat);
+        if !channel_modes.is_empty() {
+            said.push((sender.clone(), "changed the channel".to_string()));
+        }
+        // A MODE line carrying nothing this client could read still happened,
+        // and saying so beats drawing the channel changing with no line for it.
+        if said.is_empty() {
+            said.push((sender, format!("set {}", arguments.join(" "))));
+        }
+
+        for (who, what) in said {
+            let mut chat = self.chat_message(message, &target, MessageKind::Mode, what);
+            chat.sender = who;
+            self.append(chat);
+        }
         for folded in touched {
             self.sort_member_prefixes(&key, &folded);
             self.emit_member(&key, &folded);
         }
         self.emit_channel(&key);
+    }
+
+    /// Somebody a mode was set on, named the way the roster names them.
+    fn member_sender(&self, nick: &str) -> Sender {
+        Sender {
+            nick: nick.to_string(),
+            user: None,
+            host: None,
+            account: self.known_account(nick),
+            is_self: self.is_me(nick),
+        }
     }
 
     fn set_channel_mode(&mut self, key: &str, letter: char, adding: bool) {
@@ -2042,6 +2077,26 @@ fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {
         true if !member.prefixes.contains(&prefix) => member.prefixes.push(prefix),
         false => member.prefixes.retain(|held| *held != prefix),
         true => {}
+    }
+}
+
+/// What a membership mode is called, for a reader rather than for a log.
+///
+/// Only the letters `PREFIX` gives a standing for reach this, so the fallback
+/// is a mode this network names and this client has never heard of. Saying
+/// `took +y` is still shorter than the letters it replaces, and still true.
+fn standing(letter: char, adding: bool) -> String {
+    let name = match letter {
+        'q' => "owner".to_string(),
+        'a' => "admin".to_string(),
+        'o' => "ops".to_string(),
+        'h' => "half-ops".to_string(),
+        'v' => "voice".to_string(),
+        other => format!("+{other}"),
+    };
+    match adding {
+        true => format!("took {name}"),
+        false => format!("lost {name}"),
     }
 }
 

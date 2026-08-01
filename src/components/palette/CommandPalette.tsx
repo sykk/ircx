@@ -163,6 +163,9 @@ function Palette() {
       case "plugins":
         store.togglePlugins(true);
         break;
+      case "archive":
+        store.toggleArchive(true);
+        break;
       case "uploads":
         store.toggleUpload(true);
         break;

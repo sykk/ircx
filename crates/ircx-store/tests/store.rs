@@ -1460,3 +1460,131 @@ mod newest_timestamp {
         );
     }
 }
+
+/// #241. The archive had all of this and no way to reach any of it.
+mod archive_controls {
+    use super::*;
+
+    fn stocked() -> Store {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[
+                message("a", "#ircx", "2026-07-31T09:00:00Z", "morning"),
+                message("b", "#ircx", "2026-07-31T09:01:00Z", "and again"),
+                message("c", "phrack", "2026-07-31T09:02:00Z", "a private word"),
+            ])
+            .unwrap();
+        store
+            .set_draft("libera", "#ircx", "half a thought")
+            .unwrap();
+        store
+    }
+
+    #[test]
+    fn it_says_how_much_is_kept() {
+        let store = stocked();
+        let size = store.archive_size().unwrap();
+
+        assert_eq!(size.messages, 3);
+        assert!(size.bytes > 0, "a stocked archive weighs something");
+    }
+
+    #[test]
+    fn everything_exports_every_conversation_oldest_first() {
+        let store = stocked();
+        let mut out = Vec::new();
+        store.export_everything(&mut out).unwrap();
+
+        let lines: Vec<&str> = std::str::from_utf8(&out).unwrap().lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].contains("morning"));
+        assert!(lines[2].contains("a private word"));
+    }
+
+    /// Somebody clearing what was said is not asking to be logged out.
+    #[test]
+    fn deleting_everything_keeps_the_networks() {
+        let store = stocked();
+        store
+            .save_network(&NetworkConfig {
+                id: None,
+                name: "Libera".into(),
+                host: "irc.libera.chat".into(),
+                port: 6697,
+                tls: true,
+                tls_verify: true,
+                nick: "sable".into(),
+                alt_nicks: vec![],
+                username: "sable".into(),
+                realname: "sable".into(),
+                sasl: None,
+                connect_commands: vec![],
+                autojoin: vec![],
+                auto_connect: true,
+            })
+            .unwrap();
+
+        store.delete_everything().unwrap();
+
+        assert_eq!(store.archive_size().unwrap().messages, 0);
+        assert_eq!(store.list_networks().unwrap().len(), 1);
+    }
+
+    /// The full-text index hangs off the messages table by trigger, so a search
+    /// after a wipe has to come back empty rather than pointing at rows that
+    /// are gone.
+    #[test]
+    fn deleting_everything_empties_the_search_too() {
+        let store = stocked();
+        store.delete_everything().unwrap();
+
+        let hits = store
+            .search(&SearchRequest {
+                query: "morning".into(),
+                network: None,
+                target: None,
+                limit: 20,
+            })
+            .unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn deleting_everything_takes_the_drafts_with_it() {
+        let store = stocked();
+        store.delete_everything().unwrap();
+
+        assert_eq!(store.get_draft("libera", "#ircx").unwrap(), None);
+    }
+}
+
+/// A delete that leaves the words in the file's free pages is not what somebody
+/// clearing an archive asked for, and the size they are shown would still count
+/// them.
+#[test]
+fn deleting_everything_gives_the_space_back() {
+    let store = Store::open_in_memory().unwrap();
+    let bulk: Vec<ChatMessage> = (0..2000)
+        .map(|i| {
+            message(
+                &format!("m{i}"),
+                "#ircx",
+                &format!("2026-07-31T09:{:02}:{:02}Z", i / 60 % 60, i % 60),
+                "a line with enough words in it to take up room on the disk",
+            )
+        })
+        .collect();
+    store.append_messages(&bulk).unwrap();
+    let full = store.archive_size().unwrap().bytes;
+
+    store.delete_everything().unwrap();
+    let empty = store.archive_size().unwrap().bytes;
+
+    assert_eq!(store.archive_size().unwrap().messages, 0);
+    // Not to nothing: the schema and the full-text structures are still there,
+    // and an empty archive is allowed to weigh what an empty archive weighs.
+    assert!(
+        empty * 2 < full,
+        "an emptied archive should not still weigh what it did: {empty} against {full}"
+    );
+}

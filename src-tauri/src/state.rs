@@ -26,6 +26,11 @@ const DEFAULT_QUIT: &str = "ircx";
 
 pub struct App {
     store: Arc<Store>,
+    /// How many messages the retention window took on this launch. Held rather
+    /// than announced: pruning happens before any network exists, so there is
+    /// no console to say it in, and the archive sheet is where somebody who set
+    /// a window goes looking for its effect.
+    pruned: Mutex<u64>,
     events: mpsc::Sender<IrcxEvent>,
     /// `None` when the plugin library could not be opened. The client runs
     /// without it: an unreadable folder is not a reason to lose the client.
@@ -45,6 +50,7 @@ impl App {
     ) -> Self {
         Self {
             store,
+            pruned: Mutex::new(0),
             events,
             plugins,
             networks: Mutex::new(HashMap::new()),
@@ -58,6 +64,7 @@ impl App {
     /// Loads every configured network into the frontend and dials the ones the
     /// user asked to start with.
     pub async fn start(&self) {
+        self.prune_the_archive();
         let configs = match self.store.list_networks() {
             Ok(configs) => configs,
             Err(error) => {
@@ -94,6 +101,29 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Applies whatever retention windows are set, before anything is drawn.
+    ///
+    /// A window is an instruction and acting on it every launch is what the
+    /// setting means. It is said rather than done quietly: the first time an
+    /// archive shrinks, somebody should be able to find out why, and a count
+    /// nobody reads costs nothing.
+    fn prune_the_archive(&self) {
+        match self.store.prune() {
+            Ok(removed) => {
+                if let Ok(mut held) = self.pruned.lock() {
+                    *held = removed;
+                }
+            }
+            Err(error) => warn!(%error, "could not apply the archive's retention window"),
+        }
+    }
+
+    /// How many messages the last launch removed, for the one screen that
+    /// asked for the window in the first place.
+    pub fn pruned_on_launch(&self) -> u64 {
+        self.pruned.lock().map(|held| *held).unwrap_or(0)
     }
 
     /// Every configured network, live state where there is a session and a

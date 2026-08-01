@@ -194,6 +194,10 @@ pub fn run() {
             commands::install_plugin,
             commands::set_plugin_grants,
             commands::remove_plugin,
+            commands::archive_summary,
+            commands::set_retention,
+            commands::export_archive,
+            commands::delete_archive,
         ])
         .setup(|app| {
             let store = Arc::new(open_store(app.handle())?);

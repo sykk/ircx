@@ -57,6 +57,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     setup: null,
     pluginsOpen: false,
     uploadOpen: false,
+    archiveOpen: false,
     appearanceOpen: false,
     plugins: [],
     pluginsUnavailable: null,

@@ -4,6 +4,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type {
+  ArchiveScope,
+  ArchiveSummary,
   AppSnapshot,
   Attachment,
   ChatMessage,
@@ -125,6 +127,14 @@ export const ipc = {
 
   listMembers: (network: string, channel: string) =>
     invoke<Member[]>("list_members", { network, channel }),
+  archiveSummary: (network: string | null, target: string | null) =>
+    invoke<ArchiveSummary>("archive_summary", { network, target }),
+  setRetention: (network: string, target: string | null, days: number | null) =>
+    invoke<void>("set_retention", { network, target, days }),
+  exportArchive: (scope: ArchiveScope, path: string) =>
+    invoke<number>("export_archive", { scope, path }),
+  deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
+
   loadHistory: (req: HistoryRequest) => invoke<ChatMessage[]>("load_history", { req }),
   searchHistory: (req: SearchRequest) => invoke<SearchHit[]>("search_history", { req }),
   markRead: (network: string, target: string) =>

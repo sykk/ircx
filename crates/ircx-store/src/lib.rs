@@ -33,6 +33,14 @@ pub struct Store {
     credentials: Box<dyn CredentialStore>,
 }
 
+/// What the archive weighs, for a screen that would otherwise ask somebody to
+/// trust a retention setting they cannot see the effect of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArchiveSize {
+    pub messages: u64,
+    pub bytes: u64,
+}
+
 /// A conversation that was open when the app last ran. The kind travels with
 /// the name because a name on its own cannot be read as one or the other
 /// before the server has said what a channel looks like.
@@ -518,6 +526,27 @@ impl Store {
         Ok(())
     }
 
+    /// What rule is written down for this conversation, or for the network when
+    /// `target` is `None`.
+    ///
+    /// Two levels of absence, and they mean different things: no row at all is
+    /// "nothing said about this", and a row holding `NULL` is "keep forever",
+    /// which as an override beats the network's own window.
+    pub fn retention(
+        &self,
+        network: &str,
+        target: Option<&str>,
+    ) -> Result<Option<Option<u32>>, StoreError> {
+        self.conn()
+            .query_row(
+                "SELECT days FROM retention WHERE network = ?1 AND target = ?2",
+                params![network, target.unwrap_or(DEFAULT_TARGET)],
+                |row| row.get::<_, Option<u32>>(0),
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
     /// Deletes everything past its retention window and returns how many
     /// messages went. A no-op when nothing has expired, so it is safe on
     /// every startup.
@@ -568,6 +597,68 @@ impl Store {
             out.write_all(line.as_bytes())?;
             out.write_all(b"\n")?;
         }
+        Ok(())
+    }
+
+    /// How much conversation is on disk: how many messages, and what the
+    /// database costs to keep.
+    ///
+    /// The size is the file's rather than the messages': indexes and the
+    /// full-text table are most of what an archive weighs, and a number that
+    /// left them out would be wrong in the direction that matters.
+    pub fn archive_size(&self) -> Result<ArchiveSize, StoreError> {
+        let conn = self.conn();
+        let messages: u64 =
+            conn.query_row("SELECT count(*) FROM messages", [], |row| row.get(0))?;
+        let pages: u64 = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+        let page_size: u64 = conn.query_row("PRAGMA page_size", [], |row| row.get(0))?;
+        Ok(ArchiveSize {
+            messages,
+            bytes: pages * page_size,
+        })
+    }
+
+    /// Every conversation, oldest first, in the format `export_target` writes.
+    pub fn export_everything(&self, out: &mut dyn Write) -> Result<(), StoreError> {
+        let sql = format!(
+            "SELECT {columns}
+             FROM messages m
+             ORDER BY m.timestamp, m.id",
+            columns = message::COLUMNS,
+        );
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let mut message = message::from_row(row)?;
+            message::attach_reactions(&conn, std::slice::from_mut(&mut message))?;
+            let line = serde_json::to_string(&message)?;
+            out.write_all(line.as_bytes())?;
+            out.write_all(b"\n")?;
+        }
+        Ok(())
+    }
+
+    /// Every message this client has kept, and everything hanging off one.
+    ///
+    /// Networks, credentials and which conversations were open are left alone:
+    /// this is the archive rather than the account, and somebody clearing what
+    /// was said is not asking to be logged out.
+    pub fn delete_everything(&self) -> Result<(), StoreError> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        // Messages first: the FTS triggers hang off that table, and the rest
+        // are rows keyed by a msgid that will no longer name anything.
+        for table in ["messages", "drafts", "reactions", "annotations", "raised"] {
+            tx.execute(&format!("DELETE FROM {table}"), [])?;
+        }
+        tx.commit()?;
+        // A delete leaves the rows in the file's free pages, where anybody
+        // reading the bytes still finds them and where the size on disk still
+        // counts them. Somebody clearing an archive means the words to be gone,
+        // so the file is rewritten without them. Outside the transaction
+        // because SQLite will not vacuum inside one.
+        conn.execute_batch("VACUUM")?;
         Ok(())
     }
 

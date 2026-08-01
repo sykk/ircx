@@ -7,6 +7,7 @@ import { ChannelList } from "@/components/channels";
 import { AppearanceSheet } from "@/components/appearance";
 import { PluginSheet } from "@/components/plugins";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
+import { ArchiveSheet } from "@/components/archive/ArchiveSheet";
 import { UploadSheet } from "@/components/uploads/UploadSheet";
 import { AppShell } from "@/components/shell/AppShell";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
@@ -58,6 +59,7 @@ export function App() {
       <PluginSheet />
       <AppearanceSheet />
       <UploadSheet />
+      <ArchiveSheet />
       <DropToUpload />
       <ChannelList />
     </>

@@ -32,6 +32,7 @@ export type CandidateAction =
   | { type: "openSetup"; network: string }
   | { type: "plugins" }
   | { type: "uploads" }
+  | { type: "archive" }
   | { type: "appearance" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
@@ -331,6 +332,11 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Upload provider",
     detail: "Where files go before their link is sent",
     action: { type: "uploads" },
+  },
+  {
+    label: "Archive",
+    detail: "How long messages are kept, and how to export or delete them",
+    action: { type: "archive" },
   },
   {
     label: "Appearance",

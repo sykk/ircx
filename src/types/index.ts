@@ -11,6 +11,8 @@
 export const SERVER_TARGET = "*";
 
 export type { AppSnapshot } from "./generated/AppSnapshot";
+export type { ArchiveScope } from "./generated/ArchiveScope";
+export type { ArchiveSummary } from "./generated/ArchiveSummary";
 export type { Attachment } from "./generated/Attachment";
 export type { AttachmentPreview } from "./generated/AttachmentPreview";
 export type { Channel } from "./generated/Channel";

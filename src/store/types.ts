@@ -118,6 +118,7 @@ export interface AppState {
   /** The upload provider sheet, which is one for the whole client rather than
    * one per network: it is storage, not a connection. */
   uploadOpen: boolean;
+  archiveOpen: boolean;
   /** The network whose channel list is on screen, or null. Held rather than a
    * boolean because a list belongs to the network that answered it. */
   channelsOpen: string | null;

@@ -1588,3 +1588,69 @@ fn deleting_everything_gives_the_space_back() {
         "an emptied archive should not still weigh what it did: {empty} against {full}"
     );
 }
+
+/// #248. A rename moves everything else about a conversation; the draft lives
+/// on disk and was the one piece left behind.
+mod a_draft_follows_the_rename {
+    use super::*;
+
+    #[test]
+    fn the_words_go_with_the_person() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .set_draft("libera", "oldname", "half a thought")
+            .unwrap();
+
+        store.move_draft("libera", "oldname", "newname").unwrap();
+
+        assert_eq!(
+            store.get_draft("libera", "newname").unwrap().as_deref(),
+            Some("half a thought")
+        );
+        assert_eq!(store.get_draft("libera", "oldname").unwrap(), None);
+    }
+
+    #[test]
+    fn a_conversation_with_nothing_written_moves_nothing() {
+        let store = Store::open_in_memory().unwrap();
+
+        store.move_draft("libera", "oldname", "newname").unwrap();
+
+        assert_eq!(store.get_draft("libera", "newname").unwrap(), None);
+    }
+
+    /// Two drafts meeting is the newer one winning, and the older one going
+    /// rather than sitting under a name somebody else now holds.
+    #[test]
+    fn what_is_already_under_the_new_name_stands() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .set_draft("libera", "oldname", "the older words")
+            .unwrap();
+        store
+            .set_draft("libera", "newname", "the newer words")
+            .unwrap();
+
+        store.move_draft("libera", "oldname", "newname").unwrap();
+
+        assert_eq!(
+            store.get_draft("libera", "newname").unwrap().as_deref(),
+            Some("the newer words")
+        );
+        assert_eq!(store.get_draft("libera", "oldname").unwrap(), None);
+    }
+
+    #[test]
+    fn another_networks_draft_is_left_alone() {
+        let store = Store::open_in_memory().unwrap();
+        store.set_draft("libera", "oldname", "here").unwrap();
+        store.set_draft("oftc", "oldname", "elsewhere").unwrap();
+
+        store.move_draft("libera", "oldname", "newname").unwrap();
+
+        assert_eq!(
+            store.get_draft("oftc", "oldname").unwrap().as_deref(),
+            Some("elsewhere")
+        );
+    }
+}

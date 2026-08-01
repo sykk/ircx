@@ -598,6 +598,7 @@ impl Context {
                             active,
                             ..
                         } => self.record_reaction(message, nick, emoji, *active),
+                        IrcxEvent::QueryRenamed { from, to, .. } => self.move_draft(from, to),
                         _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
@@ -804,6 +805,15 @@ impl Context {
     fn persist(&self, messages: &[ChatMessage]) {
         if let Err(error) = self.store.append_messages(messages) {
             warn!(%error, "could not write messages to the archive");
+        }
+    }
+
+    /// The words somebody was part way through, moved with the person they were
+    /// for. Everything else about a renamed conversation moves in the frontend;
+    /// this is the one piece that lives on disk.
+    fn move_draft(&self, from: &str, to: &str) {
+        if let Err(error) = self.store.move_draft(&self.network, from, to) {
+            warn!(%error, "could not move a draft to the name its conversation now has");
         }
     }
 

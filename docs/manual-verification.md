@@ -1177,27 +1177,36 @@ What that leaves:
   before a window exists, so the client starts and vanishes. The sentence was
   already written for a person and had nowhere to be read.
 
-  Now: exit 1, no panic, and the four lines `say_why_and_quit` writes. Somebody
-  who launched from a terminal is told what happened, that their history is
-  intact, and what to do. **Somebody who launched from a desktop menu is still
-  told nothing**, and that half is not fixed.
+  Now: no panic, a dialog naming the version and saying the history is intact,
+  and the same four lines on stderr for whoever is reading a log rather than a
+  screen. `OK` ends the client. The supported path is unchanged — the same
+  profile with the version put back starts normally.
 
-- **A dialog at startup, which is what that half needs.** Two shapes were walked
-  on 2026-08-01 and neither drew anything on screen:
+- **A dialog at startup is walked** on 2026-08-01, and it took three attempts.
+  The two that failed are worth more than the one that worked, because both
+  look correct and neither draws anything:
 
-  - `app.dialog()…blocking_show()` in the setup hook. The process stayed alive
-    and no window appeared: setup runs before the event loop, and a dialog with
-    no loop to pump it never reaches the screen. A silent hang is worse than the
-    panic it replaced.
-  - Handing it to the loop with `.show(callback)`, closing the config-built
-    window first so a client that cannot reach its backend is not left behind
-    the dialog. Also drew nothing. The likely reason is the closing: the window
-    is the only one, so closing it asks the loop to exit before the dialog is
-    up. It also panicked on the way out — `state()` before `manage()` — because
-    the exit handler reaches for an `App` that a failed start never managed.
+  - `app.dialog()…blocking_show()` in the setup hook. The process stays alive
+    and nothing appears. Setup runs before the event loop, and a dialog with no
+    loop to pump it never reaches the screen — a silent hang, which is worse
+    than the panic it was replacing.
+  - `.show(callback)`, handed to the loop, with the config-built window closed
+    first so a client that cannot reach its backend is not left sitting behind
+    the dialog. Also nothing. Closing is the reason: it is the only window, so
+    closing it asks the loop to exit before the dialog is up. It panicked on
+    the way out too — `state()` before `manage()` — because the exit handler
+    reaches for an `App` that a failed start never managed.
+  - `.show(callback)` with the window **hidden** rather than closed. The loop
+    stays alive to draw the dialog, and there is nothing visible behind it.
 
-  The shape not tried is showing it over the surviving window. Whoever tries it
-  needs an answer for what the window shows behind, and for that exit handler.
+  Confirmed by the owner looking at it: the dialog draws, reads as intended,
+  and `OK` closes the client with nothing left behind and no panic. The exit
+  handler is guarded now, so a start that never managed an `App` does not reach
+  for one on the way out.
+
+  What no test covers: all of it. There is no way to assert a native dialog
+  drew, so the only evidence this works is somebody looking at it, and the only
+  evidence it keeps working will be somebody looking again.
 - **The first four migrations.** Only the fifth has been recorded as run against
   real data. The others presumably were, at some point, by whoever was running
   the client at the time; nothing says so.

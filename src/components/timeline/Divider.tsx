@@ -31,6 +31,22 @@ function clauses(seam: Seam): string {
   return `${size} · ${seam.mentions} of them mention${seam.mentions === 1 ? "s" : ""} you`;
 }
 
+/**
+ * Where the server's own record of a conversation starts and stops.
+ *
+ * In the date rule's grey rather than the unread seam's colour: this is a fact
+ * about where the words came from, not something the reader has to act on. What
+ * it buys is that a service replaying somebody's comings and goings as ordinary
+ * messages reads as a transcript rather than as a person in the room. #221.
+ */
+export function HistoryDivider({ opens }: { opens: boolean }) {
+  return (
+    <Rule tint="var(--text-faint)">
+      {opens ? "From the server's history" : "Live from here"}
+    </Rule>
+  );
+}
+
 /** The size of what is about to be read is the part a skim cannot recover. */
 export function UnreadDivider({ seam }: { seam: Seam }) {
   return (

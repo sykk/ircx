@@ -39,7 +39,10 @@ export type TimelineRow =
     }
   | { kind: "system"; id: string; messages: ChatMessage[] }
   | { kind: "date"; id: string; at: string }
-  | { kind: "unread"; id: string; seam: Seam };
+  | { kind: "unread"; id: string; seam: Seam }
+  /** Where what the server replayed begins, and where it gives way to what
+   * this client heard said. */
+  | { kind: "history"; id: string; opens: boolean };
 
 /** What the reader missed, stated at the unread rule rather than left to a skim. */
 export interface Seam {
@@ -147,6 +150,7 @@ export function buildRows(
   unreadFrom: string | null,
   ownNick: string | null = null,
   groups: ReadonlyMap<string, Group> = new Map(),
+  present?: ReadonlySet<string>,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
   let open: Extract<TimelineRow, { kind: "block" | "system" }> | null = null;
@@ -154,6 +158,7 @@ export function buildRows(
   // The group the block above belonged to. A group spans several author blocks,
   // so whether this one opens it cannot be read off the block alone.
   let openGroupId: string | null = null;
+  let inHistory = false;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!;
@@ -170,10 +175,32 @@ export function buildRows(
       rows.push({ kind: "date", id: `d:${day}`, at: message.timestamp });
     }
 
+    // Under the date and above the seam: the day is the outermost fact about a
+    // message and the seam is the innermost, being the one thing the reader has
+    // to act on.
+    //
+    // A replayed run is bounded rather than tinted, for the reason the date
+    // rule is: the boundary is the fact, and marking every message inside it
+    // says the same thing once per line. Only what the server replayed this
+    // session is bounded — a message read back from the archive is
+    // `localArchive`, so the rule does not come back on the next launch to
+    // relitigate history the reader has already caught up on.
+    const history = message.source === "serverHistory";
+    if (history !== inHistory) {
+      inHistory = history;
+      open = null;
+      openGroupId = null;
+      rows.push({ kind: "history", id: `h:${message.id}`, opens: history });
+    }
+
     if (unreadFrom !== null && message.id === unreadFrom) {
       open = null;
       openGroupId = null;
-      rows.push({ kind: "unread", id: "unread", seam: measureSeam(messages.slice(i), ownNick) });
+      rows.push({
+        kind: "unread",
+        id: "unread",
+        seam: measureSeam(messages.slice(i), ownNick, present),
+      });
     }
 
     const system = isSystemKind(message.kind);
@@ -220,7 +247,11 @@ export function rowMessages(row: TimelineRow): readonly ChatMessage[] {
 }
 
 /** Presence is not counted: the seam measures what people said. */
-function measureSeam(unread: readonly ChatMessage[], ownNick: string | null): Seam {
+function measureSeam(
+  unread: readonly ChatMessage[],
+  ownNick: string | null,
+  present?: ReadonlySet<string>,
+): Seam {
   const speech = unread.filter((m) => !isSystemKind(m.kind));
   const first = speech[0];
   const last = speech[speech.length - 1];
@@ -228,7 +259,7 @@ function measureSeam(unread: readonly ChatMessage[], ownNick: string | null): Se
     messages: speech.length,
     people: new Set(speech.map((m) => m.sender.nick)).size,
     spanMs: first && last ? Math.max(0, Date.parse(last.timestamp) - Date.parse(first.timestamp)) : 0,
-    mentions: speech.filter((m) => isHighlight(m, ownNick)).length,
+    mentions: speech.filter((m) => isHighlight(m, ownNick, present)).length,
   };
 }
 

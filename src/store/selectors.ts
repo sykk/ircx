@@ -174,8 +174,33 @@ export function splitOnMention(text: string, nick: string | null): TextRun[] {
   return runs;
 }
 
-export function isHighlight(message: ChatMessage, ownNick: string | null): boolean {
+/**
+ * Whether this message wants the reader's attention.
+ *
+ * `present` is who is in the conversation, folded. Somebody who is not in it
+ * cannot be addressing anyone in it, which is what silences a service narrating
+ * the reader's own comings and goings: ergo replays those as ordinary messages
+ * from `HistServ`, whose text is `<you> joined the channel`, and the name in it
+ * is the reader's own. #222.
+ *
+ * The cost is stated rather than hidden: somebody who named the reader and has
+ * since left loses the mark, though not the message. The alternative was
+ * recognising narration by its shape, which is a guess about English.
+ *
+ * An empty set is a conversation whose roster has not arrived rather than one
+ * nobody is in — the reader is always in their own channel — so it does not
+ * gate. Queries pass no set at all: the two people in one are the only two who
+ * can speak.
+ */
+export function isHighlight(
+  message: ChatMessage,
+  ownNick: string | null,
+  present?: ReadonlySet<string>,
+): boolean {
   if (!ownNick || message.sender.isSelf) return false;
+  if (present && present.size > 0 && !present.has(message.sender.nick.toLowerCase())) {
+    return false;
+  }
   return mentions(message.text, ownNick);
 }
 

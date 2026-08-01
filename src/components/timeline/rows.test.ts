@@ -474,3 +474,80 @@ describe("a run that spans two groups", () => {
     expect(rows).toHaveLength(1);
   });
 });
+
+/**
+ * #221. A message the server replayed is bounded rather than tinted, so a
+ * service narrating somebody's comings and goings reads as a transcript.
+ */
+describe("the history boundary", () => {
+  const replayed = (id: string, text: string): ChatMessage =>
+    makeMessage({ id, text, source: "serverHistory" });
+
+  function kinds(rows: TimelineRow[]): string[] {
+    return rows.map((row) => (row.kind === "history" ? (row.opens ? "opens" : "closes") : row.kind));
+  }
+
+  it("opens where the replay starts and closes where it gives way", () => {
+    const rows = buildRows(
+      [
+        makeMessage({ id: "a", text: "live" }),
+        replayed("b", "replayed"),
+        makeMessage({ id: "c", text: "live again" }),
+      ],
+      null,
+    );
+
+    expect(kinds(rows)).toEqual(["date", "block", "opens", "block", "closes", "block"]);
+  });
+
+  /** A rule under nothing states a boundary the reader can already see. */
+  it("draws no closing rule when the replay is the last thing there is", () => {
+    const rows = buildRows([makeMessage({ id: "a", text: "live" }), replayed("b", "replayed")], null);
+
+    expect(kinds(rows)).toEqual(["date", "block", "opens", "block"]);
+  });
+
+  it("opens once for a run rather than once per message", () => {
+    const rows = buildRows([replayed("a", "one"), replayed("b", "two"), replayed("c", "three")], null);
+
+    expect(kinds(rows).filter((kind) => kind === "opens")).toHaveLength(1);
+  });
+
+  it("bounds each replay separately when live messages sit between them", () => {
+    const rows = buildRows(
+      [replayed("a", "one"), makeMessage({ id: "b", text: "live" }), replayed("c", "two")],
+      null,
+    );
+
+    expect(kinds(rows)).toEqual(["date", "opens", "block", "closes", "block", "opens", "block"]);
+  });
+
+  /** What comes back out of the archive is `localArchive`, so the rule does not
+   * return on the next launch to relitigate history already caught up on. */
+  it("leaves a conversation read back from the archive unmarked", () => {
+    const rows = buildRows(
+      [
+        makeMessage({ id: "a", text: "one", source: "localArchive" }),
+        makeMessage({ id: "b", text: "two", source: "localArchive" }),
+      ],
+      null,
+    );
+
+    expect(kinds(rows)).toEqual(["date", "block"]);
+  });
+
+  /** The rule is a break across the pane, and a run that continued past it
+   * would claim the replay and the live conversation are one person talking. */
+  it("breaks the run it interrupts", () => {
+    const rows = buildRows(
+      [
+        makeMessage({ id: "a", nick: "phrack", text: "before" }),
+        replayed("b", "replayed"),
+        makeMessage({ id: "c", nick: "phrack", text: "after" }),
+      ],
+      null,
+    );
+
+    expect(rows.filter((row) => row.kind === "block")).toHaveLength(3);
+  });
+});

@@ -963,6 +963,14 @@ That run found four defects in how a backfill is drawn rather than in whether it
 arrives — #221 to #224 — of which the root is that nothing on screen separates
 a replayed message from a live one.
 
+**#221 and #222 are fixed and re-walked** on 2026-08-01 against the same ergo. A
+replayed run is bounded by *From the server's history* and *Live from here*, and
+a service narrating the reader's own join no longer claims to have addressed
+them. The case worth watching is the one that survived: `phrack: sable: can you
+look at the fixture race?`, said in the gap by somebody still in the channel, is
+still marked and still tinted. The gate is on who is in the conversation, not on
+where the message came from.
+
 What is left:
 - **A gap wider than the server's limit.** A full page and a truncated page are
   the same page, so the hole is invisible to the client and would show as a

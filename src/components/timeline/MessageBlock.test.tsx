@@ -22,6 +22,7 @@ function block(over: Partial<Parameters<typeof MessageBlock>[0]> = {}) {
       flashId={null}
       group={null}
       opensGroup={false}
+      present={new Set()}
       {...over}
     />,
   );

@@ -972,13 +972,25 @@ the only reason it is worth anything: it failed there, with `the repaired
 plugin was never asked again — the strikes outlived the install`. A step that
 passes either way says nothing about the mechanism it names.
 
-Still not walked:
+**The half above the core is walked too**, by the owner in the assembled
+application on 2026-08-01, against local `ergo` with a second client in
+`#test`. The ergo run sends `PluginChanged` itself; this is the path where the
+plugins sheet sends it.
 
-- **The half above the core.** The run sends `PluginChanged` itself. What sends
-  it in the application is `plugin_changed` in `src-tauri/src/state.rs`, reached
-  by installing through the plugins sheet, and that is a window nothing here can
-  drive. So the strikes, the drop, the repair and the return are joined over a
-  real connection; the click that starts them is not.
+A plugin written to throw was installed through the folder picker and granted
+the channel. Three messages, three seconds apart — spaced because a strike is
+counted per batch of arrivals, and three lines landing together count once. The
+console said the plugin had been dropped. A repaired build was then installed
+over it, granted again, and the next message came back annotated, with no
+restart.
+
+So the whole path is joined: the click, the grant, the strikes, the drop, the
+repair and the return.
+
+Worth keeping for the next run of this: installing over a plugin resets its
+grants, so a repaired plugin that is not granted again annotates nothing and
+looks exactly like strikes that outlived the install. The two are told apart by
+whether the sheet shows the channel granted, and nothing on the screen says so.
 
 ## The topic of a channel you have joined
 

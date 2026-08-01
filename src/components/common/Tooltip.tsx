@@ -1,6 +1,36 @@
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 
+/** How close to the window edge the box may sit before it is pushed back in. */
+const EDGE = 8;
+
+/**
+ * How far off centre the box has to move to sit inside the window, given where
+ * centring put it. Positive moves it right, negative left. A box wider than the
+ * window it is in cannot satisfy both edges, and this answers for the left one,
+ * because that is where a line of text starts.
+ */
+export function edgeShift(
+  box: { left: number; right: number },
+  windowWidth: number,
+): number {
+  const past = Math.max(0, box.right - (windowWidth - EDGE));
+  const short = Math.max(0, EDGE - box.left);
+  if (short > 0) return short;
+  return past > 0 ? -past : 0;
+}
+
+/**
+ * A tooltip is centred on the thing it describes, which works until the label
+ * is long or the anchor is near an edge — and in this app it is routinely both.
+ * A connected Libera negotiates nineteen capabilities, and the list ran 1404px
+ * wide in a 1200px window, cut off mid-word with seven of them unreadable.
+ *
+ * So the box wraps at a width somebody can read across, and then moves off
+ * centre by however much of it is still outside the window. Measuring beats
+ * guessing here: the anchors sit in both bottom corners, and which edge is the
+ * problem depends on the corner.
+ */
 export function Tooltip({
   label,
   placement = "bottom",
@@ -11,6 +41,17 @@ export function Tooltip({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+
+  // The box has to exist before it can be measured, and the answer moves it, so
+  // this writes the offset onto the node rather than through a render. Closing
+  // unmounts the box, so each open measures a freshly centred one.
+  useLayoutEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const shift = edgeShift(node.getBoundingClientRect(), window.innerWidth);
+    if (shift !== 0) node.style.transform = `translateX(calc(-50% + ${shift}px))`;
+  }, [open]);
 
   return (
     <span
@@ -23,9 +64,10 @@ export function Tooltip({
       {children}
       {open && (
         <span
+          ref={box}
           role="tooltip"
           className={clsx(
-            "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)]",
+            "pointer-events-none absolute left-1/2 z-50 w-max max-w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)]",
             placement === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
           )}
         >

@@ -32,13 +32,32 @@ export interface FileDrop {
 }
 
 /**
+ * Whether this is running inside the app rather than a plain browser or vitest.
+ *
+ * One definition, because every caller of it is a place that throws when it
+ * guesses wrong: the Tauri API modules read globals only the webview injects,
+ * and reading them anywhere else throws synchronously.
+ */
+export function insideTauri(): boolean {
+  return "__TAURI_INTERNALS__" in window;
+}
+
+/**
  * The window's own drop events, not the webview's.
  *
  * Tauri intercepts the drop before the page sees it and hands over real paths.
  * An HTML5 drop inside a webview gives a `File` with no path, which the upload
  * command cannot open.
+ *
+ * Outside the app there is nothing to subscribe to, and this used to say so by
+ * throwing — inside the effect that mounts the drop target, which took the
+ * whole React tree with it and left a window that was the right colour and
+ * completely empty (#209). A window you cannot drop a file onto is the right
+ * answer there: a missing capability changes what the UI offers and never
+ * produces an error.
  */
 export function onFileDrop(handler: (event: FileDrop) => void): Promise<() => void> {
+  if (!insideTauri()) return Promise.resolve(() => {});
   return getCurrentWebview().onDragDropEvent((event) => {
     const payload = event.payload;
     handler({

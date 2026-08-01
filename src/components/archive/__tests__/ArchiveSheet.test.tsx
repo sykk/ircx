@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { makeNetwork, oneView } from "@/components/shell/fixtures";
 import { formatBytes } from "@/lib/bytes";
+import type * as Ipc from "@/lib/ipc";
 import { ArchiveSheet, describeKept, nowKeeping } from "../ArchiveSheet";
 
 const summary = vi.fn();
@@ -11,7 +12,7 @@ const deleteArchive = vi.fn();
 const exportArchive = vi.fn();
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ...(await importOriginal<typeof Ipc>()),
   ipc: {
     archiveSummary: (...args: unknown[]) => summary(...args),
     setRetention: (...args: unknown[]) => setRetention(...args),

@@ -145,6 +145,12 @@ function Palette() {
           close();
         })().catch(report);
         return;
+      case "split":
+        store.splitActiveView(action.direction);
+        break;
+      case "closePane":
+        if (store.activeViewId) store.closeView(store.activeViewId);
+        break;
       case "toggleRoster":
         if (store.activeViewId) store.toggleRoster(store.activeViewId);
         break;

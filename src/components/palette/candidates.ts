@@ -1,8 +1,9 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
+import { DEFAULT_BINDINGS, displayChord, type ActionId } from "@/lib/keybindings";
 import { COMMANDS } from "@/components/composer/commands";
 import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
 import { targetKey, type TargetKey } from "@/store/keys";
-import type { AppState } from "@/store/types";
+import type { AppState, SplitDirection } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 
 export type CandidateKind =
@@ -23,6 +24,8 @@ export type CandidateAction =
   | { type: "refine"; text: string }
   | { type: "run"; network: string; target: string; input: string }
   | { type: "toggleRoster" }
+  | { type: "split"; direction: SplitDirection }
+  | { type: "closePane" }
   | { type: "search" }
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
@@ -277,7 +280,38 @@ function describeTheme(theme: Theme, inUse: boolean): string {
   return `${appearance} · ${author} · ${version}${inUse ? " · in use" : ""}`;
 }
 
+/**
+ * The chord that does the same thing, named in the row that teaches it.
+ *
+ * Splitting had no way in but its shortcut, which is a feature nobody finds
+ * (#224). A palette entry that does not also say the key trades one problem for
+ * a slower one: the reader learns the command and reaches it through the
+ * palette every time.
+ */
+function withChord(detail: string, action: ActionId): string {
+  const binding = DEFAULT_BINDINGS.find((candidate) => candidate.action === action);
+  return binding ? `${detail} · ${displayChord(binding.chord)}` : detail;
+}
+
 const STATIC_ACTIONS: readonly { label: string; detail: string; action: CandidateAction }[] = [
+  {
+    label: "Split pane side by side",
+    detail: withChord("A second pane on this conversation, beside this one", "pane.splitVertical"),
+    action: { type: "split", direction: "row" },
+  },
+  {
+    label: "Split pane top and bottom",
+    detail: withChord(
+      "A second pane on this conversation, above and below",
+      "pane.splitHorizontal",
+    ),
+    action: { type: "split", direction: "column" },
+  },
+  {
+    label: "Close pane",
+    detail: withChord("Close the focused pane; the window always keeps one", "pane.close"),
+    action: { type: "closePane" },
+  },
   {
     label: "Toggle member list",
     detail: "Show or hide this pane's member list",

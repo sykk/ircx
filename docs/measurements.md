@@ -33,11 +33,35 @@ figure.
 
 ## Size
 
-| | |
-|---|---|
-| `ircx` release binary, stripped | 10.08 MiB |
+| | measured | bytes | |
+|---|---|---|---|
+| `ircx` release binary, stripped | 2026-08-01 | 11,320,792 | 10.80 MiB |
+| the same, when the plugin runtime landed (#88) | 2026-07-30 | 10,570,584 | 10.08 MiB |
 
 Rust side only — no frontend bundle embedded, no installer packaging.
+
+**Covers:** `cargo build --release -p ircx` on the profile in the workspace
+`Cargo.toml` — `lto = true`, `opt-level = "s"`, `strip = true`, `panic`
+deliberately left unset. Linux x86-64, `stat -c%s` on
+`target/release/ircx`.
+
+The 2026-08-01 figure was taken twice: once in the shared `CARGO_TARGET_DIR`
+this repo normally builds in, and once in a fresh empty one. **The two came out
+byte-identical**, so the 18 KiB discrepancy the rows below warn about did not
+reproduce, and the absolute figure is trustworthy here as a baseline for the
+next change.
+
+**The 732.6 KiB since #88 is ircx's own code.** `Cargo.lock` is unchanged over
+that interval — not one crate added or removed — across 46 commits and 9,731
+inserted lines of Rust: SCRAM, SigV4 and the S3 upload path, the archive and
+its controls, history and backfill, the annotator and the notification rule.
+The crypto SCRAM needed and the HTTP the uploader needed were both already
+linked, for TLS and for the preview fetch respectively.
+
+That attribution is by dependency diff rather than by the back-to-back pairs
+the rows below use, because nobody measured each change as it landed. It says
+where the growth did **not** come from with confidence, and divides the rest
+across forty-six commits without separating them.
 
 The preview fetch (`ircx-net::http`, issue #14) added **46.0 KiB**: 9,650,552 to
 9,697,656 bytes. Measured as a back-to-back pair on one machine, building the

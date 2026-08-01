@@ -973,10 +973,12 @@ the loader, the validator and the picker are covered. What is not:
   silently, leaving the token unset and uncovering the dark theme `global.css`
   imports statically. jsdom's `cssstyle` stores such a value verbatim instead,
   so the tests pin the gate's behaviour and nothing pins the behaviour it is
-  premised on. Paste `#0969da;` into a colour field on `ircx-light` with the app
-  running: the editor should refuse it in a sentence, and nothing should change
-  on the window. The same paste with the gate removed is what it is protecting
-  against — that surface should go dark.
+  premised on. **Walked**: `#0969da;` pasted into a colour field on `ircx-light`
+  in the real window was refused in a sentence, and nothing on the window
+  changed. The other half is still unwalked — the same paste with the gate
+  taken out, which is the failure the gate exists for, and which should leave
+  that surface dark. Nobody has watched it fail, so what is confirmed is that
+  the gate holds, not that it is load-bearing.
 - **The sheet against a theme installed on disk.** Every component test uses the
   two built-ins. An edit is keyed by theme id and kept in `localStorage`, so a
   theme that arrives after first paint takes its edits a frame later than the

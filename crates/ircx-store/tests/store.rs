@@ -1654,3 +1654,86 @@ mod a_draft_follows_the_rename {
         );
     }
 }
+
+/// #249. The spec's Storage section opens with optional local history, and the
+/// shortest window #241 offered was seven days.
+mod keeping_nothing {
+    use super::*;
+
+    fn said(store: &Store, target: &str, id: &str) {
+        store
+            .append_messages(&[message(id, target, "2026-07-31T09:00:00Z", "a line")])
+            .unwrap();
+    }
+
+    fn held(store: &Store, target: &str) -> usize {
+        store
+            .load_history(&history(target, None, 50))
+            .unwrap()
+            .len()
+    }
+
+    #[test]
+    fn a_conversation_set_to_keep_nothing_writes_nothing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .set_retention("libera", Some("#ircx"), Some(0))
+            .unwrap();
+
+        said(&store, "#ircx", "a");
+
+        assert_eq!(held(&store, "#ircx"), 0);
+    }
+
+    #[test]
+    fn a_network_set_to_keep_nothing_covers_its_conversations() {
+        let store = Store::open_in_memory().unwrap();
+        store.set_retention("libera", None, Some(0)).unwrap();
+
+        said(&store, "#ircx", "a");
+        said(&store, "phrack", "b");
+
+        assert_eq!(held(&store, "#ircx"), 0);
+        assert_eq!(held(&store, "phrack"), 0);
+    }
+
+    /// The override beats the default in both directions, which is what makes
+    /// "keep nothing except this one" sayable.
+    #[test]
+    fn a_conversation_may_keep_what_its_network_does_not() {
+        let store = Store::open_in_memory().unwrap();
+        store.set_retention("libera", None, Some(0)).unwrap();
+        store.set_retention("libera", Some("#ircx"), None).unwrap();
+
+        said(&store, "#ircx", "a");
+        said(&store, "phrack", "b");
+
+        assert_eq!(held(&store, "#ircx"), 1);
+        assert_eq!(held(&store, "phrack"), 0);
+    }
+
+    #[test]
+    fn a_conversation_may_stop_keeping_what_its_network_does() {
+        let store = Store::open_in_memory().unwrap();
+        store.set_retention("libera", None, Some(30)).unwrap();
+        store
+            .set_retention("libera", Some("phrack"), Some(0))
+            .unwrap();
+
+        said(&store, "#ircx", "a");
+        said(&store, "phrack", "b");
+
+        assert_eq!(held(&store, "#ircx"), 1);
+        assert_eq!(held(&store, "phrack"), 0);
+    }
+
+    /// Nothing said about a conversation is not a conversation nobody wants.
+    #[test]
+    fn saying_nothing_keeps_everything() {
+        let store = Store::open_in_memory().unwrap();
+
+        said(&store, "#ircx", "a");
+
+        assert_eq!(held(&store, "#ircx"), 1);
+    }
+}

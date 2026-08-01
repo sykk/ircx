@@ -111,8 +111,25 @@ impl Store {
     pub fn append_messages(&self, messages: &[ChatMessage]) -> Result<(), StoreError> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
+        // A conversation set to keep nothing is not written and then swept: a
+        // window of zero is somebody saying they do not want the record, and
+        // written-then-deleted is not that. Looked up per conversation rather
+        // than per message, since a batch is almost always one. #249.
+        let mut asked: Vec<(String, String, bool)> = Vec::new();
         for message in messages {
-            message::insert(&tx, message)?;
+            let keeping = match asked.iter().find(|(network, target, _)| {
+                network == &message.network && target == &message.target
+            }) {
+                Some((_, _, keeping)) => *keeping,
+                None => {
+                    let keeping = keeps_anything(&tx, &message.network, &message.target)?;
+                    asked.push((message.network.clone(), message.target.clone(), keeping));
+                    keeping
+                }
+            };
+            if keeping {
+                message::insert(&tx, message)?;
+            }
         }
         tx.commit()?;
         Ok(())
@@ -698,6 +715,28 @@ impl Store {
         tx.commit()?;
         Ok(())
     }
+}
+
+/// Whether this conversation is written down at all.
+///
+/// The same precedence `prune` uses and for the same reason: a target row beats
+/// the network's, and a row holding `NULL` means keep forever rather than
+/// falling through to the default.
+fn keeps_anything(conn: &Connection, network: &str, target: &str) -> Result<bool, StoreError> {
+    let days: Option<Option<u32>> = conn
+        .query_row(
+            "SELECT CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END
+             FROM (SELECT 1) one
+             LEFT JOIN retention t ON t.network = ?1 AND t.target = ?2
+             LEFT JOIN retention n ON n.network = ?1 AND n.target = ''",
+            params![network, target],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten()
+        .map(Some)
+        .or(Some(None));
+    Ok(!matches!(days, Some(Some(0))))
 }
 
 fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {

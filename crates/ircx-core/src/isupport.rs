@@ -11,6 +11,9 @@ pub struct ISupport {
     /// The four `CHANMODES` classes: list, always-argument, argument on set, flag.
     pub chanmodes: [String; 4],
     pub network: Option<String>,
+    /// The most history one `CHATHISTORY` may ask for. `None` is the server
+    /// stating no limit, not a limit of zero.
+    pub chathistory: Option<u32>,
     targmax: Vec<(String, Option<u32>)>,
 }
 
@@ -22,6 +25,7 @@ impl Default for ISupport {
             prefixes: vec![('o', '@'), ('v', '+')],
             chanmodes: ["b".into(), "k".into(), "l".into(), "imnpst".into()],
             network: None,
+            chathistory: None,
             targmax: Vec::new(),
         }
     }
@@ -59,6 +63,9 @@ impl ISupport {
                 }
             }
             "NETWORK" if !value.is_empty() => self.network = Some(value.into()),
+            // Ergo sends `CHATHISTORY=1000` and `draft/CHATHISTORY=1000` while
+            // the capability is still a draft; either is the same statement.
+            "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = value.parse().ok(),
             "TARGMAX" => self.targmax = parse_targmax(value),
             _ => {}
         }
@@ -72,6 +79,7 @@ impl ISupport {
             "PREFIX" => self.prefixes = defaults.prefixes,
             "CHANMODES" => self.chanmodes = defaults.chanmodes,
             "NETWORK" => self.network = None,
+            "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = None,
             "TARGMAX" => self.targmax = Vec::new(),
             _ => {}
         }

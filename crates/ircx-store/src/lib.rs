@@ -117,6 +117,29 @@ impl Store {
         message::confirm(&self.conn(), message)
     }
 
+    /// When this conversation was last heard from, which is where a server-side
+    /// backfill picks up. `None` when the archive holds nothing for it.
+    ///
+    /// Matched without case for the reason `load_history` gives below.
+    pub fn newest_timestamp(
+        &self,
+        network: &str,
+        target: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT timestamp FROM messages
+             WHERE network = ?1 AND target = ?2 COLLATE NOCASE
+             ORDER BY timestamp DESC, id DESC
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![network, target])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
+        }
+    }
+
     /// Oldest first, so a caller can render the page in order. `before` pages
     /// backwards from the oldest message already on screen.
     ///

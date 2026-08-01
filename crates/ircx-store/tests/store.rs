@@ -1385,3 +1385,54 @@ mod upload_provider {
         assert_ne!(id, "upload-provider");
     }
 }
+
+/// #219. Where a server-side backfill picks up.
+mod newest_timestamp {
+    use super::*;
+
+    #[test]
+    fn an_empty_archive_has_no_answer() {
+        let store = Store::open_in_memory().unwrap();
+
+        assert_eq!(store.newest_timestamp("libera", "#ircx").unwrap(), None);
+    }
+
+    #[test]
+    fn the_latest_message_in_this_conversation_is_the_answer() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[
+                message("a", "#ircx", "2026-07-31T09:00:00Z", "first"),
+                message("c", "#ircx", "2026-07-31T11:00:00Z", "last"),
+                message("b", "#ircx", "2026-07-31T10:00:00Z", "middle"),
+                message("d", "#other", "2026-07-31T23:00:00Z", "elsewhere"),
+            ])
+            .unwrap();
+
+        assert_eq!(
+            store
+                .newest_timestamp("libera", "#ircx")
+                .unwrap()
+                .as_deref(),
+            Some("2026-07-31T11:00:00Z")
+        );
+    }
+
+    /// The same folding `load_history` does, and for the reason #190 gives:
+    /// rows written before it hold whichever casing arrived.
+    #[test]
+    fn the_target_is_matched_without_case() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#IRCX", "2026-07-31T09:00:00Z", "first")])
+            .unwrap();
+
+        assert_eq!(
+            store
+                .newest_timestamp("libera", "#ircx")
+                .unwrap()
+                .as_deref(),
+            Some("2026-07-31T09:00:00Z")
+        );
+    }
+}

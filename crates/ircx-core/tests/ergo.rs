@@ -34,7 +34,7 @@ use ircx_core::{
     spawn_network_with_plugins, Grants, NetworkHandle, Permission, PluginLimits, PluginRuntime,
     SessionCommand, SessionConfig,
 };
-use ircx_ipc::{ChatMessage, ConnectionStatus, IrcxEvent, MessageKind};
+use ircx_ipc::{ChatMessage, ConnectionStatus, Delivery, IrcxEvent, MessageKind, MessageSource};
 use ircx_store::Store;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -114,6 +114,7 @@ async fn against_ergo() {
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
     a_rule_raises_what_it_was_asked_about(&mut report, &mut live, &mut bot).await;
+    a_backfill_fills_the_gap(&mut report, &mut live, &mut other).await;
 
     if report.failed() {
         println!("\n--- transcript");
@@ -375,6 +376,81 @@ async fn a_rule_raises_what_it_was_asked_about(
             &format!("it also raised {id}, which said nothing failed"),
         ),
         None => report.pass("rule", "the build starting was left alone"),
+    }
+}
+
+/// #219. The capability was negotiated on every connection and never used.
+///
+/// The gap is made by parting: what the other client says meanwhile reached no
+/// socket of ours, so a copy of it can only have come back from the server.
+/// Libera has no history to ask for, which is why this step is here.
+async fn a_backfill_fills_the_gap(report: &mut Report, live: &mut Live, other: &mut Live) {
+    const MISSED: &str = "said while nobody was here";
+
+    live.submit(CHANNEL, "/part").await;
+    let parted = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::ChannelUpdated { channel } if channel.name == CHANNEL && !channel.joined => {
+                Some(())
+            }
+            _ => None,
+        })
+        .await;
+    if parted.is_none() {
+        report.fail("backfill", "never left the channel, so there is no gap");
+        return;
+    }
+
+    // The echo rather than the outgoing line: the line only says this client
+    // wrote it, and rejoining before the server has read it makes the message
+    // live and the step meaningless. The echo is the server having it.
+    other.submit(CHANNEL, MISSED).await;
+    let echoed = other
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::MessageUpdated { message }
+                if message.text == MISSED && message.delivery == Delivery::Delivered =>
+            {
+                Some(())
+            }
+            _ => None,
+        })
+        .await;
+    if echoed.is_none() {
+        report.fail("backfill", "the server never took the other client's line");
+        return;
+    }
+
+    if !live.join(CHANNEL).await {
+        report.fail("backfill", "never rejoined the channel");
+        return;
+    }
+
+    // Asserted separately from the answer: ergo can replay a channel on join by
+    // itself, and a pass that came from its own setting would say nothing about
+    // whether ircx ever asks.
+    //
+    // `AFTER` rather than any `CHATHISTORY`, because the first join of the run
+    // asked for the latest page and that line is still in the transcript. Only
+    // a rejoin with an archive behind it produces this one.
+    match live
+        .sent(PATIENCE, |line| line.starts_with("CHATHISTORY AFTER"))
+        .await
+    {
+        Some(line) => report.pass("backfill request", &line),
+        None => report.fail("backfill request", "no CHATHISTORY line went out"),
+    }
+
+    let missed = live.said(PATIENCE, |message| message.text == MISSED).await;
+    match missed {
+        Some(message) if message.source == MessageSource::ServerHistory => report.pass(
+            "backfill",
+            &format!("{} came back as history", message.text),
+        ),
+        Some(message) => report.fail(
+            "backfill",
+            &format!("it arrived as {:?} rather than history", message.source),
+        ),
+        None => report.fail("backfill", "what was said in the gap never came back"),
     }
 }
 

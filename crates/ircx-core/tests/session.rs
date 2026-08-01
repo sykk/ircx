@@ -50,6 +50,9 @@ struct Harness {
     /// Stands in for the archive's `open_targets` table, which is where these
     /// actions land in the running app.
     open: Vec<OpenTarget>,
+    /// Target and limit. The line itself is finished against the archive, which
+    /// nothing here holds.
+    backfills: Vec<(String, u32)>,
     closed: bool,
 }
 
@@ -60,6 +63,7 @@ impl Harness {
             sent: Vec::new(),
             events: Vec::new(),
             open: Vec::new(),
+            backfills: Vec::new(),
             closed: false,
         }
     }
@@ -78,6 +82,7 @@ impl Harness {
                     self.open.push(target);
                 }
                 Action::Forget(target) => self.open.retain(|held| held.name() != target),
+                Action::Backfill { target, limit } => self.backfills.push((target, limit)),
                 // Nothing here drives plugins, so a batch on its way to a
                 // rule is not something this harness can act on.
                 Action::Notify { .. } => {}
@@ -2652,5 +2657,84 @@ mod one_conversation_one_name {
         session.feed(":phrack!p@h PRIVMSG #TEST :hello");
 
         assert_eq!(named(&session, "#test"), ["#test", "#test"]);
+    }
+}
+
+/// #219. `draft/chathistory` was negotiated on every connection and never used,
+/// so the gap between the last message this machine saw and now stayed missing.
+///
+/// The action carries the target and how much to ask for. Where the archive
+/// left off is the rest of the request, and it is filled in by the connection
+/// task, which is what can read the archive.
+mod backfill_on_join {
+    use super::*;
+
+    fn joined(caps: &str, isupport: &str) -> Harness {
+        let mut session = registered(caps);
+        if !isupport.is_empty() {
+            session.feed(&format!(
+                ":irc.libera.chat 005 sykk {isupport} :are supported by this server"
+            ));
+        }
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session
+    }
+
+    #[test]
+    fn joining_asks_for_what_was_said_while_nobody_was_here() {
+        let session = joined("draft/chathistory", "");
+
+        assert_eq!(session.backfills, [("#ircx".to_string(), 200)]);
+    }
+
+    #[test]
+    fn a_server_without_the_capability_is_asked_for_nothing() {
+        let session = joined("", "CHATHISTORY=1000");
+
+        assert!(session.backfills.is_empty());
+    }
+
+    /// Asking for more than the server said it would answer with is a request
+    /// it is entitled to refuse outright.
+    #[test]
+    fn the_limit_the_server_stated_is_not_exceeded() {
+        let session = joined("draft/chathistory", "CHATHISTORY=50");
+
+        assert_eq!(session.backfills, [("#ircx".to_string(), 50)]);
+    }
+
+    #[test]
+    fn a_generous_server_does_not_widen_the_page() {
+        let session = joined("draft/chathistory", "CHATHISTORY=1000");
+
+        assert_eq!(session.backfills, [("#ircx".to_string(), 200)]);
+    }
+
+    /// The draft spelling is what ergo sends while the capability is a draft,
+    /// and it is the same statement.
+    #[test]
+    fn the_draft_spelling_of_the_token_is_read_too() {
+        let session = joined("draft/chathistory", "draft/CHATHISTORY=25");
+
+        assert_eq!(session.backfills, [("#ircx".to_string(), 25)]);
+    }
+
+    #[test]
+    fn somebody_else_joining_asks_for_nothing() {
+        let mut session = joined("draft/chathistory", "");
+        session.backfills.clear();
+        session.feed(":phrack!p@h JOIN #ircx");
+
+        assert!(session.backfills.is_empty());
+    }
+
+    /// A reconnect rejoins, and the gap it has to fill is the disconnection.
+    #[test]
+    fn rejoining_asks_again() {
+        let mut session = joined("draft/chathistory", "");
+        session.feed(":sykk!~sykk@user/sykk PART #ircx");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+
+        assert_eq!(session.backfills.len(), 2);
     }
 }

@@ -819,12 +819,17 @@ and port this network points at.
 
 - **SHA-512 against any server.** Libera advertises it and `ergo` does not, so
   the walk is a registered Libera account.
-- **The connection-failure screen repeats itself.** The wrong-password walk drew
-  the same sentence three times in one view: once as `Authentication failed:
-  <sentence>`, once again verbatim below it, and once in the status bar. The
-  bullet above it also reads `Could not connect to 127.0.0.1:6668`, which is not
-  what happened — it connected and was refused a login. Left alone here because
-  it is the connection screen rather than the SASL path.
+- **The redrawn connection-failure screen, against a live refusal.** The
+  wrong-password walk drew the same sentence three times in one view and headed
+  it `Could not connect to 127.0.0.1:6668`, which is not what happened — it
+  connected and was refused a login. Fixed in #256: the steps are history, so a
+  refused login now reads `Connected to 127.0.0.1:6668` above `Authentication
+  failed`, and the sentence itself appears once, in the alert that announces it.
+  The status bar names the network and stops at `failed`; the reason is on the
+  setup screen and in the server buffer, which every failure path notes it into.
+  Covered by `Connecting.test.tsx` and `StatusBar.test.tsx` — but no server has
+  refused a login since, so what no test sees is how the three lines read
+  together when a real one does.
 
 Also worth knowing, and the reason this section exists: **picking a mechanism the
 server does not offer connects successfully and does not log you in.** The

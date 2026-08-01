@@ -8,6 +8,13 @@ const onDone = vi.fn();
 const onRetry = vi.fn();
 const onBack = vi.fn();
 
+/** What core writes when a server refuses a login. It is long on purpose — it
+ * names the account and says where to fix it — which is what made repeating it
+ * a problem rather than a redundancy nobody would notice. */
+const REFUSED =
+  "irc.libera.chat rejected the account sable — challenge proof invalid. " +
+  "Check the account name and password in this network's settings.";
+
 function mount(
   patch: Partial<Network> = {},
   { channels = [] as Channel[], error = null as string | null } = {},
@@ -109,6 +116,36 @@ describe("Connecting", () => {
     expect(screen.getByRole("alert").textContent).toBe(
       "irc.libera.chat refused the certificate",
     );
+  });
+
+  it("says the server was reached when it got as far as refusing a login", () => {
+    mount({
+      status: { state: "failed", detail: { message: REFUSED } },
+      sasl: { state: "failed", detail: { message: REFUSED } },
+    });
+    expect(screen.getByText("Connected to irc.libera.chat:6697")).toBeTruthy();
+    expect(screen.queryByText("Could not connect to irc.libera.chat:6697")).toBeNull();
+  });
+
+  it("states a refusal once, on the line that announces it", () => {
+    mount({
+      status: { state: "failed", detail: { message: REFUSED } },
+      sasl: { state: "failed", detail: { message: REFUSED } },
+    });
+    expect(screen.getByText("Authentication failed")).toBeTruthy();
+    expect(screen.getAllByText(REFUSED)).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).toBe(REFUSED);
+  });
+
+  it("keeps the reason on the step when the connection outlived the refusal", () => {
+    mount({
+      status: { state: "registering" },
+      sasl: { state: "failed", detail: { message: "This server does not offer SASL" } },
+    });
+    expect(
+      screen.getByText("Authentication failed: This server does not offer SASL"),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("offers a retry and a way back to the settings when it fails", () => {

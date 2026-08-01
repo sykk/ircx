@@ -29,6 +29,12 @@ export function Connecting({ network, error, onRetry, onBack, onDone }: Props) {
 
   const failure = net?.status.state === "failed" ? net.status.detail.message : error;
 
+  // core publishes one sentence on two statuses: a login the server refused
+  // fails the connection too, so the same words reach the step and the alert.
+  // The alert is the one that announces, so the step keeps the fact and drops
+  // the words — but only while the alert is there to carry them.
+  const saslDetailInAlert = net?.sasl.state === "failed" && net.sasl.detail.message === failure;
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-1">
@@ -44,12 +50,12 @@ export function Connecting({ network, error, onRetry, onBack, onDone }: Props) {
 
       <ul className="flex flex-col gap-2">
         {net ? (
-          <Line color={connectionColor(net.status)}>{connectionLine(net)}</Line>
+          <Line color={connectionLineColor(net)}>{connectionLine(net)}</Line>
         ) : (
           <Line color="var(--state-connecting)">Saving the network</Line>
         )}
         {net && net.sasl.state !== "notConfigured" && (
-          <Line color={saslColor(net.sasl)}>{saslLine(net.sasl)}</Line>
+          <Line color={saslColor(net.sasl)}>{saslLine(net.sasl, saslDetailInAlert)}</Line>
         )}
         {channels.length > 0 && (
           <Line color={channels.every((c) => c.joined) ? "var(--state-connected)" : "var(--state-connecting)"}>
@@ -90,6 +96,16 @@ function Line({ color, children }: { color: string; children: string }) {
   );
 }
 
+/**
+ * A server that got as far as refusing a login was reached: the connection
+ * failed because ircx closed it afterwards, not because the address was wrong.
+ * Each line here is a step that happened, so the step that worked says so and
+ * leaves the failure to the one below it.
+ */
+function reachedServer(net: Network): boolean {
+  return net.status.state === "failed" && net.sasl.state === "failed";
+}
+
 function connectionLine(net: Network): string {
   const where = `${net.host}:${net.port}`;
   const status: ConnectionStatus = net.status;
@@ -106,18 +122,24 @@ function connectionLine(net: Network): string {
     case "reconnecting":
       return `Connection lost. Trying ${where} again in ${status.detail.inSeconds}s`;
     case "failed":
-      return `Could not connect to ${where}`;
+      return reachedServer(net) ? `Connected to ${where}` : `Could not connect to ${where}`;
   }
 }
 
-function saslLine(status: SaslStatus): string {
+function connectionLineColor(net: Network): string {
+  return reachedServer(net) ? "var(--state-connected)" : connectionColor(net.status);
+}
+
+function saslLine(status: SaslStatus, detailInAlert: boolean): string {
   switch (status.state) {
     case "inProgress":
       return "Authenticating";
     case "authenticated":
       return `Authenticated as ${status.detail.account}`;
     case "failed":
-      return `Authentication failed: ${status.detail.message}`;
+      return detailInAlert
+        ? "Authentication failed"
+        : `Authentication failed: ${status.detail.message}`;
     case "notConfigured":
       return "Not authenticating";
   }

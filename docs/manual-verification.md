@@ -523,14 +523,41 @@ you, so the accent took the second block of every exchange the reader was in.
 Measured on a screenshot: one exchange, two colours. The group keeps the spine
 now, and the run above confirms a mention in no group is still unmistakable.
 
+**Groups chained, and the chain is closed.** Answering somebody already in a
+group put the answerer in it, so each fresh pair inherited the last pair's rule
+and a run of people answering each other never closed. One round drew five
+messages and two separate question-and-answers as one group. The note here
+asked for it to be measured on a channel busier than three people first, and it
+was: fifteen messages, nine people, four exchanges interleaved with two lines of
+chatter, measured off the spine colours rather than read off the screen.
+
+```text
+before                                  after
+#4598c9  nyx     is the mirror down     #4598c9  nyx     is the mirror down
+#4598c9  jolt    nyx: back up           #4598c9  jolt    nyx: back up
+#4598c9  nyx     jolt: thanks           #4598c9  nyx     jolt: thanks
+#4598c9  marrow  morning all            neutral  marrow  morning all
+#4598c9  kade    jolt: news on build    #a97cd9  kade    jolt: news on build
+#4598c9  jolt    kade: green            #a97cd9  jolt    kade: green
+```
+
+Six blocks in nyx's colour, saying two exchanges and an unrelated greeting were
+one conversation. After, they are two exchanges in two colours with the
+greeting neutral between them — the shape the last round called the whole of
+what the feature is for. The other three exchanges were already separate and
+stayed so; the count went from four groups to five, and the group of four
+people became two groups of two.
+
+An addressed group is now between the two people whose exchange opened it and
+nobody else, which is what shuts the chain: whoever is turned away is not left
+out for long, because the answer to them opens a group of their own. A message
+the rule merely reached over is in the span without being in the pair, so it is
+not a way in either. Declared groups are untouched and still take anybody who
+joins the topic — that grade is a fact its author typed, not a guess off one
+colon.
+
 ### Still open
 
-- **Groups chain.** Addressing somebody already in a group joins that group, so
-  a run of people answering each other within reach never closes. One round
-  drew five messages and two separate question-and-answers as one group. It did
-  not recur in the last round — ordinary chatter breaks the chain — but the
-  mechanism is there, and it is the shape of the failure that took guessing out.
-  Worth measuring on a channel busier than three people before trusting it.
 - **Declared grouping has never been seen outside a fixture.** No other client
   reads a `[topic]` prefix, so nothing types one. It is exercised by tests and
   by the preview harness and by nothing else.

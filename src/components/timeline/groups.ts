@@ -155,9 +155,17 @@ export function assignGroups(
     previous = message;
   }
 
-  // Addressed. The message joins whatever the person it names is already in;
-  // if they are in nothing, they open a group and it takes their colour, since
+  // Addressed. The message joins the group the person it names is already in;
+  // if they are in nothing, they open one and it takes their colour, since
   // theirs is the message that started the exchange.
+  //
+  // Who an addressed group is between: the pair whose exchange opened it, and
+  // only them. Not everybody inside it — the rule reaches over other talk and
+  // takes it in, so a message can be in the span without being in the
+  // conversation. Declared groups are absent here and so admit anybody, which
+  // is the difference between a topic somebody typed and a pair inferred off
+  // one colon.
+  const between = new Map<Group, Set<string>>();
   const spokeAt = new Map<string, number>();
   for (let i = 0; i < speech.length; i++) {
     const message = speech[i]!;
@@ -176,12 +184,31 @@ export function assignGroups(
     // Answering yourself is not an exchange.
     if (fold(previous.sender.nick) === fold(message.sender.nick)) continue;
 
-    const group: Group = groups.get(previous.id) ?? {
+    // An addressed group carries on between the two people in it and stops
+    // there. Letting an answer in on the strength of the addressee alone is
+    // what chained them: each new pair inherited the last pair's rule, so a run
+    // of people answering each other never closed, and a live round drew five
+    // messages and two separate question-and-answers as one group. Whoever is
+    // turned away here is not left out for long — the answer to them opens a
+    // group of their own, which is the same rule reading the same evidence.
+    const open = groups.get(previous.id);
+    const pair = open === undefined ? undefined : between.get(open);
+    if (
+      pair !== undefined &&
+      !(pair.has(fold(message.sender.nick)) && pair.has(fold(previous.sender.nick)))
+    ) {
+      continue;
+    }
+
+    const group: Group = open ?? {
       id: previous.id,
       grade: "addressed",
       name: null,
       opener: previous.sender.nick,
     };
+    if (open === undefined) {
+      between.set(group, new Set([fold(previous.sender.nick), fold(message.sender.nick)]));
+    }
     // Everything from the message being answered to the answer, because the
     // rule is one unbroken line and a line with a neutral block in the middle
     // of it is two rules. `ADDRESS_REACH` is what keeps that claim small.

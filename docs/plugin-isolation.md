@@ -59,9 +59,12 @@ Two harnesses produce the numbers:
 
 Everything is **Linux x86-64 only**. See [what is not measured](#what-is-not-measured).
 
-The 665 ms cold start this is all weighed against was not re-measured here, and
-could not be found in the document it was attributed to. It is used below only
-to establish an order of magnitude, which is all the conclusions need.
+The 665 ms cold start this is all weighed against was not re-measured here and
+could not be found in the document it was attributed to, which is why it is used
+below only to establish an order of magnitude. The number itself is sound — PR
+#48, and `docs/measurements.md` has it with its method — and the same run puts
+webview content at 722–819 ms, so the order of magnitude is the one these
+conclusions assumed.
 
 ## Startup
 
@@ -414,12 +417,17 @@ software does not keep, which is worse than not offering it.
   `std::os::unix::process::CommandExt`, `RLIMIT_DATA` and `RLIMIT_CPU`. macOS
   exec is slower and code signing adds to launch; the cold-start figures would
   need redoing there.
-- **The 665 ms baseline itself.** It was quoted to this spike as coming from
-  `docs/end-to-end-run-2.md` and it does not appear in that document. That run
-  used a debug binary against the Vite dev server, so a release cold start is
-  probably not the same number. The 0.37% figure above survives the baseline
-  being wrong by a factor of several, but the baseline should be measured
-  properly before anyone leans on it harder than that.
+- ~~**The 665 ms baseline itself.**~~ **Settled.** It was quoted to this spike
+  as coming from `docs/end-to-end-run-2.md`, does not appear in that document,
+  and this section concluded it might therefore be wrong by a factor of several.
+  The citation was wrong and the number was not: it comes from PR #48, a release
+  build against an empty profile, timed off the compositor via `WAYLAND_DEBUG`
+  over three runs, and it is in `docs/measurements.md` with its method.
+
+  Worth reading that row before reusing this one. The same run measured **722–819
+  ms** to webview content — the window is up at 665 ms with nothing on it — so a
+  percentage weighed against 665 ms is weighed against the smaller of the two
+  numbers a person could mean by "cold start".
 - **More than one plugin.** Every figure is one plugin. Marginal cost per
   additional plugin is unknown for all three, and it is the number that matters
   if the answer is ever "users install five".

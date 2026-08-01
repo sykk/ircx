@@ -12,15 +12,29 @@ moved under it, that is stated rather than implied.
 
 | From process exec to | run 1 | run 2 | run 3 |
 |---|---|---|---|
+| first message to the compositor | 42.4 ms | 43.1 ms | 42.5 ms |
+| surface committed, no content yet | 70.0 ms | 71.2 ms | 70.3 ms |
 | first frame committed — window on screen | 665 ms | 679 ms | 679 ms |
+| **webview content committed — ircx on screen** | **819 ms** | **722 ms** | **819 ms** |
 
-**Covers:** `exec` of `target/release/ircx` to the frame the compositor was
-handed, timed via `WAYLAND_DEBUG`. Release profile (`lto = true`,
-`opt-level = "s"`, stripped), frontend built with `npm run build`, empty
-profile, warm page cache, unpackaged binary.
+**The last row is the one a person experiences.** A window at 679 ms is a
+window; the client is not on it yet. Quote 722–819 ms for how long ircx takes to
+start, and 665–679 ms only for how long it takes to put a frame up.
 
-**Excludes:** connecting to anything. Measured 2026-07-30 during the second
-Libera run (PR #48).
+**Covers:** `exec` of `target/release/ircx` to each of those, anchored to the
+launcher's clock and read off the compositor via `WAYLAND_DEBUG`. Release
+profile (`lto = true`, `opt-level = "s"`, stripped), frontend built with
+`npm run build`, empty profile so nothing dials out, warm page cache — the
+binary had just been built and run. Includes the launcher's `fork`/`exec`, a
+few milliseconds of it.
+
+**Excludes:** connecting to anything, a cold page cache (dropping caches needs
+root), a packaged bundle, and a profile with networks in it. Measured 2026-07-30
+during the second Libera run (PR #48).
+
+All four rows were measured in that run. Only the third was carried into this
+file, and the fourth — the one worth quoting — stayed in the pull request
+description, which is the thing this file exists to stop happening.
 
 A separate figure from the same run: **5.84 s** from process exec to
 RPL_WELCOME with no UI. Most of that is Libera's identd timeout rather than

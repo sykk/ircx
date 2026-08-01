@@ -1023,9 +1023,22 @@ quit and rejoin in the same batch, and an earlier build of this counted those
 too and said five.
 
 What is left:
-- **A gap wider than the server's limit.** A full page and a truncated page are
-  the same page, so the hole is invisible to the client and would show as a
-  jump in the conversation. Needs a channel left alone longer than 200 messages.
+- **A gap wider than one page is fetched whole** (#239), walked on 2026-08-01
+  with 520 messages said to a channel while the app was closed. Three requests
+  went out, each starting where the last page ended, and 529 messages were
+  archived. The same walk before the change archived 216.
+
+  It took a logging proxy in front of the server to see why. The continuation
+  was resuming from the conversation's watermark, which moves with **every**
+  message including live ones — so anything said while a page was in flight
+  pushed it to now, and the second request went out stamped later than the whole
+  backlog it was chasing. It resumes from the newest message in the page that
+  arrived. No test caught this and none could have: nothing interleaves live
+  traffic with a batch except a real server.
+
+  What is left is the cap. Ten pages is two thousand messages, and past that the
+  client says so in the conversation rather than leaving the reader with the
+  oldest of what they missed. Nobody has been away long enough to see it.
 - **Libera offers no history to ask for.** The capability was not in what
   `cadmium.libera.chat` advertised on 2026-07-30, so nothing is sent there and
   the archive stays the whole history. That is the degrade working, and it also

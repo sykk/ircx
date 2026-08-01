@@ -27,9 +27,6 @@ export interface ChatView {
   network: string;
   /** Channel or query, or `SERVER_TARGET` for the network's console. */
   target: string;
-  /** Scroller offset, restored when the view regains focus. Two views on one
-   * channel scroll independently, which is the whole point of the split. */
-  scrollPosition: number;
   /** Nick whose inspector is open in this view's context panel. */
   selectedUser: string | null;
   /** On a console target, whether the pane shows the protocol log instead of
@@ -97,6 +94,11 @@ export interface AppState {
 
   // View.
   views: Record<ViewId, ChatView>;
+  /** Scroller offset per pane, restored when the view regains focus. Two views
+   * on one channel scroll independently, which is the whole point of the
+   * split. Not on `ChatView`: this is written every scroll frame, and a write
+   * there re-renders everything subscribed to the view. Read via `getState`. */
+  viewScroll: Record<ViewId, number>;
   /** Depth-first pane order, derived from `layout`. Focus movement and anything
    * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];

@@ -26,10 +26,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const restored = useRef(false);
   useEffect(() => {
     const stored = loadViewState();
-    restored.current = true;
     if (!stored) return;
     useAppStore.setState({
       sidebarWidth: stored.sidebarWidth,

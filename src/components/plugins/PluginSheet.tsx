@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SecondaryButton } from "@/components/onboarding/fields";
-import { chooseFolder, ipc } from "@/lib/ipc";
+import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
 import { PermissionsForm } from "./PermissionsForm";
@@ -186,8 +186,3 @@ function Sheet() {
   );
 }
 
-/** Tauri rejects with the handler's user-facing string; anything else is a bug
- * in the bridge and gets a sentence the user can act on instead. */
-function reasonOr(reason: unknown, fallback: string): string {
-  return typeof reason === "string" && reason.length > 0 ? reason : fallback;
-}

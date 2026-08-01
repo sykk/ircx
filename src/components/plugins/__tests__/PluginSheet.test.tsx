@@ -14,7 +14,11 @@ const { ipcMock, chooseFolder } = vi.hoisted(() => ({
   },
   chooseFolder: vi.fn(),
 }));
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, chooseFolder }));
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ipc: ipcMock,
+  chooseFolder,
+}));
 
 /** The wording is the backend's — `Permission::summary` in ircx-plugin. These
  * are the lines it sends, including for a permission Greeter never asks for. */
@@ -56,6 +60,13 @@ const GREETER: InstalledPlugin = {
     hosts: ["api.example.com"],
   },
   grants: { permissions: [], channels: [], hosts: [] },
+};
+
+/** Greeter asking for every conversation, which is the scope the picker exists
+ * to narrow. */
+const EAGER: InstalledPlugin = {
+  ...GREETER,
+  requests: { ...GREETER.requests, channels: ["*"] },
 };
 
 beforeEach(() => {
@@ -181,11 +192,7 @@ describe("PluginSheet", () => {
      * this the eager plugin is the one the user cannot narrow, which is the
      * plugin the scope exists for. */
     it("lets the user hand one conversation to a plugin that asked for all of them", async () => {
-      const eager: InstalledPlugin = {
-        ...GREETER,
-        requests: { ...GREETER.requests, channels: ["*"] },
-      };
-      await open([eager]);
+      await open([EAGER]);
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
@@ -208,11 +215,7 @@ describe("PluginSheet", () => {
     /** A lone text input in a form submits it on Enter, which would have saved
      * the grant without the channel just typed. Enter has to add instead. */
     it("adds the conversation on Enter rather than saving without it", async () => {
-      const eager: InstalledPlugin = {
-        ...GREETER,
-        requests: { ...GREETER.requests, channels: ["*"] },
-      };
-      await open([eager]);
+      await open([EAGER]);
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
@@ -235,11 +238,7 @@ describe("PluginSheet", () => {
      * which was not confirmed, and nothing typed is thrown away.
      */
     it("will not save while a typed conversation has not been added", async () => {
-      const eager: InstalledPlugin = {
-        ...GREETER,
-        requests: { ...GREETER.requests, channels: ["*"] },
-      };
-      await open([eager]);
+      await open([EAGER]);
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
       // What the manifest asked for, and what stood when the typed name was
@@ -257,11 +256,7 @@ describe("PluginSheet", () => {
     });
 
     it("saves once the typed conversation is added", async () => {
-      const eager: InstalledPlugin = {
-        ...GREETER,
-        requests: { ...GREETER.requests, channels: ["*"] },
-      };
-      await open([eager]);
+      await open([EAGER]);
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
@@ -279,11 +274,7 @@ describe("PluginSheet", () => {
     });
 
     it("saves again once the typed conversation is cleared", async () => {
-      const eager: InstalledPlugin = {
-        ...GREETER,
-        requests: { ...GREETER.requests, channels: ["*"] },
-      };
-      await open([eager]);
+      await open([EAGER]);
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
       fireEvent.click(box("Every conversation"));

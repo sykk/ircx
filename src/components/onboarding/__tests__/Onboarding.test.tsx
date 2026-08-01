@@ -7,7 +7,8 @@ import { Onboarding } from "../Onboarding";
 const saveNetwork = vi.fn<(config: NetworkConfig) => Promise<string>>();
 const connectNetwork = vi.fn<(network: string) => Promise<void>>();
 
-vi.mock("@/lib/ipc", () => ({
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ipc")>()),
   ipc: {
     saveNetwork: (config: NetworkConfig) => saveNetwork(config),
     connectNetwork: (network: string) => connectNetwork(network),

@@ -121,12 +121,14 @@ describe("what a group says in words", () => {
   /** Both people are in the blocks below in their own colours, so a caption
    * naming them says nothing new. */
   it("says nothing for an addressed group", () => {
-    const { container } = block({
+    const { queryByText } = block({
       group: { id: "a", grade: "addressed", name: null, opener: "kade" },
       opensGroup: true,
     });
 
-    expect(container.querySelector("button")).toBeNull();
+    // By the opener's name, as the declared-group test asserts presence: the
+    // caption is a span, so the old query for a button passed for every grade.
+    expect(queryByText(/kade/)).toBeNull();
   });
 });
 

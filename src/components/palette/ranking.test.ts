@@ -47,6 +47,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     typing: {},
     replyTo: {},
     views: {},
+    viewScroll: {},
     viewOrder: [],
     activeViewId: null,
     layout: null,
@@ -116,12 +117,10 @@ describe("rankMatches", () => {
   });
 
   it("breaks a score tie by recency", () => {
-    const candidates = buildCandidates(stateWith(["#ctf-ops"], [], []));
-    const withQueries = buildCandidates(
+    const tied = buildCandidates(
       stateWith(["#ops-a", "#ops-b"], [], [targetKey("libera", "#ops-b")]),
     );
-    expect(labels(candidates, "ctf")[0]).toBe("#ctf-ops");
-    expect(labels(withQueries, "ops", [targetKey("libera", "#ops-b")])[0]).toBe("#ops-b");
+    expect(labels(tied, "ops", [targetKey("libera", "#ops-b")])[0]).toBe("#ops-b");
   });
 
   it("leaves a stronger match ahead of a recently visited weaker one", () => {

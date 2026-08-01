@@ -11,12 +11,10 @@ ircx-net.workspace = true
 ircx-ipc.workspace = true
 ircx-store.workspace = true
 ircx-plugin.workspace = true
-thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 time.workspace = true
 uuid.workspace = true
-serde.workspace = true
 base64 = "0.22"
 # Already in the tree under rustls; a second implementation of the same
 # primitives would be a second thing to trust.

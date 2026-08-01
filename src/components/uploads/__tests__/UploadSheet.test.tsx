@@ -12,7 +12,12 @@ const { ipcMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn(), chooseFolder: vi.fn() }));
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ipc: ipcMock,
+  onIrcxEvent: vi.fn(),
+  chooseFolder: vi.fn(),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();

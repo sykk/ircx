@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ipc } from "@/lib/ipc";
+import { ipc, reasonOr } from "@/lib/ipc";
 import {
   emptyDraft,
   presetDraft,
@@ -238,8 +238,3 @@ function Choice({
   );
 }
 
-/** Tauri rejects with the handler's user-facing string; anything else is a bug
- * in the bridge and gets a sentence the user can act on instead. */
-function reasonOr(reason: unknown, fallback: string): string {
-  return typeof reason === "string" && reason.length > 0 ? reason : fallback;
-}

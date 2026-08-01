@@ -2,14 +2,16 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { makeNetwork, oneView } from "@/components/shell/fixtures";
-import { ArchiveSheet, describeKept, describeSize, nowKeeping } from "../ArchiveSheet";
+import { formatBytes } from "@/lib/bytes";
+import { ArchiveSheet, describeKept, nowKeeping } from "../ArchiveSheet";
 
 const summary = vi.fn();
 const setRetention = vi.fn();
 const deleteArchive = vi.fn();
 const exportArchive = vi.fn();
 
-vi.mock("@/lib/ipc", () => ({
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ipc")>()),
   ipc: {
     archiveSummary: (...args: unknown[]) => summary(...args),
     setRetention: (...args: unknown[]) => setRetention(...args),
@@ -47,11 +49,11 @@ describe("saying what is kept", () => {
   });
 
   it("reads a small archive in bytes rather than in 0.0 MB", () => {
-    expect(describeSize(512)).toBe("512 B");
+    expect(formatBytes(512)).toBe("512 B");
   });
 
   it("says one message without an s", () => {
-    expect(describeKept({ ...KEPT, messages: 1n, bytes: 2048n })).toBe("1 message, 2.0 kB");
+    expect(describeKept({ ...KEPT, messages: 1n, bytes: 2048n })).toBe("1 message, 2.0 KB");
   });
 });
 
@@ -110,7 +112,6 @@ describe("the archive sheet", () => {
     fireEvent.change(screen.getByLabelText(/Everything on Libera.Chat/), { target: { value: "30" } });
 
     await waitFor(() => expect(setRetention).toHaveBeenCalledWith("libera", null, 30));
-    await waitFor(() => expect(summary).toHaveBeenCalled());
     await waitFor(() => expect(summary).toHaveBeenCalled());
   });
 

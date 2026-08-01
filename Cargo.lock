@@ -1827,7 +1827,6 @@ dependencies = [
  "ircx-net",
  "ircx-store",
  "ring",
- "serde",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -1851,10 +1850,8 @@ dependencies = [
  "ircx-proto",
  "ircx-store",
  "ring",
- "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.19",
  "time",
  "tokio",
  "tracing",
@@ -1866,7 +1863,6 @@ name = "ircx-ipc"
 version = "0.1.0"
 dependencies = [
  "serde",
- "time",
  "ts-rs",
 ]
 
@@ -1915,7 +1911,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.19",
- "tracing",
 ]
 
 [[package]]

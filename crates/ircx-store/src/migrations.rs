@@ -201,12 +201,6 @@ CREATE TABLE annotations (
 );
 "#;
 
-/// Which messages a notification rule thought worth interrupting the user for,
-/// and which rule thought so. Keyed the same way an annotation is, so a plugin
-/// answering the same message twice raises it once.
-///
-/// There is no row for a message a rule passed over: a rule raises and cannot
-/// lower, so absence is the only thing "not raised" could mean.
 /// Where an attachment goes before its link is sent. One row or none: "no
 /// provider" is a configuration the spec names, and it is the absence of the
 /// row rather than a flag on it.
@@ -230,6 +224,12 @@ ALTER TABLE upload_provider ADD COLUMN s3_region TEXT;
 ALTER TABLE upload_provider ADD COLUMN s3_access_key_id TEXT;
 "#;
 
+/// Which messages a notification rule thought worth interrupting the user for,
+/// and which rule thought so. Keyed the same way an annotation is, so a plugin
+/// answering the same message twice raises it once.
+///
+/// There is no row for a message a rule passed over: a rule raises and cannot
+/// lower, so absence is the only thing "not raised" could mean.
 const RAISED: &str = r#"
 CREATE TABLE raised (
     network TEXT NOT NULL,

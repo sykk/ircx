@@ -131,16 +131,31 @@ impl PluginRuntime {
         route: &Route,
         request: CommandRequest,
     ) -> Result<CommandReply, PluginFailure> {
+        self.ask(&route.plugin, |reply| Work::Command(request, reply))
+    }
+
+    /// Sends one job to a plugin's worker and waits, bounded, for the answer.
+    ///
+    /// On a timeout, nothing the interpreter can see is still running, so the
+    /// thread is parked somewhere the deadline could not reach — a host
+    /// function that did not come back. Quarantine it: the plugin is dropped,
+    /// its thread is left to finish on its own, and the next call gets a new
+    /// one.
+    fn ask<Reply>(
+        &self,
+        plugin: &str,
+        work: impl FnOnce(Sender<Result<Reply, Failure>>) -> Work,
+    ) -> Result<Reply, PluginFailure> {
         let named = |failure| PluginFailure {
-            plugin: route.plugin.clone(),
+            plugin: plugin.to_owned(),
             failure,
         };
-        let worker = self.worker(&route.plugin).map_err(named)?;
+        let worker = self.worker(plugin).map_err(named)?;
         let (reply, answer) = mpsc::channel();
 
         let outcome = {
             let worker = hold(&worker);
-            match worker.jobs.send(Work::Command(request, reply)) {
+            match worker.jobs.send(work(reply)) {
                 Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
                 Err(_) => Err(RecvTimeoutError::Disconnected),
             }
@@ -148,17 +163,12 @@ impl PluginRuntime {
 
         match outcome {
             Ok(result) => result.map_err(named),
-            // Nothing the interpreter can see is still running, so the thread
-            // is parked somewhere the deadline could not reach — a host
-            // function that did not come back. Quarantine it: the plugin is
-            // dropped, its thread is left to finish on its own, and the next
-            // call gets a new one.
             Err(RecvTimeoutError::Timeout) => {
-                self.stop(&route.plugin);
+                self.stop(plugin);
                 Err(named(Failure::Unresponsive))
             }
             Err(RecvTimeoutError::Disconnected) => {
-                self.stop(&route.plugin);
+                self.stop(plugin);
                 Err(named(Failure::Host("its runtime stopped".into())))
             }
         }
@@ -207,32 +217,7 @@ impl PluginRuntime {
         notifier: &Notifier,
         request: NotifyRequest,
     ) -> Result<NotifyReply, PluginFailure> {
-        let named = |failure| PluginFailure {
-            plugin: notifier.plugin.clone(),
-            failure,
-        };
-        let worker = self.worker(&notifier.plugin).map_err(named)?;
-        let (reply, answer) = mpsc::channel();
-
-        let outcome = {
-            let worker = hold(&worker);
-            match worker.jobs.send(Work::Notify(request, reply)) {
-                Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
-                Err(_) => Err(RecvTimeoutError::Disconnected),
-            }
-        };
-
-        match outcome {
-            Ok(result) => result.map_err(named),
-            Err(RecvTimeoutError::Timeout) => {
-                self.stop(&notifier.plugin);
-                Err(named(Failure::Unresponsive))
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                self.stop(&notifier.plugin);
-                Err(named(Failure::Host("its runtime stopped".into())))
-            }
-        }
+        self.ask(&notifier.plugin, |reply| Work::Notify(request, reply))
     }
 
     /// Runs one batch through one annotator. Blocking and bounded, exactly as
@@ -242,32 +227,7 @@ impl PluginRuntime {
         annotator: &Annotator,
         request: AnnotateRequest,
     ) -> Result<AnnotateReply, PluginFailure> {
-        let named = |failure| PluginFailure {
-            plugin: annotator.plugin.clone(),
-            failure,
-        };
-        let worker = self.worker(&annotator.plugin).map_err(named)?;
-        let (reply, answer) = mpsc::channel();
-
-        let outcome = {
-            let worker = hold(&worker);
-            match worker.jobs.send(Work::Annotate(request, reply)) {
-                Ok(()) => answer.recv_timeout(self.limits.call + self.limits.grace),
-                Err(_) => Err(RecvTimeoutError::Disconnected),
-            }
-        };
-
-        match outcome {
-            Ok(result) => result.map_err(named),
-            Err(RecvTimeoutError::Timeout) => {
-                self.stop(&annotator.plugin);
-                Err(named(Failure::Unresponsive))
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                self.stop(&annotator.plugin);
-                Err(named(Failure::Host("its runtime stopped".into())))
-            }
-        }
+        self.ask(&annotator.plugin, |reply| Work::Annotate(request, reply))
     }
 
     /// The library lock is taken before the worker map's and never the other

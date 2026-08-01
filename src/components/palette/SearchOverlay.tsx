@@ -11,18 +11,12 @@ const HIT_LIMIT = 50;
 const DEBOUNCE_MS = 150;
 const MIN_QUERY = 2;
 
-interface Props {
-  /** Called after the target is activated, so the timeline can scroll to the
-   * message. Selection still works without it; it just lands at the bottom. */
-  onJump?: (hit: SearchHit) => void;
-}
-
-export function SearchOverlay(props: Props) {
+export function SearchOverlay() {
   const open = useAppStore((s) => s.searchOpen);
-  return open ? <Search {...props} /> : null;
+  return open ? <Search /> : null;
 }
 
-function Search({ onJump }: Props) {
+function Search() {
   const active = useActiveTarget();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -64,13 +58,15 @@ function Search({ onJump }: Props) {
 
   const close = () => useAppStore.getState().toggleSearch(false);
 
+  // Choosing a hit lands at the bottom of the conversation rather than at the
+  // message: scroll-to-hit needs a timeline that can seek a msgid it may not
+  // have loaded, which does not exist yet.
   function jump(index: number) {
     const hit = shown[index];
     if (!hit) return;
     useAppStore
       .getState()
       .showTarget({ network: hit.message.network, target: hit.message.target });
-    onJump?.(hit);
     close();
   }
 

@@ -1,5 +1,5 @@
 import type { ThemeSource } from "@/types";
-import { BUILT_IN_SOURCES, REQUIRED_TOKENS, catalogue, loadTheme } from "./load";
+import { BUILT_IN_SOURCES, FALLBACK_THEME_ID, REQUIRED_TOKENS, catalogue, loadTheme } from "./load";
 import { parseManifest, parseStylesheet } from "./parse";
 
 const MANIFEST = JSON.stringify({
@@ -30,7 +30,9 @@ describe("the built-in themes", () => {
   );
 
   it("agree on which properties exist", () => {
-    for (const source of BUILT_IN_SOURCES) {
+    // The fallback theme is what REQUIRED_TOKENS is derived from, so comparing
+    // it would compare an expression to itself; only the others can disagree.
+    for (const source of BUILT_IN_SOURCES.filter((held) => held.id !== FALLBACK_THEME_ID)) {
       const { tokens } = parseStylesheet(source.stylesheet);
       expect(Object.keys(tokens).sort()).toEqual([...REQUIRED_TOKENS]);
     }

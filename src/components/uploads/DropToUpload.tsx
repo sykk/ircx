@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
-import { ipc, onFileDrop } from "@/lib/ipc";
+import { formatBytes } from "@/lib/bytes";
+import { ipc, onFileDrop, reasonOr } from "@/lib/ipc";
 import { useActiveTarget } from "@/store/selectors";
 import type { FileToUpload } from "@/types";
 
@@ -180,7 +181,7 @@ export function DropToUpload() {
                       ? "cannot be read"
                       : file.tooLarge
                         ? "too large"
-                        : size(file.bytes)}
+                        : formatBytes(file.bytes)}
                   </span>
                 </li>
               ))}
@@ -236,20 +237,8 @@ function unreadable(path: string): FileToUpload {
   };
 }
 
-/** Rounded to something a person reads, not to something that is exact. */
-function size(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 /** The host the file is going to, which is the part of an endpoint the user
  * needs to recognise. A malformed one is shown whole rather than hidden. */
-function reasonOr(reason: unknown, fallback: string): string {
-  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
-}
-
 function hostOf(endpoint: string): string {
   try {
     return new URL(endpoint).host;

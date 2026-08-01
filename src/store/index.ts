@@ -125,6 +125,7 @@ const initialState: AppState = {
   rawLog: {},
   channelList: {},
   views: {},
+  viewScroll: {},
   viewOrder: [],
   activeViewId: null,
   layout: null,
@@ -171,7 +172,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const id = s.activeViewId;
       if (!target) {
         if (!id) return {};
-        return { views: retarget(s.views, id, "", "") };
+        return retarget(s, id, "", "");
       }
 
       const read = readingTarget(s, target);
@@ -185,7 +186,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           ...read,
         };
       }
-      return { views: retarget(s.views, id, target.network, target.target), ...read };
+      return { ...retarget(s, id, target.network, target.target), ...read };
     }),
 
   showTarget: (target) => {
@@ -207,9 +208,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setViewScroll: (view, position) =>
     set((s) => {
-      const current = s.views[view];
-      if (!current || current.scrollPosition === position) return {};
-      return { views: { ...s.views, [view]: { ...current, scrollPosition: position } } };
+      if (!s.views[view] || s.viewScroll[view] === position) return {};
+      return { viewScroll: { ...s.viewScroll, [view]: position } };
     }),
 
   setViewSelectedUser: (view, nick) =>
@@ -248,6 +248,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (!layout) return {};
 
       const { [view]: _closed, ...views } = s.views;
+      const { [view]: _scrolled, ...viewScroll } = s.viewScroll;
       // Otherwise a later pane handed the same id would open with the closed
       // pane's roster hidden.
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
@@ -255,6 +256,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return {
         layout,
         views,
+        viewScroll,
         rosterHidden,
         viewOrder: paneOrder(layout),
         activeViewId:
@@ -410,23 +412,26 @@ function readingTarget(
 }
 
 function newView(network: string, target: string): ChatView {
-  return { id: mintViewId(), network, target, scrollPosition: 0, selectedUser: null, raw: false };
+  return { id: mintViewId(), network, target, selectedUser: null, raw: false };
 }
 
 /** Retargeting resets the view's own position — the scroll and the inspector
  * belonged to the conversation it was showing, not to the pane. */
 function retarget(
-  views: Record<ViewId, ChatView>,
+  s: Pick<AppState, "views" | "viewScroll">,
   id: ViewId,
   network: string,
   target: string,
-): Record<ViewId, ChatView> {
-  const view = views[id];
-  if (!view) return views;
-  if (view.network === network && view.target === target) return views;
+): Partial<AppState> {
+  const view = s.views[id];
+  if (!view) return {};
+  if (view.network === network && view.target === target) return {};
   return {
-    ...views,
-    [id]: { ...view, network, target, scrollPosition: 0, selectedUser: null, raw: false },
+    views: {
+      ...s.views,
+      [id]: { ...view, network, target, selectedUser: null, raw: false },
+    },
+    viewScroll: { ...s.viewScroll, [id]: 0 },
   };
 }
 
@@ -454,11 +459,14 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
             ...Object.fromEntries(
               stale.map((v) => [
                 v.id,
-                { ...v, network: "", target: "", scrollPosition: 0, selectedUser: null, raw: false },
+                { ...v, network: "", target: "", selectedUser: null, raw: false },
               ]),
             ),
           }
         : s.views;
+      const viewScroll = stale.length
+        ? { ...s.viewScroll, ...Object.fromEntries(stale.map((v) => [v.id, 0])) }
+        : s.viewScroll;
 
       return {
         networks,
@@ -468,6 +476,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         timelines: dropByNetwork(s.timelines, event.network),
         members: dropByNetwork(s.members, event.network),
         views,
+        viewScroll,
       };
     }
 
@@ -486,7 +495,17 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
     case "messagesAppended": {
       const key = targetKey(event.network, event.target);
       const timeline = s.timelines[key] ?? EMPTY_TIMELINE;
-      const known = new Set(timeline.messages.map((m) => m.id));
+      // A duplicate is an echo or a replay carrying the timestamp of what it
+      // duplicates, so only the stretch of the window as new as the batch's
+      // oldest message can hold one. For live traffic that stretch is empty,
+      // which spares sweeping a 10k window per delivery.
+      const oldest = Math.min(...event.messages.map((m) => Date.parse(m.timestamp)));
+      const known = new Set<string>();
+      for (let i = timeline.messages.length - 1; i >= 0; i--) {
+        const held = timeline.messages[i]!;
+        if (Date.parse(held.timestamp) < oldest) break;
+        known.add(held.id);
+      }
       const fresh = event.messages.filter((m) => !known.has(m.id));
       if (fresh.length === 0) return {};
 

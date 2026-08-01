@@ -234,8 +234,6 @@ impl SessionState {
         }
     }
 
-    /// The list goes into the tab it was asked for, as client notes, so it
-    /// lands where the user is looking and scrolls like everything else there.
     /// Closes a conversation and forgets it, so a restart does not reopen it.
     ///
     /// The window has had this since #121, by right-clicking the sidebar row;
@@ -258,6 +256,8 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// The list goes into the tab it was asked for, as client notes, so it
+    /// lands where the user is looking and scrolls like everything else there.
     fn cmd_help(&mut self, target: &str) -> CommandOutcome {
         self.note_block(target, HELP);
         CommandOutcome::Handled
@@ -570,10 +570,11 @@ impl SessionState {
 
 /// The commands ircx answers itself. A plugin cannot take one of these over:
 /// the routing in `plugins.rs` looks here first. Every name in the match in
-/// `dispatch` belongs in this list, which `plugin_commands.rs` checks.
+/// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "react", "unreact", "me", "query", "nick",
-    "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "help",
+    "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "close",
+    "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {
@@ -594,8 +595,6 @@ pub(crate) fn slash_command(input: &str) -> Option<(String, &str)> {
     }
 }
 
-/// Sends whatever the user configured as a connect command, taking a leading
-/// slash off so `/mode sykk +i` and `MODE sykk +i` both work.
 /// A connect command that names something ircx answers itself, as composer
 /// input — or `None` for the rest, which stay protocol lines.
 ///
@@ -612,6 +611,8 @@ pub(crate) fn connect_builtin(line: &str) -> Option<String> {
     is_builtin(&name.to_ascii_lowercase()).then(|| format!("/{line}"))
 }
 
+/// A configured connect command as the protocol line to send, taking a leading
+/// slash off so `/mode sykk +i` and `MODE sykk +i` both work.
 pub(crate) fn connect_command(line: &str) -> Option<String> {
     let line = line.trim().trim_start_matches('/');
     if line.is_empty() {

@@ -2,19 +2,11 @@ import { useState } from "react";
 import type { Attachment, AttachmentPreview } from "@/types";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { ipc, openExternal } from "@/lib/ipc";
+import { formatBytes } from "@/lib/bytes";
 import { formatClock } from "./rows";
 
-const UNITS = ["B", "KB", "MB", "GB"];
-
 export function formatSize(bytes: bigint | null): string | null {
-  if (bytes === null) return null;
-  let size = Number(bytes);
-  let unit = 0;
-  while (size >= 1024 && unit < UNITS.length - 1) {
-    size /= 1024;
-    unit++;
-  }
-  return `${unit === 0 ? size : size.toFixed(size < 10 ? 1 : 0)} ${UNITS[unit]}`;
+  return bytes === null ? null : formatBytes(bytes);
 }
 
 function filenameOf(attachment: Attachment): string {

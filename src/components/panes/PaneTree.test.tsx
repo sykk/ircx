@@ -133,9 +133,9 @@ describe("PaneTree", () => {
     scrollers[0]!.scrollTop = 900;
     fireEvent.scroll(scrollers[0]!);
 
-    const { views } = useAppStore.getState();
-    expect(views[first]!.scrollPosition).toBe(900);
-    expect(views[second]!.scrollPosition).toBe(40);
+    const { viewScroll } = useAppStore.getState();
+    expect(viewScroll[first]).toBe(900);
+    expect(viewScroll[second]).toBe(40);
     expect(scrollers[1]!.scrollTop).toBe(40);
   });
 

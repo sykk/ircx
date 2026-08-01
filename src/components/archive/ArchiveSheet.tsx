@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { save } from "@tauri-apps/plugin-dialog";
 import { Group, PrimaryButton, SecondaryButton, SelectField } from "@/components/onboarding/fields";
-import { ipc } from "@/lib/ipc";
+import { formatBytes } from "@/lib/bytes";
+import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
@@ -23,24 +23,11 @@ const WINDOWS: { value: string; label: string }[] = [
   { value: "365", label: "A year" },
 ];
 
-/** Bytes as somebody would say them, which is two significant figures and a unit. */
-export function describeSize(bytes: bigint | number): string {
-  const total = Number(bytes);
-  if (total < 1024) return `${total} B`;
-  const units = ["kB", "MB", "GB"];
-  let size = total / 1024;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`;
-}
 
 /** What was kept, in the words the sheet uses for it. */
 export function describeKept(summary: ArchiveSummary): string {
   const messages = Number(summary.messages);
-  return `${messages.toLocaleString()} message${messages === 1 ? "" : "s"}, ${describeSize(summary.bytes)}`;
+  return `${messages.toLocaleString()} message${messages === 1 ? "" : "s"}, ${formatBytes(summary.bytes)}`;
 }
 
 /**
@@ -113,14 +100,11 @@ function Sheet() {
     setError(null);
     // Dismissing the dialog and failing to open one are different answers, and
     // catching both as null is how #167 hid a refused permission for as long as
-    // it did. `save` resolves to null when the user says no and rejects when it
-    // could not ask.
+    // it did. The dialog resolves to null when the user says no and rejects
+    // when it could not ask.
     let path: string | null;
     try {
-      path = await save({
-        defaultPath: suggested,
-        filters: [{ name: "JSON Lines", extensions: ["jsonl"] }],
-      });
+      path = await chooseSavePath(suggested, [{ name: "JSON Lines", extensions: ["jsonl"] }]);
     } catch (reason) {
       setError(reasonOr(reason, "The save dialog could not be opened."));
       return;
@@ -129,7 +113,7 @@ function Sheet() {
     setBusy(true);
     try {
       const bytes = await ipc.exportArchive(scope, path);
-      setSaid(`Written to ${path} — ${describeSize(bytes)}.`);
+      setSaid(`Written to ${path} — ${formatBytes(bytes)}.`);
     } catch (reason) {
       setError(reasonOr(reason, "The export could not be written."));
     }
@@ -322,6 +306,3 @@ export function nowKeeping(days: string): string {
   return `Kept for ${days} days. Messages past that go on the next launch.`;
 }
 
-function reasonOr(reason: unknown, fallback: string): string {
-  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
-}

@@ -307,7 +307,7 @@ fn fetching_needs_the_grant_and_the_host() {
             .call(&call("fetcher", url))
             .expect("fetches")
             .content,
-        Some("200 it worked".into())
+        Some("it worked".into())
     );
     let seen = host.seen();
     assert_eq!(seen.len(), 1, "one request reached the host");

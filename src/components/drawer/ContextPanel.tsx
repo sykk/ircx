@@ -7,8 +7,7 @@ import type { Member } from "@/types";
 import { MemberList } from "./MemberList";
 import { UserInspector } from "./UserInspector";
 
-/* `useMembers` builds a fresh `[]` for a channel with no member list yet, which
- * useSyncExternalStore treats as a changed snapshot. Index the map instead. */
+/** Shared so an absent lookup returns one stable reference, not a fresh literal. */
 const NO_MEMBERS: Member[] = [];
 
 /**
@@ -46,7 +45,10 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   const pane = useView(view);
   const channel = useChannelForView(view);
   const network = useNetwork(channel?.network);
-  const membersByTarget = useAppStore((s) => s.members);
+  const key = channel === undefined ? null : targetKey(channel.network, channel.name);
+  // One entry, not the whole map: subscribing to `s.members` re-rendered every
+  // pane's panel on a join or part in any channel on any network.
+  const members = useAppStore((s) => (key === null ? NO_MEMBERS : (s.members[key] ?? NO_MEMBERS)));
   const toggleRoster = useAppStore((s) => s.toggleRoster);
 
   // The inspector belongs to the pane, not to the panel: retargeting the view
@@ -59,9 +61,6 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
     },
     [view, setViewSelectedUser],
   );
-
-  const key = channel === undefined ? null : targetKey(channel.network, channel.name);
-  const members = key === null ? NO_MEMBERS : (membersByTarget[key] ?? NO_MEMBERS);
 
   // A query or a console has nobody to list, and an empty column standing in
   // for a roster is worse than the space it costs.

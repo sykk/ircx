@@ -116,14 +116,18 @@ const LAYOUT_TOKENS = Object.keys(
   readAll(THEMES.find((theme) => theme.id === "ircx-dark")!.css),
 ).filter((name) => name.startsWith("timeline-"));
 
-describe.each(THEMES)("$id timeline layout", ({ css }) => {
+describe.each(THEMES)("$id timeline layout", ({ id, css }) => {
   const all = readAll(css);
 
-  it("declares the same set the dark theme does", () => {
-    expect(Object.keys(all).filter((name) => name.startsWith("timeline-")).sort()).toEqual(
-      [...LAYOUT_TOKENS].sort(),
-    );
-  });
+  // Not run for ircx-dark, which LAYOUT_TOKENS is derived from: that case
+  // compared an expression to itself.
+  if (id !== "ircx-dark") {
+    it("declares the same set the dark theme does", () => {
+      expect(Object.keys(all).filter((name) => name.startsWith("timeline-")).sort()).toEqual(
+        [...LAYOUT_TOKENS].sort(),
+      );
+    });
+  }
 
   // A length or a bare ratio. Anything else — a colour, a keyword, a var()
   // chain pointing somewhere else — collapses a column rather than restyling

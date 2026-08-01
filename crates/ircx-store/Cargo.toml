@@ -11,5 +11,4 @@ thiserror.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tracing.workspace = true
 keyring = { version = "3", features = ["linux-native", "apple-native", "windows-native"] }

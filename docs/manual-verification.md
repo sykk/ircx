@@ -1565,3 +1565,31 @@ harness cannot answer, so the button was watched doing nothing when the dialog
 is dismissed and the writing itself is covered only by the store's tests. Export
 one conversation and one archive, and read the file back — it is JSON Lines, one
 message per line, and `jq` is enough to check it.
+
+## Recalling a sent line in the composer
+
+Up and Down step back through what was already sent in a conversation. Where the
+arrow recalls and where it only moves the caret is decided by the caret's own
+position, and that is the part `npm test` cannot check: jsdom lays nothing out,
+so it has no soft wrapping, no visual rows, and no native caret movement. Every
+test sets `selectionStart` itself, which asserts the rule but not that a real
+textarea puts the caret where the rule expects.
+
+**Not verified:** the arrows against a laid-out box. What to walk:
+
+- A line long enough to wrap onto two or three rows, with no newline in it.
+  Pressing Up from the middle must move the caret up a row and leave the text
+  alone. Only from the very start does it recall. This is the case the rule was
+  changed for — counting newlines instead called the middle of a wrapped line
+  "the first line" and replaced the box mid-edit.
+- A message with real newlines from Shift+Enter, which should behave the same
+  way for the same reason.
+- Once a line has been recalled, Up keeps stepping back without the caret being
+  sent to the start first, and the caret sits at the end of each recalled line
+  ready to be edited.
+- Stepping past the newest line with Down puts back whatever was being typed
+  before recall started.
+
+Nothing here is written to disk: the list is per conversation and lasts only as
+long as the app is running, so a restart is expected to empty it while the
+stored draft survives.

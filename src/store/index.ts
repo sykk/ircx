@@ -28,6 +28,8 @@ import type {
 const TIMELINE_CAP = 10_000;
 const RAW_LOG_CAP = 2_000;
 const RECENT_CAP = 50;
+/** Per conversation, and only for this run — nothing here is written to disk. */
+const INPUT_HISTORY_CAP = 100;
 
 const EMPTY_TIMELINE: TimelineState = {
   messages: [],
@@ -79,6 +81,9 @@ export interface AppActions {
    * it with a null msgid. */
   setReplyTo: (network: string, target: string, msgid: string | null) => void;
 
+  /** Records a line as sent in this conversation, for the composer to recall. */
+  rememberInput: (network: string, target: string, text: string) => void;
+
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
   togglePalette: (open?: boolean) => void;
@@ -122,6 +127,7 @@ const initialState: AppState = {
   timelines: {},
   typing: {},
   replyTo: {},
+  inputHistory: {},
   rawLog: {},
   channelList: {},
   views: {},
@@ -317,6 +323,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         return { replyTo };
       }
       return { replyTo: { ...s.replyTo, [key]: msgid } };
+    }),
+
+  rememberInput: (network, target, text) =>
+    set((s) => {
+      const key = targetKey(network, target);
+      const history = s.inputHistory[key] ?? [];
+      // The same line sent twice running is one entry, so the second Up reaches
+      // what came before it rather than saying the same thing again.
+      if (history[0] === text) return s;
+      return {
+        inputHistory: {
+          ...s.inputHistory,
+          [key]: [text, ...history].slice(0, INPUT_HISTORY_CAP),
+        },
+      };
     }),
 
   toggleRoster: (view, shown) =>

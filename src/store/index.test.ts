@@ -555,3 +555,41 @@ describe("a query whose other end renames", () => {
     expect(Object.keys(useAppStore.getState().queries)).toEqual([OLD]);
   });
 });
+
+describe("the lines a conversation remembers", () => {
+  function remember(...lines: string[]) {
+    for (const line of lines) {
+      useAppStore.getState().rememberInput("libera", "#ctf-ops", line);
+    }
+    return useAppStore.getState().inputHistory[KEY];
+  }
+
+  it("puts the most recent line first", () => {
+    expect(remember("first", "second")).toEqual(["second", "first"]);
+  });
+
+  it("keeps one entry for a line sent twice running", () => {
+    expect(remember("again", "again")).toEqual(["again"]);
+  });
+
+  it("keeps both when something was said in between", () => {
+    expect(remember("again", "other", "again")).toEqual(["again", "other", "again"]);
+  });
+
+  it("drops the oldest past the cap", () => {
+    const history = remember(...Array.from({ length: 105 }, (_, i) => `line ${i}`));
+    expect(history).toHaveLength(100);
+    expect(history?.[0]).toBe("line 104");
+    expect(history?.at(-1)).toBe("line 5");
+  });
+
+  it("keeps each conversation's lines to itself", () => {
+    remember("for the channel");
+    useAppStore.getState().rememberInput("libera", "phrack", "for the query");
+
+    expect(useAppStore.getState().inputHistory[KEY]).toEqual(["for the channel"]);
+    expect(useAppStore.getState().inputHistory[targetKey("libera", "phrack")]).toEqual([
+      "for the query",
+    ]);
+  });
+});

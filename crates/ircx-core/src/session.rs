@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Instant;
 
 use ircx_ipc::{
@@ -209,7 +209,9 @@ pub struct SessionState {
     /// first page. What comes back for one of these was missed rather than
     /// merely never seen, which is the whole of the difference to the unread
     /// count.
-    pub(crate) gap_fills: HashSet<String>,
+    /// Conversations with an outstanding gap request, and how many pages of it
+    /// have come back. A page that arrives full has more behind it.
+    pub(crate) gap_fills: HashMap<String, u32>,
 }
 
 impl SessionState {
@@ -244,7 +246,7 @@ impl SessionState {
             listing: Vec::new(),
             archived: HashMap::new(),
             restored_at: None,
-            gap_fills: HashSet::new(),
+            gap_fills: HashMap::new(),
         }
     }
 
@@ -893,8 +895,54 @@ impl SessionState {
         // a first page of a conversation you were told you missed is not a
         // conversation you have only just met.
         if self.backfill(&target) {
-            self.gap_fills.insert(key);
+            self.gap_fills.entry(key).or_insert(0);
         }
+    }
+
+    /// How much history one request may ask for: the smaller of what the server
+    /// said it would answer with and the page this client reads.
+    pub(crate) fn page_limit(&self) -> u32 {
+        self.isupport
+            .chathistory
+            .map_or(history::PAGE, |max| max.min(history::PAGE))
+    }
+
+    /// Asks for the next page of a gap that has not been closed yet.
+    ///
+    /// `AFTER` answers oldest-first, so a full page is the *start* of what was
+    /// missed and the rest is still out there. #239.
+    ///
+    /// `from` is the newest message in the page that just arrived, and it has to
+    /// be: the conversation's watermark moves with every message including the
+    /// live ones, and a channel that says anything while a page is in flight
+    /// pushes it to now — which asks for the gap from after the end of it and
+    /// silently skips the rest. Found against a real server, where the second
+    /// request went out stamped later than the whole backlog it was chasing.
+    pub(crate) fn continue_gap(&mut self, target: &str, pages: u32, from: &str) {
+        let key = self.fold(target);
+        if pages >= history::GAP_PAGES {
+            self.gap_fills.remove(&key);
+            // The one case where the client knows it is behind. Saying nothing
+            // would leave the reader with the oldest of what they missed and no
+            // reason to doubt it is all of it.
+            self.note(
+                target,
+                MessageKind::Client,
+                format!(
+                    "This conversation moved faster than ircx caught up with: \
+                     {} messages of it were fetched and there is more that was not.",
+                    pages * self.page_limit()
+                ),
+            );
+            return;
+        }
+        let limit = self.page_limit();
+        let Some(line) = history::request(target, Some(from), limit) else {
+            self.gap_fills.remove(&key);
+            return;
+        };
+        self.gap_fills.insert(key, pages);
+        self.send_line(line);
     }
 
     /// The network's `autojoin`, then whatever the user had joined by hand when
@@ -1394,10 +1442,7 @@ impl SessionState {
         if !self.caps.is_enabled("draft/chathistory") {
             return false;
         }
-        let limit = self
-            .isupport
-            .chathistory
-            .map_or(history::PAGE, |max| max.min(history::PAGE));
+        let limit = self.page_limit();
         // A server can say it will answer with nothing, and asking anyway is a
         // request that can only be refused.
         if limit == 0 {
@@ -1409,8 +1454,10 @@ impl SessionState {
             return false;
         };
         match since {
+            // `or_insert` rather than `insert`: a second page of the same gap
+            // keeps the count of what has already come back.
             Some(_) => {
-                self.gap_fills.insert(key);
+                self.gap_fills.entry(key).or_insert(0);
             }
             None => {
                 self.gap_fills.remove(&key);

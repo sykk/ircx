@@ -3310,3 +3310,136 @@ fn the_gap_is_measured_from_before_the_socket_was_opened() {
         asked[0]
     );
 }
+
+/// #239. `AFTER` answers oldest-first, so a page that comes back full is the
+/// start of what was missed rather than all of it — and the watermark moves to
+/// what did arrive, so without asking again a conversation that outran one page
+/// stays exactly one page behind for good.
+mod paging_a_gap {
+    use super::*;
+
+    /// A server that will answer with three at a time, and a client that has
+    /// been away.
+    fn behind() -> Harness {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Channel("#ircx".into()),
+            newest: Some("2026-07-31T08:00:00.000Z".into()),
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=3 :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session
+    }
+
+    /// `reference` keeps each batch distinct, the way a server's do.
+    fn page(session: &mut Harness, reference: u32, minutes: &[u32]) {
+        session.feed(&format!(":ergo.test BATCH +{reference} chathistory #ircx"));
+        for minute in minutes {
+            session.feed(&format!(
+                "@batch={reference};time=2026-07-31T09:{minute:02}:00.000Z \
+                 :phrack!p@h PRIVMSG #ircx :line {minute}"
+            ));
+        }
+        session.feed(&format!(":ergo.test BATCH -{reference}"));
+    }
+
+    #[test]
+    fn a_full_page_is_asked_past() {
+        let mut session = behind();
+        page(&mut session, 1, &[1, 2, 3]);
+
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:03:00.000Z 3"]
+        );
+    }
+
+    #[test]
+    fn a_short_page_is_the_end_of_it() {
+        let mut session = behind();
+        page(&mut session, 1, &[1, 2]);
+
+        assert!(session.sent_starting("CHATHISTORY").is_empty());
+    }
+
+    /// Found against a real server: the second request went out stamped later
+    /// than the whole backlog it was chasing. A conversation's watermark moves
+    /// with every message including the live ones, so anything said while a
+    /// page is in flight pushes it to now — and the continuation asks for the
+    /// gap from after the end of it.
+    #[test]
+    fn a_live_message_mid_flight_does_not_move_where_the_next_page_starts() {
+        let mut session = behind();
+        // Said now, while the page is still coming back.
+        session.feed("@time=2026-07-31T23:59:00.000Z :walker!w@h PRIVMSG #ircx :meanwhile, live");
+        session.sent();
+        page(&mut session, 1, &[1, 2, 3]);
+
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:03:00.000Z 3"]
+        );
+    }
+
+    #[test]
+    fn each_page_carries_on_from_the_last() {
+        let mut session = behind();
+        page(&mut session, 1, &[1, 2, 3]);
+        session.sent();
+        page(&mut session, 2, &[4, 5, 6]);
+
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:06:00.000Z 3"]
+        );
+    }
+
+    /// Somebody away for a month is not worth a thousand requests, and the
+    /// reader is told where the fetching stopped rather than left with the
+    /// oldest of what they missed and no reason to doubt it.
+    #[test]
+    fn it_stops_and_says_so() {
+        let mut session = behind();
+        // Nine full pages, each answered by a request for the next.
+        for round in 1..=9 {
+            page(&mut session, round, &[round, round + 20, round + 40]);
+        }
+        assert_eq!(session.sent_starting("CHATHISTORY").len(), 9);
+        session.sent();
+
+        // The tenth is the cap.
+        page(&mut session, 10, &[10, 30, 50]);
+
+        assert!(session.sent_starting("CHATHISTORY").is_empty());
+        let said: Vec<String> = session
+            .messages()
+            .iter()
+            .filter(|message| message.kind == MessageKind::Client)
+            .map(|message| message.text.clone())
+            .collect();
+        let stopped: Vec<&String> = said
+            .iter()
+            .filter(|text| text.contains("more that was not"))
+            .collect();
+        assert_eq!(stopped.len(), 1, "said once, and only once: {said:?}");
+    }
+
+    /// A first page of a conversation this client never held is not a gap, so
+    /// its truncation is the ordinary "scroll back for more".
+    #[test]
+    fn a_first_page_is_not_paged_past() {
+        let mut session = registered("draft/chathistory");
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=3 :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        page(&mut session, 1, &[1, 2, 3]);
+
+        assert!(session.sent_starting("CHATHISTORY").is_empty());
+    }
+}

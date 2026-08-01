@@ -233,9 +233,10 @@ impl SessionState {
         };
         let mut run: Vec<ChatMessage> = Vec::new();
         let live = batch.source == MessageSource::Live;
-        // Every conversation this batch touched, so the gap each was filling is
-        // closed once rather than per message.
-        let mut filled: Vec<String> = Vec::new();
+        // Every conversation this batch touched and how much of it arrived, so
+        // each gap is closed once rather than per message — and a page that came
+        // back full is a page with more behind it.
+        let mut filled: Vec<(String, u32, String)> = Vec::new();
         for message in batch.messages {
             // A first page is not an interruption: it is a conversation the
             // user has only just met, and none of it was theirs to miss. What
@@ -250,8 +251,21 @@ impl SessionState {
             if live || (missed && self.in_conversation(&message.target, &message.sender.nick)) {
                 self.count_towards_unread(&message);
             }
-            if missed && !filled.iter().any(|target| target == &message.target) {
-                filled.push(message.target.clone());
+            if missed {
+                match filled
+                    .iter_mut()
+                    .find(|(target, _, _)| target == &message.target)
+                {
+                    Some((_, arrived, newest)) => {
+                        *arrived += 1;
+                        if message.timestamp > *newest {
+                            newest.clone_from(&message.timestamp);
+                        }
+                    }
+                    None => {
+                        filled.push((message.target.clone(), 1, message.timestamp.clone()));
+                    }
+                }
             }
             self.remember_newest(&message);
             if run.last().is_some_and(|last| last.target != message.target) {
@@ -260,16 +274,25 @@ impl SessionState {
             run.push(message);
         }
         self.flush_run(&mut run, live);
-        for target in filled {
+        let limit = self.page_limit();
+        for (target, arrived, newest) in filled {
             let key = self.fold(&target);
-            self.gap_fills.remove(&key);
+            let pages = self.gap_fills.get(&key).copied().unwrap_or(0) + 1;
+            // Short of the limit is the end of the gap. Exactly the limit is the
+            // start of one that did not fit. #239.
+            match arrived >= limit {
+                true => self.continue_gap(&target, pages, &newest),
+                false => {
+                    self.gap_fills.remove(&key);
+                }
+            }
         }
     }
 
     /// Whether what is arriving for this conversation is the gap the client
     /// asked for rather than a first page of one it has never held.
     fn fills_a_gap(&self, target: &str) -> bool {
-        self.gap_fills.contains(&self.fold(target))
+        self.gap_fills.contains_key(&self.fold(target))
     }
 
     /// Whether this nick is in the conversation. A roster that has not arrived

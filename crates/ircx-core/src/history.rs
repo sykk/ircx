@@ -22,6 +22,14 @@ pub(crate) const PAGE: u32 = 200;
 /// server's memory and still arrives the moment somebody speaks.
 pub(crate) const TARGETS: u32 = 50;
 
+/// How many pages of one gap to fetch before giving up on catching all of it.
+///
+/// A cap rather than a loop until the server runs out: a conversation somebody
+/// was away from for a month is not worth a thousand requests, and the reader is
+/// told where the fetching stopped. At `PAGE` apiece this is the last two
+/// thousand messages of what was missed.
+pub(crate) const GAP_PAGES: u32 = 10;
+
 /// Which conversations were spoken in between `since` and now.
 ///
 /// Both bounds have to be selectors: a server answers `*` with

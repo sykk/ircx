@@ -13,6 +13,15 @@ pub const RPL_LISTEND: u16 = 323;
 pub const RPL_CHANNELMODEIS: u16 = 324;
 pub const RPL_NOTOPIC: u16 = 331;
 pub const RPL_TOPICWHOTIME: u16 = 333;
+/// The WHOIS replies worth rewriting. Each puts its data *before* the server's
+/// trailing text, so joining the parameters — which is what an unhandled
+/// numeric falls back to — reads backwards or unlabelled. `session.rs` writes
+/// them, because two of them need the same clock the topic's does.
+pub const RPL_WHOISUSER: u16 = 311;
+pub const RPL_WHOISSERVER: u16 = 312;
+pub const RPL_WHOISIDLE: u16 = 317;
+pub const RPL_WHOISCHANNELS: u16 = 319;
+pub const RPL_WHOISACCOUNT: u16 = 330;
 pub const ERR_NOSUCHNICK: u16 = 401;
 pub const ERR_UNKNOWNCOMMAND: u16 = 421;
 

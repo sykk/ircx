@@ -20,40 +20,138 @@ use tracing::warn;
 /// connection may run.
 const EVENT_QUEUE: usize = 4_096;
 
-/// Where a debug build looks for the frontend. Tauri bakes `devUrl` into the
-/// binary, so this is the address regardless of what `dist/` holds.
+/// What the dev server said about itself, or why it could not be asked.
 #[cfg(debug_assertions)]
-const DEV_URL: &str = "http://localhost:5183";
+#[derive(Debug)]
+enum DevServer {
+    /// Serving this checkout. The only answer that lets the window open.
+    Ours,
+    /// Answering, and serving something else — a second checkout on the same
+    /// fixed port. The window would come up built from another working tree.
+    Theirs(String),
+    /// Nothing on the address at all.
+    Silent,
+    /// Answering but not saying which checkout, or not askable at all. A dev
+    /// server older than this check says nothing about itself, and a check that
+    /// could not run must not be the reason the client refuses to start.
+    Unknown,
+}
 
-/// Whether anything is listening on `host:port`.
+/// Asks the dev server which checkout it is serving.
 ///
 /// A hostname does not parse as a `SocketAddr`, so it is resolved first — the
-/// dev URL is `localhost:5183`, which is exactly the case that would otherwise
-/// answer "cannot tell" and let the blank window through.
+/// dev URL is a hostname, which is exactly the case that would otherwise answer
+/// "cannot tell" and let the blank window through.
+///
+/// Only the response headers are read, and only far enough to find the one
+/// `vite.config.ts` sets. Nothing here needs a body, so nothing here has to
+/// know about transfer encodings.
 #[cfg(debug_assertions)]
-fn listening(address: &str) -> bool {
+fn dev_server(url: &tauri::Url, root: &std::path::Path) -> DevServer {
+    use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
     use std::time::Duration;
 
-    let Ok(resolved) = address.to_socket_addrs() else {
-        // Nothing this can check, so say nothing rather than refuse to start
-        // over a check that did not run.
-        return true;
+    const WAIT: Duration = Duration::from_millis(1500);
+    let Some(host) = url.host_str() else {
+        return DevServer::Unknown;
     };
-    resolved
+    let authority = format!("{host}:{}", url.port().unwrap_or(80));
+    let Ok(resolved) = authority.to_socket_addrs() else {
+        return DevServer::Unknown;
+    };
+    let mut stream = match resolved
         .into_iter()
-        .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(500)).is_ok())
+        .find_map(|address| TcpStream::connect_timeout(&address, WAIT).ok())
+    {
+        Some(stream) => stream,
+        None => return DevServer::Silent,
+    };
+    let _ = stream.set_read_timeout(Some(WAIT));
+    let request = format!("GET / HTTP/1.0\r\nHost: {authority}\r\n\r\n");
+    if stream.write_all(request.as_bytes()).is_err() {
+        return DevServer::Unknown;
+    }
+
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    // Headers only: stop at the blank line, and never read more than a header
+    // block's worth however the other end behaves.
+    while head.len() < 16 * 1024 && !head.ends_with(b"\r\n\r\n") {
+        match stream.read(&mut byte) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => head.push(byte[0]),
+        }
+    }
+
+    let head = String::from_utf8_lossy(&head);
+    let named = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("x-ircx-root")
+            .then(|| value.trim().to_string())
+    });
+    match named {
+        None => DevServer::Unknown,
+        Some(named) => match same_directory(named.as_ref(), root) {
+            true => DevServer::Ours,
+            false => DevServer::Theirs(named),
+        },
+    }
+}
+
+/// Compares two paths as directories, so a trailing separator or an unresolved
+/// symlink does not read as a different checkout.
+#[cfg(debug_assertions)]
+fn same_directory(left: &std::path::Path, right: &std::path::Path) -> bool {
+    let settle =
+        |path: &std::path::Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    settle(left) == settle(right)
 }
 
 pub fn run() {
+    let context = tauri::generate_context!();
+
+    // A debug build loads the frontend from the dev server named in
+    // `tauri.conf.json`, which is the one place that address is written down.
     #[cfg(debug_assertions)]
-    if !listening(DEV_URL.trim_start_matches("http://")) {
-        eprintln!("ircx: nothing is listening on {DEV_URL}.");
-        eprintln!(
-            "A debug build loads the frontend from the dev server, so the window would be blank."
-        );
-        eprintln!("Start it with: npm run tauri dev");
-        std::process::exit(1);
+    if let Some(dev_url) = context.config().build.dev_url.as_ref() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf();
+        match dev_server(dev_url, &root) {
+            DevServer::Ours => {}
+            DevServer::Silent => {
+                eprintln!("ircx: nothing is listening on {dev_url}.");
+                eprintln!(
+                    "A debug build loads the frontend from the dev server, so the window would \
+                     be blank."
+                );
+                eprintln!("Start it with: npm run tauri dev");
+                std::process::exit(1);
+            }
+            DevServer::Theirs(theirs) => {
+                eprintln!("ircx: {dev_url} is serving another checkout.");
+                eprintln!("  it is serving: {theirs}");
+                eprintln!("  this build is: {}", root.display());
+                eprintln!(
+                    "The window would come up built from that working tree, connect, and draw a \
+                     conversation with none of your changes in it."
+                );
+                eprintln!(
+                    "Stop that dev server, or give this checkout its own port in \
+                     src-tauri/tauri.conf.json."
+                );
+                std::process::exit(1);
+            }
+            // Started rather than refused: the check not running is not
+            // evidence of anything, and blocking on it would make a dev server
+            // older than this change look like a broken build.
+            DevServer::Unknown => {
+                eprintln!("ircx: {dev_url} did not say which checkout it serves; starting anyway.");
+            }
+        }
     }
 
     tracing_subscriber::fmt()
@@ -108,7 +206,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { handle.state::<App>().start().await });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("tauri failed to start");
 
     app.run(|app, event| {
@@ -146,18 +244,44 @@ fn open_plugins(app: &tauri::AppHandle) -> Option<Arc<PluginRuntime>> {
 
 #[cfg(all(test, debug_assertions))]
 mod tests {
-    use super::listening;
+    use super::{dev_server, same_directory, DevServer};
+    use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::path::{Path, PathBuf};
 
-    /// #187. The check has to be right about the address the binary actually
-    /// uses, and `localhost:5183` is a hostname — the case that does not parse
-    /// as a `SocketAddr` and would otherwise wave a blank window through.
-    #[test]
-    fn a_hostname_is_resolved_rather_than_waved_through() {
+    /// A dev server that names `root`, for one request. `None` is one that says
+    /// nothing about itself, which is what an older one does.
+    fn serving(root: Option<PathBuf>) -> (tauri::Url, std::thread::JoinHandle<()>) {
         let socket = TcpListener::bind("127.0.0.1:0").expect("a port to listen on");
         let port = socket.local_addr().expect("its address").port();
+        let handle = std::thread::spawn(move || {
+            let Ok((mut stream, _)) = socket.accept() else {
+                return;
+            };
+            let mut scratch = [0u8; 1024];
+            let _ = stream.read(&mut scratch);
+            let header = match root {
+                Some(root) => format!("x-ircx-root: {}\r\n", root.display()),
+                None => String::new(),
+            };
+            let _ = stream.write_all(
+                format!("HTTP/1.0 200 OK\r\n{header}Content-Length: 0\r\n\r\n").as_bytes(),
+            );
+        });
+        let url = tauri::Url::parse(&format!("http://localhost:{port}/")).expect("a url");
+        (url, handle)
+    }
 
-        assert!(listening(&format!("localhost:{port}")));
+    /// #187. The check has to be right about the address the binary actually
+    /// uses, and the dev URL is a hostname — the case that does not parse as a
+    /// `SocketAddr` and would otherwise wave a blank window through.
+    #[test]
+    fn a_hostname_is_resolved_rather_than_waved_through() {
+        let root = std::env::current_dir().expect("a working directory");
+        let (url, server) = serving(Some(root.clone()));
+
+        assert!(matches!(dev_server(&url, &root), DevServer::Ours));
+        let _ = server.join();
     }
 
     #[test]
@@ -165,14 +289,49 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:0").expect("a port to listen on");
         let port = socket.local_addr().expect("its address").port();
         drop(socket);
+        let url = tauri::Url::parse(&format!("http://localhost:{port}/")).expect("a url");
 
-        assert!(!listening(&format!("localhost:{port}")));
+        assert!(matches!(
+            dev_server(&url, Path::new(".")),
+            DevServer::Silent
+        ));
+    }
+
+    /// #233. The failure this was written for: a second checkout answering on
+    /// the fixed port, which draws a whole convincing window from the wrong
+    /// working tree.
+    #[test]
+    fn another_checkout_is_named_rather_than_served() {
+        let (url, server) = serving(Some(PathBuf::from("/somewhere/else")));
+
+        match dev_server(&url, Path::new(".")) {
+            DevServer::Theirs(named) => assert_eq!(named, "/somewhere/else"),
+            other => panic!("expected the other checkout to be named, got {other:?}"),
+        }
+        let _ = server.join();
     }
 
     /// Said rather than guessed: a check that cannot run must not be the reason
     /// the client refuses to start.
     #[test]
-    fn an_address_that_cannot_be_resolved_does_not_stop_the_client() {
-        assert!(listening("this is not an address"));
+    fn a_server_that_says_nothing_about_itself_is_not_refused() {
+        let (url, server) = serving(None);
+
+        assert!(matches!(
+            dev_server(&url, Path::new(".")),
+            DevServer::Unknown
+        ));
+        let _ = server.join();
+    }
+
+    /// A trailing separator is how the dev server writes its root and not how
+    /// `CARGO_MANIFEST_DIR` writes it, which would otherwise read as two
+    /// different checkouts on every run.
+    #[test]
+    fn a_trailing_separator_is_the_same_directory() {
+        let here = std::env::current_dir().expect("a working directory");
+        let trailing = PathBuf::from(format!("{}/", here.display()));
+
+        assert!(same_directory(&trailing, &here));
     }
 }

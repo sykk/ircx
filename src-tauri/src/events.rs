@@ -113,6 +113,11 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         IrcxEvent::QueryRemoved { network, nick } => {
             Some(Lane::Query(network.clone(), nick.clone()))
         }
+        // Deliberately in no lane. A rename is a move rather than a state, and
+        // the `QueryUpdated` that follows it names the same conversation — put
+        // them in one lane and the update replaces the move, which is the whole
+        // of what the frontend needed to be told.
+        IrcxEvent::QueryRenamed { .. } => None,
 
         IrcxEvent::MembersReplaced {
             network, channel, ..

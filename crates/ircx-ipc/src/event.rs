@@ -70,6 +70,18 @@ pub enum IrcxEvent {
         network: NetworkId,
         nick: TargetName,
     },
+    /// The person a query is with changed their nick.
+    ///
+    /// One event rather than a removal and an arrival, because a conversation
+    /// is more than its row: everything the frontend keys by the name — the
+    /// history, what is being typed, what a reply answers — has to move with
+    /// it, and two events cannot say whether the old name left or became this
+    /// one. What is already written down keeps the name it was said under.
+    QueryRenamed {
+        network: NetworkId,
+        from: TargetName,
+        to: TargetName,
+    },
     /// A `LIST` that finished, whole. Sent once rather than per reply: a
     /// network answers with tens of thousands, and an event each is what #119
     /// was about.

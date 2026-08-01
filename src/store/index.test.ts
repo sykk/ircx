@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeMessage } from "@/components/timeline/fixtures";
-import { makeChannel, makeNetwork, resetStore } from "@/components/shell/fixtures";
+import { makeChannel, makeNetwork, oneView, resetStore } from "@/components/shell/fixtures";
 import type { IrcxEvent } from "@/types";
 import { useAppStore } from "./index";
 import { targetKey } from "./keys";
@@ -450,5 +450,108 @@ describe("a backfill of what was said while nobody was here", () => {
     });
 
     expect(timeline()?.unreadFrom).toBe("live");
+  });
+});
+
+/**
+ * #234 fixed the roster half of a rename. A query is not a name in a list but
+ * everything the store keys by that name, and the walk that found this showed
+ * one conversation as two rows — the older holding the history behind a
+ * composer addressed to a nick nobody held any more.
+ */
+describe("a query whose other end renames", () => {
+  const OLD = targetKey("libera", "oldname");
+  const NEW = targetKey("libera", "newname");
+
+  function withQuery() {
+    useAppStore.setState({
+      queries: {
+        [OLD]: { network: "libera", nick: "oldname", account: null, unread: 2, online: true },
+      },
+      timelines: {
+        [OLD]: {
+          messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
+          unreadFrom: null,
+          hasMore: false,
+          loadingOlder: false,
+        },
+      },
+      replyTo: { [OLD]: "msgid-1" },
+      recent: [OLD],
+    });
+  }
+
+  function rename() {
+    useAppStore.getState().applyEvent({
+      type: "queryRenamed",
+      network: "libera",
+      from: "oldname",
+      to: "newname",
+    });
+  }
+
+  it("leaves one row, under the new name", () => {
+    withQuery();
+    rename();
+
+    const { queries } = useAppStore.getState();
+    expect(Object.keys(queries)).toEqual([NEW]);
+    expect(queries[NEW]?.nick).toBe("newname");
+  });
+
+  it("takes the conversation with it", () => {
+    withQuery();
+    rename();
+
+    const { timelines } = useAppStore.getState();
+    expect(timelines[OLD]).toBeUndefined();
+    expect(timelines[NEW]?.messages.map((m) => m.id)).toEqual(["a"]);
+  });
+
+  it("takes what the next message answers, and where it sat in the recents", () => {
+    withQuery();
+    rename();
+
+    const { replyTo, recent } = useAppStore.getState();
+    expect(replyTo[NEW]).toBe("msgid-1");
+    expect(replyTo[OLD]).toBeUndefined();
+    expect(recent).toEqual([NEW]);
+  });
+
+  /** A pane reading the conversation keeps reading it rather than emptying. */
+  it("moves a pane that was looking at them", () => {
+    withQuery();
+    useAppStore.setState(oneView({ network: "libera", target: "oldname" }));
+    rename();
+
+    const { views } = useAppStore.getState();
+    expect(Object.values(views).map((v) => v.target)).toEqual(["newname"]);
+  });
+
+  /** Two conversations meeting is not a move: the one already read wins, and
+   * nothing is silently overwritten. */
+  it("keeps what is already under the new name", () => {
+    withQuery();
+    useAppStore.setState({
+      queries: {
+        ...useAppStore.getState().queries,
+        [NEW]: { network: "libera", nick: "newname", account: null, unread: 9, online: true },
+      },
+    });
+    rename();
+
+    expect(useAppStore.getState().queries[NEW]?.unread).toBe(9);
+  });
+
+  it("does nothing when the name only changes case", () => {
+    withQuery();
+    useAppStore.getState().applyEvent({
+      type: "queryRenamed",
+      network: "libera",
+      from: "oldname",
+      to: "OldName",
+    });
+
+    expect(Object.keys(useAppStore.getState().queries)).toEqual([OLD]);
   });
 });

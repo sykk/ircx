@@ -12,7 +12,10 @@ import type { ArchiveScope, ArchiveSummary } from "@/types";
  * Days rather than a free number: the question is "how long do I want this
  * around", and nobody answers it in 47.
  */
+const KEEP_NOTHING = "0";
+
 const WINDOWS: { value: string; label: string }[] = [
+  { value: KEEP_NOTHING, label: "Nothing — do not write it down" },
   { value: "", label: "Forever" },
   { value: "7", label: "7 days" },
   { value: "30", label: "30 days" },
@@ -100,11 +103,7 @@ function Sheet() {
         days === "" ? null : Number(days),
       );
       read();
-      setSaid(
-        days === ""
-          ? "Kept forever. Nothing is removed until this changes."
-          : `Kept for ${days} days. Messages past that go on the next launch.`,
-      );
+      setSaid(nowKeeping(days));
     } catch (reason) {
       setError(reasonOr(reason, "That could not be saved."));
     }
@@ -297,6 +296,21 @@ function Sheet() {
 
 /** Distinct from "forever", which is a window this conversation states itself. */
 const FOLLOWS_NETWORK = "follows";
+
+/**
+ * What the window just chosen means, said once rather than left to be inferred.
+ *
+ * The keep-nothing case earns its sentence: messages still arrive and are still
+ * drawn, and a conversation that empties when the app closes reads as a bug the
+ * first time somebody meets it. #249.
+ */
+export function nowKeeping(days: string): string {
+  if (days === KEEP_NOTHING) {
+    return "Nothing is written down. Conversations still arrive and are still drawn — they are gone when ircx closes, and scrolling back finds nothing.";
+  }
+  if (days === "") return "Kept forever. Nothing is removed until this changes.";
+  return `Kept for ${days} days. Messages past that go on the next launch.`;
+}
 
 function reasonOr(reason: unknown, fallback: string): string {
   return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;

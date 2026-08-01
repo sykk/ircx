@@ -1093,6 +1093,12 @@ Two things the walk changed:
   session routes to a target. The count is on the archive sheet instead, which
   is where somebody who set a window goes back to.
 
+**Keeping nothing is walked** (#249, 2026-08-01). A network set to
+`Nothing — do not write it down` drew five arriving messages in the timeline and
+wrote none of them: the archive held 61 before and 61 after, and none of the five
+was in it. That is the setting working, and the sheet says so in the same breath
+so a conversation that empties on close does not read as a bug.
+
 **Not verified:** the export. `save()` opens a real file dialog, which the
 harness cannot answer, so the button was watched doing nothing when the dialog
 is dismissed and the writing itself is covered only by the store's tests. Export

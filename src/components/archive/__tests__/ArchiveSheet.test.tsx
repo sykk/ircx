@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { makeNetwork, oneView } from "@/components/shell/fixtures";
-import { ArchiveSheet, describeKept, describeSize } from "../ArchiveSheet";
+import { ArchiveSheet, describeKept, describeSize, nowKeeping } from "../ArchiveSheet";
 
 const summary = vi.fn();
 const setRetention = vi.fn();
@@ -55,6 +55,24 @@ describe("saying what is kept", () => {
   });
 });
 
+/** #249. Messages still arrive and are still drawn, so a conversation that
+ * empties when the app closes reads as a bug unless the sheet says otherwise. */
+describe("what a window means", () => {
+  it("says what keeping nothing does, and what it does not", () => {
+    const said = nowKeeping("0");
+    expect(said).toContain("Nothing is written down");
+    expect(said).toContain("still drawn");
+  });
+
+  it("says forever means nothing goes", () => {
+    expect(nowKeeping("")).toContain("Nothing is removed");
+  });
+
+  it("says when a window takes effect", () => {
+    expect(nowKeeping("30")).toContain("next launch");
+  });
+});
+
 describe("the archive sheet", () => {
   it("draws nothing while it is closed", () => {
     useAppStore.setState({ archiveOpen: false });
@@ -93,6 +111,19 @@ describe("the archive sheet", () => {
 
     await waitFor(() => expect(setRetention).toHaveBeenCalledWith("libera", null, 30));
     await waitFor(() => expect(summary).toHaveBeenCalled());
+    await waitFor(() => expect(summary).toHaveBeenCalled());
+  });
+
+  it("can be told to keep nothing at all", async () => {
+    render(<ArchiveSheet />);
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.change(screen.getByLabelText(/Everything on Libera.Chat/), {
+      target: { value: "0" },
+    });
+
+    await waitFor(() => expect(setRetention).toHaveBeenCalledWith("libera", null, 0));
+    expect(await screen.findByText(/Nothing is written down/)).toBeTruthy();
   });
 
   it("sets a window on the conversation without touching the network's", async () => {

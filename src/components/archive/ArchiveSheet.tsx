@@ -111,10 +111,20 @@ function Sheet() {
 
   async function exportTo(scope: ArchiveScope, suggested: string) {
     setError(null);
-    const path = await save({
-      defaultPath: suggested,
-      filters: [{ name: "JSON Lines", extensions: ["jsonl"] }],
-    }).catch(() => null);
+    // Dismissing the dialog and failing to open one are different answers, and
+    // catching both as null is how #167 hid a refused permission for as long as
+    // it did. `save` resolves to null when the user says no and rejects when it
+    // could not ask.
+    let path: string | null;
+    try {
+      path = await save({
+        defaultPath: suggested,
+        filters: [{ name: "JSON Lines", extensions: ["jsonl"] }],
+      });
+    } catch (reason) {
+      setError(reasonOr(reason, "The save dialog could not be opened."));
+      return;
+    }
     if (typeof path !== "string") return;
     setBusy(true);
     try {

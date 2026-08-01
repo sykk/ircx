@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IconButton } from "@/components/common/IconButton";
+import { insideTauri } from "@/lib/ipc";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useAppStore } from "@/store";
 import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connection";
@@ -8,7 +9,7 @@ import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connect
 /** `getCurrentWindow` reads globals the webview injects, so it throws under
  * vitest and in a plain browser. The controls go inert there instead. */
 function appWindow() {
-  return "__TAURI_INTERNALS__" in window ? getCurrentWindow() : null;
+  return insideTauri() ? getCurrentWindow() : null;
 }
 
 export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) | undefined }) {

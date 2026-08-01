@@ -972,13 +972,45 @@ Five wrapped lines, whole, held at the 8px margin. The capability list on the
 right is unchanged at `{"left":861,"right":1181}`, and reopening still gives
 identical geometry.
 
+**The vertical edge is walked** on 2026-08-01, and the answer is that there is
+no clamp on it and nothing this application can say reaches it.
+
+There is no clamp: a 1328-character label in a 393px viewport came out 402px
+tall at `{"top":-37}`, its first two lines above the window, unreadable.
+
+Nothing reaches it. The tallest label the app can produce is around 300
+characters, which wraps to 89px:
+
+```text
+capability list, 19 caps    288 chars   h 89   top 277
+the SCRAM refusal sentence  252 chars   h 89   top 277
+```
+
+Both measured against the bottom of a **393px** viewport — shorter than the
+app permits itself, because `tauri.conf.json` sets `minHeight` to 480. The box
+would have to be four times taller to reach the top, which is roughly 1200
+characters, and each caller is bounded well under that:
+
+- The status bar and the title bar carry sentences core writes, and the longest
+  found is the SCRAM refusal above.
+- A capability list is bounded by what a server advertises. Libera advertises
+  19; there are not enough ratified and draft capabilities in IRCv3 to reach
+  four times that.
+- Reaction names are capped in `reactorNames` at `NAMES_SHOWN` and a count —
+  twelve names and `and 48 more` for sixty reactors, which measured 39px. This
+  was the case expected to fail, on a reaction near the top of the timeline,
+  and the cap is why it does not.
+
+So the missing clamp is not a defect to fix; it is a case no label can provoke.
+That holds only while those bounds do. A caller that puts an unbounded string
+in a tooltip — a filesystem error with a path in it, a server's own text
+passed through — reintroduces it, and this is the note that says so.
+
 **Not walked:**
 
 - **A window narrow enough for the `100vw` cap to bind.** The width falls back
-  from 20rem below a 336px window, which no run has been that small to see.
-- **The vertical edge.** A box tall enough to leave the window is not clamped at
-  all — only the horizontal is. Five lines at the bottom of a 1200x713 window
-  was fine; nothing has tried a longer label in a shorter window.
+  from 20rem below a 336px window. The narrowest run was 720px, and
+  `minWidth` is 720, so the app cannot be made to reach it either.
 
 ## Density
 

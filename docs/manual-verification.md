@@ -954,13 +954,31 @@ arrow in #172. A mark that is obvious to whoever built it is not evidence.
 **A broken rule being dropped** is walked, under the annotator's section above,
 along with one plugin holding both hooks and only one of them broken.
 
+**A dropped hook coming back** is walked on 2026-08-01, against local `ergo`,
+as a step in `crates/ircx-core/tests/ergo.rs`. A plugin written to throw is
+installed and granted, a second client says three things, and the hook is
+dropped into the server console:
+
+```text
+The flaky plugin failed 3 times in a row, so ircx stopped asking it to annotate
+messages. Install it again from Plugins once it is fixed.
+```
+
+Repaired, installed over — the same call the sheet makes — and told the network
+it changed, it answers on the next message without a restart.
+
+**The step was checked against a build with the clearing taken out**, which is
+the only reason it is worth anything: it failed there, with `the repaired
+plugin was never asked again — the strikes outlived the install`. A step that
+passes either way says nothing about the mechanism it names.
+
 Still not walked:
 
-- **A dropped hook coming back.** Installing a plugin again now clears the
-  strikes against it on every running network, so a plugin repaired and
-  installed should start answering without a restart. The clearing is unit
-  tested at both ends and the two have never been joined in the application —
-  which is the same shape as the gap that made the drop itself worth walking.
+- **The half above the core.** The run sends `PluginChanged` itself. What sends
+  it in the application is `plugin_changed` in `src-tauri/src/state.rs`, reached
+  by installing through the plugins sheet, and that is a window nothing here can
+  drive. So the strikes, the drop, the repair and the return are joined over a
+  real connection; the click that starts them is not.
 
 ## The topic of a channel you have joined
 

@@ -6,9 +6,11 @@ import {
   useMembers,
   useNetworks,
   useQueriesFor,
+  isHighlight,
   mentions,
   splitOnMention,
 } from "./selectors";
+import { makeMessage } from "@/components/timeline/fixtures";
 import type { ChatView } from "./types";
 import type { Channel, Network } from "@/types";
 
@@ -358,5 +360,48 @@ describe("splitOnMention", () => {
         expect(marked(splitOnMention(text, nick)).length > 0).toBe(mentions(text, nick));
       }
     }
+  });
+});
+
+/**
+ * #222. Ergo replays a channel's comings and goings as ordinary messages from
+ * `HistServ`, so the line that says the reader joined is a message whose text
+ * holds the reader's own name.
+ */
+describe("who can address you", () => {
+  const from = (nick: string, text: string) => makeMessage({ nick, text });
+
+  it("marks somebody in the conversation naming you", () => {
+    expect(isHighlight(from("phrack", "sable: look at this"), "sable", new Set(["phrack"]))).toBe(
+      true,
+    );
+  });
+
+  it("does not mark a service that is not in it", () => {
+    expect(
+      isHighlight(from("HistServ", "sable joined the channel"), "sable", new Set(["phrack"])),
+    ).toBe(false);
+  });
+
+  it("folds the roster, because a server may answer in another casing", () => {
+    expect(isHighlight(from("Phrack", "sable: hi"), "sable", new Set(["phrack"]))).toBe(true);
+  });
+
+  /** A roster that has not arrived is not a channel nobody is in: the reader is
+   * always in their own. */
+  it("does not gate on an empty roster", () => {
+    expect(isHighlight(from("phrack", "sable: hi"), "sable", new Set())).toBe(true);
+  });
+
+  /** A query has no roster to check, and the only two people who can speak in
+   * one are its two ends. */
+  it("does not gate when no roster is given", () => {
+    expect(isHighlight(from("phrack", "sable: hi"), "sable")).toBe(true);
+  });
+
+  it("still ignores your own messages", () => {
+    const own = makeMessage({ nick: "sable", text: "sable" });
+    own.sender.isSelf = true;
+    expect(isHighlight(own, "sable", new Set(["sable"]))).toBe(false);
   });
 });

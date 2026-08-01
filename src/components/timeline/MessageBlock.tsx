@@ -104,6 +104,9 @@ interface Props {
   flashId: string | null;
   group: Group | null;
   opensGroup: boolean;
+  /** Who is in the conversation, folded. A sender who is not cannot be
+   * addressing anybody in it. */
+  present: ReadonlySet<string>;
 }
 
 /**
@@ -154,9 +157,10 @@ export function MessageBlock({
   flashId,
   group,
   opensGroup,
+  present,
 }: Props) {
   const head = messages[0]!;
-  const addressed = messages.some((message) => isHighlight(message, ownNick));
+  const addressed = messages.some((message) => isHighlight(message, ownNick, present));
   // A rule raises a message to the same loudness a mention has — the badge
   // does not distinguish them — so the spine says so the same way. Which line
   // and which rule is on the row, where the message is.
@@ -222,6 +226,7 @@ export function MessageBlock({
           canTag={canTag}
           onReact={onReact}
           onReply={onReply}
+          present={present}
           flashing={message.id === flashId}
         />
       ))}

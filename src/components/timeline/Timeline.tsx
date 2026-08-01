@@ -5,7 +5,7 @@ import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, useAppStore } from "@/store";
 import { targetKey, useMembers, useTimelineForView, useView } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
-import { DateSeparator, UnreadDivider } from "./Divider";
+import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
 import { assignGroups } from "./groups";
 import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
@@ -72,10 +72,17 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const members = useMembers(network, target);
   const present = useMemo(() => members.map((member) => member.nick), [members]);
   const groups = useMemo(() => assignGroups(messages, present), [messages, present]);
+  // Folded once here rather than per message: who is in the conversation is
+  // what tells somebody addressing the reader from a service talking about
+  // them.
+  const roster = useMemo(
+    () => new Set(present.map((nick) => nick.toLowerCase())),
+    [present],
+  );
 
   const rows = useMemo(
-    () => buildRows(messages, unreadFrom, ownNick, groups),
-    [messages, unreadFrom, ownNick, groups],
+    () => buildRows(messages, unreadFrom, ownNick, groups, roster),
+    [messages, unreadFrom, ownNick, groups, roster],
   );
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
 
@@ -245,6 +252,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                   onReact: react,
                   onReply: reply,
                   flashId,
+                  present: roster,
                 })}
               </div>
             ))}
@@ -285,10 +293,12 @@ interface RowContext {
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
   flashId: string | null;
+  present: ReadonlySet<string>;
 }
 
 function renderRow(row: TimelineRow, context: RowContext) {
   if (row.kind === "unread") return <UnreadDivider seam={row.seam} />;
+  if (row.kind === "history") return <HistoryDivider opens={row.opens} />;
   if (row.kind === "date") return <DateSeparator at={row.at} />;
   if (row.kind === "system")
     return <SystemMessage messages={row.messages} ownNick={context.ownNick} />;

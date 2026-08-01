@@ -27,6 +27,7 @@ interface MessageRowProps {
   canTag: boolean;
   onReact: (msgid: string, emoji: string, active: boolean) => void;
   onReply: (msgid: string) => void;
+  present: ReadonlySet<string>;
   flashing: boolean;
 }
 
@@ -39,9 +40,10 @@ export function MessageRow({
   canTag,
   onReact,
   onReply,
+  present,
   flashing,
 }: MessageRowProps) {
-  const highlight = isHighlight(message, ownNick);
+  const highlight = isHighlight(message, ownNick, present);
   // A rule raised this line to the same loudness a mention has, so it is marked
   // the same way: the row tinted, and the reason said in the words for it.
   const raised = (message.raisedBy ?? []).length > 0;

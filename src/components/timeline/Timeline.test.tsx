@@ -4,6 +4,7 @@ import type { ChatMessage, Reaction } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
+import { member } from "@/components/drawer/fixtures";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
 import {
@@ -1349,5 +1350,78 @@ describe("a message a notification rule raised", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.queryByText("raised by")).toBeNull();
+  });
+});
+
+/**
+ * #221 and #222, both found by the third end-to-end run. Ergo replays a
+ * channel's comings and goings inside the history batch as ordinary messages
+ * from `HistServ`, and one of them says the reader's own name.
+ */
+describe("a conversation the server replayed", () => {
+  const narration = () =>
+    makeMessage({
+      id: "h",
+      nick: "HistServ",
+      text: "sable joined the channel",
+      source: "serverHistory",
+    });
+
+  function seedWithRoster(messages: ChatMessage[], nicks: string[]) {
+    seed(messages);
+    useAppStore.setState({ members: { [KEY]: nicks.map((nick) => member(nick)) } });
+  }
+
+  it("says where the replay starts and where it gives way", () => {
+    seedWithRoster(
+      [
+        makeMessage({ id: "a", nick: "phrack", text: "away for a bit", source: "serverHistory" }),
+        makeMessage({ id: "b", nick: "phrack", text: "back now" }),
+      ],
+      ["phrack", "sable"],
+    );
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("From the server's history")).toBeTruthy();
+    expect(screen.getByText("Live from here")).toBeTruthy();
+  });
+
+  it("does not let a service in the replay claim it addressed you", () => {
+    seedWithRoster([narration()], ["phrack", "sable"]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.queryByText(/addressed you by name/)).toBeNull();
+    expect(document.querySelector('[data-msgid="h"]')?.getAttribute("data-highlight")).toBe(null);
+  });
+
+  /** The gate is about who is in the conversation, not about where the message
+   * came from: somebody who really did call your name while you were away is
+   * the thing a backfill is worth reading for. */
+  it("still marks a person in the channel who named you while you were away", () => {
+    seedWithRoster(
+      [
+        makeMessage({
+          id: "a",
+          nick: "phrack",
+          text: "sable: the build is broken",
+          source: "serverHistory",
+        }),
+      ],
+      ["phrack", "sable"],
+    );
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText(/addressed you by name/).textContent).toBe(
+      "phrack addressed you by name",
+    );
+  });
+
+  /** Before the names arrive there is nothing to check against, and silencing
+   * every mention until they do would lose the ones that matter most. */
+  it("marks a mention while the roster is still empty", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "sable: look at this" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText(/addressed you by name/)).toBeTruthy();
   });
 });

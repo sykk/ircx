@@ -37,23 +37,51 @@ pub(crate) const GAP_PAGES: u32 = 10;
 /// That suits the only question worth asking — what happened while this client
 /// was away — which needs a near side anyway.
 pub(crate) fn targets(since: &str, now: &str) -> Option<String> {
-    let from = selector(since)?;
-    let to = selector(now)?;
+    let from = at(since)?;
+    let to = at(now)?;
     build(
         "CHATHISTORY",
         &["TARGETS", &from, &to, &TARGETS.to_string()],
     )
 }
 
-/// `since` is when this conversation was last heard from. With one, the ask is
+/// Where the ask for a gap starts from.
+///
+/// A timestamp is always there; a msgid is there whenever a server gave one and
+/// is preferred, because it is the only one of the two that is exact. `AFTER`
+/// is exclusive and a millisecond is not a unique key, so a timestamp steps over
+/// everything sharing it — which against a real server cost the message at the
+/// far side of a page boundary, and costs however many share that millisecond.
+/// #253.
+pub(crate) struct Resume<'a> {
+    pub(crate) timestamp: &'a str,
+    /// `None` on the first request of a gap, which has only the archive's
+    /// watermark to go on, and from any server that sends no `msgid`.
+    pub(crate) msgid: Option<&'a str>,
+}
+
+/// `since` is where this conversation was last heard from. With one, the ask is
 /// for the gap; without one, for the most recent page, which is what a channel
 /// joined for the first time has to show.
-pub(crate) fn request(target: &str, since: Option<&str>, limit: u32) -> Option<String> {
+pub(crate) fn request(target: &str, since: Option<Resume<'_>>, limit: u32) -> Option<String> {
     let limit = limit.to_string();
     match since.and_then(selector) {
         Some(after) => build("CHATHISTORY", &["AFTER", target, &after, &limit]),
         None => build("CHATHISTORY", &["LATEST", target, "*", &limit]),
     }
+}
+
+/// The msgid where there is one to use, and the timestamp otherwise.
+///
+/// A msgid is a tag value and unescaping turns `\s` into a space, so one can
+/// arrive holding a character that would end the parameter early. That msgid is
+/// passed over rather than refused: falling back to the timestamp fetches the
+/// same page less exactly, where refusing would abandon the gap.
+fn selector(from: Resume<'_>) -> Option<String> {
+    from.msgid
+        .filter(|id| !id.is_empty() && !id.contains([' ', '\r', '\n', '\0']))
+        .map(|id| format!("msgid={id}"))
+        .or_else(|| at(from.timestamp))
 }
 
 /// `timestamp=` is milliseconds and a `Z`. The archive holds whatever the
@@ -66,7 +94,7 @@ pub(crate) fn request(target: &str, since: Option<&str>, limit: u32) -> Option<S
 ///
 /// A timestamp that will not parse comes from a server-set tag rather than from
 /// an impossibility. Asking for the latest page instead loses nothing.
-fn selector(timestamp: &str) -> Option<String> {
+fn at(timestamp: &str) -> Option<String> {
     let at = OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
         .ok()?
         .to_offset(UtcOffset::UTC);
@@ -86,6 +114,13 @@ fn selector(timestamp: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    fn at_only(timestamp: &str) -> Resume<'_> {
+        Resume {
+            timestamp,
+            msgid: None,
+        }
+    }
+
     #[test]
     fn an_empty_archive_asks_for_the_most_recent_page() {
         assert_eq!(
@@ -97,7 +132,7 @@ mod tests {
     #[test]
     fn an_archive_asks_for_what_came_after_it() {
         assert_eq!(
-            request("#ircx", Some("2026-07-31T09:15:04.123456789Z"), 50).as_deref(),
+            request("#ircx", Some(at_only("2026-07-31T09:15:04.123456789Z")), 50).as_deref(),
             Some("CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.123Z 50")
         );
     }
@@ -105,7 +140,7 @@ mod tests {
     #[test]
     fn a_timestamp_off_utc_is_asked_for_in_utc() {
         assert_eq!(
-            request("#ircx", Some("2026-07-31T11:15:04+02:00"), 50).as_deref(),
+            request("#ircx", Some(at_only("2026-07-31T11:15:04+02:00")), 50).as_deref(),
             Some("CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.000Z 50")
         );
     }
@@ -113,8 +148,38 @@ mod tests {
     #[test]
     fn a_timestamp_that_will_not_parse_asks_for_the_latest_page() {
         assert_eq!(
-            request("#ircx", Some("whenever"), 200).as_deref(),
+            request("#ircx", Some(at_only("whenever")), 200).as_deref(),
             Some("CHATHISTORY LATEST #ircx * 200")
         );
+    }
+
+    #[test]
+    fn a_msgid_is_asked_for_ahead_of_the_timestamp_beside_it() {
+        let resume = Resume {
+            timestamp: "2026-07-31T09:15:04.123Z",
+            msgid: Some("pqpmmxnsetcinv4abh5jmxn3gs"),
+        };
+        assert_eq!(
+            request("#ircx", Some(resume), 200).as_deref(),
+            Some("CHATHISTORY AFTER #ircx msgid=pqpmmxnsetcinv4abh5jmxn3gs 200")
+        );
+    }
+
+    /// Unescaping a tag value turns `\s` into a space, so a msgid can arrive
+    /// holding one. Asking on the timestamp instead fetches the same page; a
+    /// refusal would abandon the gap.
+    #[test]
+    fn a_msgid_that_would_not_survive_the_line_falls_back_to_the_timestamp() {
+        for id in ["", "two words", "line\r\nbreak"] {
+            let resume = Resume {
+                timestamp: "2026-07-31T09:15:04.123Z",
+                msgid: Some(id),
+            };
+            assert_eq!(
+                request("#ircx", Some(resume), 200).as_deref(),
+                Some("CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.123Z 200"),
+                "{id:?} should have been passed over"
+            );
+        }
     }
 }

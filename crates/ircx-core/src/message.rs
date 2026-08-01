@@ -236,7 +236,7 @@ impl SessionState {
         // Every conversation this batch touched and how much of it arrived, so
         // each gap is closed once rather than per message — and a page that came
         // back full is a page with more behind it.
-        let mut filled: Vec<(String, u32, String)> = Vec::new();
+        let mut filled: Vec<(String, u32, String, Option<String>)> = Vec::new();
         for message in batch.messages {
             // A first page is not an interruption: it is a conversation the
             // user has only just met, and none of it was theirs to miss. What
@@ -252,18 +252,25 @@ impl SessionState {
                 self.count_towards_unread(&message);
             }
             if missed {
+                // A server msgid names one message; an id minted here names
+                // nothing a server can resolve, so a page without one resumes on
+                // its timestamp. #253.
+                let msgid = (!message.id_is_local).then(|| message.id.clone());
                 match filled
                     .iter_mut()
-                    .find(|(target, _, _)| target == &message.target)
+                    .find(|(target, ..)| target == &message.target)
                 {
-                    Some((_, arrived, newest)) => {
+                    Some((_, arrived, newest, last)) => {
                         *arrived += 1;
-                        if message.timestamp > *newest {
+                        // `>=`, because several messages can share a millisecond
+                        // and the one to carry on from is the last of them.
+                        if message.timestamp >= *newest {
                             newest.clone_from(&message.timestamp);
+                            *last = msgid;
                         }
                     }
                     None => {
-                        filled.push((message.target.clone(), 1, message.timestamp.clone()));
+                        filled.push((message.target.clone(), 1, message.timestamp.clone(), msgid));
                     }
                 }
             }
@@ -275,13 +282,13 @@ impl SessionState {
         }
         self.flush_run(&mut run, live);
         let limit = self.page_limit();
-        for (target, arrived, newest) in filled {
+        for (target, arrived, newest, msgid) in filled {
             let key = self.fold(&target);
             let pages = self.gap_fills.get(&key).copied().unwrap_or(0) + 1;
             // Short of the limit is the end of the gap. Exactly the limit is the
             // start of one that did not fit. #239.
             match arrived >= limit {
-                true => self.continue_gap(&target, pages, &newest),
+                true => self.continue_gap(&target, pages, &newest, msgid.as_deref()),
                 false => {
                     self.gap_fills.remove(&key);
                 }

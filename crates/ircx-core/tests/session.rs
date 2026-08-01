@@ -3425,6 +3425,39 @@ mod paging_a_gap {
         );
     }
 
+    /// The same page, with the msgids a server sending `message-tags` puts on
+    /// it.
+    fn page_with_msgids(session: &mut Harness, reference: u32, at: &[(u32, u32, &str)]) {
+        session.feed(&format!(":ergo.test BATCH +{reference} chathistory #ircx"));
+        for (minute, second, msgid) in at {
+            session.feed(&format!(
+                "@batch={reference};msgid={msgid};time=2026-07-31T09:{minute:02}:{second:02}.000Z \
+                 :phrack!p@h PRIVMSG #ircx :line {minute}:{second}"
+            ));
+        }
+        session.feed(&format!(":ergo.test BATCH -{reference}"));
+    }
+
+    /// #253, found by paging a real server past the cap. `AFTER` is exclusive
+    /// and a millisecond is not a unique key, so asking on the last timestamp of
+    /// a page steps over everything else stamped with it — which on the run that
+    /// found this lost the message on the far side of the boundary.
+    #[test]
+    fn a_page_ending_inside_a_millisecond_carries_on_by_msgid() {
+        let mut session = behind();
+        page_with_msgids(
+            &mut session,
+            1,
+            &[(1, 0, "aaa"), (2, 0, "bbb"), (2, 0, "ccc")],
+        );
+
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx msgid=ccc 3"],
+            "the last of the messages sharing that millisecond, not the first"
+        );
+    }
+
     #[test]
     fn each_page_carries_on_from_the_last() {
         let mut session = behind();

@@ -251,6 +251,18 @@ settled the console filling up on its own, the absence of a targetless `TAGMSG`
 now that the raw log can be read from inside the app, and the restart seam. It
 found two new defects, #67 and #68.
 
+A third run on 2026-08-01 went to a local `ergo` instead, because what it was
+there to see was `draft/chathistory` and Libera has none to give.
+`docs/end-to-end-run-3.md`; six defects, #221 to #226.
+
+**Run it on `Xvfb`, not on a nested `Xwayland`.** The first two used a rootful
+`Xwayland :99`, which is an ordinary window on the operator's desktop: it takes
+focus and keystrokes like any other, so the operator's typing and the harness's
+XTEST events land in the same application and neither can tell them apart. A
+first attempt at the third run was abandoned for exactly that, after the mixed
+input was read as the application acting on its own. `Xvfb :98` has no window and
+cannot be typed into by accident.
+
 What is still open:
 
 - **The topic path.** `##test` has no topic set, so no run has seen one. Core is
@@ -258,12 +270,12 @@ What is still open:
   what is left is narrower: that the header draws a topic it is given, and that
   a `/topic` typed by the user comes back from the server changed. Whoever is
   next in a channel that has one should look.
-- **Independent scrolling between split panes.** `PaneTree.test.tsx` asserts
-  both halves — two panes on one channel restore their own positions, and
-  scrolling one leaves the other's alone. jsdom lays nothing out, so those
-  positions are numbers rather than pixels; what is left is whether two panes
-  scroll apart on screen. The first run's panes held three rows each and the
-  second never split.
+- **Independent scrolling between split panes** is **verified** by the third run
+  on 2026-08-01, which is the first one to split anything. Two panes on one
+  channel, one sitting at the top of the history while the other was at the
+  bottom, each with its own roster and composer: `docs/end-to-end-3/07-split-panes.png`.
+  It reads as two views of one conversation rather than as two things sharing a
+  box, which is the question `PaneTree.test.tsx` could not answer.
 - **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
   flags and `##test` drew a lock. There is no way to see a channel's modes in
   the interface, so nobody knows whether that lock is right.
@@ -942,13 +954,16 @@ Two things the run settled that were guesses beforehand:
   yet, so the message came back live and correctly so. Waiting for the echo is
   the barrier.
 
-What is left:
+**Seen in the assembled application** on 2026-08-01, in all three shapes:
+`LATEST` on a first join, `AFTER` on a rejoin, and `AFTER` across a restart with
+the app closed while the channel moved on. The messages land in the right place
+and group correctly. `docs/end-to-end-run-3.md`.
 
-- **Nobody has seen this in the assembled application.** Every part has a test
-  and no backfill has reached a window. What to look at: rejoin a channel that
-  has moved on, and the messages should land above what arrived while the
-  request was in flight rather than under it. The reordering is asserted in
-  `src/store/index.test.ts` and jsdom lays nothing out.
+That run found four defects in how a backfill is drawn rather than in whether it
+arrives — #221 to #224 — of which the root is that nothing on screen separates
+a replayed message from a live one.
+
+What is left:
 - **A gap wider than the server's limit.** A full page and a truncated page are
   the same page, so the hole is invisible to the client and would show as a
   jump in the conversation. Needs a channel left alone longer than 200 messages.

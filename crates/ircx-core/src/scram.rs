@@ -107,6 +107,19 @@ pub enum ScramError {
     Refused(String),
 }
 
+impl ScramError {
+    /// Whether re-typing the password would change the outcome.
+    ///
+    /// Only the server's own `e=` refusal says the credentials were wrong. The
+    /// other four are the server answering wrongly, and sending somebody back to
+    /// the password field over one of those is sending them somewhere the fault
+    /// is not — `BadSignature` in particular means something is answering for
+    /// the server, which no password fixes.
+    pub fn is_the_credentials(&self) -> bool {
+        matches!(self, Self::Refused(_))
+    }
+}
+
 impl fmt::Display for ScramError {
     /// Read by whoever has to fix it, so each one says what to do about it.
     /// Three of the five are the server's fault and say so, because a user

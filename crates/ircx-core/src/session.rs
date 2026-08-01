@@ -673,10 +673,10 @@ impl SessionState {
         }
         let challenge = std::mem::take(&mut self.challenge);
         let Ok(decoded) = STANDARD.decode(&challenge) else {
-            return self.abort_scram("the server's SCRAM reply was not base64");
+            return self.abort_scram(&scram::ScramError::Malformed("not base64"));
         };
         let Ok(decoded) = String::from_utf8(decoded) else {
-            return self.abort_scram("the server's SCRAM reply was not text");
+            return self.abort_scram(&scram::ScramError::Malformed("not text"));
         };
 
         let Some(exchange) = self.scram.as_mut() else {
@@ -687,13 +687,13 @@ impl SessionState {
                 // The server proved it knew the password too. The empty
                 // response is what tells it we are done, and 903 follows.
                 Ok(()) => self.send_payload(""),
-                Err(why) => self.abort_scram(&why.to_string()),
+                Err(why) => self.abort_scram(&why),
             }
             return;
         }
         match exchange.respond(&decoded) {
             Ok(reply) => self.send_payload(&STANDARD.encode(reply)),
-            Err(why) => self.abort_scram(&why.to_string()),
+            Err(why) => self.abort_scram(&why),
         }
     }
 
@@ -709,11 +709,23 @@ impl SessionState {
     ///
     /// `AUTHENTICATE *` first, which is how a client abandons an exchange —
     /// without it the server is left waiting on a response that is never coming.
-    fn abort_scram(&mut self, why: &str) {
+    ///
+    /// Which sentence the user gets turns on whose fault it was. Four of the
+    /// five ways an exchange dies are the server answering wrongly, and ircx is
+    /// the side that walked away — so saying the server "rejected the account"
+    /// and to go and check the password is wrong twice over. Walked against a
+    /// proxy that forged the server's signature: the window said something was
+    /// answering for the account, and then sent the reader to the password
+    /// field.
+    fn abort_scram(&mut self, why: &scram::ScramError) {
         self.scram = None;
         self.challenge.clear();
         self.send_command("AUTHENTICATE", &["*"]);
-        let message = self.sasl_refused(why);
+        let said = why.to_string();
+        let message = match why.is_the_credentials() {
+            true => self.sasl_refused(&said),
+            false => self.sasl_untrusted(&said),
+        };
         self.abort_sasl(message);
     }
 
@@ -727,15 +739,9 @@ impl SessionState {
     /// SASL authentication failed". Naming the account matters: it is as
     /// likely to be wrong as the password, and it is not on screen anywhere.
     fn sasl_refused(&self, reason: &str) -> String {
-        let account = self
-            .config
-            .sasl
-            .as_ref()
-            .map(|sasl| sasl.account.as_str())
-            .unwrap_or_default();
-        let who = match account.is_empty() {
-            true => String::new(),
-            false => format!(" the account {account}"),
+        let who = match self.sasl_account() {
+            Some(account) => format!(" the account {account}"),
+            None => String::new(),
         };
         let said = match reason.trim().is_empty() {
             true => String::new(),
@@ -745,6 +751,33 @@ impl SessionState {
             "{} rejected{who}{said}. Check the account name and password in this network's settings.",
             self.network_name()
         )
+    }
+
+    /// What an exchange the *server* could not hold up its end of says.
+    ///
+    /// Nobody rejected anything here: ircx stopped, because a server that
+    /// cannot prove it knows the password is not one to sign in to. The reason
+    /// already says what went wrong, so this adds only where to look — and says
+    /// plainly that the password is not it, because the sentence it replaces
+    /// sent people there.
+    fn sasl_untrusted(&self, reason: &str) -> String {
+        let who = match self.sasl_account() {
+            Some(account) => format!(" as {account}"),
+            None => String::new(),
+        };
+        format!(
+            "ircx stopped signing in to {}{who}: {reason}. The password is not what is wrong \
+             here — check the address and port this network points at.",
+            self.network_name()
+        )
+    }
+
+    fn sasl_account(&self) -> Option<&str> {
+        self.config
+            .sasl
+            .as_ref()
+            .map(|sasl| sasl.account.as_str())
+            .filter(|account| !account.is_empty())
     }
 
     fn abort_sasl(&mut self, message: String) {

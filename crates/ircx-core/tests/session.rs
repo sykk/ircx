@@ -2554,6 +2554,65 @@ mod scram_over_a_session {
         assert!(failed, "{:?}", session.sasl_states().last());
     }
 
+    /// Walked on 2026-08-01 against a proxy that replaced the server's
+    /// signature. The window said something was answering for the account and
+    /// then told the reader to go and check their password — advice that fixes
+    /// nothing, on the one failure that is worth reading carefully.
+    #[test]
+    fn a_forged_signature_does_not_send_the_reader_to_the_password_field() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        let nonce = nonce_from(&session.sent()[0]);
+        let server_first = format!("r={nonce}{SERVER_PART},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+        session.sent();
+
+        let forged = STANDARD.encode([0u8; 64]);
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode(format!("v={forged}"))
+        ));
+
+        let Some(SaslStatus::Failed { message }) = session.sasl_states().last() else {
+            panic!("expected a failure");
+        };
+        assert!(
+            !message.contains("password in this network's settings"),
+            "no password fixes a server that cannot prove itself: {message}"
+        );
+        assert!(
+            !message.contains("rejected"),
+            "the server refused nothing; ircx stopped: {message}"
+        );
+        assert!(
+            message.contains("address and port"),
+            "says where the fault could be instead: {message}"
+        );
+        assert!(message.contains("user"), "names the account: {message}");
+    }
+
+    /// The other half of the same rule: an `e=` refusal is the server saying
+    /// the credentials were wrong, so that one does belong in the password
+    /// field.
+    #[test]
+    fn a_server_that_says_why_it_refused_sends_the_reader_to_the_settings() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        session.sent();
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode("e=invalid-proof")
+        ));
+
+        let Some(SaslStatus::Failed { message }) = session.sasl_states().last() else {
+            panic!("expected a failure");
+        };
+        assert!(
+            message.contains("password in this network's settings"),
+            "this one is the credentials: {message}"
+        );
+    }
+
     /// A server nonce that does not extend the client's is another exchange
     /// being replayed, and it is caught before any proof is sent.
     #[test]

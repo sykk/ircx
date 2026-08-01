@@ -921,6 +921,38 @@ whether a reader notices it is not something a test can answer. The pointer
 affordance came out of the same walk: a link inherited `cursor: default` from
 the chrome-less window and so looked like text.
 
+## A tooltip against the window it is in
+
+`edgeShift` is unit tested, but what it is worth depends on a browser: jsdom
+returns zeros from `getBoundingClientRect`, so nothing in vitest can see a box
+wrap, take a width, or land where it was put.
+
+**Walked in a real browser** on 2026-08-01, in a 1200px window, against the
+nineteen capabilities Libera actually negotiates. Before #258 the box ran
+
+```text
+{"width":1404,"left":318,"right":1723,"offRight":523}
+```
+
+— cut mid-word at `multi-p…`, with seven capabilities unreadable. After it:
+
+```text
+{"width":320,"height":89,"left":861,"right":1181,"offLeft":0,"offRight":0}
+```
+
+Four wrapped lines ending in `userhost-in-names`, inside the window on both
+sides. Opened, closed and reopened to check the offset is measured from centre
+each time rather than accumulating: identical geometry on the second open.
+
+**Not walked:**
+
+- **The left edge, in the application.** The unit tests cover it and the
+  measured case was the right edge, because after #256 no tooltip is anchored
+  far enough left to overflow. A long reaction list in the first column of the
+  timeline is the one that would.
+- **A window narrow enough for the `100vw` cap to bind.** The width falls back
+  from 20rem below a 336px window, which no run has been that small to see.
+
 ## Density
 
 Chosen in the palette and remembered in `localStorage`, verified that far on

@@ -605,11 +605,38 @@ It still keeps it. What changed is that the weaker claim around it does not
 form, which is about whether a line can be drawn rather than which grade
 outranks.
 
+**Declared grouping is walked in the application** on 2026-08-01, against local
+`ergo` with a second client — the first time it has run anywhere but a fixture
+and the preview harness. Both halves of the bracket, and both ends of the
+window:
+
+- **The bracket is stripped, on arrival and on your own line.** A topic that
+  came from the server and one typed into the composer are different paths and
+  both drop it. What is drawn is the group's name above the block, once.
+- **The topic takes in what follows.** The next line, which typed no bracket,
+  joined it — which is the whole point of naming one.
+- **So does a reply from somebody else.** A second person answering into the
+  topic joined it, in the opener's colour, with no second label. Declared
+  outranks, and the hue stays with whoever named the thing.
+- **It lets go.** After seven minutes' silence an unrelated line came back
+  neutral rather than joining. This is the guard the ten-minute first draft got
+  wrong, and nothing had walked the five-minute one.
+- **The same name said again is drawn again.** A topic revived after the group
+  let go is labelled and coloured as before.
+
+What that last one does *not* show is whether it rejoined the original group or
+opened a second with the same name: both were opened by the same person, so the
+colour is the same either way. Telling them apart needs the revival to come
+from somebody else, since a rejoin keeps the first opener's hue. `byName` is
+unit tested for the same-run case; the across-a-gap case is inferred from the
+code rather than seen.
+
 ### Still open
 
-- **Declared grouping has never been seen outside a fixture.** No other client
-  reads a `[topic]` prefix, so nothing types one. It is exercised by tests and
-  by the preview harness and by nothing else.
+- **Whether anybody but us ever types one.** No other client reads a `[topic]`
+  prefix, so the grade is only worth its weight if ircx users type brackets at
+  each other. The mechanism is walked; the habit is not, and cannot be until
+  there are two people using it.
 - **What an unmarked exchange costs.** Two exchanges now go unmarked where one
   crosses the other, and no live round has shown how often a real channel puts
   them that way round. The count is measurable on a busy channel and has not
@@ -822,7 +849,8 @@ warning, and the object reads back byte for byte with no credential at all.
 
 ## SCRAM
 
-**SCRAM-SHA-256 can be walked here; SCRAM-SHA-512 cannot.** `ergo` advertises
+**SCRAM-SHA-256 can be walked locally; SCRAM-SHA-512 needs Libera.** `ergo`
+advertises
 
 ```text
 sasl=PLAIN,EXTERNAL,SCRAM-SHA-256
@@ -833,11 +861,66 @@ and Libera advertises `SCRAM-SHA-512` (the capability list in
 against `ergo` with a registered account, and SHA-512 has no server here to
 answer it.
 
-That is worth stating plainly: SHA-512 shipped first and there was nowhere to
-run it. The mechanism's own tests are strong — the SHA-256 half is checked
-against RFC 7677's published vectors, and the exchange, the nonce check and the
-signature check are shared — but no server has answered a SHA-512 exchange this
-client sent.
+SHA-512 shipped first and for a long time there was nowhere to run it. Its own
+tests are strong — the SHA-256 half is checked against RFC 7677's published
+vectors, and the exchange, the nonce check and the signature check are shared —
+but until 2026-08-01 no server had answered a SHA-512 exchange this client sent.
+
+**SCRAM-SHA-512 is walked**, that day, against `irc.libera.chat` over TLS 1.3
+with a registered account, and the whole exchange is captured. Libera still
+advertises it, which this file previously claimed on a capture from #43:
+
+```text
+CAP * LS :... sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN,SCRAM-SHA-512 ...
+```
+
+Note what is *not* in that list. **Libera does not advertise SCRAM-SHA-256**, so
+the SHA-256 walk is ergo's alone and cannot be repeated here. A client
+configured for SHA-256 against Libera gets the quiet path this section warns
+about: a connection that succeeds and a login that does not happen.
+
+The four-message exchange, with the outgoing payloads redacted by the raw log
+as designed and the server's own halves intact:
+
+```text
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE +
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE r=d0By4OZJiyzO5d1W5sWEI49Nb5AJ444ixOBqnpjFUe9aBHiKTmaJuz9hkfISvlJeB7CTzV930qGWSBJJ8WheFe8d,s=JrlFTroexJQRJ1aFnAz52Vzv5we/NC49YOqPGeUs6eU=,i=10000
+>> AUTHENTICATE <credentials>
+<< AUTHENTICATE v=0SIGHcA2N/SXCXgUDcnnK6Yg1/R2B1bvbNglKF3Ii59l6lQBSMJ9oSKrEGtOs9QmnmKX5bKkSpsUiDW8EOVmBA==
+>> AUTHENTICATE +
+<< :molybdenum.libera.chat 900 syk syk!syk@user/brandn brandn :You are now logged in as brandn
+<< :molybdenum.libera.chat 903 syk :SASL authentication successful
+```
+
+A real salt and iteration count, and `v=` — the server proving it knew the
+password — verified by the client before it accepted the login. Then `900` and
+`903` from Libera, which is the server saying it, not ircx. `/whois` on the
+session answered `330` as well.
+
+**A mechanism the server does not offer is walked**, the same day, against
+Libera. This section has warned about it from the start — *picking a mechanism
+the server does not offer connects successfully and does not log you in* — and
+a unit test pinned it, but no real network had done it. Configured for
+SCRAM-SHA-256, which Libera does not advertise, the client:
+
+- did not send `AUTHENTICATE` at all, having checked the advertised list first
+- said `Libera.Chat does not accept SASL SCRAM-SHA-256` in the server console
+- connected anyway, because a missing mechanism is not an authentication failure
+- left `/whois` with no `330`
+
+Which is the behaviour wanted, and still the trap the section says it is: a
+connection that looks entirely successful, and a login that did not happen. The
+only thing saying so is one console line and a status indicator reading `not
+signed in`.
+
+**It also settles what the earlier connection was not.** That session reported
+SHA-256 and `/whois` showed `330`. It cannot have been configured for
+SCRAM-SHA-256, because that configuration produces exactly the run above and
+leaves nobody logged in. What it actually used is unidentified — `PLAIN` is the
+only advertised mechanism that fits — and it is recorded as unidentified rather
+than guessed.
 
 **SCRAM-SHA-256 is walked**, on 2026-07-31, against local `ergo` with a
 registered account. The whole exchange ran against a real server: a real salt
@@ -848,9 +931,7 @@ and iteration count, and the server's signature verifying. Confirmed from
 :ergo.test 330 whoisprobe syk syk :is logged in as
 ```
 
-— because the client saying it authenticated is the thing under test. This is
-the first time SASL has been verified against a real account at all; the
-mechanism this milestone shipped first, SHA-512, still has not been.
+— because the client saying it authenticated is the thing under test.
 
 **The failure paths are walked**, on 2026-08-01 against local `ergo` with a
 registered account, in two halves.
@@ -893,8 +974,6 @@ and port this network points at.
 
 **Not walked**:
 
-- **SHA-512 against any server.** Libera advertises it and `ergo` does not, so
-  the walk is a registered Libera account.
 - **The redrawn connection-failure screen, against a live refusal.** The
   wrong-password walk drew the same sentence three times in one view and headed
   it `Could not connect to 127.0.0.1:6668`, which is not what happened — it

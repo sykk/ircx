@@ -12,6 +12,7 @@ use ircx_core::{network_for_plugins, PluginLimits, PluginRuntime};
 use ircx_store::Store;
 use state::App;
 use tauri::{Manager, RunEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -200,9 +201,13 @@ pub fn run() {
             commands::delete_archive,
         ])
         .setup(|app| {
-            let store = Arc::new(
-                open_store(app.handle()).unwrap_or_else(|reason| say_why_and_quit(reason.as_ref())),
-            );
+            let store = match open_store(app.handle()) {
+                Ok(store) => Arc::new(store),
+                Err(reason) => {
+                    say_why_and_quit(app.handle(), reason.as_ref());
+                    return Ok(());
+                }
+            };
             let (events, inbox) = mpsc::channel(EVENT_QUEUE);
             events::pump(app.handle().clone(), inbox);
             themes::watch(app.handle().clone());
@@ -217,7 +222,12 @@ pub fn run() {
 
     app.run(|app, event| {
         if let RunEvent::ExitRequested { .. } = event {
-            tauri::async_runtime::block_on(app.state::<App>().shutdown());
+            // A start that never opened an archive never managed one of these.
+            // It is sitting on a dialog saying so, and reaching for state it
+            // never had would panic on the way out.
+            if let Some(app) = app.try_state::<App>() {
+                tauri::async_runtime::block_on(app.shutdown());
+            }
         }
     });
 }
@@ -228,32 +238,46 @@ fn open_store(app: &tauri::AppHandle) -> Result<Store, Box<dyn std::error::Error
     Ok(Store::open(&directory.join("ircx.sqlite3"))?)
 }
 
-/// Says why the client cannot start, in the same place and shape as the other
-/// two reasons it refuses to.
+/// Says why the client cannot start, on screen and on stderr, and ends it once
+/// the answer has been read.
 ///
 /// An error returned from the setup hook panics inside Tauri's own `build`,
 /// before any window exists. Walked on 2026-08-01 against a profile marked one
 /// schema ahead: exit 101, and a sentence written for a person wrapped in
-/// `panicked at ... note: run with RUST_BACKTRACE=1`. The archive is untouched
-/// and unreachable, and the reader is told nothing they can act on.
+/// `panicked at ... note: run with RUST_BACKTRACE=1`.
 ///
-/// **A dialog belongs here and could not be made to appear.** Two shapes were
-/// walked and neither drew: `blocking_show` in setup blocks forever, because
-/// setup runs before the event loop and nothing pumps the dialog; handing it to
-/// the loop with a callback and closing the window first drew nothing either,
-/// most likely because closing the only window asks the loop to exit before the
-/// dialog is up. Showing it over the surviving window is the shape not tried.
-/// `docs/manual-verification.md` holds both runs.
+/// Getting a dialog to appear this early took three attempts, and the two that
+/// failed are why this one is shaped the way it is. `blocking_show` in setup
+/// hangs with nothing drawn: setup runs before the event loop, and a dialog
+/// with no loop to pump it never reaches the screen. Handing it to the loop
+/// with a callback drew nothing either, as long as the window was closed
+/// first — it is the only one, so closing it asks the loop to exit before the
+/// dialog is up.
 ///
-/// So this is the honest half: no panic, and a sentence anybody with a terminal
-/// or a log can read. Somebody launching from a desktop menu still gets a client
-/// that does not open and no reason why, and that half is not fixed.
-fn say_why_and_quit(reason: &dyn std::error::Error) -> ! {
+/// So the window is hidden rather than closed. The loop stays alive to draw the
+/// dialog, and what it draws is not sitting in front of a client that cannot
+/// reach its own backend.
+///
+/// stderr keeps its copy. A dialog is for the person at the machine and does
+/// not survive into a log, and the launch that led here is one somebody may
+/// well be reading a log about.
+fn say_why_and_quit(app: &tauri::AppHandle, reason: &dyn std::error::Error) {
     eprintln!("ircx cannot open its archive.");
     eprintln!("  {reason}");
     eprintln!("Your history is still there and has not been changed.");
     eprintln!("Install the newer ircx to open it.");
-    std::process::exit(1);
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    app.dialog()
+        .message(format!(
+            "{reason}\n\nYour history is still there and has not been changed. \
+             Install the newer ircx to open it."
+        ))
+        .title("ircx cannot open its archive")
+        .kind(MessageDialogKind::Error)
+        .show(|_| std::process::exit(1));
 }
 
 /// The plugin library, or nothing. One that cannot be opened costs the plugins

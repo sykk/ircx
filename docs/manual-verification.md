@@ -60,10 +60,20 @@ What is left:
   their rank. A rejoin arriving before the QUIT that explains it has its own
   test.
 
-  What that leaves is what a hundred arrivals at once look like: the timeline
-  folds presence into a digest and the roster re-renders per change, and neither
-  has been watched under a burst. Whoever is next in a channel when one happens
-  should look at those two rather than at the membership, which is settled.
+  **Both halves of what that left were watched on 2026-08-01**, against a local
+  ergo driven through a netsplit-shaped burst: thirty-one clients joining at
+  once, seven renaming, all of them leaving.
+
+  The timeline holds. Sixty-nine events fold into one line — `31 joined, 7
+  renamed, 31 quit.` — with room either side, which is the whole of what the
+  digest is for.
+
+  **The roster did not**, and that is where a real defect was: seven people
+  renamed and then left, and their old names stayed in the member list for the
+  rest of the session. `handle_nick` re-keyed the member correctly and said only
+  that somebody had arrived under the new name, so the frontend — which holds a
+  list of names — kept both, and the quit that followed named the new one and
+  took only that away. A rename says the old name is gone now.
 
 - **Reactions on the wire are verified, and they do not work on Libera.** Run
   by the owner against `cadmium.libera.chat` on 2026-07-30, with `message-tags`
@@ -833,8 +843,20 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
   Worth knowing before judging it again: leading only shows where messages
   wrap, so a channel of short one-liners is the worst place to tell the
   densities apart. On a 600px pane the shipped values put 27% more one-line
-  messages on screen than comfortable. `read` has never been looked at against
-  a long backlog at all.
+  messages on screen than comfortable.
+
+  **`read` has now been looked at against a long backlog**, on 2026-08-01, along
+  with the other two: a channel of 240 messages from four people, driven against
+  a local ergo. What was being judged was the spacing #232 changed — the spine's
+  28px gap and the 20px a rule carries — and all three hold. Compact is the
+  tightest and the spine is still clearly off the prose; read is the most open
+  and the gap stays proportionate rather than becoming a margin.
+
+  One thing to look at next time: in `read` the rule gap and the block gap are
+  both 20px, so a rule has less to distinguish it from the blocks around it than
+  it does in compact, where the block gap is 6px. No rule happened to be on
+  screen during this run, so it is an observation about the numbers rather than
+  about anything seen.
 - **Changing theme while on a density that is not comfortable.** The
   implementation is built around this case — theme and density write the same
   three properties to the same inline declaration — and `apply.test.ts` covers

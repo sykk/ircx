@@ -2991,3 +2991,68 @@ mod modes_in_words {
         );
     }
 }
+
+/// A rename is two things to a roster that is a list of names: the new one
+/// arrives and the old one has to go. Found by driving a channel through a
+/// netsplit-sized burst, where seven people renamed and then left, and their
+/// old names stayed in the member list for the rest of the session.
+mod renaming_in_a_roster {
+    use super::*;
+
+    fn joined() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk oldname");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        session.events.clear();
+        session
+    }
+
+    /// The roster the frontend holds, replayed from the events it was sent.
+    fn roster(session: &Harness) -> Vec<String> {
+        let mut held: Vec<String> = Vec::new();
+        for event in &session.events {
+            match event {
+                IrcxEvent::MembersReplaced { members, .. } => {
+                    held = members.iter().map(|member| member.nick.clone()).collect();
+                }
+                IrcxEvent::MemberUpdated { member, .. } => {
+                    if !held.iter().any(|nick| nick == &member.nick) {
+                        held.push(member.nick.clone());
+                    }
+                }
+                IrcxEvent::MemberRemoved { nick, .. } => held.retain(|held| held != nick),
+                _ => {}
+            }
+        }
+        held.sort();
+        held
+    }
+
+    #[test]
+    fn the_old_name_goes_when_the_new_one_arrives() {
+        let mut session = joined();
+        session.feed(":oldname!o@h NICK newname");
+
+        assert_eq!(roster(&session), ["newname"]);
+    }
+
+    /// The failure this was found by: the quit names the new nick, so a roster
+    /// still holding the old one keeps it for good.
+    #[test]
+    fn quitting_after_a_rename_leaves_nobody_behind() {
+        let mut session = joined();
+        session.feed(":oldname!o@h NICK newname");
+        session.feed(":newname!o@h QUIT :leaving");
+
+        assert!(roster(&session).is_empty());
+    }
+
+    #[test]
+    fn a_rename_that_only_changes_case_still_leaves_one_name() {
+        let mut session = joined();
+        session.feed(":oldname!o@h NICK OldName");
+
+        assert_eq!(roster(&session), ["OldName"]);
+    }
+}

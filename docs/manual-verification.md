@@ -277,6 +277,15 @@ A third run on 2026-08-01 went to a local `ergo` instead, because what it was
 there to see was `draft/chathistory` and Libera has none to give.
 `docs/end-to-end-run-3.md`; six defects, #221 to #226.
 
+**A dev server on the port belonging to another checkout is refused now** (#233,
+2026-08-01). It used to be served: the window came up, connected, joined a
+channel and drew a conversation built from somebody else's working tree, with
+nothing reporting anything. The port is stated once, in
+`src-tauri/tauri.conf.json`, and the dev server names its own root on every
+response so the binary can tell whose it is. A server that says nothing about
+itself still starts the app, with a line saying so — a check that cannot run is
+not a reason to refuse.
+
 **Run it on `Xvfb`, not on a nested `Xwayland`.** The first two used a rootful
 `Xwayland :99`, which is an ordinary window on the operator's desktop: it takes
 focus and keystrokes like any other, so the operator's typing and the harness's

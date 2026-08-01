@@ -974,17 +974,40 @@ and port this network points at.
 
 **Not walked**:
 
-- **The redrawn connection-failure screen, against a live refusal.** The
-  wrong-password walk drew the same sentence three times in one view and headed
-  it `Could not connect to 127.0.0.1:6668`, which is not what happened — it
-  connected and was refused a login. Fixed in #256: the steps are history, so a
-  refused login now reads `Connected to 127.0.0.1:6668` above `Authentication
-  failed`, and the sentence itself appears once, in the alert that announces it.
-  The status bar names the network and stops at `failed`; the reason is on the
-  setup screen and in the server buffer, which every failure path notes it into.
-  Covered by `Connecting.test.tsx` and `StatusBar.test.tsx` — but no server has
-  refused a login since, so what no test sees is how the three lines read
-  together when a real one does.
+**The redrawn connection-failure screen is walked against a live refusal** on
+2026-08-01, against local `ergo` with the `scramtest` account and a deliberately
+wrong password. The wrong-password walk that opened all this drew the same
+sentence three times and headed it `Could not connect`, which was not what
+happened. What it draws now:
+
+```text
+● green   Connected to localhost:6667
+● red     Authentication failed
+● grey    Joined 0 of 1 channels
+
+localhost rejected the account scramtest — challenge proof invalid. Check the
+account name and password in this network's settings.
+
+[Edit settings]  [Try again]
+```
+
+The step that worked says so, the failure says what failed without repeating
+itself, and the sentence appears once. Read by the owner rather than asserted:
+the three lines land as one explanation — what worked, what did not, why, and
+what to do about it.
+
+**The walk found one thing no test could see.** The join step was amber, the
+colour of something in progress, sitting under two lines saying the connection
+was over. `Joined 0 of 1 channels` reads identically whether the join is still
+coming or never will, so the colour was the only thing distinguishing them and
+it was saying the wrong one. Fixed in the same change: a failed connection
+greys that step. Confirmed on the same screen afterwards.
+
+Worth keeping for whoever repeats this: **the password field cannot be typed
+into.** It shows `Saved in your system keyring` with a `Replace password`
+control beside it, and the person doing this walk read the screen as offering
+no way to enter a wrong password at all. The hint under the field explains why
+ircx cannot read one back. The control is there; it did not read as one.
 
 Also worth knowing, and the reason this section exists: **picking a mechanism the
 server does not offer connects successfully and does not log you in.** The

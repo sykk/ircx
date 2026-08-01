@@ -58,7 +58,7 @@ export function Connecting({ network, error, onRetry, onBack, onDone }: Props) {
           <Line color={saslColor(net.sasl)}>{saslLine(net.sasl, saslDetailInAlert)}</Line>
         )}
         {channels.length > 0 && (
-          <Line color={channels.every((c) => c.joined) ? "var(--state-connected)" : "var(--state-connecting)"}>
+          <Line color={channelColor(net, channels)}>
             {channelLine(channels)}
           </Line>
         )}
@@ -156,6 +156,20 @@ function saslColor(status: SaslStatus): string {
     case "notConfigured":
       return "var(--state-disconnected)";
   }
+}
+
+/**
+ * A join still coming and one that never will read the same — `Joined 0 of 1
+ * channels` either way — so the colour is the only thing that separates them.
+ *
+ * Walked against a live refusal: a connection that failed on its login left
+ * this step amber, which is the colour of something in progress, under two
+ * lines saying the connection was over. Nothing was still trying.
+ */
+function channelColor(net: Network | undefined, channels: Channel[]): string {
+  if (channels.every((channel) => channel.joined)) return "var(--state-connected)";
+  if (net?.status.state === "failed") return "var(--state-disconnected)";
+  return "var(--state-connecting)";
 }
 
 function channelLine(channels: Channel[]): string {

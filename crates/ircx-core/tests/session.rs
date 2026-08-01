@@ -2067,6 +2067,58 @@ fn closing_a_query_says_so_the_way_closing_a_channel_does() {
 /// thousands. #119 was the client lagging under exactly that, because every
 /// reply fell through to `server_words` and became a console message. They are
 /// collected now and sent once — #125.
+/// #269. A perform list is where people paste `/msg nickserv identify …` from
+/// another client, and it went out as a literal `MSG` — not an IRC command.
+/// Libera answered 421 and the identify never happened.
+#[test]
+fn a_connect_command_ircx_knows_means_what_it_means_in_the_composer() {
+    let mut config = config();
+    config.connect_commands = vec!["/msg nickserv identify hunter2".into()];
+    let mut session = Harness::new(config);
+
+    session.connect();
+    session.sent();
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+    assert_eq!(session.sent(), vec!["PRIVMSG nickserv :identify hunter2"]);
+}
+
+/// Written without the slash, because a perform list is also where protocol
+/// lines live and people write them both ways.
+#[test]
+fn a_connect_command_reaches_the_same_place_without_its_slash() {
+    let mut config = config();
+    config.connect_commands = vec!["msg nickserv identify hunter2".into()];
+    let mut session = Harness::new(config);
+
+    session.connect();
+    session.sent();
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+    assert_eq!(session.sent(), vec!["PRIVMSG nickserv :identify hunter2"]);
+}
+
+/// And a line ircx has no command for is still a line to send. Routing
+/// everything through `dispatch` would have it reject most of IRC.
+#[test]
+fn a_connect_command_ircx_does_not_know_is_still_sent() {
+    let mut config = config();
+    config.connect_commands = vec![
+        "PROTOCTL NAMESX".into(),
+        "/silence +*!*@spam.invalid".into(),
+    ];
+    let mut session = Harness::new(config);
+
+    session.connect();
+    session.sent();
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+    assert_eq!(
+        session.sent(),
+        vec!["PROTOCTL NAMESX", "SILENCE +*!*@spam.invalid"]
+    );
+}
+
 #[test]
 fn a_channel_list_arrives_once_rather_than_a_line_at_a_time() {
     let mut session = registered("");

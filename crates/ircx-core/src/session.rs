@@ -867,10 +867,21 @@ impl SessionState {
             );
         }
 
+        // A command ircx answers itself means here what it means in the
+        // composer, and everything else is still a protocol line to send.
+        //
+        // It did not, and `/msg nickserv identify …` — the commonest line
+        // anybody puts here — went out as a literal `MSG`, which is not an IRC
+        // command. Libera answered 421 and the identify never happened. #269.
         for command in self.config.connect_commands.clone() {
-            match crate::dispatch::connect_command(&command) {
-                Some(line) => self.send_line(line),
-                None => debug!(command, "skipped an unsendable connect command"),
+            match crate::dispatch::connect_builtin(&command) {
+                Some(input) => {
+                    self.dispatch(SERVER_TARGET, &input, None);
+                }
+                None => match crate::dispatch::connect_command(&command) {
+                    Some(line) => self.send_line(line),
+                    None => debug!(command, "skipped an unsendable connect command"),
+                },
             }
         }
         for channel in self.channels_to_join() {
@@ -2388,11 +2399,121 @@ pub(crate) fn build(command: &str, params: &[&str]) -> Option<String> {
     builder.build().ok().map(|message| message.to_line())
 }
 
-/// The raw log is a UI surface and the `AUTHENTICATE` payload is the user's
-/// password in base64, so the payload never reaches it.
+/// What somebody tells a service to prove who they are. The verb comes first in
+/// every one of these, and everything after it is the secret.
+const CREDENTIAL_VERBS: &[&str] = &[
+    "identify", "id", "register", "setpass", "ghost", "release", "regain", "login", "auth",
+];
+
+/// The raw log is a UI surface, so what is only ever a password does not reach
+/// it. Three shapes are, and the third is the one that cost something.
+///
+/// `AUTHENTICATE` was here first: its payload is the password in base64.
+/// `PASS` and `OPER` are the same case with no argument worth showing.
+///
+/// The third is a message to a service — `identify`, `ghost`, `setpass` and the
+/// rest. It is redacted only when it is not addressed to a channel, because the
+/// wire log exists to show messages and hiding them by sniffing their text is
+/// exactly what it should not do. Nobody identifies to a channel; somebody may
+/// well type "identify yourself" in one. #269, found when a connect command put
+/// a NickServ password in a log that was then pasted into a bug report.
 fn redact(line: &str) -> String {
-    match line.strip_prefix("AUTHENTICATE ") {
-        Some("+" | "PLAIN" | "EXTERNAL") | None => line.to_string(),
-        Some(_) => "AUTHENTICATE <credentials>".to_string(),
+    if let Some(rest) = line.strip_prefix("AUTHENTICATE ") {
+        return match rest {
+            "+" | "PLAIN" | "EXTERNAL" => line.to_string(),
+            _ => "AUTHENTICATE <credentials>".to_string(),
+        };
+    }
+    for command in ["PASS", "OPER"] {
+        if line
+            .strip_prefix(command)
+            .is_some_and(|r| r.starts_with(' '))
+        {
+            return format!("{command} <credentials>");
+        }
+    }
+    redact_service_message(line).unwrap_or_else(|| line.to_string())
+}
+
+/// `PRIVMSG nickserv :identify hunter2` and its relatives, with the secret
+/// taken out and the verb left in, so the log still says what was attempted.
+fn redact_service_message(line: &str) -> Option<String> {
+    let (command, rest) = line.split_once(' ')?;
+    if !matches!(command, "PRIVMSG" | "NOTICE") {
+        return None;
+    }
+    let (target, text) = rest.split_once(" :")?;
+    if target.starts_with('#') || target.starts_with('&') {
+        return None;
+    }
+    let (verb, secret) = text.split_once(' ')?;
+    let known = CREDENTIAL_VERBS
+        .iter()
+        .any(|candidate| verb.eq_ignore_ascii_case(candidate));
+    (known && !secret.is_empty()).then(|| format!("{command} {target} :{verb} <credentials>"))
+}
+
+#[cfg(test)]
+mod redaction {
+    use super::redact;
+
+    #[test]
+    fn keeps_a_line_that_carries_no_secret() {
+        assert_eq!(redact("PRIVMSG #ircx :hello"), "PRIVMSG #ircx :hello");
+        assert_eq!(redact("AUTHENTICATE PLAIN"), "AUTHENTICATE PLAIN");
+        assert_eq!(redact("AUTHENTICATE +"), "AUTHENTICATE +");
+        assert_eq!(redact("PASSWORD_RESET foo"), "PASSWORD_RESET foo");
+    }
+
+    #[test]
+    fn takes_out_a_payload_that_is_only_ever_a_password() {
+        assert_eq!(
+            redact("AUTHENTICATE aGVsbG8="),
+            "AUTHENTICATE <credentials>"
+        );
+        assert_eq!(redact("PASS hunter2"), "PASS <credentials>");
+        assert_eq!(redact("OPER syk hunter2"), "OPER <credentials>");
+    }
+
+    /// #269: a connect command put one of these in a log that was then pasted
+    /// into a bug report. The verb stays, so the log still says what was tried.
+    #[test]
+    fn takes_out_what_a_service_was_told() {
+        assert_eq!(
+            redact("PRIVMSG nickserv :identify hunter2"),
+            "PRIVMSG nickserv :identify <credentials>"
+        );
+        assert_eq!(
+            redact("PRIVMSG NickServ :GHOST syk hunter2"),
+            "PRIVMSG NickServ :GHOST <credentials>"
+        );
+        assert_eq!(
+            redact("NOTICE nickserv :setpass syk key new"),
+            "NOTICE nickserv :setpass <credentials>"
+        );
+    }
+
+    /// The log exists to show messages, so hiding one by sniffing its text is
+    /// the thing it must not do. Nobody identifies to a channel.
+    #[test]
+    fn leaves_a_channel_alone_however_it_reads() {
+        assert_eq!(
+            redact("PRIVMSG #ircx :identify yourself"),
+            "PRIVMSG #ircx :identify yourself"
+        );
+        assert_eq!(
+            redact("PRIVMSG &local :register your account"),
+            "PRIVMSG &local :register your account"
+        );
+    }
+
+    /// A verb with nothing after it is somebody asking for the syntax.
+    #[test]
+    fn leaves_a_verb_with_no_secret_after_it() {
+        assert_eq!(
+            redact("PRIVMSG nickserv :identify"),
+            "PRIVMSG nickserv :identify"
+        );
+        assert_eq!(redact("PRIVMSG nickserv :help"), "PRIVMSG nickserv :help");
     }
 }

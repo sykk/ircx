@@ -180,7 +180,12 @@ impl SessionState {
         }
     }
 
-    fn dispatch(&mut self, target: &str, input: &str, reply_to: Option<&str>) -> CommandOutcome {
+    pub(crate) fn dispatch(
+        &mut self,
+        target: &str,
+        input: &str,
+        reply_to: Option<&str>,
+    ) -> CommandOutcome {
         let Some(rest) = input.strip_prefix('/') else {
             return self.say_here(target, input, MessageKind::Privmsg, reply_to);
         };
@@ -591,6 +596,22 @@ pub(crate) fn slash_command(input: &str) -> Option<(String, &str)> {
 
 /// Sends whatever the user configured as a connect command, taking a leading
 /// slash off so `/mode sykk +i` and `MODE sykk +i` both work.
+/// A connect command that names something ircx answers itself, as composer
+/// input — or `None` for the rest, which stay protocol lines.
+///
+/// Both spellings reach the same place, because both are written: a perform
+/// list is where people paste `/msg nickserv identify …` from another client,
+/// and where they write bare `MODE syk +i` because it is a protocol line.
+///
+/// Only builtins are taken. A perform list is also where raw lines live, and
+/// sending those through `dispatch` would have it reject every command it has
+/// no arm for — which is most of IRC.
+pub(crate) fn connect_builtin(line: &str) -> Option<String> {
+    let line = line.trim().trim_start_matches('/');
+    let (name, _) = line.split_once(' ').unwrap_or((line, ""));
+    is_builtin(&name.to_ascii_lowercase()).then(|| format!("/{line}"))
+}
+
 pub(crate) fn connect_command(line: &str) -> Option<String> {
     let line = line.trim().trim_start_matches('/');
     if line.is_empty() {

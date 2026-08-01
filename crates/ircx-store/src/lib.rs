@@ -118,7 +118,14 @@ impl Store {
     }
 
     /// When this conversation was last heard from, which is where a server-side
-    /// backfill picks up. `None` when the archive holds nothing for it.
+    /// backfill picks up. `None` when the archive holds nothing the server
+    /// stamped.
+    ///
+    /// Client-stamped rows are ignored: this is a point in the server's own
+    /// record, and a line this machine timestamped is a point in its clock. A
+    /// fast clock would otherwise ask for the gap from after the messages in
+    /// it. The session applies the same rule to what arrives live, so a rejoin
+    /// and a relaunch ask from the same place.
     ///
     /// Matched without case for the reason `load_history` gives below.
     pub fn newest_timestamp(
@@ -130,6 +137,7 @@ impl Store {
         let mut stmt = conn.prepare(
             "SELECT timestamp FROM messages
              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
+               AND timestamp_is_local = 0
              ORDER BY timestamp DESC, id DESC
              LIMIT 1",
         )?;

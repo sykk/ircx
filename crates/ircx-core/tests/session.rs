@@ -4,7 +4,7 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use ircx_core::{Action, SaslCredentials, SessionConfig, SessionState};
+use ircx_core::{Action, Restored, SaslCredentials, SessionConfig, SessionState};
 use ircx_ipc::{
     ChatMessage, CommandOutcome, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
     MessageSource, SaslMechanism, SaslStatus, Severity,
@@ -50,9 +50,6 @@ struct Harness {
     /// Stands in for the archive's `open_targets` table, which is where these
     /// actions land in the running app.
     open: Vec<OpenTarget>,
-    /// Target and limit. The line itself is finished against the archive, which
-    /// nothing here holds.
-    backfills: Vec<(String, u32)>,
     closed: bool,
 }
 
@@ -63,7 +60,6 @@ impl Harness {
             sent: Vec::new(),
             events: Vec::new(),
             open: Vec::new(),
-            backfills: Vec::new(),
             closed: false,
         }
     }
@@ -82,7 +78,6 @@ impl Harness {
                     self.open.push(target);
                 }
                 Action::Forget(target) => self.open.retain(|held| held.name() != target),
-                Action::Backfill { target, limit } => self.backfills.push((target, limit)),
                 // Nothing here drives plugins, so a batch on its way to a
                 // rule is not something this harness can act on.
                 Action::Notify { .. } => {}
@@ -249,6 +244,24 @@ fn registered(caps: &str) -> Harness {
         ":irc.libera.chat 005 sykk CHANTYPES=# PREFIX=(ov)@+ CASEMAPPING=rfc1459 \
          NETWORK=Libera.Chat :are supported by this server",
     );
+    session.sent();
+    session.events.clear();
+    session
+}
+
+/// A session that already holds this conversation's record, the way a relaunch
+/// does: restored from the archive with a watermark, then registered.
+fn registered_holding(name: &str, newest: &str) -> Harness {
+    let mut session = Harness::new(config());
+    let actions = session.state.restore(vec![Restored {
+        target: OpenTarget::Channel(name.into()),
+        newest: Some(newest.into()),
+    }]);
+    session.apply(actions);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :draft/chathistory");
+    session.feed(":irc.libera.chat CAP * ACK :draft/chathistory");
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
     session.sent();
     session.events.clear();
     session
@@ -1479,8 +1492,14 @@ fn a_channel_the_user_left_or_was_thrown_out_of_is_not_remembered() {
 fn the_conversations_from_the_last_run_come_back_and_are_rejoined() {
     let mut session = Harness::new(config());
     let actions = session.state.restore(vec![
-        OpenTarget::Channel("##test".into()),
-        OpenTarget::Query("NickServ".into()),
+        Restored {
+            target: OpenTarget::Channel("##test".into()),
+            newest: None,
+        },
+        Restored {
+            target: OpenTarget::Query("NickServ".into()),
+            newest: None,
+        },
     ]);
     session.apply(actions);
 
@@ -2680,18 +2699,22 @@ mod backfill_on_join {
         session
     }
 
+    fn asked(session: &Harness) -> Vec<String> {
+        session.sent_starting("CHATHISTORY")
+    }
+
     #[test]
     fn joining_asks_for_what_was_said_while_nobody_was_here() {
         let session = joined("draft/chathistory", "");
 
-        assert_eq!(session.backfills, [("#ircx".to_string(), 200)]);
+        assert_eq!(asked(&session), ["CHATHISTORY LATEST #ircx * 200"]);
     }
 
     #[test]
     fn a_server_without_the_capability_is_asked_for_nothing() {
         let session = joined("", "CHATHISTORY=1000");
 
-        assert!(session.backfills.is_empty());
+        assert!(asked(&session).is_empty());
     }
 
     /// Asking for more than the server said it would answer with is a request
@@ -2700,14 +2723,14 @@ mod backfill_on_join {
     fn the_limit_the_server_stated_is_not_exceeded() {
         let session = joined("draft/chathistory", "CHATHISTORY=50");
 
-        assert_eq!(session.backfills, [("#ircx".to_string(), 50)]);
+        assert_eq!(asked(&session), ["CHATHISTORY LATEST #ircx * 50"]);
     }
 
     #[test]
     fn a_generous_server_does_not_widen_the_page() {
         let session = joined("draft/chathistory", "CHATHISTORY=1000");
 
-        assert_eq!(session.backfills, [("#ircx".to_string(), 200)]);
+        assert_eq!(asked(&session), ["CHATHISTORY LATEST #ircx * 200"]);
     }
 
     /// The draft spelling is what ergo sends while the capability is a draft,
@@ -2716,25 +2739,146 @@ mod backfill_on_join {
     fn the_draft_spelling_of_the_token_is_read_too() {
         let session = joined("draft/chathistory", "draft/CHATHISTORY=25");
 
-        assert_eq!(session.backfills, [("#ircx".to_string(), 25)]);
+        assert_eq!(asked(&session), ["CHATHISTORY LATEST #ircx * 25"]);
     }
 
     #[test]
     fn somebody_else_joining_asks_for_nothing() {
         let mut session = joined("draft/chathistory", "");
-        session.backfills.clear();
+        session.sent();
         session.feed(":phrack!p@h JOIN #ircx");
 
-        assert!(session.backfills.is_empty());
+        assert!(asked(&session).is_empty());
     }
 
-    /// A reconnect rejoins, and the gap it has to fill is the disconnection.
+    /// A conversation this client already holds is asked for the gap rather
+    /// than for a page it mostly has.
     #[test]
-    fn rejoining_asks_again() {
-        let mut session = joined("draft/chathistory", "");
-        session.feed(":sykk!~sykk@user/sykk PART #ircx");
+    fn an_archive_is_asked_for_what_came_after_it() {
+        let mut session = registered_holding("#ircx", "2026-07-31T09:15:04.123456789Z");
         session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
 
-        assert_eq!(session.backfills.len(), 2);
+        assert_eq!(
+            asked(&session),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.123Z 200"]
+        );
+    }
+
+    /// A rejoin inside one session has a gap too: the client heard the channel
+    /// before it left, so what it says while away was missed.
+    #[test]
+    fn a_rejoin_asks_for_the_gap_rather_than_the_latest_page() {
+        let mut session = joined("draft/chathistory", "");
+        session.feed("@time=2026-07-31T09:15:04.000Z :phrack!p@h PRIVMSG #ircx :hello");
+        session.feed(":sykk!~sykk@user/sykk PART #ircx");
+        session.sent();
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+
+        assert_eq!(
+            asked(&session),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.000Z 200"]
+        );
+    }
+}
+
+/// #223. What a backfill fills decides whether it counts: a gap is what the
+/// reader was not here for, and a first page is a conversation they have only
+/// just met.
+mod what_a_backfill_counts {
+    use super::*;
+
+    fn unread(session: &Harness, name: &str) -> u32 {
+        session
+            .state
+            .channels()
+            .iter()
+            .find(|channel| channel.name == name)
+            .map_or(0, |channel| channel.unread)
+    }
+
+    fn replay(session: &mut Harness, lines: &[&str]) {
+        session.feed(":ergo.test BATCH +1 chathistory #ircx");
+        for line in lines {
+            session.feed(line);
+        }
+        session.feed(":ergo.test BATCH -1");
+    }
+
+    #[test]
+    fn a_first_page_counts_towards_nothing() {
+        let mut session = registered("draft/chathistory");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning"],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 0);
+    }
+
+    #[test]
+    fn a_gap_counts_as_the_unread_it_is() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        replay(
+            &mut session,
+            &[
+                "@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning",
+                "@batch=1;time=2026-07-31T09:01:00.000Z :phrack!p@h PRIVMSG #ircx :and again",
+            ],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 2);
+    }
+
+    /// Ergo narrates the reader's own comings and goings as messages from a
+    /// service, and a badge counting those says more than was said. #221.
+    #[test]
+    fn a_service_outside_the_channel_adds_nothing_to_read() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk phrack");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        replay(
+            &mut session,
+            &[
+                "@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning",
+                "@batch=1;time=2026-07-31T09:01:00.000Z :HistServ!HistServ@localhost \
+                 PRIVMSG #ircx :sykk joined the channel",
+            ],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 1);
+    }
+
+    /// The gap is closed by the answer to it. A second batch that nobody asked
+    /// for — a netjoin replay, say — is not the reader's backlog.
+    #[test]
+    fn the_gap_is_only_filled_once() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning"],
+        );
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:02:00.000Z :phrack!p@h PRIVMSG #ircx :again"],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 1);
+    }
+
+    /// The restart case, which is the one #223 was filed for: the archive says
+    /// where the conversation left off, and everything after it was missed.
+    #[test]
+    fn a_conversation_restored_from_the_archive_asks_for_its_gap() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T08:00:00.000Z 200"]
+        );
     }
 }

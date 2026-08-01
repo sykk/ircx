@@ -971,6 +971,14 @@ look at the fixture race?`, said in the gap by somebody still in the channel, is
 still marked and still tinted. The gate is on who is in the conversation, not on
 where the message came from.
 
+**#223 is fixed and re-walked** the same day. Both halves were watched, because
+the whole change is that they differ: joining `#gap` for the first time drew its
+backlog and left the sidebar row unmarked, and quitting, letting the channel say
+three things, and relaunching brought the row back reading **3**. The count is
+what was said and not what the replay contained — ergo narrates the reader's own
+quit and rejoin in the same batch, and an earlier build of this counted those
+too and said five.
+
 What is left:
 - **A gap wider than the server's limit.** A full page and a truncated page are
   the same page, so the hole is invisible to the client and would show as a

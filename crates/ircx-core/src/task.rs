@@ -15,9 +15,8 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
 
-use crate::history;
 use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
-use crate::session::{Action, SessionConfig, SessionState};
+use crate::session::{Action, Restored, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
 
@@ -322,6 +321,23 @@ async fn run(
             Vec::new()
         }
     };
+    // Where each one's record left off, which is what makes the difference
+    // between coming back to a conversation and meeting one. An archive that
+    // cannot be read asks for a first page, which is what a conversation with
+    // no archive asks for anyway.
+    let remembered: Vec<Restored> = remembered
+        .into_iter()
+        .map(|target| {
+            let newest = context
+                .store
+                .newest_timestamp(&context.network, target.name())
+                .unwrap_or_else(|error| {
+                    warn!(%error, "could not read where a conversation left off");
+                    None
+                });
+            Restored { target, newest }
+        })
+        .collect();
     let actions = session.restore(remembered);
     if context.deliver(actions, None).await {
         return;
@@ -535,21 +551,6 @@ impl Context {
         }
     }
 
-    /// Finishes the history request the session started, which needs the one
-    /// thing only the archive knows: when this conversation was last heard
-    /// from. An archive that cannot be read asks for the most recent page,
-    /// which is what a conversation with no archive asks for anyway.
-    fn history_request(&self, target: &str, limit: u32) -> Option<String> {
-        let since = self
-            .store
-            .newest_timestamp(&self.network, target)
-            .unwrap_or_else(|error| {
-                warn!(%error, "could not read where a conversation left off");
-                None
-            });
-        history::request(target, since.as_deref(), limit)
-    }
-
     /// Waits for the plugin and applies what it produced. The wait is bounded
     /// by the plugin's limits, so the worst a plugin does to the connection is
     /// hold this command for its deadline.
@@ -616,25 +617,6 @@ impl Context {
                 Action::Forget(target) => {
                     if let Err(error) = self.store.forget_target(&self.network, &target) {
                         warn!(%error, "could not forget a closed conversation");
-                    }
-                }
-                Action::Backfill { target, limit } => {
-                    let Some(line) = self.history_request(&target, limit) else {
-                        continue;
-                    };
-                    // A request nobody typed is still what the raw log is for.
-                    let event = IrcxEvent::RawLine {
-                        network: self.network.clone(),
-                        outgoing: true,
-                        line: line.clone(),
-                    };
-                    if self.events.send(event).await.is_err() {
-                        close = true;
-                    }
-                    if let Some(sender) = sender {
-                        if let Err(error) = sender.send(line).await {
-                            warn!(%error, "could not queue a history request");
-                        }
                     }
                 }
                 Action::Notify { target, messages } => self.notify(target, messages),

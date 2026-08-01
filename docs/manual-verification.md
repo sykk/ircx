@@ -307,9 +307,19 @@ What is still open:
   bottom, each with its own roster and composer: `docs/end-to-end-3/07-split-panes.png`.
   It reads as two views of one conversation rather than as two things sharing a
   box, which is the question `PaneTree.test.tsx` could not answer.
-- **The lock icon in the sidebar.** `isRestricted` reads the channel's mode
-  flags and `##test` drew a lock. There is no way to see a channel's modes in
-  the interface, so nobody knows whether that lock is right.
+- **The lock icon in the sidebar is checkable now** (#243, 2026-08-01). A
+  channel says what it is on the way in, the way the topic does:
+
+  ```text
+  #vault is behind a key, moderated, closed to messages from outside and
+  topic-locked to ops.
+  ```
+
+  Walked against a local ergo with a channel held at `+mnt` and a key, by an
+  operator who stayed — an empty channel ceases to exist, and rejoining one
+  makes a fresh channel with the server's default modes, which is what the first
+  two attempts at this measured instead. The sidebar drew its lock and the line
+  says why.
 **A conversation closed before quitting stays closed**, verified by the owner on
 2026-07-30. That entry sat open from the second end-to-end run and nobody could
 have done it: until #121 there was no way to close a conversation at all, so it

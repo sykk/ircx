@@ -1129,8 +1129,23 @@ impl SessionState {
         let Some(channel) = self.channels.get_mut(&key) else {
             return;
         };
-        channel.modes = modes;
+        channel.modes = modes.clone();
+        let name = channel.name.clone();
         self.emit_channel(&key);
+
+        // Said in the conversation rather than drawn as chrome, which is where
+        // the topic goes and for the same reason: it is a fact about the
+        // channel, and a change to it already reads as a line. Without this the
+        // modes were tracked, used to draw a lock in the sidebar, and shown
+        // nowhere a reader could check the lock against. #243.
+        let rules = channel_rules(modes.split(' ').next().unwrap_or_default());
+        if !rules.is_empty() {
+            self.note(
+                &name,
+                MessageKind::Server,
+                format!("{name} is {}.", and_then(&rules)),
+            );
+        }
     }
 
     fn on_away_reply(&mut self, params: &[String]) {
@@ -1641,7 +1656,7 @@ impl SessionState {
         // who now holds it, not who handed it over. Everything else is about
         // the channel and stays with whoever changed it.
         let mut said: Vec<(Sender, String)> = Vec::new();
-        let mut channel_modes = Vec::new();
+        let mut channel_modes: Vec<(char, bool)> = Vec::new();
 
         for letter in arguments
             .first()
@@ -1673,15 +1688,15 @@ impl SessionState {
                         }
                         _ => {
                             self.set_channel_mode(&key, letter, adding);
-                            channel_modes.push(letter);
+                            channel_modes.push((letter, adding));
                         }
                     }
                 }
             }
         }
 
-        if !channel_modes.is_empty() {
-            said.push((sender.clone(), "changed the channel".to_string()));
+        for letter in channel_modes {
+            said.push((sender.clone(), channel_rule(letter.0, letter.1)));
         }
         // A MODE line carrying nothing this client could read still happened,
         // and saying so beats drawing the channel changing with no line for it.
@@ -2216,6 +2231,64 @@ fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {
         true if !member.prefixes.contains(&prefix) => member.prefixes.push(prefix),
         false => member.prefixes.retain(|held| *held != prefix),
         true => {}
+    }
+}
+
+/// What a channel mode does, as a change somebody made.
+///
+/// Two phrasings per mode rather than a name and a rule for bending it: the
+/// removals are not the additions with a word in front, and writing both out is
+/// shorter than the machinery for deriving one from the other.
+///
+/// A mode with no name here keeps its letter, which is the rule `standing`
+/// follows and is still shorter than what it replaces.
+fn channel_rule(letter: char, adding: bool) -> String {
+    match (letter, adding) {
+        ('m', true) => "moderated the channel".into(),
+        ('m', false) => "took moderation off the channel".into(),
+        ('i', true) => "made the channel invite only".into(),
+        ('i', false) => "took invite-only off the channel".into(),
+        ('k', true) => "put a key on the channel".into(),
+        ('k', false) => "took the key off the channel".into(),
+        ('t', true) => "locked the topic to ops".into(),
+        ('t', false) => "let anybody set the topic".into(),
+        ('n', true) => "blocked messages from outside the channel".into(),
+        ('n', false) => "allowed messages from outside the channel".into(),
+        ('s', true) => "made the channel secret".into(),
+        ('s', false) => "took secrecy off the channel".into(),
+        ('l', true) => "put a size limit on the channel".into(),
+        ('l', false) => "took the size limit off the channel".into(),
+        (other, true) => format!("set +{other} on the channel"),
+        (other, false) => format!("took -{other} off the channel"),
+    }
+}
+
+/// The same modes as a description of what a channel is, for the line said on
+/// the way in. Anything unnamed is left out rather than spelled: a reader who
+/// wants the letters has the raw log, and a sentence ending in "and +C" helps
+/// nobody.
+fn channel_rules(flags: &str) -> Vec<&'static str> {
+    flags
+        .chars()
+        .filter_map(|letter| match letter {
+            'm' => Some("moderated"),
+            'i' => Some("invite only"),
+            'k' => Some("behind a key"),
+            't' => Some("topic-locked to ops"),
+            'n' => Some("closed to messages from outside"),
+            's' => Some("secret"),
+            'l' => Some("size-limited"),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn and_then(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => (*only).to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 

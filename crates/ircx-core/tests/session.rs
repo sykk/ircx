@@ -2958,17 +2958,55 @@ mod modes_in_words {
     }
 
     /// A mode that grants nobody anything is about the channel, and stays with
-    /// whoever changed it.
+    /// whoever changed it — one line each, saying what it did rather than which
+    /// letter it was. #243.
     #[test]
-    fn a_channel_mode_is_about_the_channel() {
+    fn a_channel_mode_says_what_it_did() {
         let mut session = in_channel();
-        session.feed(":irc.libera.chat MODE #ircx +Cnt");
+        session.feed(":irc.libera.chat MODE #ircx +nt");
+
+        assert_eq!(
+            said(&session),
+            [
+                (
+                    "irc.libera.chat".to_string(),
+                    "blocked messages from outside the channel".to_string()
+                ),
+                (
+                    "irc.libera.chat".to_string(),
+                    "locked the topic to ops".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// Removing one is not adding it with a word in front.
+    #[test]
+    fn taking_a_channel_mode_off_reads_as_taking_it_off() {
+        let mut session = in_channel();
+        session.feed(":irc.libera.chat MODE #ircx -i");
 
         assert_eq!(
             said(&session),
             [(
                 "irc.libera.chat".to_string(),
-                "changed the channel".to_string()
+                "took invite-only off the channel".to_string()
+            )]
+        );
+    }
+
+    /// A mode this client has no name for keeps its letter, which is the rule
+    /// the membership modes already follow.
+    #[test]
+    fn a_channel_mode_with_no_name_keeps_its_letter() {
+        let mut session = in_channel();
+        session.feed(":irc.libera.chat MODE #ircx +C");
+
+        assert_eq!(
+            said(&session),
+            [(
+                "irc.libera.chat".to_string(),
+                "set +C on the channel".to_string()
             )]
         );
     }
@@ -3441,5 +3479,71 @@ mod paging_a_gap {
         page(&mut session, 1, &[1, 2, 3]);
 
         assert!(session.sent_starting("CHATHISTORY").is_empty());
+    }
+}
+
+/// #243. The modes were tracked, used to draw a lock in the sidebar, and shown
+/// nowhere a reader could check the lock against. They are said in the
+/// conversation now, which is where the topic goes and for the same reason.
+mod what_a_channel_is {
+    use super::*;
+
+    fn joined_with(modes: &str) -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+        session.feed(&format!(":irc.libera.chat 324 sykk #ircx {modes}"));
+        session
+    }
+
+    fn said(session: &Harness) -> Vec<String> {
+        session
+            .messages()
+            .iter()
+            .filter(|message| message.kind == MessageKind::Server)
+            .map(|message| message.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_rules_are_said_on_the_way_in() {
+        let session = joined_with("+int");
+
+        assert_eq!(
+            said(&session),
+            ["#ircx is invite only, closed to messages from outside and topic-locked to ops."]
+        );
+    }
+
+    #[test]
+    fn one_rule_needs_no_list() {
+        let session = joined_with("+m");
+
+        assert_eq!(said(&session), ["#ircx is moderated."]);
+    }
+
+    /// A sentence ending in "and +C" helps nobody, and the raw log has the
+    /// letters for whoever wants them.
+    #[test]
+    fn a_mode_with_no_name_is_left_out_rather_than_spelled() {
+        let session = joined_with("+Cm");
+
+        assert_eq!(said(&session), ["#ircx is moderated."]);
+    }
+
+    #[test]
+    fn a_channel_with_nothing_worth_saying_says_nothing() {
+        let session = joined_with("+C");
+
+        assert!(said(&session).is_empty());
+    }
+
+    /// A key is a mode parameter and may hold any letter, which is the reason
+    /// `isRestricted` only ever reads the flag token.
+    #[test]
+    fn a_key_does_not_read_as_more_modes() {
+        let session = joined_with("+k mistletoe");
+
+        assert_eq!(said(&session), ["#ircx is behind a key."]);
     }
 }

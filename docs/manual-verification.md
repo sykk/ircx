@@ -986,12 +986,26 @@ the loader, the validator and the picker are covered. What is not:
   silently, leaving the token unset and uncovering the dark theme `global.css`
   imports statically. jsdom's `cssstyle` stores such a value verbatim instead,
   so the tests pin the gate's behaviour and nothing pins the behaviour it is
-  premised on. **Walked**: `#0969da;` pasted into a colour field on `ircx-light`
-  in the real window was refused in a sentence, and nothing on the window
-  changed. The other half is still unwalked — the same paste with the gate
-  taken out, which is the failure the gate exists for, and which should leave
-  that surface dark. Nobody has watched it fail, so what is confirmed is that
-  the gate holds, not that it is load-bearing.
+  premised on. **Both halves walked on 2026-08-01.** With the gate in place,
+  `#0969da;` pasted into `--surface-base` on `ircx-light` was refused in a
+  sentence and the field snapped back. With `tokenProblem`'s stray-character
+  branch disabled and the same paste made, the window went from `#ffffff` to
+  `rgb(10, 13, 18)` behind the conversation — the dark theme's surface — while
+  the sidebar stayed `#f6f8fa`, because `--surface-sidebar` was still set. Half
+  a light theme, no error, and the editor reading "1 of the author's 62 tokens
+  changed". The premise holds: WebKit drops the declaration without a word, and
+  the gate is what stands between a pasted stylesheet line and a window in two
+  themes at once.
+
+  Two things the walk turned up that the tests do not reach. Relaunching with
+  the gate restored and the refused value still in `localStorage` dropped it at
+  load — `sanitiseOverrides` runs the same check on the way in — and the surface
+  came back white without anyone clearing anything. And the refusal names a
+  character the field no longer shows: the sentence says `--surface-base has a ;
+  in its value` while the field reads `#0969da`, because a refused value is
+  never committed and the field snaps back to what it held. That is
+  `TokenEditor.tsx`'s stated design rather than a defect, and the alternative it
+  argues against — a second place a value can live — is worse.
 - **The sheet against a theme installed on disk.** Every component test uses the
   two built-ins. An edit is keyed by theme id and kept in `localStorage`, so a
   theme that arrives after first paint takes its edits a frame later than the
@@ -1061,9 +1075,38 @@ What is left:
   arrived. No test caught this and none could have: nothing interleaves live
   traffic with a batch except a real server.
 
-  What is left is the cap. Ten pages is two thousand messages, and past that the
-  client says so in the conversation rather than leaving the reader with the
-  oldest of what they missed. Nobody has been away long enough to see it.
+- **The ten-page cap**, walked on 2026-08-01 with 2500 messages said to `#flood`
+  while the app was closed. Ten `CHATHISTORY AFTER #flood … 200` went out and an
+  eleventh did not; the conversation ends at `line 2000 of the flood` and says
+  `This conversation moved faster than ircx caught up with: 2000 messages of it
+  were fetched and there is more that was not.` The cap holds and the sentence is
+  true.
+
+  Two things worth knowing, neither of which the cap itself gets wrong:
+
+  **A page boundary inside one millisecond loses a message.** 1999 of the 2000
+  were archived. The missing one is `line 0200`, and the reason is that the
+  resume point is a timestamp: page one ended at `line 0199` stamped
+  `14:20:51.623Z`, `line 0200` carries the same millisecond, and `AFTER
+  timestamp=…51.623Z` is exclusive of it. Asked of the server by hand, that
+  selector answers with `line 0201` onwards — the message is not late, it is
+  unreachable through a timestamp. A millisecond is not a unique key and a busy
+  channel puts several messages in one, so this loses everything that shares the
+  last millisecond of a page. It is invisible below the cap only because a gap
+  that fits in one page has no boundary to fall down. `msgid=` is the selector
+  that does not have this problem: `CHATHISTORY AFTER #flood msgid=<id> 3`
+  answered `0202, 0203, 0204` in the same run, and `server_msgid` is already
+  archived. This is the third defect in this area that only a real server run
+  could produce, after #223's window and #239's poisoned resume point.
+
+  **What survives the cap is the oldest of what was missed, not the newest.**
+  `AFTER` pages forward, so the reader gets lines 1 to 2000 and loses 2001 to
+  2500 — the five hundred closest to now. The discontinuity therefore sits
+  immediately above the live seam, which is where a reader is least likely to
+  expect one, and the sentence explaining it is drawn below the seam rather than
+  at the join. `continue_gap` states the reasoning for saying something at all;
+  what it does not decide is which end of the gap to keep, and this walk is the
+  first time anyone has seen which end that turns out to be.
 - **Libera offers no history to ask for.** The capability was not in what
   `cadmium.libera.chat` advertised on 2026-07-30, so nothing is sent there and
   the archive stays the whole history. That is the degrade working, and it also

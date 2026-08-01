@@ -601,6 +601,43 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { queries };
     }
 
+    /**
+     * The person renamed, so the conversation goes with them. #234 fixed the
+     * roster half of this; a query is not a name in a list but everything the
+     * store keys by that name, and leaving any of it behind splits one
+     * conversation into two rows with a dead composer on the older one.
+     *
+     * What is already archived keeps the name it was said under: a nick is
+     * lent, not owned, and re-targeting stored messages would let whoever
+     * takes the old one next inherit this conversation.
+     */
+    case "queryRenamed": {
+      const from = targetKey(event.network, event.from);
+      const to = targetKey(event.network, event.to);
+      if (from === to) return {};
+      // The moved row is renamed here rather than left to the `QueryUpdated`
+      // that follows: a move that leaves the old name showing is a state the
+      // reducer should never produce, whatever arrives next.
+      const moved = s.queries[from];
+      const queries = moveKey(s.queries, from, to);
+      if (moved && queries[to] === moved) queries[to] = { ...moved, nick: event.to };
+      return {
+        queries,
+        timelines: moveKey(s.timelines, from, to),
+        typing: moveKey(s.typing, from, to),
+        replyTo: moveKey(s.replyTo, from, to),
+        recent: s.recent.map((held) => (held === from ? to : held)),
+        views: Object.fromEntries(
+          Object.entries(s.views).map(([id, view]) => [
+            id,
+            view.network === event.network && view.target === event.from
+              ? { ...view, target: event.to }
+              : view,
+          ]),
+        ),
+      };
+    }
+
     case "queryUpdated": {
       const key = targetKey(event.query.network, event.query.nick);
       return { queries: { ...s.queries, [key]: event.query } };
@@ -743,6 +780,20 @@ function insertionPoint(messages: readonly ChatMessage[], message: ChatMessage):
     if (Date.parse(messages[i]!.timestamp) <= at) return i + 1;
   }
   return 0;
+}
+
+/**
+ * Moves one conversation's entry to a new key, keeping what is already at the
+ * destination. A rename onto a name the store already holds is the two of them
+ * meeting; the older entry is the one that has been read, so it wins.
+ */
+function moveKey<T>(held: Record<string, T>, from: string, to: string): Record<string, T> {
+  const moved = held[from];
+  if (moved === undefined) return held;
+  const next: Record<string, T> = { ...held };
+  delete next[from];
+  if (!(to in next)) next[to] = moved;
+  return next;
 }
 
 function patchNetwork(

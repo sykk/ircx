@@ -3056,3 +3056,78 @@ mod renaming_in_a_roster {
         assert_eq!(roster(&session), ["OldName"]);
     }
 }
+
+/// The other half of #234: a query is the conversation, not the name on it.
+mod renaming_in_a_query {
+    use super::*;
+
+    fn talking() -> Harness {
+        let mut session = registered("");
+        session.feed(":oldname!o@h PRIVMSG sykk :are you around?");
+        session.events.clear();
+        session
+    }
+
+    fn renames(session: &Harness) -> Vec<(String, String)> {
+        session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::QueryRenamed { from, to, .. } => Some((from.clone(), to.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_rename_says_which_conversation_moved_and_where() {
+        let mut session = talking();
+        session.feed(":oldname!o@h NICK newname");
+
+        assert_eq!(
+            renames(&session),
+            [("oldname".to_string(), "newname".to_string())]
+        );
+    }
+
+    /// Said before the move, so it carries the name the conversation had.
+    #[test]
+    fn the_name_it_moved_from_is_the_one_it_was_under() {
+        let mut session = talking();
+        session.feed(":oldname!o@h NICK OldName");
+
+        assert_eq!(
+            renames(&session),
+            [("oldname".to_string(), "OldName".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_rename_by_somebody_with_no_query_moves_nothing() {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk stranger");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        session.events.clear();
+        session.feed(":stranger!s@h NICK renamed");
+
+        assert!(renames(&session).is_empty());
+    }
+
+    /// The row that follows has to name the person it is now with.
+    #[test]
+    fn the_query_that_follows_carries_the_new_name() {
+        let mut session = talking();
+        session.feed(":oldname!o@h NICK newname");
+
+        let named: Vec<String> = session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::QueryUpdated { query } => Some(query.nick.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(named, ["newname"]);
+    }
+}

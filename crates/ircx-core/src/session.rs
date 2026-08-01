@@ -1473,9 +1473,16 @@ impl SessionState {
         }
 
         if let Some(mut query) = self.queries.remove(&old) {
-            query.nick = new_nick.clone();
+            // Before the nick is overwritten: the conversation is moved by the
+            // name it was under, and this is the last place that holds it.
+            let was = std::mem::replace(&mut query.nick, new_nick.clone());
             let folded = self.fold(&new_nick);
             self.queries.insert(folded.clone(), query);
+            self.emit(IrcxEvent::QueryRenamed {
+                network: self.config.network.clone(),
+                from: was,
+                to: new_nick.clone(),
+            });
             self.emit_query(&folded);
         }
 

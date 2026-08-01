@@ -75,6 +75,18 @@ What is left:
   list of names — kept both, and the quit that followed named the new one and
   took only that away. A rename says the old name is gone now.
 
+  **The same shape had the same fault in a query**, walked on 2026-08-01: one
+  private conversation drew as two rows, the older holding the history behind a
+  composer addressed to a nick nobody held. A conversation now moves with the
+  person, whole, while what is already written down keeps the name it was said
+  under.
+
+  Worth knowing before reproducing either: **a rename is only ever heard from a
+  server if you share a channel with the person.** The first attempt at this
+  walk had them open a query and nothing else, and ircx never saw the `NICK` at
+  all — the second name simply arrived as a second conversation, which is not
+  something the client can do anything about.
+
 - **Reactions on the wire are verified, and they do not work on Libera.** Run
   by the owner against `cadmium.libera.chat` on 2026-07-30, with `message-tags`
   and `echo-message` both negotiated — confirmed by `CAP LIST` rather than

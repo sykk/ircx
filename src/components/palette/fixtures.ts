@@ -110,6 +110,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     setup: null,
     pluginsOpen: false,
     uploadOpen: false,
+    archiveOpen: false,
     appearanceOpen: false,
     plugins: [],
     pluginsUnavailable: null,

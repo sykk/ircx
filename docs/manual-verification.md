@@ -1043,3 +1043,33 @@ What is left:
   `cadmium.libera.chat` advertised on 2026-07-30, so nothing is sent there and
   the archive stays the whole history. That is the degrade working, and it also
   means no Libera run can exercise any of this.
+
+## The archive's own controls
+
+Built and walked on 2026-08-01 (#241). Everything in `ircx-store` for this
+existed and nothing reached it: `set_retention`, `prune`, `export_target` and
+`delete_target` were referenced from no command, no Tauri surface and no screen,
+and `prune` was called only by its own tests.
+
+Walked in the app: the sheet reports `108 messages, 204 kB on this machine`, a
+window is set and read back, deleting everything empties it while the networks
+stay, and seven backdated messages were taken by the window on the next launch
+with the sheet saying `7 were removed when ircx started`.
+
+Two things the walk changed:
+
+- **A delete left the words in the file.** SQLite keeps deleted rows in free
+  pages, so an archive emptied from the sheet still read `236 kB` and the bytes
+  were still on the disk for anybody reading the file. `delete_everything`
+  vacuums, and the same walk now reads `120 kB`.
+- **The console was the wrong home for the prune notice.** Pruning happens
+  before any network exists, so there is no console to write to; and an
+  app-level `Notice` is discarded by the frontend, which only renders the ones a
+  session routes to a target. The count is on the archive sheet instead, which
+  is where somebody who set a window goes back to.
+
+**Not verified:** the export. `save()` opens a real file dialog, which the
+harness cannot answer, so the button was watched doing nothing when the dialog
+is dismissed and the writing itself is covered only by the store's tests. Export
+one conversation and one archive, and read the file back — it is JSON Lines, one
+message per line, and `jq` is enough to check it.

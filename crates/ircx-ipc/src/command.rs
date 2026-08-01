@@ -28,6 +28,10 @@
 //! install_plugin(source: String)              -> InstalledPlugin
 //! set_plugin_grants(plugin, grants)           -> InstalledPlugin
 //! remove_plugin(plugin: String)               -> ()
+//! archive_summary(network, target)            -> ArchiveSummary
+//! set_retention(network, target, days)        -> ()
+//! export_archive(scope, path)                 -> u64
+//! delete_archive(scope)                       -> ()
 //! ```
 //!
 //! Every handler returns `Result<T, String>`; the error string is user-facing.
@@ -321,4 +325,46 @@ pub struct ThemeSource {
     pub manifest: String,
     /// Contents of `theme.css`.
     pub stylesheet: String,
+}
+
+/// What one conversation is worth, and what the whole archive weighs.
+///
+/// The counts are what makes a retention setting believable: a window nobody
+/// can see the effect of is a window nobody will trust.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveSummary {
+    /// Every message this client has kept, across every network.
+    pub messages: u64,
+    /// What the database costs on disk, indexes and search included.
+    pub bytes: u64,
+    /// How long this network keeps messages, in days. `None` is forever.
+    pub network_days: Option<u32>,
+    /// The same for the conversation asked about, when one was. `None` is
+    /// "whatever the network says" rather than "forever" — the override is
+    /// absent, not set to keep.
+    pub target_days: Option<u32>,
+    /// Whether that override exists at all, which `target_days` cannot say.
+    pub target_override: bool,
+    /// How many messages the window took when the app last started. Said here
+    /// because pruning happens before any network exists and so has no console
+    /// to say it in, and this is the screen somebody who set a window comes
+    /// back to.
+    pub removed_on_launch: u64,
+}
+
+/// What an export or a delete applies to.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ArchiveScope {
+    /// One conversation, named the way everything else names one.
+    Conversation {
+        network: NetworkId,
+        target: TargetName,
+    },
+    /// Every message this client has kept. Networks and credentials stay:
+    /// clearing what was said is not asking to be logged out.
+    Everything,
 }

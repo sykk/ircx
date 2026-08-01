@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use ircx_core::SessionCommand;
 use ircx_ipc::{
-    AppSnapshot, Attachment, ChatMessage, CommandOutcome, FileToUpload, HistoryRequest,
-    InstalledPlugin, Member, NetworkConfig, NetworkId, PluginGrants, PluginPermissionInfo, Query,
-    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
+    AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
+    FileToUpload, HistoryRequest, InstalledPlugin, Member, NetworkConfig, NetworkId, PluginGrants,
+    PluginPermissionInfo, Query, SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
+    UploadedFile,
 };
 use tauri::State;
 
@@ -247,4 +248,92 @@ pub async fn set_plugin_grants(
 #[tauri::command]
 pub async fn remove_plugin(app: State<'_, App>, plugin: String) -> Result<(), String> {
     app.remove_plugin(&plugin).await
+}
+
+/// What the archive holds, and what this conversation's rule is.
+///
+/// `target` is optional because the sheet opens with or without a conversation
+/// in front of it, and the network's own rule is worth showing either way.
+#[tauri::command]
+pub async fn archive_summary(
+    app: State<'_, App>,
+    network: Option<NetworkId>,
+    target: Option<TargetName>,
+) -> Result<ArchiveSummary, String> {
+    let store = app.store();
+    let size = store.archive_size().map_err(describe)?;
+    let (network_days, target_days, target_override) = match network.as_deref() {
+        None => (None, None, false),
+        Some(network) => {
+            let network_days = store.retention(network, None).map_err(describe)?.flatten();
+            match target.as_deref() {
+                None => (network_days, None, false),
+                Some(target) => match store.retention(network, Some(target)).map_err(describe)? {
+                    Some(days) => (network_days, days, true),
+                    None => (network_days, None, false),
+                },
+            }
+        }
+    };
+    Ok(ArchiveSummary {
+        messages: size.messages,
+        bytes: size.bytes,
+        network_days,
+        target_days,
+        target_override,
+        removed_on_launch: app.pruned_on_launch(),
+    })
+}
+
+/// `days` of `None` keeps messages forever. `target` of `None` sets the
+/// network's own rule rather than an override.
+#[tauri::command]
+pub async fn set_retention(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: Option<TargetName>,
+    days: Option<u32>,
+) -> Result<(), String> {
+    app.store()
+        .set_retention(&network, target.as_deref(), days)
+        .map_err(describe)
+}
+
+/// Writes the archive to `path` as JSON Lines and answers with how many bytes
+/// went, which is the only thing the caller can show that the file itself does
+/// not already say.
+#[tauri::command]
+pub async fn export_archive(
+    app: State<'_, App>,
+    scope: ArchiveScope,
+    path: String,
+) -> Result<u64, String> {
+    use std::io::Write;
+
+    let mut buffer = Vec::new();
+    let store = app.store();
+    match &scope {
+        ArchiveScope::Conversation { network, target } => store
+            .export_target(network, target, &mut buffer)
+            .map_err(describe)?,
+        ArchiveScope::Everything => store.export_everything(&mut buffer).map_err(describe)?,
+    }
+    let written = buffer.len() as u64;
+    let mut file = std::fs::File::create(&path)
+        .map_err(|error| format!("{path} could not be written: {error}"))?;
+    file.write_all(&buffer)
+        .map_err(|error| format!("{path} could not be written: {error}"))?;
+    Ok(written)
+}
+
+/// There is no undo. Whatever asks for this has to have said so.
+#[tauri::command]
+pub async fn delete_archive(app: State<'_, App>, scope: ArchiveScope) -> Result<(), String> {
+    let store = app.store();
+    match &scope {
+        ArchiveScope::Conversation { network, target } => {
+            store.delete_target(network, target).map_err(describe)
+        }
+        ArchiveScope::Everything => store.delete_everything().map_err(describe),
+    }
 }

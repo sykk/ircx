@@ -1,0 +1,303 @@
+import { useEffect, useRef, useState } from "react";
+import { save } from "@tauri-apps/plugin-dialog";
+import { Group, PrimaryButton, SecondaryButton, SelectField } from "@/components/onboarding/fields";
+import { ipc } from "@/lib/ipc";
+import { useAppStore } from "@/store";
+import { useActiveTarget } from "@/store/selectors";
+import type { ArchiveScope, ArchiveSummary } from "@/types";
+
+/**
+ * What a retention window may be set to.
+ *
+ * Days rather than a free number: the question is "how long do I want this
+ * around", and nobody answers it in 47.
+ */
+const WINDOWS: { value: string; label: string }[] = [
+  { value: "", label: "Forever" },
+  { value: "7", label: "7 days" },
+  { value: "30", label: "30 days" },
+  { value: "90", label: "90 days" },
+  { value: "365", label: "A year" },
+];
+
+/** Bytes as somebody would say them, which is two significant figures and a unit. */
+export function describeSize(bytes: bigint | number): string {
+  const total = Number(bytes);
+  if (total < 1024) return `${total} B`;
+  const units = ["kB", "MB", "GB"];
+  let size = total / 1024;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`;
+}
+
+/** What was kept, in the words the sheet uses for it. */
+export function describeKept(summary: ArchiveSummary): string {
+  const messages = Number(summary.messages);
+  return `${messages.toLocaleString()} message${messages === 1 ? "" : "s"}, ${describeSize(summary.bytes)}`;
+}
+
+/**
+ * The archive: how long it is kept, what it weighs, and the two ways out of it.
+ *
+ * It is a sheet rather than a page in the network's settings because the
+ * archive is one file for the whole client, and because deleting what somebody
+ * said is not a connection setting.
+ */
+export function ArchiveSheet() {
+  const open = useAppStore((s) => s.archiveOpen);
+  return open ? <Sheet /> : null;
+}
+
+/** What a destructive button is waiting for. Nothing is destroyed on one click. */
+type Pending = { scope: ArchiveScope; what: string } | null;
+
+function Sheet() {
+  const closeSheet = useAppStore((s) => s.toggleArchive);
+  const here = useActiveTarget();
+  const [summary, setSummary] = useState<ArchiveSummary | null>(null);
+  const [pending, setPending] = useState<Pending>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.focus();
+  }, []);
+
+  const network = here?.network ?? null;
+  const target = here?.target ?? null;
+  // The label is for a reader, and a network's id is a hash. Falling back to
+  // the id keeps the row from going blank if the network has gone away.
+  const networkName = useAppStore((s) =>
+    network === null ? null : (s.networks[network]?.name ?? network),
+  );
+
+  function read() {
+    void ipc.archiveSummary(network, target).then(
+      (next) => setSummary(next),
+      (reason: unknown) => setError(reasonOr(reason, "The archive could not be read.")),
+    );
+  }
+
+  useEffect(read, [network, target]);
+
+  function close() {
+    if (!busy) closeSheet(false);
+  }
+
+  async function keepFor(scope: "network" | "target", days: string) {
+    if (network === null) return;
+    setError(null);
+    try {
+      await ipc.setRetention(
+        network,
+        scope === "target" ? target : null,
+        days === "" ? null : Number(days),
+      );
+      read();
+      setSaid(
+        days === ""
+          ? "Kept forever. Nothing is removed until this changes."
+          : `Kept for ${days} days. Messages past that go on the next launch.`,
+      );
+    } catch (reason) {
+      setError(reasonOr(reason, "That could not be saved."));
+    }
+  }
+
+  async function exportTo(scope: ArchiveScope, suggested: string) {
+    setError(null);
+    const path = await save({
+      defaultPath: suggested,
+      filters: [{ name: "JSON Lines", extensions: ["jsonl"] }],
+    }).catch(() => null);
+    if (typeof path !== "string") return;
+    setBusy(true);
+    try {
+      const bytes = await ipc.exportArchive(scope, path);
+      setSaid(`Written to ${path} — ${describeSize(bytes)}.`);
+    } catch (reason) {
+      setError(reasonOr(reason, "The export could not be written."));
+    }
+    setBusy(false);
+  }
+
+  async function destroy() {
+    if (pending === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await ipc.deleteArchive(pending.scope);
+      setSaid(`${pending.what} deleted. There is no undo, and there was none.`);
+      setPending(null);
+      read();
+    } catch (reason) {
+      setError(reasonOr(reason, "That could not be deleted."));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onMouseDown={close}>
+      <div className="absolute inset-0 bg-[var(--scrim)]" />
+      <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Archive"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.stopPropagation();
+          if (pending !== null) setPending(null);
+          else close();
+        }}
+        className="relative flex max-h-[88vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] shadow-[var(--shadow-overlay)]"
+      >
+        <div className="flex flex-col gap-4 p-5">
+          <div>
+            <h2 className="text-[15px] font-semibold">Archive</h2>
+            <p className="text-[12px] text-[var(--text-muted)]">
+              {summary === null
+                ? "Reading what is kept…"
+                : `${describeKept(summary)} on this machine.`}
+            </p>
+            {summary !== null && summary.removedOnLaunch > 0n && (
+              <p className="text-[12px] text-[var(--text-muted)]">
+                {Number(summary.removedOnLaunch).toLocaleString()} were removed when ircx started,
+                past the window below.
+              </p>
+            )}
+          </div>
+
+          {network === null ? (
+            <p className="text-[12px] text-[var(--text-muted)]">
+              Open a conversation to set how long it is kept.
+            </p>
+          ) : (
+            <Group title="How long to keep">
+              <SelectField
+                label={`Everything on ${networkName}`}
+                value={summary?.networkDays === null ? "" : String(summary?.networkDays ?? "")}
+                options={WINDOWS}
+                onChange={(days) => void keepFor("network", days)}
+              />
+              {target !== null && (
+                <SelectField
+                  label={`${target}, if it should differ`}
+                  value={
+                    summary?.targetOverride ? String(summary.targetDays ?? "") : FOLLOWS_NETWORK
+                  }
+                  options={[{ value: FOLLOWS_NETWORK, label: "Same as the network" }, ...WINDOWS]}
+                  onChange={(days) =>
+                    days === FOLLOWS_NETWORK ? undefined : void keepFor("target", days)
+                  }
+                />
+              )}
+            </Group>
+          )}
+
+          <Group title="Take a copy">
+            <p className="text-[12px] text-[var(--text-muted)]">
+              JSON Lines, one message per line, oldest first. Re-readable by anything, including
+              ircx.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {network !== null && target !== null && (
+                <SecondaryButton
+                  onClick={() =>
+                    void exportTo({ type: "conversation", network, target }, `${target}.jsonl`)
+                  }
+                  disabled={busy}
+                >
+                  Export {target}
+                </SecondaryButton>
+              )}
+              <SecondaryButton
+                onClick={() => void exportTo({ type: "everything" }, "ircx-archive.jsonl")}
+                disabled={busy}
+              >
+                Export everything
+              </SecondaryButton>
+            </div>
+          </Group>
+
+          <Group title="Delete">
+            {pending === null ? (
+              <div className="flex flex-wrap gap-2">
+                {network !== null && target !== null && (
+                  <SecondaryButton
+                    onClick={() =>
+                      setPending({
+                        scope: { type: "conversation", network, target },
+                        what: target,
+                      })
+                    }
+                    disabled={busy}
+                  >
+                    Delete {target}
+                  </SecondaryButton>
+                )}
+                <SecondaryButton
+                  onClick={() =>
+                    setPending({ scope: { type: "everything" }, what: "The whole archive" })
+                  }
+                  disabled={busy}
+                >
+                  Delete everything
+                </SecondaryButton>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2" role="alertdialog" aria-label="Confirm delete">
+                <p className="text-[12px]">
+                  {pending.scope.type === "everything"
+                    ? `Delete ${summary === null ? "the whole archive" : describeKept(summary)}? Your networks and passwords stay; everything anybody said goes.`
+                    : `Delete everything kept from ${pending.what}?`}{" "}
+                  This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <PrimaryButton onClick={() => void destroy()} disabled={busy}>
+                    Delete
+                  </PrimaryButton>
+                  <SecondaryButton onClick={() => setPending(null)} disabled={busy}>
+                    Keep it
+                  </SecondaryButton>
+                </div>
+              </div>
+            )}
+          </Group>
+
+          {said !== null && (
+            <p className="text-[12px] text-[var(--text-muted)]" role="status">
+              {said}
+            </p>
+          )}
+          {error !== null && (
+            <p className="text-[12px] text-[var(--danger)]" role="alert">
+              {error}
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <SecondaryButton onClick={close} disabled={busy}>
+              Close
+            </SecondaryButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Distinct from "forever", which is a window this conversation states itself. */
+const FOLLOWS_NETWORK = "follows";
+
+function reasonOr(reason: unknown, fallback: string): string {
+  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
+}

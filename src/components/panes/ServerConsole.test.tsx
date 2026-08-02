@@ -261,4 +261,15 @@ describe("the server console", () => {
       expect(screen.getByText(/Welcome to the Libera.Chat/)).toBeTruthy();
     });
   });
+
+  /** A console is a pane, and #297 has to reach it from the same place as a
+   * conversation — the pane-restore walk left one of these open in a split. */
+  it("can be closed from its own header once the window is split", () => {
+    useAppStore.getState().splitActiveView("row");
+    render(<ChatPane view={TEST_VIEW} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close pane" }));
+
+    expect(useAppStore.getState().viewOrder).not.toContain(TEST_VIEW);
+  });
 });

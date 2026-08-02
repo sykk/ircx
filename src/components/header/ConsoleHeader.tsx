@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { useAppStore } from "@/store";
 import type { ViewId } from "@/store/types";
 import type { Network } from "@/types";
+import { ClosePaneButton } from "./ClosePaneButton";
 import { HeaderButton } from "./HeaderButton";
 import { WireIcon } from "./icons";
 
@@ -39,6 +40,8 @@ export function ConsoleHeader({ view, network, raw, onToggleRaw }: Props) {
         >
           <WireIcon size={16} />
         </HeaderButton>
+
+        <ClosePaneButton view={view} />
       </div>
     </header>
   );

@@ -418,10 +418,18 @@ what nobody has done is drag one.
   a fixed 208px that will not shrink. Drag one all the way in on a small window
   and see what the conversation has left.
 
-- **Where a resize goes when the app closes.** Nowhere: the layout tree is not
-  persisted, so a restart is back to even halves. That is what today's code
-  does, not a decision anybody made — `viewState.ts` persists the sidebar width
-  and the collapsed networks, and the layout could join it.
+- **Where a resize goes when the app closes.** Into `viewState.ts`, alongside
+  the sidebar width, since #287. The tree is written down as the conversations
+  its panes hold and read back after the opening snapshot, which is what knows
+  whether a conversation is still there to come back to.
+
+  Nothing here has been watched. The unit tests cover the round trip, the prune
+  and the collapse, but they run in jsdom against a store, so what nobody has
+  seen is a window opening onto the panes it closed with. Worth walking: two
+  panes at an uneven share and a quit, a pane on a conversation closed before
+  quitting, and a console pane left on the raw log. Note that the first pane in
+  reading order takes focus rather than the one that had it, which is deliberate
+  and is the thing most likely to read as wrong.
 
 ## Plugins
 

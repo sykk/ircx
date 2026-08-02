@@ -10,6 +10,7 @@ import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { ArchiveSheet } from "@/components/archive/ArchiveSheet";
 import { UploadSheet } from "@/components/uploads/UploadSheet";
 import { AppShell } from "@/components/shell/AppShell";
+import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { loadPlugins } from "@/lib/plugins";
@@ -30,10 +31,19 @@ export function App() {
     const bridge = startBridge();
     void loadPlugins();
     bridge.then(
-      () =>
-        setStartup(
-          useAppStore.getState().networkOrder.length === 0 ? "onboarding" : "ready",
-        ),
+      () => {
+        const state = useAppStore.getState();
+        if (state.networkOrder.length === 0) {
+          setStartup("onboarding");
+          return;
+        }
+        // After the snapshot rather than on mount: which panes can come back is
+        // a question about which conversations are still open, and until the
+        // snapshot lands the answer is none of them.
+        const stored = loadViewState()?.layout;
+        if (stored) state.restoreLayout(stored);
+        setStartup("ready");
+      },
       (reason: unknown) => {
         console.error("ircx could not reach its backend", reason);
         setStartup("ready");

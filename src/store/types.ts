@@ -55,6 +55,22 @@ export type Layout =
       ratio?: number;
     };
 
+/**
+ * `Layout` as it survives a restart. Its leaves name a conversation rather than
+ * a `ViewId`, because ids are minted per run and the pane they named is gone by
+ * the time this is read back. What a pane holds is therefore how it is found
+ * again, which also means a conversation that no longer exists takes its pane
+ * with it — see `fromStored`.
+ */
+export type StoredLayout =
+  | { type: "view"; network: string; target: string; raw: boolean }
+  | {
+      type: "split";
+      direction: SplitDirection;
+      children: [StoredLayout, StoredLayout];
+      ratio?: number;
+    };
+
 export interface TimelineState {
   messages: ChatMessage[];
   /** msgid of the first message below the unread rule; null when caught up. */

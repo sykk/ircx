@@ -1,4 +1,4 @@
-import type { Layout, SplitDirection, ViewId } from "./types";
+import type { ChatView, Layout, SplitDirection, StoredLayout, ViewId } from "./types";
 
 /** An even split, and what a node with no ratio of its own is worth. */
 export const EVEN_SPLIT = 0.5;
@@ -66,6 +66,65 @@ export function splitLeaf(
   const right = splitLeaf(second, id, direction, added);
   if (right !== second) return { ...layout, children: [first, right] };
   return layout;
+}
+
+/**
+ * Writes the tree down as the conversations it holds. Returns null for a pane
+ * whose view has gone, which collapses its split the way closing one does.
+ */
+export function toStored(
+  layout: Layout,
+  views: Record<ViewId, ChatView>,
+): StoredLayout | null {
+  if (layout.type === "view") {
+    const view = views[layout.id];
+    if (!view || view.network === "") return null;
+    return { type: "view", network: view.network, target: view.target, raw: view.raw };
+  }
+
+  const first = toStored(layout.children[0], views);
+  const second = toStored(layout.children[1], views);
+  if (!first) return second;
+  if (!second) return first;
+  return { ...layout, children: [first, second] };
+}
+
+/**
+ * Reads the tree back, keeping only the panes whose conversation is still
+ * there. `exists` is asked once per leaf; a split that loses one child is
+ * replaced by the other, and one that loses both goes with them.
+ *
+ * Null means there is nothing to restore, which is the state a first launch is
+ * already in.
+ */
+export function fromStored(
+  stored: StoredLayout,
+  exists: (network: string, target: string) => boolean,
+): StoredLayout | null {
+  if (stored.type === "view") {
+    return exists(stored.network, stored.target) ? stored : null;
+  }
+
+  const first = fromStored(stored.children[0], exists);
+  const second = fromStored(stored.children[1], exists);
+  if (!first) return second;
+  if (!second) return first;
+  if (first === stored.children[0] && second === stored.children[1]) return stored;
+  return { ...stored, children: [first, second] };
+}
+
+/** Turns a stored tree into a live one, asking `open` for the view each pane
+ * gets. Depth-first left-to-right, the walk `paneOrder` takes, so panes are
+ * opened in the order they are read. */
+export function openStored(
+  stored: StoredLayout,
+  open: (pane: Extract<StoredLayout, { type: "view" }>) => ViewId,
+): Layout {
+  if (stored.type === "view") return { type: "view", id: open(stored) };
+  return {
+    ...stored,
+    children: [openStored(stored.children[0], open), openStored(stored.children[1], open)],
+  };
 }
 
 /**

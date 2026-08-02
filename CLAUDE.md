@@ -42,7 +42,8 @@ people in one window, which is clustering rather than a timer.
 tree is built, and every pane on a channel draws its own member list inside it —
 the three context-panel modes that doc originally specified are gone, and the
 doc says why. A split carries a ratio and its divider moves, by pointer or by
-arrow key; the ratio does not survive a restart.
+arrow key. The tree survives a restart, written down as the conversations its
+panes hold; one whose conversation is gone takes its pane with it.
 
 `docs/measurements.md` holds every figure this project claims, with the method
 behind it. The spec justifies the stack on startup, memory and size, so those

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAppStore } from "@/store";
+import { toStored } from "@/store/layout";
 import { SidebarNetworks } from "./SidebarNetworks";
 import { StatusBar } from "./StatusBar";
 import { TitleBar } from "./TitleBar";
@@ -12,6 +13,8 @@ const HANDLE_PX = 4;
 export function AppShell({ children }: { children?: ReactNode }) {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
+  const layout = useAppStore((s) => s.layout);
+  const views = useAppStore((s) => s.views);
 
   const [narrow, setNarrow] = useState(() => window.innerWidth < NARROW_PX);
   const [sidebarOverlay, setSidebarOverlay] = useState(false);
@@ -44,8 +47,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
     saveViewState({
       sidebarWidth,
       collapsedNetworks: Object.keys(collapsedNetworks).filter((id) => collapsedNetworks[id]),
+      // Only once a pane is open. The layout is null until then, and writing
+      // that null would throw away the one this run has not restored yet —
+      // which is what `saveViewState` merging rather than replacing is for.
+      ...(layout ? { layout: toStored(layout, views) } : {}),
     });
-  }, [sidebarWidth, collapsedNetworks]);
+  }, [sidebarWidth, collapsedNetworks, layout, views]);
 
   const columns = narrow ? "1fr" : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)`;
 

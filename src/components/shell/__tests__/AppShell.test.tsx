@@ -76,7 +76,47 @@ describe("AppShell", () => {
     expect(loadViewState()).toEqual({
       sidebarWidth: 256,
       collapsedNetworks: ["libera"],
+      layout: null,
     });
+  });
+
+  it("writes the panes down as the conversations they hold", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<AppShell />);
+
+    act(() => {
+      useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
+      useAppStore.getState().splitActiveView("row");
+      useAppStore.getState().setSplitRatio([], 0.7);
+    });
+
+    expect(loadViewState()?.layout).toEqual({
+      type: "split",
+      direction: "row",
+      ratio: 0.7,
+      children: [
+        { type: "view", network: "libera", target: "#ctf-ops", raw: false },
+        { type: "view", network: "libera", target: "#ctf-ops", raw: false },
+      ],
+    });
+  });
+
+  /** Until a pane opens there is nothing to say, and saying it would throw away
+   * the layout the run has not restored yet. */
+  it("keeps a stored layout while the window is still empty", () => {
+    const layout = { type: "view", network: "libera", target: "#ctf-ops", raw: false };
+    localStorage.setItem(
+      "ircx.shell.view",
+      JSON.stringify({ sidebarWidth: 240, collapsedNetworks: [], layout }),
+    );
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<AppShell />);
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Sidebar width" }), {
+      key: "ArrowRight",
+    });
+
+    expect(loadViewState()?.layout).toEqual(layout);
   });
 
   it("restores persisted view state on mount", () => {

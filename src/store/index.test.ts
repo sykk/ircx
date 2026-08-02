@@ -8,7 +8,7 @@ import {
   resetStore,
   seedStore,
 } from "@/components/shell/fixtures";
-import { SERVER_TARGET, type IrcxEvent } from "@/types";
+import { SERVER_TARGET, type IrcxEvent, type Member } from "@/types";
 import { useAppStore } from "./index";
 import { targetKey } from "./keys";
 import { ratioOf } from "./layout";
@@ -974,5 +974,108 @@ describe("deleting a network", () => {
     store().applyEvent({ type: "networkRemoved", network: "oftc" });
 
     expect(store().channels[targetKey("oftc-eu", "#eu")]).toBeTruthy();
+  });
+});
+
+/**
+ * #321. `applyEvents` coalesces a batch's roster changes so a netsplit costs one
+ * rebuild of the member list rather than one per person, which means the batch
+ * path and the one-at-a-time path are two implementations of the same rule.
+ * `reduce` is the one to trust; this asserts the fast one agrees with it.
+ */
+describe("a batch of roster changes", () => {
+  const store = () => useAppStore.getState();
+
+  function member(nick: string): Member {
+    return { nick, account: null, prefixes: [], away: null };
+  }
+
+  function seed() {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera"), makeNetwork("oftc")],
+      [
+        makeChannel("libera", "#ctf-ops"),
+        makeChannel("libera", "#hackint"),
+        makeChannel("oftc", "#linux"),
+      ],
+    );
+    useAppStore.setState({
+      members: {
+        [targetKey("libera", "#ctf-ops")]: ["sable", "phrack", "nyx"].map(member),
+        [targetKey("oftc", "#linux")]: ["guest", "root"].map(member),
+      },
+    });
+  }
+
+  /** Everything the coalescer has to get right in one batch: a channel it has
+   * no roster for, a nick removed and put back, a replacement landing on top of
+   * pending edits, a second network, and a `networkRemoved` in the middle —
+   * which is the one other reducer that reads `members`, so the pending edits
+   * have to be written back before it runs. */
+  const batch: IrcxEvent[] = [
+    { type: "memberRemoved", network: "libera", channel: "#ctf-ops", nick: "phrack" },
+    { type: "memberUpdated", network: "libera", channel: "#ctf-ops", member: member("walker") },
+    { type: "memberRemoved", network: "libera", channel: "#ctf-ops", nick: "nope" },
+    { type: "memberUpdated", network: "libera", channel: "#ctf-ops", member: member("phrack") },
+    { type: "memberUpdated", network: "libera", channel: "#hackint", member: member("rae") },
+    { type: "memberRemoved", network: "oftc", channel: "#linux", nick: "guest" },
+    {
+      type: "membersReplaced",
+      network: "libera",
+      channel: "#ctf-ops",
+      members: ["one", "two"].map(member),
+    },
+    { type: "memberUpdated", network: "libera", channel: "#ctf-ops", member: member("three") },
+    { type: "networkRemoved", network: "oftc" },
+    // A different channel from the one edited above, deliberately. Landing on
+    // `#linux` would let the batch resurrect it from what it still had pending
+    // and still agree with `reduce`, which is how the first version of this
+    // test passed against a coalescer that never flushed before a removal.
+    { type: "memberUpdated", network: "oftc", channel: "#opers", member: member("late") },
+  ];
+
+  it("lands the same members as the same events applied one at a time", () => {
+    seed();
+    for (const event of batch) store().applyEvent(event);
+    const oneAtATime = store().members;
+
+    seed();
+    store().applyEvents(batch);
+
+    expect(store().members).toEqual(oneAtATime);
+  });
+
+  it("keeps the order a roster was built in", () => {
+    seed();
+    store().applyEvents([
+      { type: "memberRemoved", network: "libera", channel: "#ctf-ops", nick: "phrack" },
+      { type: "memberUpdated", network: "libera", channel: "#ctf-ops", member: member("walker") },
+      {
+        type: "memberUpdated",
+        network: "libera",
+        channel: "#ctf-ops",
+        member: { ...member("sable"), away: "back later" },
+      },
+    ]);
+
+    // `sable` keeps its place rather than moving to the end: an update to
+    // somebody already there replaces them where they are.
+    expect(store().members[targetKey("libera", "#ctf-ops")]!.map((m) => m.nick)).toEqual([
+      "sable",
+      "nyx",
+      "walker",
+    ]);
+  });
+
+  it("leaves a channel nothing happened to alone, by identity", () => {
+    seed();
+    const before = store().members[targetKey("oftc", "#linux")];
+
+    store().applyEvents([
+      { type: "memberRemoved", network: "libera", channel: "#ctf-ops", nick: "phrack" },
+    ]);
+
+    expect(store().members[targetKey("oftc", "#linux")]).toBe(before);
   });
 });

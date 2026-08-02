@@ -388,9 +388,23 @@ is whether it looks like one conversation or like two things sharing a box.
 - **A narrow pane was watched, and it was worse than this entry guessed.** A
   `Ctrl+\` split on a 1194px window gave the roster about 45% of each pane and
   wrapped `/help` mid-phrase — #114. The roster no longer takes a fixed column:
-  it asks for the longest name it holds, between a 7rem floor and the 13rem it
+  it asks for the longest name it holds, between an 8rem floor and the 13rem it
   used to always take. What is left to watch is a channel whose nicks are long
   enough to reach that ceiling, where the old problem returns in miniature.
+
+  **What the column asked for and what it drew came apart**, found on
+  2026-08-01 and fixed in #301. It reserved `<widest>ch + 2.25rem` and neither
+  term held: the gutter covered the padding but not the presence dot or the
+  gaps either side of the sigil, and `ch` was the width of a zero in the prose
+  face, because only the sigil was ever drawn in mono. So the longest nick in
+  every channel was the one that truncated. Measured in the running frontend,
+  `wallabywombat` was given 83.7px of the 96px it needed, inside a column the
+  formula had sized at 132.65px. At the floor the same shortfall wrapped
+  `Operators — 1` onto two lines, in a row whose height is fixed at 34px.
+
+  Worth knowing before touching that arithmetic: `ch` is measured against the
+  element the width is on rather than the rows inside it, which is why the
+  column carries the mono family itself.
 
 - **A large channel.** The second Libera run read `#libera`'s member list across
   31 replies, so it is the size of channel worth trying. `MemberList` renders

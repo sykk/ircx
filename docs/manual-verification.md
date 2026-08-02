@@ -290,6 +290,12 @@ A third run on 2026-08-01 went to a local `ergo` instead, because what it was
 there to see was `draft/chathistory` and Libera has none to give.
 `docs/end-to-end-run-3.md`; six defects, #221 to #226.
 
+A fourth on 2026-08-02 went after one thread rather than the whole app: a paste
+draining, and a cut through the middle of it. `docs/end-to-end-run-4.md`. It is
+the first run to have a conversation on screen — #344 opens one without being
+asked — and the first to type into the window, which turns out to be possible
+here after all. One defect, #345.
+
 **A dev server on the port belonging to another checkout is refused now** (#233,
 2026-08-01). It used to be served: the window came up, connected, joined a
 channel and drew a conversation built from somebody else's working tree, with
@@ -309,12 +315,19 @@ cannot be typed into by accident.
 
 What is still open:
 
-- **The topic path is closed.** Both halves it named are done, and neither is
-  here any more: the header drawing a topic it is given was watched on
-  2026-07-31 and is written up under *The topic of a channel you have joined*,
-  and a `/topic` typed by the user is driven against a real server by
-  `a_topic_typed_here_comes_back_changed` in `crates/ircx-core/tests/ergo.rs`.
-  What that run found is recorded in the same section.
+- **The topic path is walked, and one half of it was never what this said.** A
+  `/topic` typed by the user is driven against a real server by
+  `a_topic_typed_here_comes_back_changed` in `crates/ircx-core/tests/ergo.rs`,
+  and the join path is written up under *The topic of a channel you have
+  joined*. This entry used to call that second one "the header drawing a topic
+  it is given", and it is not: what the 2026-07-31 walk watched was the
+  **timeline** drawing `The topic of X is: …` and `Set by …`, which is what that
+  section records.
+
+  The header draws no topic, and the fourth run looked straight at it —
+  `#walk   2 members` with the topic set and named two rows below in the same
+  pane. Nothing in the app draws one for a channel you have joined. #345,
+  `docs/end-to-end-run-4.md`.
 - **Independent scrolling between split panes** is **verified** by the third run
   on 2026-08-01, which is the first one to split anything. Two panes on one
   channel, one sitting at the top of the history while the other was at the
@@ -2040,9 +2053,13 @@ seeded with the 22 delivered and 78 failed this run produced. One notice, one
 Retry, and the other 77 lines marked in the column the reply controls would have
 used, which costs no height: the pane holds 22 messages where it held 13. The
 mark keeps its own line at every pane width, the column being a fixed 60px that
-does not shrink with the measure. What nobody has seen is the fixed screen
-arriving from a real cut rather than from a seeded copy of one, for the same
-reason the rest of this run could not be watched in the window.
+does not shrink with the measure.
+
+**A real cut drew it on 2026-08-02**, which until then had only ever been a
+seeded copy of one: forty lines pasted into `#walk` and `ergo` killed four
+seconds in left twelve delivered and twenty-eight failed, under one notice
+reading `28 messages were not sent — not connected to ergo`. The `Retry` sent
+all twenty-eight again in order. `docs/end-to-end-run-4.md`.
 
 **The fade says nothing during a paste.** #339's premise turns out to be
 stronger than it was argued. A queued message is drawn fainter, which is a
@@ -2062,6 +2079,13 @@ the archive. So the window sat on "No conversation open" for both runs while the
 paste drained correctly underneath it. There is no input injection here — no
 `xdotool`, `ydotool` or `wtype`, and the WebKit local storage is not reachable
 from outside the process — so nothing could open it.
+
+**That sentence was wrong about the machine**, and the fourth run found it out.
+No injection tool is installed, but `gcc`, `X11/extensions/XTest.h` and
+`libXtst` all are, and a hundred lines of C over `XTestFakeKeyEvent` types and
+clicks into the real window. What was missing was a program, not a capability.
+`docs/end-to-end-run-4.md` says what it takes, including the `GDK_BACKEND=x11`
+without which the window opens on the operator's desktop instead of on `Xvfb`.
 
 Everything above about delivery states is therefore read from the archive, which
 is the same fact the timeline draws from, and none of it is read off the screen.
@@ -2090,10 +2114,21 @@ workspace draws "No conversation open" and no composer before the change, and
 What that does not settle is the run itself. Chrome is not WebKitGTK and a
 seeded backend is not a socket, so what is established is that the rule fires
 and which conversation it picks — not that the assembled app comes up in a
-channel against real `ergo`. **That is the next live run**, and what it should
-watch is what these two could not: the queue count, the fade, the cut and the
-failure notice were each measured out of the archive rather than read off the
-screen.
+channel against real `ergo`.
+
+**That run happened the same day**: `docs/end-to-end-run-4.md`. The app came up
+in `#walk` on its own in WebKitGTK, and everything this section says nobody had
+watched was then watched. `31 waiting to send` in the composer's hint row three
+seconds into a forty-line paste, every visible row at the pending fade; a cut
+four seconds into a second one leaving twelve delivered and twenty-eight failed
+with nothing lost between them; one notice reading `28 messages were not sent —
+not connected to ergo` with one `Retry`, and the other twenty-seven rows marked
+in the reserved column. The `Retry` was clicked and all twenty-eight went again,
+`53` through `80` in order, five at once and then one every 500 ms.
+
+The two conditions were the window opening itself and typing into it, and the
+second is worth reading before the next run: **this host does have input
+injection**, which the note below saying it has none was wrong about.
 
 ### The queue, heard rather than seen
 

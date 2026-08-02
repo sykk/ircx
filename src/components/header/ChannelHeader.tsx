@@ -4,6 +4,7 @@ import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useChannelForView, useNetwork } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
+import { ClosePaneButton } from "./ClosePaneButton";
 import { HeaderButton } from "./HeaderButton";
 import { MembersIcon, OverflowIcon, SearchIcon } from "./icons";
 
@@ -146,6 +147,8 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
             </div>
           )}
         </div>
+
+        <ClosePaneButton view={view} />
       </div>
     </header>
   );

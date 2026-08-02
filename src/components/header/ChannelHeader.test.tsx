@@ -91,4 +91,33 @@ describe("ChannelHeader", () => {
     expect(screen.queryByLabelText(/Nick to invite/)).toBeNull();
     expect(screen.queryByRole("menu")).toBeNull();
   });
+
+  /** #297: a split could be made with a drag and unmade only with a chord, so
+   * what people reached for was closing the conversation the pane showed. */
+  describe("closing the pane", () => {
+    it("offers nothing while the window holds one pane", () => {
+      render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.queryByRole("button", { name: "Close pane" })).toBeNull();
+    });
+
+    it("offers a close once the window is split", () => {
+      useAppStore.getState().splitActiveView("row");
+      render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.getByRole("button", { name: "Close pane" })).toBeTruthy();
+    });
+
+    it("closes the pane it is drawn in rather than the focused one", () => {
+      useAppStore.getState().splitActiveView("row");
+      // Splitting focuses the pane it opened, so the two differ here — which is
+      // the case a header reading `activeViewId` instead of its own view would
+      // get wrong.
+      const opened = useAppStore.getState().activeViewId;
+      expect(opened).not.toBe(TEST_VIEW);
+
+      render(<ChannelHeader view={TEST_VIEW} />);
+      fireEvent.click(screen.getByRole("button", { name: "Close pane" }));
+
+      expect(useAppStore.getState().viewOrder).toEqual([opened]);
+    });
+  });
 });

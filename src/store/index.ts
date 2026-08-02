@@ -13,7 +13,7 @@ import {
   type IrcxEvent,
   type Reaction,
 } from "@/types";
-import { sameTarget, targetKey, type TargetKey } from "./keys";
+import { networkPrefix, sameTarget, targetKey, type TargetKey } from "./keys";
 import {
   fromStored,
   openStored,
@@ -1015,7 +1015,7 @@ function patchNetwork(
 }
 
 function dropByNetwork<T>(map: Record<string, T>, network: string): Record<string, T> {
-  const prefix = `${network} `;
+  const prefix = networkPrefix(network);
   return Object.fromEntries(
     Object.entries(map).filter(([k]) => !k.startsWith(prefix)),
   ) as Record<string, T>;

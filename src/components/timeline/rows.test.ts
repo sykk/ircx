@@ -551,3 +551,59 @@ describe("the history boundary", () => {
     expect(rows.filter((row) => row.kind === "block")).toHaveLength(3);
   });
 });
+
+/**
+ * A netsplit is the burst the digest exists for. Unlike a `LIST`, which now
+ * bypasses the timeline entirely (#125), every one of these legitimately
+ * belongs on screen — so the only thing that keeps thousands of them from
+ * becoming thousands of rows is the fold.
+ *
+ * Measured rather than guessed: `docs/measurements.md` records what this costs
+ * at four sizes, and the number that matters is here as an assertion because a
+ * regression would be a channel that becomes unscrollable rather than slow.
+ */
+describe("buildRows under a netsplit", () => {
+  /** `n` people leaving, then the same `n` coming back a minute later — the
+   * shape of a split and its heal, inside one `RUN_MS` window. */
+  function split(n: number): ChatMessage[] {
+    const messages: ChatMessage[] = [];
+    for (let i = 0; i < n; i += 1) {
+      messages.push(
+        at(i * 10, { id: `q${i}`, nick: `nick${i}`, kind: "quit", text: "*.net *.split" }),
+      );
+    }
+    for (let i = 0; i < n; i += 1) {
+      messages.push(
+        at(60_000 + i * 10, { id: `j${i}`, nick: `nick${i}`, kind: "join", text: "joined" }),
+      );
+    }
+    return messages;
+  }
+
+  it("folds thousands of comings and goings into a handful of rows", () => {
+    const rows = buildRows(split(2_500), null);
+
+    // One, in fact: the split and its heal are inside a single run window, so
+    // they share a digest. The bound rather than the exact figure is what
+    // matters — what must not happen is one row each.
+    expect(rows.filter((row) => row.kind === "system").length).toBeLessThanOrEqual(4);
+  });
+
+  it("folds them without losing any", () => {
+    const messages = split(2_500);
+    const rows = buildRows(messages, null);
+
+    const held = rows.flatMap((row) => rowMessages(row).map((message) => message.id));
+    expect(held).toHaveLength(messages.length);
+    expect(new Set(held).size).toBe(messages.length);
+  });
+
+  /** The digest counts what it folded, so the line has to survive the scale it
+   * is summarising — five thousand comings and goings is still one sentence. */
+  it("still says what happened", () => {
+    const rows = buildRows(split(2_500), null);
+    const system = rows.find((row) => row.kind === "system");
+
+    expect(system && describePresence(system.messages)).toBe("2500 quit, 2500 joined");
+  });
+});

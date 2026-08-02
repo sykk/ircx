@@ -8,7 +8,7 @@ import {
   resetStore,
   seedStore,
 } from "@/components/shell/fixtures";
-import { SERVER_TARGET, type IrcxEvent, type Member } from "@/types";
+import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Member } from "@/types";
 import { useAppStore } from "./index";
 import { targetKey } from "./keys";
 import { ratioOf } from "./layout";
@@ -1077,5 +1077,155 @@ describe("a batch of roster changes", () => {
     ]);
 
     expect(store().members[targetKey("oftc", "#linux")]).toBe(before);
+  });
+});
+
+/**
+ * #325. The other half of the same netsplit: `applyEvents` coalesces a batch's
+ * messages so the list is extended once rather than rebuilt per event. Same
+ * arrangement as the roster above — two implementations of one rule, and
+ * `reduce` is the one to trust.
+ */
+describe("a batch of arriving messages", () => {
+  const store = () => useAppStore.getState();
+  const HACKINT = targetKey("libera", "#hackint");
+
+  function said(id: string, at: string, overrides: Partial<ChatMessage> = {}) {
+    return makeMessage({ id, timestamp: at, nick: "nyx", target: "#hackint", ...overrides });
+  }
+
+  function mine(id: string, at: string) {
+    const message = makeMessage({ id, timestamp: at, nick: "sable" });
+    message.sender.isSelf = true;
+    return message;
+  }
+
+  function seed() {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#ctf-ops"), makeChannel("libera", "#hackint")],
+    );
+    useAppStore.setState(oneView({ network: "libera", target: "#hackint" }));
+  }
+
+  /** Everything the coalescer has to get right in one batch: a conversation it
+   * holds no timeline for, an echo of a message an earlier event in the same
+   * batch added, a backfill older than what is already held, an event that
+   * rewrites a message only the batch is holding, and a channel closing under
+   * the pane that was reading it — which is how a batch moves `activeViewId`
+   * out from under the messages after it. */
+  const batch: IrcxEvent[] = [
+    // Arrives in the pane showing it, so it is read and leaves no seam.
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#hackint",
+      messages: [said("b1", "2026-07-30T13:00:00.000Z")],
+    },
+    { type: "channelRemoved", network: "libera", name: "#hackint" },
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#hackint",
+      messages: [said("b2", "2026-07-30T13:01:00.000Z")],
+    },
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#hackint",
+      messages: [said("b2", "2026-07-30T13:01:00.000Z"), said("b3", "2026-07-30T13:02:00.000Z")],
+    },
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#hackint",
+      messages: [said("h0", "2026-07-30T12:59:00.000Z", { source: "serverHistory" })],
+    },
+    {
+      type: "messageUpdated",
+      message: said("b3", "2026-07-30T13:02:00.000Z", { text: "edited" }),
+    },
+    // Nothing is showing `#ctf-ops`, and the line you sent it does not open a
+    // seam — but it does not stop the answer from opening one either.
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [mine("c0", "2026-07-30T13:03:00.000Z")],
+    },
+    {
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [makeMessage({ id: "c1", timestamp: "2026-07-30T13:04:00.000Z" })],
+    },
+  ];
+
+  it("lands the same timelines as the same events applied one at a time", () => {
+    seed();
+    for (const event of batch) store().applyEvent(event);
+    const oneAtATime = store().timelines;
+
+    seed();
+    store().applyEvents(batch);
+
+    expect(store().timelines).toEqual(oneAtATime);
+  });
+
+  it("puts the seam where the reader was when the message arrived", () => {
+    seed();
+    store().applyEvents(batch);
+
+    // `b1` arrived while the pane was showing `#hackint`, `b2` after the close
+    // took the pane off it.
+    expect(store().timelines[HACKINT]?.unreadFrom).toBe("b2");
+  });
+
+  it("passes over a line you sent without letting it close the question", () => {
+    seed();
+    store().applyEvents(batch);
+
+    // Deciding once at the end of the batch would read `c0` — the first live
+    // message the batch brought — and stop there because it is yours, leaving
+    // the answer to it unmarked.
+    expect(store().timelines[targetKey("libera", "#ctf-ops")]?.unreadFrom).toBe("c1");
+  });
+
+  it("holds the messages in the order the conversation happened", () => {
+    seed();
+    store().applyEvents(batch);
+
+    expect(store().timelines[HACKINT]?.messages.map((m) => m.id)).toEqual([
+      "h0",
+      "b1",
+      "b2",
+      "b3",
+    ]);
+  });
+
+  it("leaves a conversation nothing new arrived for alone, by identity", () => {
+    const c1 = makeMessage({ id: "c1", timestamp: "2026-07-30T13:03:00.000Z" });
+    seed();
+    store().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [c1],
+    });
+    const before = store().timelines[targetKey("libera", "#ctf-ops")];
+
+    store().applyEvents([
+      {
+        type: "messagesAppended",
+        network: "libera",
+        target: "#hackint",
+        messages: [said("b1", "2026-07-30T13:04:00.000Z")],
+      },
+      // An echo of what it already holds is not news either.
+      { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages: [c1] },
+    ]);
+
+    expect(store().timelines[targetKey("libera", "#ctf-ops")]).toBe(before);
   });
 });

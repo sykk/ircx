@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
+import type * as Ipc from "@/lib/ipc";
 import type { InstalledPlugin, PluginPermissionInfo } from "@/types";
 import { PluginSheet } from "../PluginSheet";
 
@@ -15,7 +16,7 @@ const { ipcMock, chooseFolder } = vi.hoisted(() => ({
   chooseFolder: vi.fn(),
 }));
 vi.mock("@/lib/ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ...(await importOriginal<typeof Ipc>()),
   ipc: ipcMock,
   chooseFolder,
 }));

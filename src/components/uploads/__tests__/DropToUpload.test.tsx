@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { oneView, resetStore } from "@/components/shell/fixtures";
+import type * as Ipc from "@/lib/ipc";
 import { DropToUpload } from "../DropToUpload";
 
 const { ipcMock, drops } = vi.hoisted(() => ({
@@ -15,7 +16,7 @@ const { ipcMock, drops } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ...(await importOriginal<typeof Ipc>()),
   ipc: ipcMock,
   onIrcxEvent: vi.fn(),
   onFileDrop: (handler: (event: unknown) => void) => {

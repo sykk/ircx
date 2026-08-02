@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
+import type * as Ipc from "@/lib/ipc";
 import type { NetworkConfig } from "@/types";
 import { Onboarding } from "../Onboarding";
 
@@ -8,7 +9,7 @@ const saveNetwork = vi.fn<(config: NetworkConfig) => Promise<string>>();
 const connectNetwork = vi.fn<(network: string) => Promise<void>>();
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ...(await importOriginal<typeof Ipc>()),
   ipc: {
     saveNetwork: (config: NetworkConfig) => saveNetwork(config),
     connectNetwork: (network: string) => connectNetwork(network),

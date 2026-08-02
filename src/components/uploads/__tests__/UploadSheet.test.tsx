@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { resetStore } from "@/components/shell/fixtures";
+import type * as Ipc from "@/lib/ipc";
 import { UploadSheet } from "../UploadSheet";
 
 const { ipcMock } = vi.hoisted(() => ({
@@ -13,7 +14,7 @@ const { ipcMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ipc")>()),
+  ...(await importOriginal<typeof Ipc>()),
   ipc: ipcMock,
   onIrcxEvent: vi.fn(),
   chooseFolder: vi.fn(),

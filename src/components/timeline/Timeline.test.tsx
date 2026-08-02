@@ -641,6 +641,32 @@ describe("Timeline", () => {
     });
   });
 
+  /** #300. Splitting a pane rebuilds it, so what the store holds is all it
+   * comes back to. A pane at the live edge that recorded an offset came back to
+   * wherever that offset fell at the narrower width, which was the top. */
+  it("records a pane at the live edge as following rather than as its offset", () => {
+    seed(makeConversation({ count: 400, seed: 7 }));
+    render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = scroller.scrollHeight - VIEWPORT_PX;
+    fireEvent.scroll(scroller);
+
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(useAppStore.getState().viewScroll[TEST_VIEW]).toBe(0);
+  });
+
+  it("records where a pane reading history is parked", () => {
+    seed(makeConversation({ count: 400, seed: 7 }));
+    render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = 600;
+    fireEvent.scroll(scroller);
+
+    expect(useAppStore.getState().viewScroll[TEST_VIEW]).toBe(600);
+  });
+
   it("draws none of the IRC formatting codes a services reply arrives with", () => {
     seed([
       makeMessage({

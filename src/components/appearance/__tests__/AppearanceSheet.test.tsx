@@ -92,6 +92,17 @@ describe("AppearanceSheet", () => {
     expect(screen.getByText("light · ircx · 1.0.0")).toBeTruthy();
   });
 
+  /** #312. The sentence under the name is the only place it was said, so a
+   * screen reader heard two ordinary buttons and no choice between them. */
+  it("marks the theme in use as pressed, and the other as not", () => {
+    open({ themeId: "ircx-dark" });
+
+    // Anchored: each theme's own button and its "Edit the colours of …" sibling
+    // both carry the name.
+    expect(button(/^ircx Dark/).getAttribute("aria-pressed")).toBe("true");
+    expect(button(/^ircx Light/).getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("paints the theme that was chosen", () => {
     open({ themeId: "ircx-dark" });
     fireEvent.click(screen.getByText("light · ircx · 1.0.0"));
@@ -147,6 +158,17 @@ describe("AppearanceSheet", () => {
 
       expect(token("--timeline-block-gap")).toBe("6px");
       expect(useAppStore.getState().density).toBe("compact");
+    });
+
+    it("marks the density in use as pressed, and moves the mark when it changes", () => {
+      open();
+      expect(button(/Comfortable/).getAttribute("aria-pressed")).toBe("true");
+      expect(button(/Compact/).getAttribute("aria-pressed")).toBe("false");
+
+      fireEvent.click(button(/Compact/));
+
+      expect(button(/Compact/).getAttribute("aria-pressed")).toBe("true");
+      expect(button(/Comfortable/).getAttribute("aria-pressed")).toBe("false");
     });
   });
 

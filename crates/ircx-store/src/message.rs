@@ -1,4 +1,4 @@
-use ircx_ipc::{Annotation, ChatMessage, MessageSource, Reaction, Sender};
+use ircx_ipc::{Annotation, ChatMessage, Delivery, MessageSource, Reaction, Sender};
 use rusqlite::{params, Connection, Row, Transaction};
 
 use crate::{from_json_column, to_json, StoreError};
@@ -22,7 +22,67 @@ const INSERT: &str = "INSERT OR IGNORE INTO messages (
         ?21
      )";
 
+/// A replayed message claiming the copy this client drew when it was typed.
+///
+/// Matched on the text rather than on time, because the two stamps are on
+/// different clocks: `written_at` is ours, the replay's timestamp is the
+/// server's, and a server an hour out would otherwise turn this off without
+/// saying so. The hour is a staleness bound rather than the match itself —
+/// unbounded, a replay could claim a copy from weeks ago and the message
+/// arriving now would never be archived at all, which is worse than the
+/// doubling this exists to stop.
+///
+/// That a copy reached the socket is part of the comparison rather than a
+/// clause of its own: `written_at` is stamped on the `sent` transition and
+/// nowhere else, so a line still queued or already failed has none, and `ABS`
+/// of a NULL is NULL, which no row matches on.
+///
+/// The timestamp is deliberately not taken. An echo arrives while the message
+/// is the newest thing on screen, so `confirm` moving it costs nothing; a
+/// replay can arrive a relaunch later, and a line that jumped four seconds down
+/// the timeline on startup would be a stranger thing than the doubling. The
+/// tags are taken, because the `msgid` among them is what a reply or a reaction
+/// names, and a message that cannot be answered is not fixed.
+const ADOPT: &str = "UPDATE messages
+        SET server_msgid = ?1, tags = ?6, raw = ?7
+     WHERE id = (
+        SELECT id FROM messages
+         WHERE network = ?2 AND target = ?3 COLLATE NOCASE AND text = ?4
+           AND sender_is_self = 1 AND server_msgid IS NULL
+           AND ABS(strftime('%s', written_at) - strftime('%s', ?5)) <= 3600
+         ORDER BY id
+         LIMIT 1
+     )";
+
+/// Whether this message is a replay of one already archived. Repeated identical
+/// lines pair up oldest first, so saying the same thing twice matches the two
+/// copies in the order they were said.
+fn adopted(tx: &Transaction, message: &ChatMessage) -> Result<bool, StoreError> {
+    if !message.sender.is_self {
+        return Ok(false);
+    }
+    let Some(msgid) = server_msgid(message) else {
+        return Ok(false);
+    };
+    let claimed = tx.execute(
+        ADOPT,
+        params![
+            msgid,
+            message.network,
+            message.target,
+            message.text,
+            message.timestamp,
+            to_json(&message.tags)?,
+            message.raw,
+        ],
+    )?;
+    Ok(claimed == 1)
+}
+
 pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), StoreError> {
+    if adopted(tx, message)? {
+        return Ok(());
+    }
     tx.execute(
         INSERT,
         params![
@@ -57,7 +117,11 @@ pub(crate) fn insert(tx: &Transaction, message: &ChatMessage) -> Result<(), Stor
 /// was written the moment the user pressed enter.
 const CONFIRM: &str = "UPDATE messages
         SET server_msgid = ?3, timestamp = ?4, timestamp_is_local = ?5, delivery = ?6,
-            tags = ?7, raw = ?8
+            tags = ?7, raw = ?8,
+            written_at = COALESCE(
+                written_at,
+                CASE WHEN ?9 THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END
+            )
      WHERE network = ?1 AND message_id = ?2";
 
 /// Matching no row means the message was never archived, which is nothing the
@@ -74,6 +138,11 @@ pub(crate) fn confirm(conn: &Connection, message: &ChatMessage) -> Result<(), St
             to_json(&message.delivery)?,
             to_json(&message.tags)?,
             message.raw,
+            // The clock is taken here rather than passed in because the write
+            // is the only thing this stamp has to be near, and the update that
+            // reports one arrives within milliseconds of it. `COALESCE` keeps
+            // the first: a later state does not restamp a line already gone.
+            message.delivery == Delivery::Sent,
         ],
     )?;
     Ok(())

@@ -12,6 +12,7 @@ const MIGRATIONS: &[&str] = &[
     RAISED,
     UPLOAD_PROVIDER,
     UPLOAD_S3,
+    WRITTEN_AT,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -222,6 +223,18 @@ CREATE TABLE upload_provider (
 const UPLOAD_S3: &str = r#"
 ALTER TABLE upload_provider ADD COLUMN s3_region TEXT;
 ALTER TABLE upload_provider ADD COLUMN s3_access_key_id TEXT;
+"#;
+
+/// When a message of ours reached the socket, on this machine's clock. The
+/// `timestamp` beside it is when it was typed, and a rate-limited line can sit
+/// between the two for the better part of a minute.
+///
+/// It is what a history replay is matched against where the server does not
+/// echo, so nothing else can tell the replay from a message never seen before.
+/// Rows already archived have none and go on doubling; there is nothing to
+/// infer it from. #333.
+const WRITTEN_AT: &str = r#"
+ALTER TABLE messages ADD COLUMN written_at TEXT;
 "#;
 
 /// Which messages a notification rule thought worth interrupting the user for,

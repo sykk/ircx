@@ -1967,11 +1967,19 @@ only thing that ever puts one on a local copy is the echo. The comment above
 because until this proxy nothing had run against a server without the
 capability.
 
-It is not #332's doing — a local copy had no msgid before that change either —
-and the fix is not obvious enough to bolt on: matching a replayed message to a
-local copy without a msgid means matching on target, text and a timestamp the
-server assigns, which for a queued line is seconds after the one the client
-wrote down. Filed separately.
+It is not #332's doing — a local copy had no msgid before that change either.
+Filed as #333 and **fixed there**; the same run against the fix holds forty rows
+for forty lines, each the copy the window drew with the server's msgid adopted
+onto it.
+
+The fix nearly went in on a false premise, which the walk is also what caught.
+#332 knows when a line reached the socket, so matching that against the replay's
+timestamp inside a second looked exact. It is not: `written_at` is on this
+machine's clock and the replay's timestamp is on the server's, and here they
+agreed only because `ergo` runs on the same machine as the client. Against a
+server a minute out the match would never fire, and the failure would look like
+nothing happening. The match is on the text, oldest copy first, with the clocks
+compared only as a staleness bound.
 
 **Still not walked:**
 

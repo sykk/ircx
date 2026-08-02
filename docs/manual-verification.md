@@ -2074,8 +2074,26 @@ timing is not. The composer draws `95 waiting to send` in the hint row, and the
 live region holds `Messages waiting to send`. The failure screen is #341.
 
 **Nobody has yet seen the count change against a real socket**, because that
-needs the window and the window cannot be opened. It would take input injection,
-or a way to restore a pane from the archive rather than from `localStorage`.
+needs the window and the window could not be opened. It would take input
+injection, or a way to restore a pane from the archive rather than from
+`localStorage`.
+
+**The window opens one itself now** (#343), which was neither of those. A pane
+was only ever opened by a person, so the autojoin that `connect_commands` runs
+filled the sidebar and left the window on "No conversation open" — the whole of
+why these runs were read out of the archive. An empty window now takes the first
+conversation there is, so a run that connects has the channel on screen without
+anybody clicking. Seen in Chrome through the walk driver: the same seeded
+workspace draws "No conversation open" and no composer before the change, and
+`#ircx` with its roster and composer after it, on `goto /` and nothing else.
+
+What that does not settle is the run itself. Chrome is not WebKitGTK and a
+seeded backend is not a socket, so what is established is that the rule fires
+and which conversation it picks — not that the assembled app comes up in a
+channel against real `ergo`. **That is the next live run**, and what it should
+watch is what these two could not: the queue count, the fade, the cut and the
+failure notice were each measured out of the archive rather than read off the
+screen.
 
 ### The queue, heard rather than seen
 

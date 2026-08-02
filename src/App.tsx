@@ -13,6 +13,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
+import { openFirstConversation } from "@/lib/firstPane";
 import { loadPlugins } from "@/lib/plugins";
 import { startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
@@ -29,20 +30,26 @@ export function App() {
   useEffect(() => {
     const themes = startThemes();
     const bridge = startBridge();
+    let stopOpening = () => {};
     void loadPlugins();
     bridge.then(
       () => {
         const state = useAppStore.getState();
         if (state.networkOrder.length === 0) {
           setStartup("onboarding");
-          return;
+        } else {
+          // After the snapshot rather than on mount: which panes can come back
+          // is a question about which conversations are still open, and until
+          // the snapshot lands the answer is none of them.
+          const stored = loadViewState()?.layout;
+          if (stored) state.restoreLayout(stored);
+          setStartup("ready");
         }
-        // After the snapshot rather than on mount: which panes can come back is
-        // a question about which conversations are still open, and until the
-        // snapshot lands the answer is none of them.
-        const stored = loadViewState()?.layout;
-        if (stored) state.restoreLayout(stored);
-        setStartup("ready");
+        // Both paths, and after the restore has had the window: what the last
+        // run left outranks a conversation that merely exists. A first launch
+        // goes through onboarding and has none of either yet, which is the
+        // case this waits for.
+        stopOpening = openFirstConversation();
       },
       (reason: unknown) => {
         console.error("ircx could not reach its backend", reason);
@@ -50,6 +57,7 @@ export function App() {
       },
     );
     return () => {
+      stopOpening();
       void bridge.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
     };

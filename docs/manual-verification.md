@@ -423,13 +423,43 @@ what nobody has done is drag one.
   its panes hold and read back after the opening snapshot, which is what knows
   whether a conversation is still there to come back to.
 
-  Nothing here has been watched. The unit tests cover the round trip, the prune
-  and the collapse, but they run in jsdom against a store, so what nobody has
-  seen is a window opening onto the panes it closed with. Worth walking: two
-  panes at an uneven share and a quit, a pane on a conversation closed before
-  quitting, and a console pane left on the raw log. Note that the first pane in
-  reading order takes focus rather than the one that had it, which is deliberate
-  and is the thing most likely to read as wrong.
+  **Walked on 2026-08-01**, against local `ergo`, reading the record out of
+  WebKit's `localStorage` on either side of the quit rather than trusting the
+  screen for both halves. `ircx.shell.view` is UTF-16 in
+  `~/.local/share/chat.ircx.app/localstorage/`.
+
+  **An uneven share comes back.** Dragged to the stop, which is the useful place
+  to drag it: `MIN_SHARE` is `0.15`, so the stored `0.85` is a figure the run
+  can predict rather than eyeball. It came back at `0.85` and read as the same
+  window.
+
+  **A console pane comes back on the protocol log.** `raw` is a flag beside the
+  target rather than part of it, so it is the thing a restore would most easily
+  drop. The pane returned reading `Nothing on the wire yet`, which is `RawLog`'s
+  own empty state and not the server-message console.
+
+  **Focus lands on the first pane in reading order**, as designed, and the
+  person walking it did not remark on it. That is the whole of the evidence
+  this note asked for.
+
+  **A pane whose server is unreachable comes back too**, which was walked
+  because the alternative would have been silent and permanent. With `ergo`
+  stopped and `:6667` refusing, the split still opened on `#test2` — `0 members`,
+  the roster saying `No members`, the status bar counting down to a reconnect.
+  So `restoreLayout` keys on the conversations the client holds open rather than
+  on live connection state. Had it pruned instead, the reduced layout would have
+  been written back over the stored one and a split would be lost for good by
+  nothing worse than starting up before the network did.
+
+  Worth knowing before repeating any of this: **one window only.** Two instances
+  share one `localStorage`, so whichever exits last writes its layout over the
+  other's. A first attempt at this walk lost its own setup that way and read as
+  a restore failure.
+
+  An unread caveat rather than a finding: at the `0.15` end the console
+  composer's `/join #channel` placeholder clips to `/join #char`. That is a
+  narrow input behaving like one — it reads in full at an even split — and is
+  not the fixed-width fault #114 was.
 
 ## Plugins
 

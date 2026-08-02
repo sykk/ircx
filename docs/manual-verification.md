@@ -1981,15 +1981,92 @@ server a minute out the match would never fire, and the failure would look like
 nothing happening. The match is on the text, oldest copy first, with the clocks
 compared only as a staleness bound.
 
-**Still not walked:**
+**Both of what this left are now walked**, in the two runs below: a hundred-line
+paste drained against a real socket, and the same paste cut partway through so
+that more lines stranded than the pending cap holds.
 
-- **An ordinary message sent while a paste is draining.** It queues behind
-  everything still to go, so a one-word reply can take the rest of the minute to
-  leave. It says `Pending` until it does, and since #339 the composer counts
-  what is waiting and a reader is told a queue formed — but neither has been
-  watched against a draining socket. See below for what that leaves.
-- **A real netsplit's worth of failures.** The cut above stranded twenty-six
-  lines. Nothing has tried it with a queue deep enough to reach the pending cap.
+### A hundred lines, and a hundred lines cut in half
+
+Against local `ergo` through a transparent TCP proxy — the same `nocap.py` the
+run above used, given a capability name nobody advertises so it relays and
+nothing else, and can be killed to cut the link. One network whose
+`connect_commands` join `#queue` and say a hundred lines and one more behind
+them; no typing, for the reason the run above gives.
+
+**The drain matches the model exactly.** A hundred and one lines took 48 s, and
+the count of ours still `Pending` fell from 95 to 0 at almost exactly two a
+second — the token bucket is burst 5 then one per 500 ms, and this is what that
+looks like from the archive:
+
+```text
+t+0s    delivered  8   pending 95
+t+10s   delivered 29   pending 74
+t+30s   delivered 67   pending 36
+t+47s   delivered 102  pending  1
+t+48s   delivered 104
+```
+
+One line sat at `sent` for a second or so at a time in the middle of it, which
+is a line written to the socket whose echo had not come back yet. Nothing
+doubled: 101 `privmsg` for 101 lines said.
+
+**The cut stranded 78 and lost none of them.** Killing the proxy 12 s in left
+22 delivered, 1 written and awaiting an echo that never arrived, and 78 lines
+that had never reached the socket. All 78 moved to `Failed` in the same second,
+with `not connected to Queue`. Nothing stayed at `Pending`.
+
+That is the pending cap's first real test. `track_pending` holds 64 and evicts
+only entries that have been *written*, so a queue of 78 unwritten lines pushes
+straight past the cap rather than dropping its oldest — which is what the
+comment on it says it is for, and what stops a paste longer than the cap
+stranding its first lines at `Pending` forever. It had never been run.
+
+**The line that was written stays `Sent`.** `paste line 023` reached the socket
+and its echo died with the connection, so it is terminal at `Sent` rather than
+`Delivered`. That is true rather than wrong — it was sent — but it is worth
+knowing that a cut leaves one line in a state that never resolves.
+
+### What it found
+
+**A cut mid-paste draws a wall of identical failures.** Seventy-eight
+`FailureNotice` rows, each repeating `Not sent — not connected to Queue` and
+each carrying its own Retry, for what the archive records as exactly **one**
+distinct reason. Recovering the paste means seventy-eight clicks. Filed as #341;
+the deepest run before this stranded 26 lines, which is a size the component is
+fine at.
+
+**The fade says nothing during a paste.** #339's premise turns out to be
+stronger than it was argued. A queued message is drawn fainter, which is a
+signal only against an unfaded row to compare it to — and in a draining paste
+every row on screen is queued, so there is nothing to compare against and the
+fade conveys nothing at all. The composer's count is doing the whole job.
+
+### How much of this was the assembled app, and how much was not
+
+Less than the runs above, and the reason is worth recording so the next walk
+does not lose the time to it.
+
+**The real window never opened the conversation.** `connect_commands` join a
+channel and register it in `open_targets`, but a pane is only opened by a
+person, and the pane tree lives in the webview's `localStorage` rather than in
+the archive. So the window sat on "No conversation open" for both runs while the
+paste drained correctly underneath it. There is no input injection here — no
+`xdotool`, `ydotool` or `wtype`, and the WebKit local storage is not reachable
+from outside the process — so nothing could open it.
+
+Everything above about delivery states is therefore read from the archive, which
+is the same fact the timeline draws from, and none of it is read off the screen.
+
+**The two screens were checked separately, in the walk driver**, seeded with the
+exact states these runs produced: 95 pending in one conversation and the 22/1/78
+of the cut in another. That is a real browser and the real frontend with a faked
+backend, so what it shows about layout is worth having and what it shows about
+timing is not. The composer draws `95 waiting to send` in the hint row, and the
+live region holds `Messages waiting to send`. The failure screen is #341.
+
+**Nobody has yet seen the count change against a real socket**, because that
+needs the window and the window cannot be opened. It would take input injection,
+or a way to restore a pane from the archive rather than from `localStorage`.
 
 ### The queue, heard rather than seen
 

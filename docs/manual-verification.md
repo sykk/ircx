@@ -382,10 +382,52 @@ test reaches.
   a 790 ms one.
 
   It is a hitch rather than the freeze `LIST` was, because it arrives as one
-  batch and costs one long frame. Two things are still unwalked: the same burst
-  with WebKit in it rather than jsdom, and a real netsplit — the harness closes
-  a few thousand ordinary sockets at once, which is the arrival rate without the
-  server link or the `*.net *.split` reason.
+  batch and costs one long frame.
+
+  **The burst is walked in a window now**, by the owner on 2026-08-02, which is
+  what the two rows above could not answer between them: one measures jsdom and
+  the other stops at the events. A running client sat in `#test2` on a local
+  `ergo` while three bursts were driven into it from throwaway clients — 400,
+  then 1,500, then a thousand-person split and its heal. **7,800 arrivals and
+  departures, and the archive holds 7,800**: the joins and the quits reconcile
+  exactly, and the set of names that joined without a matching quit is empty.
+  That is #328's held write checked against a live client rather than against
+  its own unit tests, and it is the durability question the hold raises.
+
+  To do it again: connect the crowd, register them, join them all, let the
+  window draw them, then close every socket in one pass — a burst is made by the
+  closing being together, not by the leaving being fast. `ergo` exempts
+  `localhost` from `ip-limits` in its shipped config, so a few thousand clients
+  from one address are not throttled; `fakelag` applies to what a client sends
+  and does not matter here. The counts come out of the archive with SQLite,
+  which is the part worth checking rather than trusting: what a digest says it
+  folded is a summary, and what the archive holds is the claim.
+
+  **The fold holds in WebKit.** Roughly 3,800 of them drew as two digest lines —
+  *Over 2 minutes: 1901 joined, 1900 quit* and *Over 3 minutes: 1001 quit, 1000
+  joined* — with an ordinary message between them untouched. `rows.test.ts`
+  asserts that at 2,500 in jsdom, where nothing is laid out; this is the first
+  time anything has drawn one.
+
+  **Expanding one does not hang the window.** *show all* on one of the two —
+  they held about 3,800 and about 2,000, and which was clicked was not
+  recorded — rendered every message in it and stayed responsive.
+  `SystemMessage.tsx` maps every folded message with no cap and no
+  virtualisation, so this was the plausible way to reach the unscrollable
+  channel that the fold exists to prevent. Worth knowing what bounds it: a
+  timeline holds `TIMELINE_CAP` messages, so 10,000 is the worst a digest can
+  be, and this walked between a fifth and a third of that. Observed rather than
+  timed, on a debug build — which is the slow direction, so a release build is
+  no worse.
+
+  **The pane kept its place through all of it.** The reading position sat where
+  it had been left, several thousand arrivals earlier, with the *Live from here*
+  marker below — #309 doing its job at a scale nothing had tried. Worth saying
+  because it reads at first glance like a client that missed the traffic.
+
+  Still unwalked: a real netsplit. What was driven is a few thousand ordinary
+  sockets closing at once, which is the arrival rate without the server link,
+  the `*.net *.split` reason or the `NETSPLIT` batch.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`
@@ -1410,11 +1452,40 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
   it does in compact, where the block gap is 6px. No rule happened to be on
   screen during this run, so it is an observation about the numbers rather than
   about anything seen.
-- **Changing theme while on a density that is not comfortable.** The
-  implementation is built around this case — theme and density write the same
-  three properties to the same inline declaration — and `apply.test.ts` covers
-  it, but it has not been seen. The density should survive and the colours
-  should still change.
+- **Changing theme while on a density that is not comfortable** is **half seen**
+  now, on 2026-08-02. The implementation is built around this case — theme and
+  density write the same three properties to the same inline declaration — and
+  `apply.test.ts` covered it without anybody watching it happen.
+
+  What the running window showed: the owner changed density and then theme, and
+  the light theme came up and the client kept working. What it did not show is
+  the part worth checking, because the run was confounded by something else on
+  screen at the time (below) and nobody read the density off it.
+
+  So the assertion was driven in the browser harness instead, which is a weaker
+  place to see it than a real window: the sheet reads `Compact · in use`
+  alongside the light theme, the page background comes back white, and the
+  conversation is the same conversation either side of both changes. The
+  densities differ by spacing, and spacing is exactly what a browser lays out
+  and jsdom does not, so this is worth one more look in the real window rather
+  than being written off as done.
+
+  **A conversation vanishing on a theme change is not this**, and the run above
+  is where that was learned. What had actually happened was a reload of the
+  webview, which empties the frontend store; the channel then read one page back
+  out of the archive and drew that. Three things tell the two apart, and none of
+  them needs a rebuild:
+
+  - the archive still holds every row, so `select count(*)` is unchanged;
+  - the timeline holds exactly `PAGE_SIZE`, which is the tell — 200 messages,
+    not a number that means anything else;
+  - the connection never dropped and neither process restarted, so the status
+    bar is still connected and `WebKitWebProcess` still has its original pid.
+
+  Scrolling up pages the rest back in. On a channel of eight thousand it reads
+  at first glance as a client that lost the backlog, which is worth knowing
+  before somebody files it: `loadOlder` fills the viewport and stops, which is
+  what it is supposed to do.
 
 ## Unread counts
 

@@ -135,7 +135,7 @@ fn lines(actions: &[Action]) -> Vec<String> {
     actions
         .iter()
         .filter_map(|action| match action {
-            Action::Send(line) => Some(line.clone()),
+            Action::Send { line, .. } => Some(line.clone()),
             _ => None,
         })
         .collect()

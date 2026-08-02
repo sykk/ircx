@@ -1096,9 +1096,9 @@ async fn a_server_initiated_ping(nick: String) -> PingProbe {
         Err(error) => return PingProbe::Refused(format!("could not connect: {error}")),
     };
     let sender = transport.sender();
-    let _ = sender.send(format!("NICK {nick}")).await;
+    let _ = sender.send(format!("NICK {nick}"), 1).await;
     let _ = sender
-        .send("USER ircxtest 0 * :ircx verification run")
+        .send("USER ircxtest 0 * :ircx verification run", 2)
         .await;
 
     let deadline = Instant::now() + PING_WINDOW;
@@ -1133,9 +1133,9 @@ async fn a_server_initiated_ping(nick: String) -> PingProbe {
                 let idle = registered.map(|at| at.elapsed()).unwrap_or_default();
                 let pong = answer_for(&line);
                 if let Some(pong) = pong.clone() {
-                    let _ = sender.send(pong).await;
+                    let _ = sender.send(pong, 3).await;
                 }
-                let _ = sender.send("QUIT :ircx verification run finished").await;
+                let _ = sender.send("QUIT :ircx verification run finished", 4).await;
                 // Let the QUIT reach the wire before the socket goes.
                 let _ = timeout(Duration::from_secs(5), events.recv()).await;
                 transport.shutdown().await;
@@ -1162,7 +1162,9 @@ fn answer_for(ping: &str) -> Option<String> {
         .on_line(ping)
         .into_iter()
         .find_map(|action| match action {
-            Action::Send(line) if line.to_ascii_uppercase().starts_with("PONG") => Some(line),
+            Action::Send { line, .. } if line.to_ascii_uppercase().starts_with("PONG") => {
+                Some(line)
+            }
             _ => None,
         })
 }

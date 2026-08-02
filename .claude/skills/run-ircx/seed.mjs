@@ -6,12 +6,19 @@
 // that read something all draw. Everything below is fixed: two channels, a
 // query, a long channel with a middle to park in, and a few members.
 //
-// Two things to know before adding a handler:
+// Things to know before adding a handler:
 //
 //   - Key it off the *Rust* parameter names. `submit_input` takes `input`, not
 //     `text`. A wrong name throws inside the stub and reads like a frontend bug.
 //   - Plugin commands arrive as `plugin:<name>|<command>`, and `listen` has to
 //     answer with a number or nothing subscribes.
+//   - Answer with states the backend can actually produce. A plugin asking to
+//     read messages without `access-channels` is refused at install
+//     (crates/ircx-plugin/src/manifest.rs), so seeding one draws a grant form
+//     that looks broken and is not.
+//   - No backticks past this line, comments included: the seed is one template
+//     literal, so one ends it and Vite reports a parse error in this file
+//     rather than anything about the seed.
 //
 // Anything with no handler rejects by name, so a walk that reaches past what is
 // here says so rather than failing silently.
@@ -161,11 +168,20 @@ export const SEED = `
       version: "1.0.0",
       description: "Rewrites imperial measurements into metric beside the line.",
       commands: [{ name: "units", summary: "Convert a measurement" }],
-      requests: { permissions: ["read-messages", "annotate-messages"], channels: ["#ircx"], hosts: [] },
+      // access-channels is what says *where* reading applies, and a manifest
+      // asking to read without it is refused at install, in
+      // crates/ircx-plugin/src/manifest.rs. A seed missing it draws a grant
+      // form no real plugin could produce.
+      requests: {
+        permissions: ["read-messages", "access-channels", "annotate-messages"],
+        channels: ["#ircx", "#rust"],
+        hosts: [],
+      },
       grants,
     }],
     plugin_permissions: () => [
       { permission: "read-messages", summary: "Read what people say in the conversations you allow" },
+      { permission: "access-channels", summary: "Work in the channels you choose, and no others" },
       { permission: "annotate-messages", summary: "Add a note of its own beside a message" },
       { permission: "network-requests", summary: "Reach the hosts you allow" },
     ],

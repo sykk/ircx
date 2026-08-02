@@ -1654,10 +1654,112 @@ the things the dev server has no backend for.
 blank lines dropped, a CR from another window's clipboard taken off. What it
 cannot say is what a server does with the burst that comes out of a paste.
 
-`ircx-net`'s limiter paces the outgoing lines at five then one every 500 ms, so
-twenty pasted lines take about ten seconds to leave. **Not verified:** that a
-real network takes them at that rate without treating it as a flood. Paste
-twenty lines into a channel on Libera and watch for a `NOTICE` about excess
-flood or a kill; the pacing figures are in `crates/ircx-net/src/rate_limit.rs`
-and this is the first change that sends more than a handful of lines from one
-keystroke.
+**It is walked in the application** on 2026-08-01 against local `ergo`, in
+three parts, and read back with `CHATHISTORY` from a probe client rather than
+off the sender's own screen:
+
+```text
+1) len=4    test                             typed, Shift+Enter between them
+2) len=4    test
+3) len=24   first paragraph line one         pasted, CRLF, blank line between
+4) len=24   first paragraph line two
+5) len=30   second paragraph after a blank
+6) len=16   short first line                 pasted, a 704-char middle line
+7) len=466  xxx…
+8) len=238  xxx… END
+9) len=15   short last line
+```
+
+Each group carries one timestamp to the millisecond, so each is one input
+leaving as several messages rather than several submits. The blank line is not
+a message, and no `\r` reached a trailing parameter.
+
+The long line is the part worth keeping. 466 + 238 is 704 with nothing lost or
+doubled, and the 466 was predicted before it was sent: `wire_budget` derives it
+from the mask the server prepends, which for `syk__!~u@4dy55fkndsc9u.irc` in
+`#test2` is 28 bytes of prefix and 18 of envelope against 512. So the wire
+split still runs inside each line, which is where the old single-line splitter
+and the per-line split had to agree.
+
+The screen matched the wire in order and content, which is the half no test
+reaches: the first piece goes back to the composer to draw and the rest arrive
+as ordinary messages, so the two paths can disagree without a server noticing.
+
+### The burst a paste makes
+
+**Walked against Libera** on 2026-08-01: twenty numbered lines pasted into
+`#ircx-walk` in one keystroke. All twenty arrived, in order, with no
+excess-flood `NOTICE` and no `Closing Link`.
+
+**Measure it from a second client.** Neither obvious way works, and both look
+like they do. The sender's timeline draws the local copies the moment Enter is
+pressed, because `say` hands them straight over and never waits for the socket.
+The raw log is no better: `send_line` emits its `RawLine` before `Action::Send`
+reaches the transport, so an outgoing entry records the queue rather than the
+wire — and the log carries no timestamps at all. Arrivals at another client are
+wire events and are the only thing here that is.
+
+Read off a probe joined to the same channel, first arrival as zero:
+
+```text
+0.000s  line 01   ┐
+0.055s  line 02   │  the burst
+0.055s  line 03   │
+0.055s  line 04   ┘
+0.527s  line 05   ┐
+0.993s  line 06   │  fifteen intervals, 497.7 ms each
+  …               │
+7.992s  line 20   ┘
+```
+
+Which is `rate_limit.rs` doing exactly what it says: a burst spent at once, then
+one line per 500 ms. The pacing was asserted from the constants before this and
+is measured now.
+
+Four in the burst rather than five because the bucket was a token short when
+the paste landed — a `PONG` or the composer's `+typing` TAGMSG will have taken
+one, both of which go out through the same queue. That is also why the run
+finished at 7.99 s against a 7.5 s prediction, and it is worth expecting rather
+than reading as drift: the burst is whatever is left of the allowance, not a
+fresh five.
+
+### A paste that outruns the allowance
+
+**A hundred lines is walked** against local `ergo` on 2026-08-01, timed off a
+probe in the channel:
+
+```text
+ 0.000s  001, 002, 003     the burst
+ 0.500s  004
+   …
+48.556s  100
+```
+
+All hundred arrived, in order, none lost. Ninety-seven paced gaps averaging
+501 ms against a configured 500, and a burst of three rather than five for the
+same reason the Libera run had four — the burst is whatever is left of the
+allowance, not a fresh five.
+
+So one keystroke takes the client the better part of a minute to send. **This
+entry used to say the window looks finished while the socket is not, and that
+was wrong.** `MessageRow` draws a `Pending` message at 0.55 opacity, and nothing
+else in the row changes text brightness, so a draining paste is a hard boundary
+marching down the list: solid above, faded below. Confirmed on screen at the
+36/37 line about eighteen seconds in, which is where the probe's timings put the
+front. It is legible at a glance and needs nobody to be told to look for it.
+
+Worth knowing why that holds, because it is conditional. `say` files a local
+copy as `Pending` only when `echo-message` was negotiated, and as `Sent`
+otherwise — and `Sent` is terminal and assigned at enqueue rather than at write.
+Both `ergo` and Libera negotiate it, so the progress a user sees is the common
+case, not the guaranteed one.
+
+**Still not walked:**
+
+- **A server without `echo-message`.** Every line would render solid the moment
+  it was typed while the socket drained for a minute behind it, which is the
+  case this entry originally described and no server here will produce.
+- **An ordinary message sent while a paste is draining.** It queues behind
+  everything still to go, so a one-word reply can take the rest of the minute to
+  leave while its own copy is already on screen. Nothing was watched here and
+  the composer says nothing about a queue.

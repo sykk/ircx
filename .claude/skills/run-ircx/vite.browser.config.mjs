@@ -12,11 +12,17 @@
 // the bridge reports that it could not reach its backend), so what renders is
 // the real UI in a real degraded state rather than a mock.
 //
+// With `--seeded` the driver sets `IRCX_SEEDED` and `seed.mjs` answers instead,
+// so the parts of the client that need a conversation can be walked at all. The
+// rejecting stub stays the default: it is the state the app is designed to
+// degrade into, and a walk of the shell should see it.
+//
 // This file exists so none of that has to be patched into the repo. It wraps the
 // project's own config rather than restating it, so a change to the port, the
 // alias or the plugin list is picked up here too.
 import { fileURLToPath } from "node:url";
 import base from "../../../vite.config.ts";
+import { SEED } from "./seed.mjs";
 
 const STUB = `
 window.__TAURI_INTERNALS__ = {
@@ -33,6 +39,8 @@ window.__TAURI_INTERNALS__ = {
 };
 `;
 
+const stub = process.env.IRCX_SEEDED ? SEED : STUB;
+
 /** Vite resolves `base` lazily when it is a function; the project's is an
  * object, so it is spread directly. */
 const config = typeof base === "function" ? base({ command: "serve", mode: "development" }) : base;
@@ -47,7 +55,7 @@ export default {
       name: "ircx-tauri-stub",
       transformIndexHtml: {
         order: "pre",
-        handler: (html) => html.replace("<head>", `<head><script>${STUB}</script>`),
+        handler: (html) => html.replace("<head>", `<head><script>${stub}</script>`),
       },
     },
   ],

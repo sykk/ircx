@@ -10,6 +10,9 @@
 // Tauri globals the app assumes) so a caller has one process to start and one
 // to kill.
 //
+// Pass `--seeded` to answer `invoke` from seed.mjs instead of rejecting it,
+// which is what anything needing a conversation on screen has to be driven with.
+//
 // Commands, one per line on stdin. Every one prints a single line beginning
 // `ok` or `err`, so a caller can pipe a script in and read the results back
 // without parsing anything cleverer than that.
@@ -66,6 +69,9 @@ function waitForLine(child, re, what, timeoutMs = 60_000) {
 const vite = spawn("npx", ["vite", "--config", CONFIG], {
   cwd: ROOT,
   stdio: ["ignore", "pipe", "pipe"],
+  env: process.argv.includes("--seeded")
+    ? { ...process.env, IRCX_SEEDED: "1" }
+    : process.env,
 });
 const viteUrl = (await waitForLine(vite, /http:\/\/localhost:(\d+)\//, "the Vite dev server"))[0];
 

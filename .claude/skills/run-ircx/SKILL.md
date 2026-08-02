@@ -62,6 +62,43 @@ quit
 That prints the sheet's text, writes the screenshot, and ends with `ok 0`
 confirming Escape closed it.
 
+### With a conversation on screen
+
+By default every `invoke` rejects, so the app has no networks and no
+conversations. Anything needing one — the timeline, the composer, the panes, the
+roster, the archive and upload sheets — has to be driven with `--seeded`, which
+answers from `seed.mjs` instead:
+
+```bash
+printf 'goto /
+wait 1500
+click [aria-label="#ircx"]
+wait 900
+click textarea
+type hello
+key Return
+wait 600
+ss /tmp/shots/channel.png
+quit
+' | node .claude/skills/run-ircx/driver.mjs --seeded
+```
+
+The seed holds one network, `#ircx`, `#rust`, a 300-message `#long` to park in
+the middle of, and a query. `#ircx`'s members are picked for the roster's width
+arithmetic: a voiced one, an away one, and `wallabywombat` to reach the ceiling.
+A line typed into the composer is kept, so `ArrowUp` brings it back.
+
+**This is where the layout defects are.** jsdom lays nothing out, so a whole
+class of bug — a name truncated by a sub-pixel shortfall, a header wrapping into
+a row of fixed height, a scroller clamped before it was measured — cannot be
+caught by `vitest` at all. #299, #300, #301 and #307 were each found here, and
+none of them had a failing test until a browser had shown the defect first.
+
+Adding a handler to `seed.mjs`: key it off the **Rust** parameter names, not the
+TypeScript ones. `submit_input` takes `input`, not `text`, and a wrong name
+throws inside the seed and reads exactly like a frontend bug. A command with no
+handler rejects by name, so a walk that reaches past the seed says so.
+
 | command | what it does |
 |---|---|
 | `goto <path>` | navigate, default `/` |
@@ -132,12 +169,13 @@ The `CARGO_TARGET_DIR` is not optional in a fresh worktree — see Gotchas.
   so `(` and `)` are unreachable through it. Use `type`, which goes through
   `Input.insertText` and is layout-independent. This matters for anything
   pasting a CSS value like `rgb(...)` or `url(...)`.
-- **Backend-dependent UI is empty, not broken.** Every `invoke` rejects, so the
-  network list, plugins, uploads and themes installed on disk show their
-  backend-absent state — the plugins sheet renders "no backend: the frontend is
-  running in a browser" where the list would be. The two built-in themes still
-  load, because they are compiled in rather than read from disk. Anything that
-  must exercise the Rust side needs `npm run tauri dev`.
+- **Backend-dependent UI is empty, not broken.** Without `--seeded` every
+  `invoke` rejects, so the network list, plugins, uploads and themes installed on
+  disk show their backend-absent state — the plugins sheet renders "no backend:
+  the frontend is running in a browser" where the list would be. The two built-in
+  themes still load, being compiled in rather than read from disk. `--seeded`
+  answers instead; anything that must exercise the Rust side itself still needs
+  `npm run tauri dev`.
 - **`.claude/**` is already excluded** from vitest (`vite.config.ts`) and passes
   eslint and tsc as-is, so the driver does not need an ignore entry.
 

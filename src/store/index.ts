@@ -455,6 +455,62 @@ function paneShowing(s: AppState, target: ActiveTarget): ViewId | undefined {
 }
 
 /**
+ * A conversation that is gone takes its panes with it. `fromStored` already
+ * drops them on the way back in, so a pane left behind is one the next launch
+ * would silently not reopen — and until then it holds a composer addressed to
+ * somewhere the client is no longer in.
+ *
+ * Splitting opens the second pane on the same target, so two panes on one
+ * conversation is the ordinary result of a split rather than an edge case.
+ * When they are all that is left one is emptied instead of removed — the state
+ * `setActive(null)` leaves, and the one `toStored` refuses to write down.
+ */
+function dropPanesOn(s: AppState, network: string, target: string): Partial<AppState> {
+  const showing = s.viewOrder.filter((id) => {
+    const view = s.views[id];
+    return view !== undefined && view.network === network && sameTarget(view.target, target);
+  });
+  if (showing.length === 0 || !s.layout) return {};
+
+  // The one pane the window keeps, when the conversation being closed is the
+  // only thing open.
+  const survivor = showing.length === s.viewOrder.length ? showing[0] : undefined;
+  const views = { ...s.views };
+  const viewScroll = { ...s.viewScroll };
+  const rosterHidden = { ...s.rosterHidden };
+  let layout = s.layout;
+
+  for (const id of showing) {
+    if (id === survivor) continue;
+    const left = removeLeaf(layout, id);
+    if (!left) continue;
+    layout = left;
+    delete views[id];
+    delete viewScroll[id];
+    delete rosterHidden[id];
+  }
+
+  const kept = survivor === undefined ? undefined : views[survivor];
+  if (survivor !== undefined && kept !== undefined) {
+    views[survivor] = { ...kept, network: "", target: "", selectedUser: null, raw: false };
+    viewScroll[survivor] = 0;
+  }
+
+  const viewOrder = paneOrder(layout);
+  return {
+    layout,
+    views,
+    viewScroll,
+    rosterHidden,
+    viewOrder,
+    activeViewId:
+      s.activeViewId && viewOrder.includes(s.activeViewId)
+        ? s.activeViewId
+        : (viewOrder[0] ?? null),
+  };
+}
+
+/**
  * What reading a target does whichever pane it is read in. The unread rule is
  * placed on switch rather than on scroll, so it holds still while the user
  * reads, and it lives beside the target rather than the view: having read a
@@ -677,13 +733,13 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
     case "channelRemoved": {
       const key = targetKey(event.network, event.name);
       const { [key]: _dropped, ...channels } = s.channels;
-      return { channels };
+      return { channels, ...dropPanesOn(s, event.network, event.name) };
     }
 
     case "queryRemoved": {
       const key = targetKey(event.network, event.nick);
       const { [key]: _dropped, ...queries } = s.queries;
-      return { queries };
+      return { queries, ...dropPanesOn(s, event.network, event.nick) };
     }
 
     /**

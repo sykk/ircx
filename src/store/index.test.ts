@@ -672,3 +672,96 @@ describe("the panes a previous run left", () => {
     expect(views[viewOrder[0]!]?.target).toBe("phrack");
   });
 });
+
+/**
+ * A restore already drops the panes whose conversation is gone, so a pane that
+ * survives a close is one the next launch would silently not reopen — and
+ * until then it holds a composer addressed to a channel the client has left.
+ */
+describe("closing a conversation a pane is showing", () => {
+  const store = () => useAppStore.getState();
+  const targets = () => store().viewOrder.map((id) => store().views[id]!.target);
+  const close = (target: string) =>
+    store().applyEvent({ type: "channelRemoved", network: "libera", name: target });
+
+  beforeEach(() => {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#ctf-ops"), makeChannel("libera", "#hackint")],
+      [makeQuery("libera", "phrack")],
+    );
+  });
+
+  it("takes the pane with it and collapses the split", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    store().setActive({ network: "libera", target: "#hackint" });
+
+    close("#hackint");
+
+    expect(targets()).toEqual(["#ctf-ops"]);
+    expect(store().layout?.type).toBe("view");
+    expect(store().activeViewId).toBe(store().viewOrder[0]);
+  });
+
+  /** Splitting opens the second pane on the same target, so two panes on one
+   * conversation is what an ordinary split leaves. */
+  it("takes every pane showing it, not just the first", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    store().splitActiveView("column");
+    expect(targets()).toEqual(["#ctf-ops", "#ctf-ops", "#ctf-ops"]);
+
+    store().setActive({ network: "libera", target: "#hackint" });
+    close("#ctf-ops");
+
+    expect(targets()).toEqual(["#hackint"]);
+  });
+
+  it("leaves a pane on another conversation alone", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    store().setActive({ network: "libera", target: "phrack" });
+    const kept = store().activeViewId;
+
+    close("#ctf-ops");
+
+    expect(targets()).toEqual(["phrack"]);
+    expect(store().activeViewId).toBe(kept);
+  });
+
+  /** The window always holds a pane, so the last one is emptied where the
+   * others are removed — what `setActive(null)` leaves and `toStored` refuses
+   * to write down. */
+  it("empties the last pane rather than leaving the window with none", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+
+    close("#ctf-ops");
+
+    expect(store().viewOrder).toHaveLength(1);
+    expect(targets()).toEqual([""]);
+    expect(store().views[store().viewOrder[0]!]?.network).toBe("");
+  });
+
+  it("does the same for a query", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    store().setActive({ network: "libera", target: "phrack" });
+
+    store().applyEvent({ type: "queryRemoved", network: "libera", nick: "phrack" });
+
+    expect(targets()).toEqual(["#ctf-ops"]);
+  });
+
+  it("changes nothing when no pane is showing it", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    const before = store().layout;
+
+    close("#hackint");
+
+    expect(store().layout).toBe(before);
+    expect(targets()).toEqual(["#ctf-ops"]);
+  });
+});

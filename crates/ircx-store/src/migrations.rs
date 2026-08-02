@@ -309,11 +309,19 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
             .unwrap();
         assert_eq!(held, 1, "the upgrade keeps what was already archived");
+        // Whatever the last migration added, reached through the row that was
+        // already there. Naming the column rather than a table keeps this
+        // honest as migrations are appended: it was an insert into `raised`
+        // while that was last, which by then tested the migration before it.
         conn.execute(
-            "INSERT INTO raised (network, msgid, plugin) VALUES ('libera','m1','deploys')",
+            "UPDATE messages SET written_at = '2026-01-01T00:00:01Z' WHERE message_id = 'm1'",
             [],
         )
         .unwrap();
+        let stamped: Option<String> = conn
+            .query_row("SELECT written_at FROM messages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(stamped.as_deref(), Some("2026-01-01T00:00:01Z"));
     }
 
     #[test]

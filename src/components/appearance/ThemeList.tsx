@@ -46,8 +46,12 @@ export function ThemeList({
       <ul className="flex flex-col divide-y divide-[var(--border-subtle)]">
         {themes.map((theme) => (
           <li key={theme.id} className="flex items-center justify-between gap-4 py-3">
+            {/* Which one is in use is otherwise only in the line under the
+                name, where a reader has to reach the end of the sentence for
+                it and a screen reader is told nothing at all. */}
             <button
               type="button"
+              aria-pressed={theme.id === themeId}
               onClick={() => selectTheme(theme.id)}
               className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
             >
@@ -74,6 +78,7 @@ export function ThemeList({
             <li key={option.id}>
               <button
                 type="button"
+                aria-pressed={option.id === density}
                 onClick={() => selectDensity(option.id)}
                 className="flex w-full flex-col items-start gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--surface-hover)]"
               >

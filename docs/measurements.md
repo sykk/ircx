@@ -272,13 +272,80 @@ including a channel closing under the pane showing it.
 **Covers:** the store reducer and the row builder, in jsdom. **Excludes:**
 everything the real client would also be doing — parsing the lines, writing them
 to SQLite, and WebKit laying out and painting the result. The figures are the
-floor, not the whole cost.
+floor, not the whole cost. How far below the whole cost is the next section.
+
+## The same burst through the real stack
+
+What the section above excludes, measured. `crates/ircx-core/tests/burst.rs`
+puts `n` ordinary clients in a channel against a local `ergo` and closes all
+their sockets at once, and times what reaches the events the frontend would be
+handed: the socket read, the line framing, the parse, the session state and the
+archive write. Release profile, loopback, median of three runs, **archive on a
+real filesystem** — btrfs on NVMe, which is where a user's is.
+
+| channel | quit wave, wall | on cpu | rows archived |
+|---|---|---|---|
+| 100 | 26.7 ms | 30 ms | 201 |
+| 500 | 124.9 ms | 130 ms | 1,003 |
+| 1,000 | 284.7 ms | 280 ms | 2,203 |
+| 2,500 | 791.3 ms | 790 ms | 5,203 |
+
+**The frontend was never where a netsplit costs.** The store reducer and the row
+builder together are about 12 ms of the 2,500 row above (9.3 and 2.9); the Rust
+side is 790 ms. The two rounds of work that made the frontend linear were worth
+doing and they were worth about one and a half percent of the burst. The section
+above says its figures are a floor; the floor is a sixtieth of the building.
+
+**Over half of it is the archive**, and for the same reason #324 and #325 were
+about: each quit arrives as its own event, so each is its own `append_messages`
+and so its own SQLite transaction. Timed directly — 2,500 messages through
+`Store::append_messages`, one call each against one call with all of them, fresh
+database, release profile — that is 444 ms against 80 ms. A batched write would
+take something like 360 ms off the row above, which is the largest single thing
+left in this path. The same one-at-a-time shape, a third time, one layer further
+down. Filed as #328.
+
+**Where the database sits changes that answer**, which is why the row above says
+which filesystem. The same comparison under `/tmp` reads 178 ms against 77 ms:
+the batched write does not care where it is — 77 against 80 — and the
+one-at-a-time write cares a great deal, because a commit on a tmpfs is a memcpy
+and a commit on a disk is not. `tempfile::tempdir` lands on a tmpfs on most
+Linux now, so a harness that takes the default measures the flattering case.
+
+> The first pass at this section did exactly that, quoted 490 ms, called the
+> archive a third of it, and argued against filing on the grounds that a tmpfs
+> figure would be overstating a real machine's cost. It was understating it, by
+> 3.6 times.
+
+**On cpu and wall clock come out close together** on a real filesystem, and it
+was cpu that exceeded wall on the tmpfs run — the work is spread over a tokio
+runtime, so more than one thread is busy. Cpu is what the burst costs a machine;
+the wall clock is what one client waits.
+
+**Covers:** ircx's own process — everything from the socket to the events, in
+the release profile, with the archive on a real filesystem. **Excludes:**
+WebKit, and the frontend stages measured above. Also excludes anything a real
+network does to the arrival rate: a loopback server delivers a burst as fast as
+the client will take it, which is the worst case rather than the usual one. One
+machine, one NVMe; a slower disk moves the archive's share up.
+
+**Two things the harness cannot separate.** The wall clock includes whatever
+`ergo` spends fanning the quits out, which is why the join wave the harness also
+prints — 3.2 s at 2,500 — is not quoted here: with the crowd still connected the
+server is doing `n²` work that no single client's netsplit would cost it. And at
+the two larger sizes the archive holds about 200 more rows than the burst sent,
+because the server replayed channel history to the client while it ran. That is
+ircx's own backfill working, and it is part of what the real stack does.
 
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.
 - Startup with a populated archive and several networks auto-connecting.
 - Memory over a long session, or with a real backlog rendered.
-- A netsplit against a real server, end to end. The row above measures the two
-  frontend stages in isolation; nothing has yet driven thousands of real QUITs
-  through the socket, the archive and the compositor together.
+- A netsplit against a real server, end to end. Both halves are measured
+  separately now — the frontend stages in jsdom, everything below them against a
+  local `ergo` — and neither has WebKit in it. What nothing has yet driven is
+  thousands of real QUITs all the way to the compositor.
+- A real netsplit. What the section above measures is a few thousand ordinary
+  clients whose sockets close at once, which is the arrival rate without the
+  server link, the `*.net *.split` reason or the `NETSPLIT` batch.

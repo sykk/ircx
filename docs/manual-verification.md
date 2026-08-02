@@ -368,10 +368,23 @@ test reaches.
   reads 9 ms. `docs/measurements.md` has the tables, the method, and why the two
   passes are not directly comparable.
 
+  **The burst below the frontend is measured too**, on 2026-08-02, and it moves
+  where the cost is again. `crates/ircx-core/tests/burst.rs` empties a channel
+  of 2,500 against a local `ergo` and times what the socket, the parse, the
+  session and the archive do with it: 790 ms, against the 12 ms the two frontend
+  stages spend on the same burst. Over half of it is the archive writing each
+  quit in its own transaction (#328). The frontend rounds were worth doing and
+  they were worth about one and a half percent of the burst.
+
+  Read the method before quoting that: the first pass put the archive on a
+  tmpfs, which made it look like a third of a 490 ms burst rather than half of a
+  790 ms one.
+
   It is a hitch rather than the freeze `LIST` was, because it arrives as one
-  batch and costs one long frame. What is still unwalked is the same burst
-  against a real server, with the socket, the archive and the compositor in it
-  — the measurement covers two frontend stages in isolation and is a floor.
+  batch and costs one long frame. Two things are still unwalked: the same burst
+  with WebKit in it rather than jsdom, and a real netsplit — the harness closes
+  a few thousand ordinary sockets at once, which is the arrival rate without the
+  server link or the `*.net *.split` reason.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

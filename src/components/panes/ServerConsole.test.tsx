@@ -7,6 +7,7 @@ import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { SERVER_TARGET } from "@/types";
 import { ChatPane } from "./ChatPane";
+import { PaneTree } from "./PaneTree";
 
 const { ipcMock } = vi.hoisted(() => ({
   ipcMock: {
@@ -260,6 +261,42 @@ describe("the server console", () => {
       expect(screen.queryByRole("log")).toBeNull();
       expect(screen.getByText(/Welcome to the Libera.Chat/)).toBeTruthy();
     });
+  });
+
+  /**
+   * #308: a change to the pane tree's shape unmounts every pane in it, so
+   * anything a pane holds in component state is lost to a split. The console is
+   * where that bites, because a command box saves no draft — the refusal is the
+   * same one #299 stopped losing, and a split lost it again.
+   *
+   * Rendered through `PaneTree` rather than as a pane: it is the remount that
+   * is under test, and only the tree performs one.
+   */
+  it("keeps a half-typed command, and the refusal under it, across a split", async () => {
+    ipcMock.submitInput.mockResolvedValue({
+      kind: "rejected",
+      value: "This tab is the server's, not a conversation. Try `/msg <target> <message>`.",
+    });
+    render(<PaneTree />);
+
+    fireEvent.change(commandBox(), { target: { value: "hello" } });
+    await act(async () => {
+      fireEvent.submit(commandBox());
+    });
+    expect(screen.getByRole("alert").textContent).toContain("not a conversation");
+
+    act(() => {
+      useAppStore.getState().splitActiveView("row");
+    });
+
+    // The pane that was typed in comes first; the one the split opened is a
+    // second console on the same network and starts empty, which is what makes
+    // this the pane's state rather than the network's.
+    const boxes = screen.getAllByLabelText("Command for Libera.Chat") as HTMLInputElement[];
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0]!.value).toBe("hello");
+    expect(boxes[1]!.value).toBe("");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
   /** A console is a pane, and #297 has to reach it from the same place as a

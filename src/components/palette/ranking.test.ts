@@ -49,6 +49,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     inputHistory: {},
     views: {},
     viewAnchor: {},
+    consoleInput: {},
     viewOrder: [],
     activeViewId: null,
     layout: null,

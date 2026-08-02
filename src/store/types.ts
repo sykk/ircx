@@ -35,6 +35,12 @@ export interface ChatView {
   raw: boolean;
 }
 
+export interface ConsoleInput {
+  text: string;
+  /** Why core refused the last command sent from this box, drawn above it. */
+  error: string | null;
+}
+
 /** `row` puts the two panes side by side, `column` stacks them. */
 export type SplitDirection = "row" | "column";
 
@@ -126,6 +132,12 @@ export interface AppState {
    * written every scroll frame, and a write there re-renders everything
    * subscribed to the view. Read via `getState`. */
   viewAnchor: Record<ViewId, string | null>;
+  /** What is typed into each console pane's command box, and the refusal under
+   * it. Here for the same reason as `viewAnchor`: a console saves no draft, so
+   * a pane rebuilt by a change to the layout's shape (#308) came back having
+   * lost both — a half-typed command and the reason the last one was refused,
+   * which is the loss #299 was filed for. */
+  consoleInput: Record<ViewId, ConsoleInput>;
   /** Depth-first pane order, derived from `layout`. Focus movement and anything
    * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];

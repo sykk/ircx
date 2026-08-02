@@ -765,3 +765,60 @@ describe("closing a conversation a pane is showing", () => {
     expect(targets()).toEqual(["#ctf-ops"]);
   });
 });
+
+/**
+ * A console saves no draft, so what is typed at one lives here rather than in
+ * the pane drawing it — a change to the layout's shape rebuilds every pane in
+ * the window (#308) and component state does not survive that. Living in the
+ * store means it now has to be let go of at the points a pane does.
+ */
+describe("what a console pane holds", () => {
+  const store = () => useAppStore.getState();
+
+  beforeEach(() => {
+    resetStore();
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    store().setActive({ network: "libera", target: SERVER_TARGET });
+  });
+
+  it("is kept per pane, so a split opens an empty box beside a typed one", () => {
+    const typed = store().activeViewId!;
+    store().setConsoleInput(typed, { text: "/whois phrack", error: null });
+
+    store().splitActiveView("row");
+
+    expect(store().consoleInput[typed]?.text).toBe("/whois phrack");
+    expect(store().consoleInput[store().activeViewId!]).toBeUndefined();
+  });
+
+  it("is let go of when the pane is pointed at a conversation", () => {
+    const view = store().activeViewId!;
+    store().setConsoleInput(view, { text: "/whois phrack", error: null });
+
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().consoleInput[view]).toBeUndefined();
+  });
+
+  /** Otherwise a later pane handed the same id opens with a command somebody
+   * typed at a console that is gone — the reason `rosterHidden` is dropped in
+   * the same place. */
+  it("is let go of when the pane it was typed in closes", () => {
+    store().splitActiveView("row");
+    const opened = store().activeViewId!;
+    store().setConsoleInput(opened, { text: "/quit", error: null });
+
+    store().closeView(opened);
+
+    expect(store().consoleInput[opened]).toBeUndefined();
+  });
+
+  it("is let go of when the console's network goes away", () => {
+    const view = store().activeViewId!;
+    store().setConsoleInput(view, { text: "/quit", error: null });
+
+    store().applyEvent({ type: "networkRemoved", network: "libera" });
+
+    expect(store().consoleInput[view]).toBeUndefined();
+  });
+});

@@ -641,3 +641,80 @@ describe("Composer recall", () => {
     expect(box.value).toBe("/whois nobodu");
   });
 });
+
+function queue(pending: number) {
+  const messages = Array.from({ length: pending }, (_, i) => {
+    const message = makeMessage({ id: `q${i}`, nick: "sable", delivery: { state: "pending" } });
+    message.sender.isSelf = true;
+    return message;
+  });
+  useAppStore.setState({
+    timelines: { [KEY]: { messages, unreadFrom: null, hasMore: false, loadingOlder: false } },
+  });
+}
+
+describe("what is waiting to send", () => {
+  it("keeps the hint while nothing is queued", async () => {
+    await mount();
+    expect(screen.getByText("Markdown is supported")).toBeTruthy();
+  });
+
+  /** One is every message between Enter and the socket, so saying it would
+   * twitch the row on ordinary typing without telling anyone anything. */
+  it("says nothing about a single line in flight", async () => {
+    queue(1);
+    await mount();
+    expect(screen.getByText("Markdown is supported")).toBeTruthy();
+  });
+
+  it("counts the queue once a line is waiting behind another", async () => {
+    queue(12);
+    await mount();
+    expect(screen.getByText("12 waiting to send")).toBeTruthy();
+    expect(screen.queryByText("Markdown is supported")).toBeNull();
+  });
+});
+
+describe("what a reader is told about the queue", () => {
+  const said = () => screen.getByRole("status").textContent;
+
+  it("is silent in a conversation with nothing queued", async () => {
+    await mount();
+    expect(said()).toBe("");
+  });
+
+  /** The whole point of the region. A polite one holds every change it is
+   * given, so a count would still be reading numbers out after the queue had
+   * gone. This says a queue formed and then stops. */
+  it("says a queue formed and does not say it again as it drains", async () => {
+    queue(40);
+    await mount();
+    expect(said()).toBe("Messages waiting to send");
+
+    act(() => queue(12));
+    expect(said()).toBe("Messages waiting to send");
+    act(() => queue(2));
+    expect(said()).toBe("Messages waiting to send");
+  });
+
+  /** One left is still one not sent. The row stops counting at two because a
+   * single line in flight is every message ever typed; the sentence "all sent"
+   * has to mean it. */
+  it("waits for the last line before saying everything has gone", async () => {
+    queue(40);
+    await mount();
+
+    act(() => queue(1));
+    expect(said()).toBe("Messages waiting to send");
+    act(() => queue(0));
+    expect(said()).toBe("All sent");
+  });
+
+  it("stays silent for a line that was never a queue", async () => {
+    queue(1);
+    await mount();
+
+    act(() => queue(0));
+    expect(said()).toBe("");
+  });
+});

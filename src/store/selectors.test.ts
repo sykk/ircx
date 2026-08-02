@@ -8,11 +8,13 @@ import {
   useQueriesFor,
   isHighlight,
   mentions,
+  selectQueued,
   splitOnMention,
+  targetKey,
 } from "./selectors";
 import { makeMessage } from "@/components/timeline/fixtures";
 import type { ChatView } from "./types";
-import type { Channel, Network } from "@/types";
+import type { Channel, ChatMessage, Network } from "@/types";
 
 function network(id: string): Network {
   return {
@@ -400,5 +402,77 @@ describe("who can address you", () => {
     const own = makeMessage({ nick: "sable", text: "sable" });
     own.sender.isSelf = true;
     expect(isHighlight(own, "sable", new Set(["sable"]))).toBe(false);
+  });
+});
+
+describe("what is still waiting to send", () => {
+  function ours(id: string, delivery: ChatMessage["delivery"]): ChatMessage {
+    const message = makeMessage({ id, nick: "sable", delivery });
+    message.sender.isSelf = true;
+    return message;
+  }
+
+  function theirs(id: string): ChatMessage {
+    return makeMessage({ id, nick: "phrack" });
+  }
+
+  function hold(...messages: ChatMessage[]) {
+    useAppStore.setState({
+      timelines: {
+        [targetKey("libera", "#ctf-ops")]: {
+          messages,
+          unreadFrom: null,
+          hasMore: false,
+          loadingOlder: false,
+        },
+      },
+    });
+  }
+
+  const count = () => selectQueued(useAppStore.getState(), "libera", "#ctf-ops");
+
+  it("is nothing in a conversation nobody has typed into", () => {
+    hold(theirs("a"), theirs("b"));
+    expect(count()).toBe(0);
+  });
+
+  it("is nothing when the last thing we said has left", () => {
+    hold(ours("a", { state: "sent" }), ours("b", { state: "delivered" }));
+    expect(count()).toBe(0);
+  });
+
+  it("counts the run of ours still queued", () => {
+    hold(
+      ours("a", { state: "delivered" }),
+      ours("b", { state: "pending" }),
+      ours("c", { state: "pending" }),
+    );
+    expect(count()).toBe(2);
+  });
+
+  /** The case a paste is actually walked in: the channel goes on talking while
+   * ours drains, so somebody else's line lands between two of ours. Counting
+   * has to step over it rather than stop, which is the difference between this
+   * and reading backwards to the first message that is not pending. */
+  it("steps over what other people said in the middle of it", () => {
+    hold(
+      ours("a", { state: "pending" }),
+      theirs("b"),
+      ours("c", { state: "pending" }),
+      theirs("d"),
+    );
+    expect(count()).toBe(2);
+  });
+
+  /** A line of ours that was refused ends the queue behind it. Everything we
+   * sent before one that came back has been written, because the writer writes
+   * in the order it was given and #334 settles them in that order too. */
+  it("stops at a line of ours that did not make it", () => {
+    hold(
+      ours("a", { state: "pending" }),
+      ours("b", { state: "failed", detail: "Cannot send to channel" }),
+      ours("c", { state: "pending" }),
+    );
+    expect(count()).toBe(1);
   });
 });

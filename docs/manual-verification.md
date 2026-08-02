@@ -1617,3 +1617,17 @@ Nothing here is written to disk: the list is per conversation and lasts only as
 long as the app is running, so a restart is expected to empty it while the
 stored draft survives. That much was not walked either — the archive is one of
 the things the dev server has no backend for.
+
+## A message typed on several lines
+
+`crates/ircx-core/tests/session.rs` asserts the split: one PRIVMSG per line,
+blank lines dropped, a CR from another window's clipboard taken off. What it
+cannot say is what a server does with the burst that comes out of a paste.
+
+`ircx-net`'s limiter paces the outgoing lines at five then one every 500 ms, so
+twenty pasted lines take about ten seconds to leave. **Not verified:** that a
+real network takes them at that rate without treating it as a flood. Paste
+twenty lines into a channel on Libera and watch for a `NOTICE` about excess
+flood or a kill; the pacing figures are in `crates/ircx-net/src/rate_limit.rs`
+and this is the first change that sends more than a handful of lines from one
+keystroke.

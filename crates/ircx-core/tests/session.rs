@@ -725,6 +725,61 @@ fn a_long_message_is_split_to_fit_the_line_the_server_will_send_on() {
     assert_eq!(rejoined.trim(), text.trim());
 }
 
+/// The composer offers Shift+Enter and a paste brings its own breaks, but a
+/// newline cannot travel inside a parameter. What arrives as one input leaves
+/// as one message per line, and the blank line between paragraphs is not a
+/// message at all. #289.
+#[test]
+fn a_message_on_several_lines_goes_as_one_message_per_line() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.sent();
+
+    let typed = "first line\r\nsecond line\n\nthird line";
+    let CommandOutcome::Sent(first) = session.submit("#ircx", typed) else {
+        panic!("a message typed on several lines was refused");
+    };
+
+    assert_eq!(first.text, "first line");
+    assert_eq!(
+        session.sent_starting("PRIVMSG"),
+        vec![
+            "PRIVMSG #ircx :first line",
+            "PRIVMSG #ircx :second line",
+            "PRIVMSG #ircx :third line",
+        ]
+    );
+
+    // The first copy went back to the caller to draw; the rest arrive the way
+    // anything else does.
+    let appended: Vec<&str> = session
+        .messages()
+        .iter()
+        .filter(|message| message.kind == MessageKind::Privmsg)
+        .map(|message| message.text.as_str())
+        .collect();
+    assert_eq!(appended, vec!["second line", "third line"]);
+}
+
+/// A NUL cannot be sent and nobody can see one. Dropping it costs the reader
+/// nothing; refusing the line it sits in loses what they wrote.
+#[test]
+fn a_pasted_nul_is_dropped_rather_than_taking_the_line_with_it() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.sent();
+
+    let CommandOutcome::Sent(first) = session.submit("#ircx", "before\0after") else {
+        panic!("a message carrying a NUL was refused");
+    };
+
+    assert_eq!(first.text, "beforeafter");
+    assert_eq!(
+        session.sent_starting("PRIVMSG"),
+        vec!["PRIVMSG #ircx beforeafter"]
+    );
+}
+
 #[test]
 fn an_unknown_command_is_refused_in_words() {
     let mut session = registered("");

@@ -513,8 +513,19 @@ impl SessionState {
         // here names a parent nobody else was shown.
         let parent = reply_to.filter(|_| self.caps.is_enabled("message-tags"));
 
+        // A line break cannot travel inside a parameter — it would end the line
+        // early and let what follows be read as another command — so each line
+        // goes as its own message. `lines` takes the CR of a paste from another
+        // window with it; IRC has no empty message, and a NUL cannot be sent.
+        let pieces: Vec<String> = text
+            .lines()
+            .map(|line| line.replace('\0', ""))
+            .filter(|line| !line.trim().is_empty())
+            .flat_map(|line| text::split_for_wire(&line, budget))
+            .collect();
+
         let mut copies = Vec::new();
-        for piece in text::split_for_wire(text, budget) {
+        for piece in pieces {
             let body = match action {
                 true => format!("\u{1}ACTION {piece}\u{1}"),
                 false => piece.clone(),

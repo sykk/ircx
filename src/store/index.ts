@@ -14,12 +14,21 @@ import {
   type Reaction,
 } from "@/types";
 import { sameTarget, targetKey, type TargetKey } from "./keys";
-import { paneOrder, removeLeaf, setRatio, splitLeaf, type SplitPath } from "./layout";
+import {
+  fromStored,
+  openStored,
+  paneOrder,
+  removeLeaf,
+  setRatio,
+  splitLeaf,
+  type SplitPath,
+} from "./layout";
 import type {
   ActiveTarget,
   AppState,
   ChatView,
   SplitDirection,
+  StoredLayout,
   TimelineState,
   ViewId,
 } from "./types";
@@ -76,6 +85,9 @@ export interface AppActions {
   /** Moves one split's divider. `path` names the split by the route to it from
    * the root, which is what the component drawing the divider holds. */
   setSplitRatio: (path: SplitPath, ratio: number) => void;
+  /** Opens the panes a previous run left, dropping any whose conversation the
+   * client no longer holds. Called once, after the snapshot says what exists. */
+  restoreLayout: (stored: StoredLayout) => void;
 
   /** Stages the message the next line in this conversation answers, or clears
    * it with a null msgid. */
@@ -280,6 +292,36 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (!s.layout) return {};
       const layout = setRatio(s.layout, path, ratio);
       return layout === s.layout ? {} : { layout };
+    }),
+
+  restoreLayout: (stored) =>
+    set((s) => {
+      // A pane opened while the snapshot was in flight is the user's, and it
+      // outranks what the last run left.
+      if (s.layout) return {};
+
+      const kept = fromStored(stored, (network, target) => {
+        if (!s.networks[network]) return false;
+        // A console is the network itself, so it is there as long as the
+        // network is; every other target has to still be open.
+        if (target === SERVER_TARGET) return true;
+        const key = targetKey(network, target);
+        return key in s.channels || key in s.queries;
+      });
+      if (!kept) return {};
+
+      const views: Record<ViewId, ChatView> = {};
+      const layout = openStored(kept, (pane) => {
+        const view = { ...newView(pane.network, pane.target), raw: pane.raw };
+        views[view.id] = view;
+        return view.id;
+      });
+
+      // The first pane takes focus. Which one had it is not written down, for
+      // the same reason the scroll position is not: where a pane was looking
+      // belongs to the run it was looking in.
+      const viewOrder = paneOrder(layout);
+      return { layout, views, viewOrder, activeViewId: viewOrder[0] ?? null };
     }),
 
   prependHistory: (key, older, hasMore) =>

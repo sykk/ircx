@@ -62,9 +62,26 @@ share rather than a width — on a narrow window that is still a small pane, and
 the roster inside it does not shrink. A split with no share of its own is an
 even half, so a layout made before any of this reads the way it did.
 
-The share is not persisted. `viewState.ts` keeps the sidebar width and the
-collapsed networks across a restart; the layout tree is rebuilt from the
-conversations that were open, so a resize lasts as long as the window does.
+The layout survives a restart, alongside the sidebar width and the collapsed
+networks `viewState.ts` already kept. What is written down is the tree with each
+pane named by the conversation it holds rather than by its view id: ids are
+minted per run and mean nothing to the next one, so what a pane was showing is
+how it is found again.
+
+That makes the restore answerable. A conversation the client no longer holds —
+closed before quitting, or on a network since deleted — takes its pane with it,
+and the split around it collapses the way closing a pane collapses one. A stored
+tree with nothing left in it opens no panes at all, which is where a first launch
+starts anyway. Because the question is which conversations still exist, the
+restore waits for the opening snapshot rather than running on mount.
+
+What is not written down is where a pane was looking: the scroll position, the
+open inspector, and which pane had focus. The first pane in reading order takes
+focus. Those belong to the run that was looking, the same reason `retarget`
+discards them when a pane is pointed somewhere else. A hidden roster is left out
+for the same reason and is the one worth arguing about, since it changes the
+window's proportions on the way back — it is a toggle over a pane rather than
+part of what the pane holds, which is where the line was drawn.
 
 Important state rule
 

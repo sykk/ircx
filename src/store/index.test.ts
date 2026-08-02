@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeMessage } from "@/components/timeline/fixtures";
-import { makeChannel, makeNetwork, oneView, resetStore } from "@/components/shell/fixtures";
-import type { IrcxEvent } from "@/types";
+import {
+  makeChannel,
+  makeNetwork,
+  makeQuery,
+  oneView,
+  resetStore,
+  seedStore,
+} from "@/components/shell/fixtures";
+import { SERVER_TARGET, type IrcxEvent } from "@/types";
 import { useAppStore } from "./index";
 import { targetKey } from "./keys";
+import { ratioOf } from "./layout";
+import type { StoredLayout } from "./types";
 
 const KEY = targetKey("libera", "#ctf-ops");
 
@@ -591,5 +600,75 @@ describe("the lines a conversation remembers", () => {
     expect(useAppStore.getState().inputHistory[targetKey("libera", "phrack")]).toEqual([
       "for the query",
     ]);
+  });
+});
+
+describe("the panes a previous run left", () => {
+  const pane = (target: string, raw = false): StoredLayout => ({
+    type: "view",
+    network: "libera",
+    target,
+    raw,
+  });
+  const sideBySide = (first: StoredLayout, second: StoredLayout): StoredLayout => ({
+    type: "split",
+    direction: "row",
+    ratio: 0.7,
+    children: [first, second],
+  });
+
+  beforeEach(() => {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#ctf-ops")],
+      [makeQuery("libera", "phrack")],
+    );
+  });
+
+  it("opens a pane on each conversation, keeping the share between them", () => {
+    useAppStore.getState().restoreLayout(sideBySide(pane("#ctf-ops"), pane("phrack")));
+
+    const { views, viewOrder, activeViewId, layout } = useAppStore.getState();
+    expect(viewOrder).toHaveLength(2);
+    expect(viewOrder.map((id) => views[id]?.target)).toEqual(["#ctf-ops", "phrack"]);
+    expect(activeViewId).toBe(viewOrder[0]);
+    expect(layout && ratioOf(layout)).toBe(0.7);
+  });
+
+  it("brings a console back on the protocol log it was showing", () => {
+    useAppStore.getState().restoreLayout(pane(SERVER_TARGET, true));
+
+    const { views, activeViewId } = useAppStore.getState();
+    expect(activeViewId && views[activeViewId]?.raw).toBe(true);
+  });
+
+  /** The sidebar keeps a closed conversation closed across a restart, so a pane
+   * that outlived one would draw a header for something the client has forgotten. */
+  it("leaves behind a pane whose conversation is gone", () => {
+    useAppStore.getState().restoreLayout(sideBySide(pane("#ctf-ops"), pane("#closed")));
+
+    const { views, viewOrder, layout } = useAppStore.getState();
+    expect(viewOrder).toHaveLength(1);
+    expect(views[viewOrder[0]!]?.target).toBe("#ctf-ops");
+    expect(layout?.type).toBe("view");
+  });
+
+  it("opens nothing at all when none of them are left", () => {
+    useAppStore.getState().restoreLayout(sideBySide(pane("#closed"), pane("#gone")));
+
+    expect(useAppStore.getState().layout).toBeNull();
+    expect(useAppStore.getState().viewOrder).toEqual([]);
+  });
+
+  /** The snapshot can take long enough for somebody to click a channel, and what
+   * they just opened is not something a restore should take away from them. */
+  it("stands aside for a pane the user has already opened", () => {
+    useAppStore.getState().showTarget({ network: "libera", target: "phrack" });
+    useAppStore.getState().restoreLayout(sideBySide(pane("#ctf-ops"), pane("#ctf-ops")));
+
+    const { views, viewOrder } = useAppStore.getState();
+    expect(viewOrder).toHaveLength(1);
+    expect(views[viewOrder[0]!]?.target).toBe("phrack");
   });
 });

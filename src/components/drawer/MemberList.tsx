@@ -48,7 +48,7 @@ export function MemberList({ members, selected, onSelect }: MemberListProps) {
                 style={{ height: item.size, transform: `translateY(${item.start}px)` }}
               >
                 {row.kind === "header" ? (
-                  <h3 className="flex h-full items-end px-2 pb-1 text-[11px] tracking-wide text-[var(--text-muted)] uppercase">
+                  <h3 className="flex h-full items-end px-2 pb-1 font-[family-name:var(--font-ui)] text-[11px] tracking-wide whitespace-nowrap text-[var(--text-muted)] uppercase">
                     {GROUP_LABEL[row.group]} — {row.count}
                   </h3>
                 ) : row.kind === "more" ? (

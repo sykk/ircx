@@ -59,8 +59,10 @@ export function UserInspector({
     }
   }
 
+  // The column carries the mono family so its width can be counted in `ch`. The
+  // inspector is prose and fields rather than a list of names.
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto font-[family-name:var(--font-ui)]">
       <button
         type="button"
         onClick={onBack}

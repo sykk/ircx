@@ -16,16 +16,23 @@ const NO_MEMBERS: Member[] = [];
  * split pane unreadable — see #114.
  *
  * The list is monospace, so a character is exactly one `ch` and the arithmetic
- * is not a guess. It has to be arithmetic rather than `width: fit-content`
- * because `MemberList` virtualises: its rows are positioned absolutely and
- * contribute no intrinsic width for the browser to fit to.
+ * is not a guess — which is why the column carries the mono family itself
+ * rather than leaving it to the rows: `ch` is measured against the element the
+ * width is on. It has to be arithmetic rather than `width: fit-content` because
+ * `MemberList` virtualises: its rows are positioned absolutely and contribute
+ * no intrinsic width for the browser to fit to.
+ *
+ * The floor is set by the widest group header rather than by a name:
+ * `Operators — 1` is drawn whatever the nicks are, and it sits in a row of
+ * fixed height, so a header that wraps meets the member below it.
  */
-const ROSTER_MIN = "7rem";
+const ROSTER_MIN = "8rem";
 /** What it used to always be. A nick longer than this truncates rather than
  * taking the conversation's room. */
 const ROSTER_MAX = "13rem";
-/** Row padding either side, and the scrollbar. */
-const ROSTER_GUTTER = "2.25rem";
+/** Everything on a row that is not the name: the list's padding and the row's,
+ * the presence dot, and the gap either side of the sigil. */
+const ROSTER_GUTTER = "3.5rem";
 
 export function rosterWidth(members: readonly Member[], inspecting: boolean): string {
   // The inspector is prose and a set of fields rather than a list of names, so
@@ -82,7 +89,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         if (selectedNick !== null) setSelectedNick(null);
         else if (view) toggleRoster(view, false);
       }}
-      className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
+      className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)] font-mono"
       style={{ width: rosterWidth(members, selected !== undefined) }}
     >
       {/* Empty, and the same height and rule as the pane header a few inches to

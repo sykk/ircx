@@ -56,6 +56,9 @@ fn sasl_config(mechanism: SaslMechanism, password: Option<&str>) -> SessionConfi
 struct Harness {
     state: SessionState,
     sent: Vec<String>,
+    /// The ticket on the last line queued. Nothing here writes on its own, so
+    /// a test that wants a line on the socket says so with `wrote_through`.
+    queued: u64,
     events: Vec<IrcxEvent>,
     /// Stands in for the archive's `open_targets` table, which is where these
     /// actions land in the running app.
@@ -68,6 +71,7 @@ impl Harness {
         Self {
             state: SessionState::new(config),
             sent: Vec::new(),
+            queued: 0,
             events: Vec::new(),
             open: Vec::new(),
             closed: false,
@@ -77,7 +81,10 @@ impl Harness {
     fn apply(&mut self, actions: Vec<Action>) {
         for action in actions {
             match action {
-                Action::Send(line) => self.sent.push(line),
+                Action::Send { line, ticket } => {
+                    self.sent.push(line);
+                    self.queued = ticket;
+                }
                 // The raw log mirrors every line; it would drown the assertions.
                 Action::Emit(event) => match *event {
                     IrcxEvent::RawLine { .. } => {}
@@ -109,6 +116,18 @@ impl Harness {
     fn feed(&mut self, line: &str) {
         let actions = self.state.on_line(line);
         self.apply(actions);
+    }
+
+    /// Stands in for the transport's writer getting as far as `mark`.
+    fn wrote_through(&mut self, mark: u64) {
+        let actions = self.state.on_written(mark);
+        self.apply(actions);
+    }
+
+    /// The writer draining everything queued, which is what an idle connection
+    /// does within a rate limiter interval.
+    fn wrote_everything(&mut self) {
+        self.wrote_through(self.queued);
     }
 
     fn submit(&mut self, target: &str, input: &str) -> CommandOutcome {
@@ -183,6 +202,17 @@ impl Harness {
             })
             .flatten()
             .collect()
+    }
+
+    /// The last state a message was updated to, which is the one on screen.
+    fn updated(&self, id: &str) -> Option<&ChatMessage> {
+        self.events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessageUpdated { message } if message.id == id => Some(message.as_ref()),
+                _ => None,
+            })
+            .next_back()
     }
 
     fn appended(&self) -> Vec<&Vec<ChatMessage>> {
@@ -370,15 +400,22 @@ fn a_server_offering_no_capabilities_still_gives_a_working_client() {
     let outcome = session.submit("#ircx", "hello");
     let sent = session.sent();
     assert_eq!(sent, vec!["PRIVMSG #ircx hello"]);
-    match outcome {
+    let id = match outcome {
         CommandOutcome::Sent(message) => {
-            // Without `echo-message` the write is the last thing we hear.
-            assert_eq!(message.delivery, Delivery::Sent);
+            // Queued, and nothing has written it yet.
+            assert_eq!(message.delivery, Delivery::Pending);
             assert!(message.id_is_local);
             assert!(message.timestamp_is_local);
+            message.id
         }
         other => panic!("expected a sent message, got {other:?}"),
-    }
+    };
+
+    session.wrote_everything();
+    // Without `echo-message` the write is the last thing we hear, so this is
+    // where the message stops.
+    let settled = session.updated(&id).expect("the write is reported");
+    assert_eq!(settled.delivery, Delivery::Sent);
     assert!(!session.closed);
 }
 
@@ -4036,5 +4073,186 @@ mod coming_back_after_a_drop {
         let asked = asked(&session);
         assert_eq!(asked.len(), 1);
         assert!(asked[0].contains("timestamp=2026-07-31T11:00:00.000Z timestamp="));
+    }
+}
+
+/// `Delivery` is what a message on screen claims about itself. The rate
+/// limiter can hold a line for the better part of a minute — 48 s for a
+/// hundred-line paste, walked for #295 — so the difference between queued and
+/// written is the difference between a claim and a fact.
+mod what_a_sent_message_claims {
+    use super::*;
+
+    fn joined(caps: &str) -> Harness {
+        let mut session = registered(caps);
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+        session.sent();
+        session
+    }
+
+    /// The optimistic copy a submit hands back, which is what the composer
+    /// draws before anything has happened to it.
+    fn copy_of(outcome: CommandOutcome) -> ChatMessage {
+        match outcome {
+            CommandOutcome::Sent(message) => *message,
+            other => panic!("expected a sent message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_queued_line_is_pending_until_the_writer_reaches_it() {
+        let mut session = joined("");
+        let copy = copy_of(session.submit("#ircx", "held behind the bucket"));
+        let id = copy.id.clone();
+        assert_eq!(
+            copy.delivery,
+            Delivery::Pending,
+            "queued is not sent, whatever the server offered"
+        );
+        assert!(
+            session.updated(&id).is_none(),
+            "nothing has written it, so nothing has changed"
+        );
+
+        session.wrote_everything();
+        assert_eq!(
+            session
+                .updated(&id)
+                .expect("the write is reported")
+                .delivery,
+            Delivery::Sent
+        );
+    }
+
+    /// The case the fold and the rate limiter make ordinary: a paste drains at
+    /// one line per interval, and the lines behind the front are still queued.
+    #[test]
+    fn a_line_behind_the_front_of_a_paste_stays_pending() {
+        let mut session = joined("");
+        // Registration spent tickets of its own, so the paste starts after
+        // whatever the last of those was.
+        let before = session.queued;
+        let copy = copy_of(session.submit("#ircx", "one\ntwo\nthree"));
+        assert_eq!(copy.delivery, Delivery::Pending);
+        let first = copy.id.clone();
+        let ids: Vec<String> = session
+            .messages()
+            .iter()
+            .filter(|message| message.kind == MessageKind::Privmsg && message.id != first)
+            .map(|message| message.id.clone())
+            .collect();
+        assert_eq!(ids.len(), 2, "three lines, and the first is named already");
+
+        session.wrote_through(before + 1);
+        assert_eq!(
+            session.updated(&first).expect("the front left").delivery,
+            Delivery::Sent
+        );
+        for id in &ids {
+            assert!(
+                session.updated(id).is_none(),
+                "still queued behind the first"
+            );
+        }
+
+        session.wrote_everything();
+        for id in &ids {
+            assert_eq!(
+                session.updated(id).expect("the rest drain").delivery,
+                Delivery::Sent
+            );
+        }
+    }
+
+    #[test]
+    fn a_written_line_waits_for_its_echo_where_the_server_sends_one() {
+        let mut session = joined("echo-message");
+        let id = copy_of(session.submit("#ircx", "hello")).id;
+
+        session.wrote_everything();
+        assert_eq!(
+            session
+                .updated(&id)
+                .expect("the write is reported")
+                .delivery,
+            Delivery::Sent,
+            "on the socket, and not yet answered for"
+        );
+
+        session.feed(":sykk!~sykk@user/sykk PRIVMSG #ircx :hello");
+        assert_eq!(
+            session.updated(&id).expect("the echo lands").delivery,
+            Delivery::Delivered
+        );
+    }
+
+    /// A message typed while the connection is down is not refused — plain text
+    /// never reaches the `registered` guard — so the line is built, queued, and
+    /// dropped for want of a transport. Saying it was sent is the one answer
+    /// that is wrong.
+    #[test]
+    fn a_line_the_connection_outlived_is_failed_rather_than_sent() {
+        let mut session = joined("");
+        let copy = copy_of(session.submit("#ircx", "into the void"));
+        assert_eq!(copy.delivery, Delivery::Pending);
+        let id = copy.id.clone();
+
+        let actions = session.state.on_disconnected("the connection ended");
+        session.apply(actions);
+
+        let settled = session.updated(&id).expect("the message is answered for");
+        match &settled.delivery {
+            Delivery::Failed(reason) => assert_eq!(reason, "not connected to Libera"),
+            other => panic!("expected a failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_line_already_written_is_not_unsent_by_the_connection_ending() {
+        let mut session = joined("echo-message");
+        let id = copy_of(session.submit("#ircx", "this one left")).id;
+        session.wrote_everything();
+
+        let actions = session.state.on_disconnected("the connection ended");
+        session.apply(actions);
+
+        assert_eq!(
+            session
+                .updated(&id)
+                .expect("the write is reported")
+                .delivery,
+            Delivery::Sent,
+            "an echo that will never arrive does not take the write back"
+        );
+    }
+
+    /// The pending list is capped so a server that negotiates `echo-message`
+    /// and then stays silent cannot grow it forever. A paste longer than the
+    /// cap must not be what that spends itself on: every line here is still
+    /// waiting for the socket, and dropping one strands it at `Pending`.
+    #[test]
+    fn a_paste_longer_than_the_pending_cap_still_settles_every_line() {
+        let mut session = joined("");
+        let lines: Vec<String> = (1..=70).map(|index| format!("line {index}")).collect();
+        let first = copy_of(session.submit("#ircx", &lines.join("\n"))).id;
+
+        session.wrote_everything();
+        let settled = session
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(event, IrcxEvent::MessageUpdated { message }
+                    if message.delivery == Delivery::Sent)
+            })
+            .count();
+        assert_eq!(settled, 70, "every line of the paste is answered for");
+        assert_eq!(
+            session
+                .updated(&first)
+                .expect("the oldest is not evicted")
+                .delivery,
+            Delivery::Sent
+        );
     }
 }

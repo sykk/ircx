@@ -33,7 +33,8 @@ const MAX_LISTING: usize = 50_000;
 
 #[derive(Debug)]
 pub enum Action {
-    Send(String),
+    /// `ticket` is what the transport reports back once the line is written.
+    Send { line: String, ticket: u64 },
     /// Boxed so an action is the size of a line, not of the largest event.
     Emit(Box<IrcxEvent>),
     /// The user is in this conversation. Kept across restarts so the next
@@ -158,6 +159,10 @@ pub(crate) struct BatchState {
 
 #[derive(Debug)]
 struct PendingSend {
+    /// What the transport calls the line this message went out on. It is how a
+    /// write is matched back when there is no label to match on, which is every
+    /// server without `labeled-response`.
+    ticket: u64,
     label: Option<String>,
     message: ChatMessage,
 }
@@ -185,6 +190,11 @@ pub struct SessionState {
     cap_ended: bool,
     nick_attempt: usize,
     pending: Vec<PendingSend>,
+    /// Numbers every line handed to the transport. Never reset: a ticket from
+    /// a connection that has ended must not name a line on the next one.
+    next_ticket: u64,
+    /// The highest ticket the transport has reported writing.
+    written: u64,
     next_label: u64,
     ping: Option<(String, Instant)>,
     lag_ms: Option<u32>,
@@ -243,6 +253,8 @@ impl SessionState {
             cap_ended: false,
             nick_attempt: 0,
             pending: Vec::new(),
+            next_ticket: 1,
+            written: 0,
             next_label: 1,
             ping: None,
             lag_ms: None,
@@ -879,7 +891,9 @@ impl SessionState {
                     self.dispatch(SERVER_TARGET, &input, None);
                 }
                 None => match crate::dispatch::connect_command(&command) {
-                    Some(line) => self.send_line(line),
+                    Some(line) => {
+                        self.send_line(line);
+                    }
                     None => debug!(command, "skipped an unsendable connect command"),
                 },
             }
@@ -1513,6 +1527,56 @@ impl SessionState {
         }
         let chat = self.chat_message(message, &target, kind, text);
         self.append(chat);
+    }
+
+    /// The transport has written every line up to `mark`. Anything waiting on
+    /// one of them is on the socket now, which is as much as a server without
+    /// `echo-message` will ever tell us: there, `Sent` is where it stops.
+    pub fn on_written(&mut self, mark: u64) -> Vec<Action> {
+        if mark <= self.written {
+            return Vec::new();
+        }
+        let echoes = self.caps.is_enabled("echo-message");
+        let mut settled = Vec::new();
+        self.pending.retain_mut(|pending| {
+            if pending.ticket <= self.written || pending.ticket > mark {
+                return true;
+            }
+            pending.message.delivery = Delivery::Sent;
+            settled.push(pending.message.clone());
+            echoes
+        });
+        self.written = mark;
+        for message in settled {
+            self.emit(IrcxEvent::MessageUpdated {
+                message: Box::new(message),
+            });
+        }
+        self.drain()
+    }
+
+    /// Fails every message whose line never reached the socket. A connection
+    /// that ends takes the queue behind it with it, and the alternative to
+    /// saying so is a message that sits at `Pending` for the rest of the
+    /// session. What was written stays written: an echo that will now never
+    /// arrive does not unsend it.
+    fn abandon_unwritten(&mut self) {
+        let written = self.written;
+        let stranded: Vec<PendingSend> = self
+            .pending
+            .drain(..)
+            .filter(|pending| pending.ticket > written)
+            .collect();
+        // The same words a refused command uses, because it is the same fact.
+        // It covers both ways a line is stranded: the connection ended under
+        // it, and there was never one to begin with.
+        let reason = format!("not connected to {}", self.network_name());
+        for mut pending in stranded {
+            pending.message.delivery = Delivery::Failed(reason.clone());
+            self.emit(IrcxEvent::MessageUpdated {
+                message: Box::new(pending.message),
+            });
+        }
     }
 
     /// Matches a server echo to the optimistic copy already on screen. The id
@@ -2314,7 +2378,7 @@ impl SessionState {
         self.host = None;
         self.account = None;
         self.batches.clear();
-        self.pending.clear();
+        self.abandon_unwritten();
         self.ping = None;
         self.lag_ms = None;
         self.sasl = match self.config.sasl {
@@ -2370,27 +2434,55 @@ impl SessionState {
             .and_then(|member| member.account.clone())
     }
 
-    pub(crate) fn send_line(&mut self, line: String) {
+    /// Queues a line and returns the ticket it went out under, which is what
+    /// `on_written` later reports back. Most callers have no message riding on
+    /// the line and can drop it.
+    pub(crate) fn send_line(&mut self, line: String) -> u64 {
         self.emit(IrcxEvent::RawLine {
             network: self.config.network.clone(),
             outgoing: true,
             line: redact(&line),
         });
-        self.actions.push(Action::Send(line));
+        let ticket = self.next_ticket;
+        self.next_ticket += 1;
+        self.actions.push(Action::Send { line, ticket });
+        ticket
     }
 
     pub(crate) fn send_command(&mut self, command: &str, params: &[&str]) {
         match build(command, params) {
-            Some(line) => self.send_line(line),
+            Some(line) => {
+                self.send_line(line);
+            }
             None => debug!(command, "refused to send a malformed command"),
         }
     }
 
-    pub(crate) fn track_pending(&mut self, label: Option<String>, message: ChatMessage) {
-        self.pending.push(PendingSend { label, message });
-        // A server that never echoes would grow this list forever.
+    pub(crate) fn track_pending(
+        &mut self,
+        ticket: u64,
+        label: Option<String>,
+        message: ChatMessage,
+    ) {
+        self.pending.push(PendingSend {
+            ticket,
+            label,
+            message,
+        });
+        // A server that negotiated `echo-message` and then does not echo would
+        // grow this list forever. Only a written line can be abandoned that
+        // way: one still waiting for the socket has a state change coming, and
+        // dropping it is how a paste longer than the cap would strand its
+        // oldest lines at `Pending`.
         if self.pending.len() > 64 {
-            self.pending.remove(0);
+            let written = self.written;
+            if let Some(index) = self
+                .pending
+                .iter()
+                .position(|pending| pending.ticket <= written)
+            {
+                self.pending.remove(index);
+            }
         }
     }
 

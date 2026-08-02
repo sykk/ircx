@@ -1920,18 +1920,64 @@ marching down the list: solid above, faded below. Confirmed on screen at the
 36/37 line about eighteen seconds in, which is where the probe's timings put the
 front. It is legible at a glance and needs nobody to be told to look for it.
 
-Worth knowing why that holds, because it is conditional. `say` files a local
-copy as `Pending` only when `echo-message` was negotiated, and as `Sent`
-otherwise — and `Sent` is terminal and assigned at enqueue rather than at write.
-Both `ergo` and Libera negotiate it, so the progress a user sees is the common
-case, not the guaranteed one.
+That used to be conditional, and #332 is why it no longer is. `say` filed a
+local copy as `Pending` only where `echo-message` had been negotiated and as
+`Sent` otherwise, and `Sent` was assigned at enqueue rather than at write — so
+the boundary above existed only because both servers here happen to offer the
+capability. A line now carries a ticket the transport reports back once it is
+written, and `Pending` means "not on the socket" wherever it is drawn.
+
+### A paste on a server that does not echo
+
+**Walked on 2026-08-02** against local `ergo` with `echo-message` taken out of
+its advertisement. Neither server here can be told to withhold a capability —
+ergo has no setting for it, and `DEFCON` restricts registrations rather than
+caps — so a proxy deleted the token from `CAP LS` on the way past. That is
+enough on its own: `request_lines` asks only for the intersection of what was
+offered with `SUPPORTED`, so the client takes the genuine "not offered" path
+rather than a test-only one, and nothing in shipped code knows the walk is
+happening.
+
+Forty lines were queued by the network's connect commands, which is the only way
+to drive the real window here — it takes no synthetic input, and a paste has to
+come from somewhere.
+
+The archive was sampled twice a second while it drained. Forty `pending` at
+0.5 s, one turning `sent` every ~500 ms, none left by 20.75 s: the rate
+limiter's pace, read off the same `delivery` column the timeline draws from. On
+screen the boundary sat between lines 23 and 24 at twelve seconds and between 32
+and 33 at sixteen — solid above, faded below, on a server where before this
+every line was solid the moment it was typed.
+
+**Cutting the connection mid-drain** is the other half. The proxy was killed at
+eight seconds: fourteen lines had been written and stayed `sent`, and the
+twenty-six still queued each drew *Not sent — not connected to Walk* with a
+Retry beside it. Worth doing because nothing in the client had ever produced a
+`Delivery::Failed` before, so `FailureNotice` had never once rendered against a
+real message.
+
+### What that run found
+
+**A client's own messages come back doubled from history where the server does
+not echo.** Every one of the forty was in the archive twice: the local copy,
+`sent`, with no `server_msgid`, and a second copy carrying one, inside a
+`batch=1` — a `CHATHISTORY` replay. The dedup keys on `server_msgid`, and the
+only thing that ever puts one on a local copy is the echo. The comment above
+`deliver` in `session.rs` predicted exactly this; it had never been seen,
+because until this proxy nothing had run against a server without the
+capability.
+
+It is not #332's doing — a local copy had no msgid before that change either —
+and the fix is not obvious enough to bolt on: matching a replayed message to a
+local copy without a msgid means matching on target, text and a timestamp the
+server assigns, which for a queued line is seconds after the one the client
+wrote down. Filed separately.
 
 **Still not walked:**
 
-- **A server without `echo-message`.** Every line would render solid the moment
-  it was typed while the socket drained for a minute behind it, which is the
-  case this entry originally described and no server here will produce.
 - **An ordinary message sent while a paste is draining.** It queues behind
   everything still to go, so a one-word reply can take the rest of the minute to
-  leave while its own copy is already on screen. Nothing was watched here and
-  the composer says nothing about a queue.
+  leave. It now says `Pending` until it does, which is new, but nothing has
+  watched one and the composer still says nothing about a queue.
+- **A real netsplit's worth of failures.** The cut above stranded twenty-six
+  lines. Nothing has tried it with a queue deep enough to reach the pending cap.

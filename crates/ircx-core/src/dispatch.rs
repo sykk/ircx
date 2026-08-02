@@ -507,7 +507,6 @@ impl SessionState {
         };
         let action = kind == MessageKind::Action;
         let budget = self.wire_budget(command, target, action);
-        let echoes = self.caps.is_enabled("echo-message");
         let labels = self.caps.is_enabled("labeled-response");
         // Without `message-tags` the tag cannot travel, and a quote drawn only
         // here names a parent nobody else was shown.
@@ -541,15 +540,15 @@ impl SessionState {
                 builder = builder.tag("+reply", Some(parent.to_string()));
             }
             let Ok(line) = builder.build() else { continue };
-            self.send_line(line.to_line());
+            let ticket = self.send_line(line.to_line());
 
             let mut message = self.local_message(&filed, kind, piece);
             message.reply_to = parent.map(str::to_string);
-            message.delivery = match echoes {
-                true => Delivery::Pending,
-                false => Delivery::Sent,
-            };
-            self.track_pending(label, message.clone());
+            // Queued is not sent. The rate limiter can hold this line for the
+            // better part of a minute behind a paste, and `on_written` is what
+            // says it left — on a server that echoes and on one that does not.
+            message.delivery = Delivery::Pending;
+            self.track_pending(ticket, label, message.clone());
             copies.push(message);
         }
         copies

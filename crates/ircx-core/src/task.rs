@@ -379,6 +379,7 @@ async fn run(
 
         backoff.record_connected();
         let sender = transport.sender();
+        let mut written = transport.written();
         let mut keepalive = interval_at(Instant::now() + KEEPALIVE, KEEPALIVE);
         let mut stop = false;
         let mut reason = String::from("the connection ended");
@@ -397,6 +398,15 @@ async fn run(
                 command = inbox.recv() => match command {
                     Some(command) => apply(command, &mut session, &context).await,
                     None => { stop = true; break }
+                },
+                // The writer ends with the connection, so a closed mark is the
+                // socket going and the `Disconnected` event is what explains it.
+                moved = written.changed() => match moved {
+                    Ok(()) => {
+                        let mark = *written.borrow_and_update();
+                        session.on_written(mark)
+                    }
+                    Err(_) => break,
                 },
                 _ = keepalive.tick() => session.keepalive(),
             };
@@ -593,9 +603,9 @@ impl Context {
         let mut close = false;
         for action in actions {
             match action {
-                Action::Send(line) => {
+                Action::Send { line, ticket } => {
                     if let Some(sender) = sender {
-                        if let Err(error) = sender.send(line).await {
+                        if let Err(error) = sender.send(line, ticket).await {
                             warn!(%error, "could not queue an outgoing line");
                         }
                     }

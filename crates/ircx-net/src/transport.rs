@@ -49,26 +49,37 @@ pub enum TransportEvent {
     Disconnected { reason: DisconnectReason },
 }
 
+/// A queued line and the ticket the caller knows it by. The ticket means
+/// nothing here beyond being the number reported once the line is written.
+struct Outbound {
+    line: String,
+    ticket: u64,
+}
+
 #[derive(Clone)]
 pub struct LineSender {
-    outbound: mpsc::Sender<String>,
+    outbound: mpsc::Sender<Outbound>,
 }
 
 impl LineSender {
     /// Queues a line for sending. The terminator is added here; the rate
     /// limiter may hold the line back, so returning does not mean it is on the
-    /// wire.
-    pub async fn send(&self, line: impl Into<String>) -> Result<(), NetError> {
+    /// wire. `Transport::written` reaching `ticket` is what means that.
+    pub async fn send(&self, line: impl Into<String>, ticket: u64) -> Result<(), NetError> {
         let line = line.into();
         if line.contains(['\r', '\n']) {
             return Err(NetError::EmbeddedNewline);
         }
-        self.outbound.send(line).await.map_err(|_| NetError::Closed)
+        self.outbound
+            .send(Outbound { line, ticket })
+            .await
+            .map_err(|_| NetError::Closed)
     }
 }
 
 pub struct Transport {
-    outbound: mpsc::Sender<String>,
+    outbound: mpsc::Sender<Outbound>,
+    written: watch::Receiver<u64>,
     stop: Arc<watch::Sender<Option<DisconnectReason>>>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -100,6 +111,8 @@ impl Transport {
         let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_QUEUE);
         let (stop_tx, stop_rx) = watch::channel(None);
         let stop_tx = Arc::new(stop_tx);
+        // Tickets start at 1, so nothing written is a mark of 0.
+        let (written_tx, written_rx) = watch::channel(0);
 
         let _ = event_tx.send(TransportEvent::Connected { tls_info }).await;
 
@@ -114,6 +127,7 @@ impl Transport {
             tokio::spawn(write_task(
                 writer,
                 outbound_rx,
+                written_tx,
                 stop_rx,
                 stop_tx.clone(),
                 rate_limit,
@@ -123,6 +137,7 @@ impl Transport {
         Ok((
             Self {
                 outbound: outbound_tx,
+                written: written_rx,
                 stop: stop_tx,
                 tasks,
             },
@@ -134,6 +149,13 @@ impl Transport {
         LineSender {
             outbound: self.outbound.clone(),
         }
+    }
+
+    /// The highest ticket written to the socket. It only ever rises, so a
+    /// reader that misses a change has missed nothing: every ticket at or below
+    /// what it reads has been written.
+    pub fn written(&self) -> watch::Receiver<u64> {
+        self.written.clone()
     }
 
     /// Closes the socket. Sends nothing first: QUIT is the caller's to send,
@@ -234,7 +256,8 @@ async fn read_task(
 
 async fn write_task(
     mut writer: impl AsyncWrite + Unpin,
-    mut outbound: mpsc::Receiver<String>,
+    mut outbound: mpsc::Receiver<Outbound>,
+    written: watch::Sender<u64>,
     mut stop: watch::Receiver<Option<DisconnectReason>>,
     stop_tx: Arc<watch::Sender<Option<DisconnectReason>>>,
     rate_limit: RateLimit,
@@ -242,10 +265,10 @@ async fn write_task(
     let mut bucket = TokenBucket::new(rate_limit);
 
     loop {
-        let line = tokio::select! {
+        let queued = tokio::select! {
             _ = stop.changed() => break,
             line = outbound.recv() => match line {
-                Some(line) => line,
+                Some(queued) => queued,
                 None => break,
             },
         };
@@ -254,13 +277,18 @@ async fn write_task(
             () = bucket.acquire() => {}
         }
 
-        let mut frame = line.into_bytes();
+        let mut frame = queued.line.into_bytes();
         frame.extend_from_slice(b"\r\n");
         if let Err(error) = writer.write_all(&frame).await {
             debug!(%error, "outbound write failed");
             let _ = stop_tx.send(Some(DisconnectReason::Io(error.to_string())));
             break;
         }
+        // After the write, so a mark that has moved is a line that went out.
+        // A `watch` rather than an event because the writer must never block on
+        // the reader: the reader is what drains `outbound`, and a writer waiting
+        // on a full event queue would be waiting for itself.
+        let _ = written.send(queued.ticket);
     }
 
     let _ = writer.shutdown().await;

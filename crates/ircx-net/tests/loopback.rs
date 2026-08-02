@@ -91,9 +91,9 @@ async fn sends_lines_with_crlf() {
     let (mut server, transport, _events) = connected().await;
     let sender = transport.sender();
 
-    sender.send("NICK me").await.expect("send");
+    sender.send("NICK me", 1).await.expect("send");
     sender
-        .send(String::from("USER me 0 * :me"))
+        .send(String::from("USER me 0 * :me"), 2)
         .await
         .expect("send");
 
@@ -108,7 +108,7 @@ async fn refuses_a_line_carrying_its_own_terminator() {
 
     let error = transport
         .sender()
-        .send("NICK me\r\nJOIN #ops")
+        .send("NICK me\r\nJOIN #ops", 1)
         .await
         .expect_err("embedded newline must be refused");
     assert!(matches!(error, NetError::EmbeddedNewline));
@@ -144,7 +144,7 @@ async fn sending_after_shutdown_reports_a_closed_connection() {
     transport.shutdown().await;
     drop(transport);
 
-    let error = sender.send("PING :x").await.expect_err("send must fail");
+    let error = sender.send("PING :x", 1).await.expect_err("send must fail");
     assert!(matches!(error, NetError::Closed));
 }
 
@@ -208,7 +208,10 @@ async fn outbound_lines_are_paced_after_the_burst() {
 
     let sender = transport.sender();
     for index in 0..4 {
-        sender.send(format!("PING :{index}")).await.expect("send");
+        sender
+            .send(format!("PING :{index}"), index + 1)
+            .await
+            .expect("send");
     }
 
     let start = tokio::time::Instant::now();
@@ -229,4 +232,58 @@ async fn outbound_lines_are_paced_after_the_burst() {
         "{:?}",
         start.elapsed()
     );
+}
+
+/// The mark is the only thing that separates a line the rate limiter is
+/// holding from a line the socket has taken. Queueing must not move it.
+#[tokio::test(start_paused = true)]
+async fn a_ticket_comes_back_when_its_line_leaves_rather_than_when_it_is_queued() {
+    let (listener, config) = listener().await;
+    let limit = RateLimit {
+        burst: 1,
+        interval: Duration::from_millis(500),
+    };
+    let client = tokio::spawn(Transport::connect_with(config, limit));
+    let (mut server, _) = listener.accept().await.expect("accept");
+    let (transport, _events) = client.await.expect("join").expect("connect");
+
+    let sender = transport.sender();
+    let mut written = transport.written();
+    assert_eq!(*written.borrow(), 0, "nothing sent, nothing written");
+
+    sender.send("PING :1", 1).await.expect("send");
+    written.changed().await.expect("the burst covers the first");
+    assert_eq!(*written.borrow(), 1);
+
+    sender.send("PING :2", 2).await.expect("send");
+    sender.send("PING :3", 3).await.expect("send");
+    // The writer gets to run before this is read, or it would pass against a
+    // mark moved at queue time and prove nothing. What it cannot do is get a
+    // token: the bucket is empty and only the clock refills it.
+    for _ in 0..8 {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(*written.borrow(), 1, "queued behind an empty bucket");
+
+    let start = tokio::time::Instant::now();
+    while *written.borrow() < 3 {
+        written.changed().await.expect("the writer drains");
+    }
+    assert!(
+        start.elapsed() >= Duration::from_millis(1000),
+        "{:?}",
+        start.elapsed()
+    );
+
+    let mut seen = Vec::new();
+    while seen.len() < 3 {
+        let mut buf = vec![0u8; 128];
+        let read = server.read(&mut buf).await.expect("read");
+        for line in buf[..read].split(|b| *b == b'\n') {
+            if !line.is_empty() {
+                seen.push(String::from_utf8_lossy(line).trim_end().to_owned());
+            }
+        }
+    }
+    assert_eq!(seen, vec!["PING :1", "PING :2", "PING :3"]);
 }

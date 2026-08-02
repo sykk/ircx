@@ -27,6 +27,7 @@ import type {
   ActiveTarget,
   AppState,
   ChatView,
+  ConsoleInput,
   SplitDirection,
   StoredLayout,
   TimelineState,
@@ -76,6 +77,9 @@ export interface AppActions {
   setViewAnchor: (view: ViewId, row: string | null) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
   setViewRaw: (view: ViewId, raw: boolean) => void;
+  /** Holds one console pane's command box. Both fields together: sending clears
+   * the text and the refusal at once, and a refusal puts the text back. */
+  setConsoleInput: (view: ViewId, input: ConsoleInput) => void;
 
   /** Opens a second pane on the focused view's target and focuses it. */
   splitActiveView: (direction: SplitDirection) => void;
@@ -144,6 +148,7 @@ const initialState: AppState = {
   channelList: {},
   views: {},
   viewAnchor: {},
+  consoleInput: {},
   viewOrder: [],
   activeViewId: null,
   layout: null,
@@ -244,6 +249,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { views: { ...s.views, [view]: { ...current, raw } } };
     }),
 
+  setConsoleInput: (view, input) =>
+    set((s) => {
+      if (!s.views[view]) return {};
+      const current = s.consoleInput[view];
+      if (current && current.text === input.text && current.error === input.error) return {};
+      return { consoleInput: { ...s.consoleInput, [view]: input } };
+    }),
+
   splitActiveView: (direction) =>
     set((s) => {
       const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
@@ -270,12 +283,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // Otherwise a later pane handed the same id would open with the closed
       // pane's roster hidden.
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
+      const { [view]: _typed, ...consoleInput } = s.consoleInput;
       const at = s.viewOrder.indexOf(view);
       return {
         layout,
         views,
         viewAnchor,
         rosterHidden,
+        consoleInput,
         viewOrder: paneOrder(layout),
         activeViewId:
           s.activeViewId === view
@@ -478,6 +493,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   const views = { ...s.views };
   const viewAnchor = { ...s.viewAnchor };
   const rosterHidden = { ...s.rosterHidden };
+  const consoleInput = { ...s.consoleInput };
   let layout = s.layout;
 
   for (const id of showing) {
@@ -488,12 +504,14 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     delete views[id];
     delete viewAnchor[id];
     delete rosterHidden[id];
+    delete consoleInput[id];
   }
 
   const kept = survivor === undefined ? undefined : views[survivor];
   if (survivor !== undefined && kept !== undefined) {
     views[survivor] = { ...kept, network: "", target: "", selectedUser: null, raw: false };
     viewAnchor[survivor] = null;
+    delete consoleInput[survivor];
   }
 
   const viewOrder = paneOrder(layout);
@@ -502,6 +520,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     views,
     viewAnchor,
     rosterHidden,
+    consoleInput,
     viewOrder,
     activeViewId:
       s.activeViewId && viewOrder.includes(s.activeViewId)
@@ -534,10 +553,11 @@ function newView(network: string, target: string): ChatView {
   return { id: mintViewId(), network, target, selectedUser: null, raw: false };
 }
 
-/** Retargeting resets the view's own position — the scroll and the inspector
- * belonged to the conversation it was showing, not to the pane. */
+/** Retargeting resets the view's own position — the scroll, the inspector and
+ * any half-typed command belonged to the conversation it was showing, not to
+ * the pane. */
 function retarget(
-  s: Pick<AppState, "views" | "viewAnchor">,
+  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput">,
   id: ViewId,
   network: string,
   target: string,
@@ -545,12 +565,14 @@ function retarget(
   const view = s.views[id];
   if (!view) return {};
   if (view.network === network && view.target === target) return {};
+  const { [id]: _typed, ...consoleInput } = s.consoleInput;
   return {
     views: {
       ...s.views,
       [id]: { ...view, network, target, selectedUser: null, raw: false },
     },
     viewAnchor: { ...s.viewAnchor, [id]: null },
+    consoleInput,
   };
 }
 
@@ -586,6 +608,8 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       const viewAnchor = stale.length
         ? { ...s.viewAnchor, ...Object.fromEntries(stale.map((v) => [v.id, null])) }
         : s.viewAnchor;
+      const consoleInput = { ...s.consoleInput };
+      for (const view of stale) delete consoleInput[view.id];
 
       return {
         networks,
@@ -596,6 +620,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         members: dropByNetwork(s.members, event.network),
         views,
         viewAnchor,
+        consoleInput,
       };
     }
 

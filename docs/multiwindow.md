@@ -133,3 +133,23 @@ would make the list unwalkable.
 Splitting deliberately opens a second view on one target, so more than one pane
 can be showing it; the first in pane order takes focus. Targets are matched the
 way a server matches them, case-insensitively, and by network as well as name.
+
+## What a pane may hold
+
+Nothing a pane needs to keep lives in its component state. A change to the
+layout's shape — a split, or a close — unmounts every pane in the window and
+mounts fresh ones, because the element at a position changes from a `ChatPane`
+to a `div` when a view node becomes a split node. No arrangement of keys fixes
+it: the pane genuinely moves to a new position in the element tree, and React
+does not reparent a subtree. #308.
+
+So a pane's state goes in the store, keyed by `ViewId`, which is where
+`viewAnchor`, `selectedUser`, `raw` and `rosterHidden` already are. The console's
+command box is there for that reason: it saves no draft, so a split used to take
+a half-typed command and the refusal under it, which is the loss #299 was filed
+for reaching the user by a second route.
+
+The cost of keying by `ViewId` is that a pane's entry has to be let go of
+everywhere a pane is: closed, pointed at another conversation, taken by the
+conversation it was showing, or blanked when its network is deleted. A pane
+handed the same id later would otherwise open holding what the last one did.

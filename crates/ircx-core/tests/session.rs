@@ -2639,6 +2639,32 @@ mod closing {
             CommandOutcome::Rejected(_)
         ));
     }
+
+    /// Closing parts, and the server echoes the PART back at a channel that is
+    /// already gone. Reporting it anyway describes a channel nobody holds, and
+    /// `Session::channel` names one it cannot find with an empty string — which
+    /// the sidebar drew as a nameless row.
+    #[test]
+    fn the_part_a_close_provokes_does_not_report_a_channel_that_is_gone() {
+        let mut session = in_channel();
+        session.submit("#ircx", "/close");
+        session.events.clear();
+
+        session.feed(":sykk!~sykk@user/sykk PART #ircx");
+
+        let named: Vec<String> = session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::ChannelUpdated { channel } => Some(channel.name.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            named.is_empty(),
+            "a closed channel was reported again as {named:?}"
+        );
+    }
 }
 
 /// A whole SCRAM-SHA-512 exchange, answered the way a server answers it.

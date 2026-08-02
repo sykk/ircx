@@ -4,7 +4,7 @@ import type { ChatMessage, CommandOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
-import { targetKey, useMembers, useReplyTarget, useView } from "@/store/selectors";
+import { targetKey, useMembers, useQueued, useReplyTarget, useView } from "@/store/selectors";
 import { plainText } from "@/components/timeline/Markdown";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
@@ -44,6 +44,21 @@ function ComposerFor({
   const members = useMembers(network, target);
   const replying = useReplyTarget(network, target);
   const recall = useRecall(network, target);
+  const queued = useQueued(network, target);
+  // What a reader needs from a draining queue is its two edges. The count
+  // between them changes a hundred times in a paste and a polite region holds
+  // every change it is given, so a region carrying the count would still be
+  // reading numbers out after the last line had gone.
+  //
+  // The end is nothing left, not the one line the row below stops counting at:
+  // "all sent" with one still in flight would be wrong at the only moment it is
+  // worth saying. And it is held rather than derived, because the sentence is
+  // only true of a queue that existed — with nothing to compare against, a
+  // single line leaving would announce the end of a queue that never formed.
+  const [saidBefore, setSaidBefore] = useState("");
+  const queueSaid =
+    queued > 1 ? "Messages waiting to send" : queued === 0 && saidBefore ? "All sent" : saidBefore;
+  if (queueSaid !== saidBefore) setSaidBefore(queueSaid);
   const [value, setValue] = useState("");
   // In the store rather than here, keyed by the pane: a change to the layout's
   // shape rebuilds every pane in the window (#308), and the line comes back
@@ -307,6 +322,10 @@ function ComposerFor({
         </div>
       )}
 
+      <div role="status" className="sr-only">
+        {queueSaid}
+      </div>
+
       <div
         className="flex items-end gap-2 rounded-[var(--radius-lg)] border px-3 py-2"
         style={{ background: "var(--surface-raised)", borderColor: "var(--border-default)" }}
@@ -339,7 +358,16 @@ function ComposerFor({
         className="flex justify-between px-1 pt-1 text-[11px]"
         style={{ color: "var(--text-faint)" }}
       >
-        <span>Markdown is supported</span>
+        {/* The queue takes the hint's slot rather than a row of its own. The
+            mockup gives the composer one line of quiet text, and a hint that
+            stops being news after the first day is what a paste has something
+            to say over.
+
+            Two, not one: every line is pending between Enter and the socket, so
+            announcing a queue of one would twitch this row on ordinary typing
+            and say nothing. A queue is the case where a line is waiting behind
+            another one. */}
+        <span>{queued > 1 ? `${queued} waiting to send` : "Markdown is supported"}</span>
         <span>Shift+Enter for new line</span>
       </div>
     </div>

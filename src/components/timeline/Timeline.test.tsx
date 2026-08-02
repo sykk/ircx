@@ -918,6 +918,19 @@ describe("Timeline", () => {
     expect(screen.getByText("Retry")).toBeTruthy();
   });
 
+  /** The fade is the only mark a queued line carries, and #339 is that it is
+   * the only one. A failed line has said so in words all along, one row down
+   * from this one. */
+  it("says in words that a queued line has not left, and only of the queued one", () => {
+    seed([
+      makeMessage({ id: "a", text: "in flight", delivery: { state: "pending" } }),
+      makeMessage({ id: "b", text: "arrived", delivery: { state: "delivered" } }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getAllByText("Waiting to send")).toHaveLength(1);
+  });
+
   it("does not fetch an attachment before the user asks", () => {
     seed([makeMessage({ id: "a", text: "here", attachments: [makeAttachment()] })]);
     render(<Timeline view={TEST_VIEW} />);

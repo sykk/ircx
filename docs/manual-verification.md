@@ -1985,7 +1985,38 @@ compared only as a staleness bound.
 
 - **An ordinary message sent while a paste is draining.** It queues behind
   everything still to go, so a one-word reply can take the rest of the minute to
-  leave. It now says `Pending` until it does, which is new, but nothing has
-  watched one and the composer still says nothing about a queue.
+  leave. It says `Pending` until it does, and since #339 the composer counts
+  what is waiting and a reader is told a queue formed — but neither has been
+  watched against a draining socket. See below for what that leaves.
 - **A real netsplit's worth of failures.** The cut above stranded twenty-six
   lines. Nothing has tried it with a queue deep enough to reach the pending cap.
+
+### The queue, heard rather than seen
+
+#339 gave a queued message something other than the fade: a count in the
+composer's hint row, a `role="status"` region that speaks when a queue forms and
+again when it is gone, and `Waiting to send` inside the row itself for a reader
+who arrives at one.
+
+**What was checked**, in Chrome through the walk driver: the region resolves to
+a genuinely hidden 1×1 clipped element, so it disturbs nothing; and the count in
+the hint row does not wrap the row at any width the hint itself does not already
+wrap at — both wrap below about 220px, which is the hint's own doing and older
+than this.
+
+**Nobody has listened to it.** The tree can be asserted and was; whether it
+*reads* well is a different question, and the same one #318 left behind. What
+the tests pin is that two sentences are said and a hundred are not, which is the
+failure the design was chosen to avoid — not that the two are the right two, or
+that "all sent" arrives when a reader expects it.
+
+Worth an hour with a screen reader, and specifically:
+
+- Whether `Messages waiting to send` at the start of a paste and `All sent` 48 s
+  later read as a pair, or as two unrelated interruptions.
+- Whether arriving at a queued row and hearing `Waiting to send` before the text
+  is the right order, or whether it should follow the message.
+- Whether the count in the hint row wants announcing at all for somebody who
+  cannot see it — it is deliberately outside the live region, on the grounds
+  that a number changing a hundred times is noise, and that reasoning has not
+  been tested against a person.

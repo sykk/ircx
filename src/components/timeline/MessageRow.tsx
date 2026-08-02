@@ -92,6 +92,17 @@ export function MessageRow({
         <div>
           {raised && <RaisedLine by={message.raisedBy ?? []} />}
 
+          {/* Read when the reader arrives at this row rather than announced.
+              A paste queues a hundred of these at once, and the composer says
+              a queue formed; a row saying so for itself would bury the
+              conversation to repeat what was already said. The fade carries it
+              for anyone who can see the fade, and carried it alone until #339.
+              A span rather than an aria-label, which a generic element is not
+              reliably given one from. */}
+          {message.delivery.state === "pending" && (
+            <span className="sr-only">Waiting to send</span>
+          )}
+
           {/* Prose gets the text face; code and identifiers keep monospace. */}
           <div
             className="selectable font-[family-name:var(--font-ui)]"

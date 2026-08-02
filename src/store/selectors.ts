@@ -110,6 +110,36 @@ export function useInputHistory(network: string, target: string): string[] {
   return useAppStore((s) => s.inputHistory[targetKey(network, target)] ?? EMPTY);
 }
 
+/**
+ * How many of our own lines in this conversation are still waiting for the
+ * socket.
+ *
+ * Counted backwards from the newest and stopped at the first line of ours that
+ * has left, rather than swept over the window. #334 gives every line a ticket
+ * in the order it was queued and settles them as a prefix, so our own pending
+ * lines are a suffix of our own: once one has left, everything we said before
+ * it has left too. A conversation nobody is pasting into therefore costs one
+ * comparison, which is what this is called on every store read for.
+ *
+ * Someone else's messages are skipped rather than stopped at — a busy channel
+ * goes on talking while a paste of ours drains.
+ */
+export function selectQueued(s: AppState, network: string, target: string): number {
+  const messages = s.timelines[targetKey(network, target)]?.messages ?? EMPTY;
+  let queued = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    if (!message.sender.isSelf) continue;
+    if (message.delivery.state !== "pending") break;
+    queued++;
+  }
+  return queued;
+}
+
+export function useQueued(network: string, target: string): number {
+  return useAppStore((s) => selectQueued(s, network, target));
+}
+
 export function selectChannelsFor(s: AppState, network: string): Channel[] {
   return Object.values(s.channels).filter((c) => c.network === network);
 }

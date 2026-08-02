@@ -44,6 +44,53 @@ export type TimelineRow =
    * this client heard said. */
   | { kind: "history"; id: string; opens: boolean };
 
+/** Which lines failed together, and whether this is the one that says so. */
+export interface FailureRun {
+  /** Every message of the run, in the order they were said, shared by each
+   * row of it — the notice retries all of them. */
+  run: ChatMessage[];
+  /** The last of the run, which is where the one notice goes. */
+  last: boolean;
+}
+
+function failureReason(message: ChatMessage): string | null {
+  return message.delivery.state === "failed" ? message.delivery.detail : null;
+}
+
+/**
+ * Consecutive messages that failed for the same reason, which are one event.
+ *
+ * `abandon_unwritten` fails every line still queued in one pass and gives them
+ * all the same reason, so a cut mid-paste produces one run however long the
+ * paste was — walked at 78 lines, where a notice on each said one fact
+ * seventy-eight times and offered seventy-eight ways to fix it. #341.
+ *
+ * Adjacency rather than an id carried from the core: the core knows they are
+ * one event and the wire does not say so, and nothing yet needs it to. Two
+ * failures for the same reason with a sent message between them are two runs,
+ * which is what they are.
+ */
+export function failureRuns(messages: ChatMessage[]): (FailureRun | null)[] {
+  const marks: (FailureRun | null)[] = new Array(messages.length).fill(null);
+
+  let start = 0;
+  while (start < messages.length) {
+    const reason = failureReason(messages[start]!);
+    if (reason === null) {
+      start += 1;
+      continue;
+    }
+    let end = start + 1;
+    while (end < messages.length && failureReason(messages[end]!) === reason) end += 1;
+
+    const run = messages.slice(start, end);
+    for (let at = start; at < end; at += 1) marks[at] = { run, last: at === end - 1 };
+    start = end;
+  }
+
+  return marks;
+}
+
 /** What the reader missed, stated at the unread rule rather than left to a skim. */
 export interface Seam {
   messages: number;

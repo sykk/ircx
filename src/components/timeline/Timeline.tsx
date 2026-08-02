@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
-import { EMPTY_TIMELINE, useAppStore } from "@/store";
+import { EMPTY_TIMELINE, TIMELINE_CAP, useAppStore } from "@/store";
 import { targetKey, useMembers, useTimelineForView, useView } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
@@ -148,13 +148,17 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     restoreTo.current = null;
   }, []);
 
-  const loadOlder = useCallback(async () => {
+  /** Says which of the three things happened, because the caller below cannot
+   * tell them apart from the outside and one of them is not an answer: a call
+   * that skipped because a read was already running looks exactly like a read
+   * that came back with nothing. */
+  const loadOlder = useCallback(async (): Promise<"skipped" | "read" | "failed"> => {
     const key = targetKey(network, target);
     const store = useAppStore.getState();
     // A channel restored across a restart has no entry at all until something
     // is filed under it, and that is exactly the pane with an archive to read.
     const current = store.timelines[key] ?? EMPTY_TIMELINE;
-    if (!current.hasMore || current.loadingOlder) return;
+    if (!current.hasMore || current.loadingOlder) return "skipped";
 
     store.setLoadingOlder(key, true);
     try {
@@ -166,24 +170,44 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       });
       setLoadError(null);
       useAppStore.getState().prependHistory(key, older, older.length === PAGE_SIZE);
+      return "read";
     } catch (e) {
       setLoadError(String(e));
       useAppStore.getState().setLoadingOlder(key, false);
+      return "failed";
     }
   }, [network, target]);
 
   // A pane holding less than a screenful cannot be scrolled, so the handler
-  // below would never fire and a conversation that only exists in the archive
-  // would stay empty for good. The component is keyed by conversation, so this
-  // reads it once per target a pane shows.
-  const opened = useRef(false);
+  // below never fires and the rest of the archive is out of reach. Priming it
+  // with a single page is not enough: a run of joins and quits folds into one
+  // digest row, so a channel whose history is mostly presence comes back short
+  // however much is behind it, and 200 more messages can add no height at all
+  // (#331). So this reads until there is something to scroll.
+  //
+  // Bounded at both ends. `hasMore` goes false at the start of the archive, and
+  // `TIMELINE_CAP` is as much as the window is meant to hold — the same answer
+  // `messagesAppended` gives at the other end. A page that adds nothing stops
+  // it too, which is what a failed read looks like from here.
+  const stalled = useRef(false);
   useEffect(() => {
-    if (opened.current) return;
-    opened.current = true;
     const el = scrollRef.current;
-    if (el && el.scrollHeight - el.clientHeight > LOAD_OLDER_PX) return;
-    void loadOlder();
-  }, [loadOlder]);
+    if (stalled.current || !el) return;
+    if (el.scrollHeight - el.clientHeight > LOAD_OLDER_PX) return;
+    if (!timeline.hasMore || timeline.loadingOlder) return;
+    if (messages.length >= TIMELINE_CAP) return;
+
+    const held = messages.length;
+    void loadOlder().then((outcome) => {
+      // A skip is another read already in flight, which is not this pane
+      // running out of things to ask for. Latching on it stopped the loop after
+      // one page, which is the whole of what #331 was.
+      if (outcome === "skipped") return;
+      const key = targetKey(network, target);
+      const now = useAppStore.getState().timelines[key]?.messages.length ?? held;
+      if (outcome === "failed" || now === held) stalled.current = true;
+    });
+  }, [loadOlder, messages, timeline.hasMore, timeline.loadingOlder, network, target]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;

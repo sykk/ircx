@@ -35,7 +35,9 @@ import type {
   ViewId,
 } from "./types";
 
-/** Older messages stay in SQLite; the window is what the timeline can scroll. */
+/** Older messages stay in SQLite; the window is what the timeline can scroll.
+ * Paging backwards stops at the same figure, because the size the window is
+ * meant to be is one answer and not two (#331). */
 const TIMELINE_CAP = 10_000;
 const RAW_LOG_CAP = 2_000;
 const RECENT_CAP = 50;

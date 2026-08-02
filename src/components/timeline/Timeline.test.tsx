@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, Reaction } from "@/types";
@@ -497,6 +498,93 @@ describe("Timeline", () => {
     const grew = scroller.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(scroller.scrollTop).toBe(100 + grew);
+  });
+
+  /**
+   * #331. A pane with nothing to scroll never fires the handler that asks for
+   * more, so opening one primes it with a page. One page is not always a
+   * screenful: a run of presence folds into a single digest row, and 200 more
+   * quits can add no height at all. A channel whose archive is a netsplit
+   * stopped there with the rest of it out of reach.
+   */
+  describe("a channel whose history folds away to nothing", () => {
+    /** All inside one `RUN_MS`, so however many are read they draw as one row. */
+    const quits = (from: number, count: number) => {
+      const base = Date.parse("2026-07-29T02:00:00.000Z");
+      return Array.from({ length: count }, (_, i) =>
+        makeMessage({
+          id: `q${from + i}`,
+          nick: `crowd${from + i}`,
+          kind: "quit",
+          text: "*.net *.split",
+          timestamp: new Date(base + (from + i) * 50).toISOString(),
+        }),
+      );
+    };
+
+    it("keeps reading until it reaches the beginning of the archive", async () => {
+      // Three pages and a short one, which is what the archive running out
+      // looks like from here.
+      const pages = [quits(600, 200), quits(400, 200), quits(200, 200), quits(0, 60)];
+      let asked = 0;
+      ipcMock.loadHistory.mockImplementation(() =>
+        Promise.resolve(pages[asked++] ?? []),
+      );
+
+      seed([]);
+      render(<Timeline view={TEST_VIEW} />);
+
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(660),
+      );
+      expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false);
+    });
+
+    /**
+     * Under `StrictMode` the effect is mounted twice, so the second run asks
+     * again before the first read has told the store it is running — and that
+     * call comes straight back having done nothing. Reading that as "the
+     * archive has no more to give" stops the loop after one page, which is the
+     * shape of the first attempt at fixing this. A scroll landing during a read
+     * does the same thing without `StrictMode`.
+     */
+    it("keeps reading when a second ask overlaps the first", async () => {
+      const pages = [quits(400, 200), quits(200, 200), quits(0, 60)];
+      let asked = 0;
+      // A read that takes longer than a turned-away one, which is the whole
+      // point: resolving both in the same microtask lets the real answer land
+      // first and the overlap never shows.
+      ipcMock.loadHistory.mockImplementation(() => {
+        const page = pages[asked++] ?? [];
+        return new Promise((resolve) => setTimeout(() => resolve(page), 5));
+      });
+
+      seed([]);
+      render(
+        <StrictMode>
+          <Timeline view={TEST_VIEW} />
+        </StrictMode>,
+      );
+
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false),
+      );
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(460);
+    });
+
+    it("reads nothing ahead when the pane can already be scrolled", async () => {
+      // Ordinary conversation, which does not fold. The reader can reach the
+      // top on their own, and reaching it is what asks for the next page — so
+      // opening this should cost no read at all.
+      ipcMock.loadHistory.mockResolvedValue([]);
+
+      seed(makeConversation({ count: 400, seed: 3 }));
+      render(<Timeline view={TEST_VIEW} />);
+
+      // Long enough for a page to have been asked for, had it been.
+      await act(() => new Promise((done) => setTimeout(done, 50)));
+      expect(ipcMock.loadHistory).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps the viewport still when the prepended page merges into the top block", async () => {

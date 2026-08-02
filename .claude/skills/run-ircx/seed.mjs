@@ -71,6 +71,18 @@ export const SEED = `
     "#long": Array.from({ length: 300 }, (_, i) =>
       message("#long", NICKS[i % NICKS.length], "line " + i + " of the backlog", i * 20),
     ),
+    // An archive of nothing but presence, which the digest folds into about one
+    // row however much of it is read back. A pane with nothing to scroll never
+    // asks for the next page, so this is the channel that only reaches the end
+    // of its history if the reader goes on asking unprompted — #331.
+    // Inside one RUN_MS window on purpose, so the whole archive is a single
+    // digest row rather than one per five minutes. That is what a netsplit
+    // looks like, and it is the shape that leaves a pane with nothing to
+    // scroll however many pages it reads.
+    "#split": Array.from({ length: 1200 }, (_, i) => ({
+      ...message("#split", "crowd" + i, "*.net *.split", i * 0.05),
+      kind: "quit",
+    })),
     sable: [
       message("sable", "sable", "got a minute?", 0),
       message("sable", "walker", "sure", 20),
@@ -122,7 +134,12 @@ export const SEED = `
       capsEnabled: ["message-tags", "echo-message", "server-time", "chathistory"],
       lagMs: 12,
     }],
-    channels: [channel("#ircx", 0, "the client"), channel("#rust", 2), channel("#long", 0)],
+    channels: [
+      channel("#ircx", 0, "the client"),
+      channel("#rust", 2),
+      channel("#long", 0),
+      channel("#split", 0),
+    ],
     queries: [{ network: "net1", nick: "sable", account: "sable", unread: 0, online: true }],
   };
 
@@ -134,7 +151,15 @@ export const SEED = `
     get_snapshot: () => snapshot,
     list_network_configs: () => [],
     list_members: ({ channel }) => members[channel] ?? [],
-    load_history: ({ req }) => (req.before ? [] : (history[req.target] ?? [])),
+    // Pages backwards the way the archive does. It used to answer nothing at
+    // all to a request carrying "before", so no walk could reach a second page
+    // and #331 — a pane that stops asking — could not be seen here.
+    load_history: ({ req }) => {
+      const all = history[req.target] ?? [];
+      const found = req.before ? all.findIndex((m) => m.timestamp >= req.before) : -1;
+      const to = req.before ? (found === -1 ? all.length : found) : all.length;
+      return all.slice(Math.max(0, to - req.limit), to);
+    },
     get_draft: ({ target }) => drafts[target] ?? null,
     set_draft: ({ target, text }) => ((drafts[target] = text), null),
     mark_read: () => null,

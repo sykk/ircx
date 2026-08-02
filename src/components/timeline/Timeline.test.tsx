@@ -116,14 +116,15 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
   seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false } });
 }
 
-/** A second pane on the same channel, as a split would open, parked at
- * `scrollPosition` so it is reading history rather than following. */
-function openSecondView(scrollPosition: number) {
+/** A second pane on the same channel, as a split would open. `anchor` is the
+ * row it comes back to, so a pane given one is reading history rather than
+ * following; `null` follows the live edge. */
+function openSecondView(anchor: string | null) {
   const id = "second-view";
-  const { views, viewScroll, viewOrder } = useAppStore.getState();
+  const { views, viewAnchor, viewOrder } = useAppStore.getState();
   useAppStore.setState({
     views: { ...views, [id]: { ...views[TEST_VIEW]!, id } },
-    viewScroll: { ...viewScroll, [id]: scrollPosition },
+    viewAnchor: { ...viewAnchor, [id]: anchor },
     viewOrder: [...viewOrder, id],
   });
   return id;
@@ -542,7 +543,7 @@ describe("Timeline", () => {
     ipcMock.loadHistory.mockResolvedValue(older);
 
     seed(makeConversation({ count: 400, seed: 3 }));
-    const second = openSecondView(200);
+    const second = openSecondView(null);
     render(
       <>
         <Timeline view={TEST_VIEW} />
@@ -551,6 +552,12 @@ describe("Timeline", () => {
     );
 
     const [reading, other] = screen.getAllByTestId("timeline-scroller");
+    // Parked by scrolling rather than by seeding a position: the store holds the
+    // row a pane is reading, and only a scroll knows which row that is. Far
+    // enough down that this pane does not ask for history itself.
+    other!.scrollTop = 900;
+    fireEvent.scroll(other!);
+
     const heightBefore = reading!.scrollHeight;
     reading!.scrollTop = 100;
     fireEvent.scroll(reading!);
@@ -562,7 +569,7 @@ describe("Timeline", () => {
     const grew = reading!.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(reading!.scrollTop).toBe(100 + grew);
-    expect(other!.scrollTop).toBe(200 + grew);
+    expect(other!.scrollTop).toBe(900 + grew);
   });
 
   it("reads the archive when a pane opens on a conversation the window holds none of", async () => {
@@ -644,7 +651,7 @@ describe("Timeline", () => {
   /** #300. Splitting a pane rebuilds it, so what the store holds is all it
    * comes back to. A pane at the live edge that recorded an offset came back to
    * wherever that offset fell at the narrower width, which was the top. */
-  it("records a pane at the live edge as following rather than as its offset", () => {
+  it("records a pane at the live edge as following rather than as a row", () => {
     seed(makeConversation({ count: 400, seed: 7 }));
     render(<Timeline view={TEST_VIEW} />);
 
@@ -653,18 +660,58 @@ describe("Timeline", () => {
     fireEvent.scroll(scroller);
 
     expect(scroller.scrollTop).toBeGreaterThan(0);
-    expect(useAppStore.getState().viewScroll[TEST_VIEW]).toBe(0);
+    expect(useAppStore.getState().viewAnchor[TEST_VIEW]).toBe(null);
   });
 
-  it("records where a pane reading history is parked", () => {
+  /** #307. The row rather than the offset, because the pane is rebuilt at a
+   * width where the same offset is a different message. */
+  it("records the row at the top of a pane reading history", () => {
     seed(makeConversation({ count: 400, seed: 7 }));
     render(<Timeline view={TEST_VIEW} />);
 
     const scroller = screen.getByTestId("timeline-scroller");
-    scroller.scrollTop = 600;
-    fireEvent.scroll(scroller);
+    const anchorAt = (offset: number) => {
+      scroller.scrollTop = offset;
+      fireEvent.scroll(scroller);
+      return useAppStore.getState().viewAnchor[TEST_VIEW];
+    };
 
-    expect(useAppStore.getState().viewScroll[TEST_VIEW]).toBe(600);
+    const deep = anchorAt(4_000);
+    const shallow = anchorAt(1_000);
+
+    expect(deep).toBeTruthy();
+    expect(shallow).toBeTruthy();
+    expect(deep).not.toBe(shallow);
+  });
+
+  it("comes back to the row it recorded rather than to the top", () => {
+    seed(makeConversation({ count: 400, seed: 7 }));
+    const { unmount } = render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = 4_000;
+    fireEvent.scroll(scroller);
+    const anchor = useAppStore.getState().viewAnchor[TEST_VIEW];
+    expect(anchor).toBeTruthy();
+
+    unmount();
+    // The restore goes through the virtualiser, which scrolls by `scrollTo`, and
+    // it runs in a layout effect on the first render — so the shim has to be in
+    // place before the render, and cannot be hung on the element afterwards the
+    // way `letItScroll` does it. Put back straight away: left on the prototype
+    // it would also let the prepend compensation run in every test below.
+    const withoutScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = function (this: HTMLElement, options: ScrollToOptions | number) {
+      this.scrollTop = typeof options === "number" ? options : (options.top ?? 0);
+    } as HTMLElement["scrollTo"];
+    try {
+      render(<Timeline view={TEST_VIEW} />);
+    } finally {
+      HTMLElement.prototype.scrollTo = withoutScrollTo;
+    }
+
+    expect(useAppStore.getState().viewAnchor[TEST_VIEW]).toBe(anchor);
+    expect(screen.getByTestId("timeline-scroller").scrollTop).toBeGreaterThan(3_000);
   });
 
   it("draws none of the IRC formatting codes a services reply arrives with", () => {

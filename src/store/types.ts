@@ -116,11 +116,16 @@ export interface AppState {
 
   // View.
   views: Record<ViewId, ChatView>;
-  /** Scroller offset per pane, restored when the view regains focus. Two views
-   * on one channel scroll independently, which is the whole point of the
-   * split. Not on `ChatView`: this is written every scroll frame, and a write
-   * there re-renders everything subscribed to the view. Read via `getState`. */
-  viewScroll: Record<ViewId, number>;
+  /** Where each pane is reading, as the id of the timeline row at the top of
+   * its screen, or `null` for one following the live edge. Two views on one
+   * channel read independently, which is the whole point of the split.
+   *
+   * A row rather than an offset because a pane is rebuilt whenever the layout
+   * changes shape (#308) and comes back a different width, where the same
+   * number of pixels is a different message — #307. Not on `ChatView`: this is
+   * written every scroll frame, and a write there re-renders everything
+   * subscribed to the view. Read via `getState`. */
+  viewAnchor: Record<ViewId, string | null>;
   /** Depth-first pane order, derived from `layout`. Focus movement and anything
    * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];

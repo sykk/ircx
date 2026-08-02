@@ -73,7 +73,7 @@ export interface AppActions {
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   clearUnreadMarker: (key: TargetKey) => void;
 
-  setViewScroll: (view: ViewId, position: number) => void;
+  setViewAnchor: (view: ViewId, row: string | null) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
   setViewRaw: (view: ViewId, raw: boolean) => void;
 
@@ -143,7 +143,7 @@ const initialState: AppState = {
   rawLog: {},
   channelList: {},
   views: {},
-  viewScroll: {},
+  viewAnchor: {},
   viewOrder: [],
   activeViewId: null,
   layout: null,
@@ -224,10 +224,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (id) get().setViewRaw(id, raw);
   },
 
-  setViewScroll: (view, position) =>
+  setViewAnchor: (view, row) =>
     set((s) => {
-      if (!s.views[view] || s.viewScroll[view] === position) return {};
-      return { viewScroll: { ...s.viewScroll, [view]: position } };
+      if (!s.views[view] || s.viewAnchor[view] === row) return {};
+      return { viewAnchor: { ...s.viewAnchor, [view]: row } };
     }),
 
   setViewSelectedUser: (view, nick) =>
@@ -266,7 +266,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (!layout) return {};
 
       const { [view]: _closed, ...views } = s.views;
-      const { [view]: _scrolled, ...viewScroll } = s.viewScroll;
+      const { [view]: _read, ...viewAnchor } = s.viewAnchor;
       // Otherwise a later pane handed the same id would open with the closed
       // pane's roster hidden.
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
@@ -274,7 +274,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return {
         layout,
         views,
-        viewScroll,
+        viewAnchor,
         rosterHidden,
         viewOrder: paneOrder(layout),
         activeViewId:
@@ -476,7 +476,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   // only thing open.
   const survivor = showing.length === s.viewOrder.length ? showing[0] : undefined;
   const views = { ...s.views };
-  const viewScroll = { ...s.viewScroll };
+  const viewAnchor = { ...s.viewAnchor };
   const rosterHidden = { ...s.rosterHidden };
   let layout = s.layout;
 
@@ -486,21 +486,21 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     if (!left) continue;
     layout = left;
     delete views[id];
-    delete viewScroll[id];
+    delete viewAnchor[id];
     delete rosterHidden[id];
   }
 
   const kept = survivor === undefined ? undefined : views[survivor];
   if (survivor !== undefined && kept !== undefined) {
     views[survivor] = { ...kept, network: "", target: "", selectedUser: null, raw: false };
-    viewScroll[survivor] = 0;
+    viewAnchor[survivor] = null;
   }
 
   const viewOrder = paneOrder(layout);
   return {
     layout,
     views,
-    viewScroll,
+    viewAnchor,
     rosterHidden,
     viewOrder,
     activeViewId:
@@ -537,7 +537,7 @@ function newView(network: string, target: string): ChatView {
 /** Retargeting resets the view's own position — the scroll and the inspector
  * belonged to the conversation it was showing, not to the pane. */
 function retarget(
-  s: Pick<AppState, "views" | "viewScroll">,
+  s: Pick<AppState, "views" | "viewAnchor">,
   id: ViewId,
   network: string,
   target: string,
@@ -550,7 +550,7 @@ function retarget(
       ...s.views,
       [id]: { ...view, network, target, selectedUser: null, raw: false },
     },
-    viewScroll: { ...s.viewScroll, [id]: 0 },
+    viewAnchor: { ...s.viewAnchor, [id]: null },
   };
 }
 
@@ -583,9 +583,9 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
             ),
           }
         : s.views;
-      const viewScroll = stale.length
-        ? { ...s.viewScroll, ...Object.fromEntries(stale.map((v) => [v.id, 0])) }
-        : s.viewScroll;
+      const viewAnchor = stale.length
+        ? { ...s.viewAnchor, ...Object.fromEntries(stale.map((v) => [v.id, null])) }
+        : s.viewAnchor;
 
       return {
         networks,
@@ -595,7 +595,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         timelines: dropByNetwork(s.timelines, event.network),
         members: dropByNetwork(s.members, event.network),
         views,
-        viewScroll,
+        viewAnchor,
       };
     }
 

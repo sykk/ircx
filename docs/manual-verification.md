@@ -412,6 +412,40 @@ is whether it looks like one conversation or like two things sharing a box.
   once, each re-rendering as members come and go. Both end-to-end runs split
   panes on quiet channels, so nothing has drawn two busy rosters together.
 
+## Where a pane is reading, across a split
+
+A pane is rebuilt whenever the layout changes shape (#308), so the position only
+survives in the store. Two rounds found two different ways it did not, and both
+are worth knowing before touching `Timeline`'s restore.
+
+**A pane at the live edge** recorded the offset it happened to sit at, so it came
+back that many pixels down a narrower pane, which was near the top — #305, found
+2026-08-01. It records `null` for following now.
+
+**A pane reading history** recorded an offset that meant nothing at the new
+width, and the restore then overwrote the stored position with the top of the
+channel — #307, found 2026-08-02. Walked on a 300-message channel parked 45% of
+the way down:
+
+```text
+parked:       scrollTop 6407, top of the screen reading "line 129 of the backlog"
+after split:  scrollTop 0 of 13609, reading "line 0", the stored position now 0
+```
+
+It records the row at the top of the screen now, and comes back to it: the same
+walk reads `line 129 of the backlog` at `scrollTop 6376 of 13993`.
+
+**What no test covers, and why.** The restore is re-asserted every render until
+the reader takes the pane over with a wheel, a pointer or a key. That is not
+belt and braces: the virtualiser goes on adjusting the scroller as it measures
+rows for real, and it walked a restored pane back to the top *after* it had
+landed. Traced by hooking `Element.prototype.scrollTo` — the restore put the pane
+at 5980, and a later `scrollWithAdjustments` inside the virtualiser called
+`scrollTo({top: 0})` on the same element. jsdom measures nothing, so that
+settling never happens there and no test can reproduce the race. What the tests
+hold is that the row is recorded and comes back; that it *stays* has only been
+watched.
+
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom

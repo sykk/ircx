@@ -61,10 +61,11 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const [flashId, setFlashId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Read once: after the restore the scroller owns the position, and reading it
-  // as a subscription would fight every scroll event with a stale value.
-  const restoreTo = useRef(useAppStore.getState().viewScroll[view] ?? 0);
-  const followingRef = useRef(restoreTo.current === 0);
+  // Read once: from the restore onwards the scroller owns the position, and
+  // reading it as a subscription would fight every scroll event with a stale
+  // value. Cleared when the pane is back where it was and the reader has it.
+  const restoreTo = useRef(useAppStore.getState().viewAnchor[view] ?? null);
+  const followingRef = useRef(restoreTo.current === null);
 
   const { messages, unreadFrom } = timeline;
 
@@ -119,14 +120,33 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     }
   }, [messages, rows.length, virtualizer]);
 
-  // Deferred until there is something to scroll: an empty scroller clamps any
-  // offset back to zero and the position would be lost.
+  // Through the virtualiser rather than by assigning `scrollTop`: an offset is
+  // only a place at the width it was measured at, and a rebuilt pane is a
+  // different width (#307).
+  //
+  // Re-asserted every render until the reader takes over, rather than done once.
+  // A pane is rebuilt before it is laid out and before its archive has been read
+  // back, so the first attempt often has no row to scroll to or no room to
+  // scroll in; and even after it lands, the virtualiser goes on adjusting the
+  // scroller as it measures rows for real, which walks the pane back to the top.
+  // Landing is therefore not the end of it. Once the row is where it should be
+  // this does nothing, so the loop settles as soon as the measurements do.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el || restoreTo.current === 0 || rows.length === 0) return;
-    el.scrollTop = restoreTo.current;
-    restoreTo.current = 0;
-  }, [rows.length]);
+    if (restoreTo.current === null || !el || el.clientHeight === 0) return;
+    const index = rows.findIndex((row) => row.id === restoreTo.current);
+    if (index === -1) return;
+    const target = virtualizer.getOffsetForIndex(index, "start")?.[0];
+    if (target !== undefined && Math.abs(el.scrollTop - target) <= 1) return;
+    virtualizer.scrollToIndex(index, { align: "start" });
+  });
+
+  /** The reader has taken the pane over, so stop putting it back. Anything that
+   * moves a scroller by hand — a wheel, a drag of the bar, a key — rather than
+   * `scroll` itself, which the restore also raises. */
+  const takeOver = useCallback(() => {
+    restoreTo.current = null;
+  }, []);
 
   const loadOlder = useCallback(async () => {
     const key = targetKey(network, target);
@@ -168,16 +188,29 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // A pane waiting to be put back is at the top because nothing has moved it
+    // yet, not because anybody read their way there. Recording that would
+    // overwrite the row it is being put back to, which is how the position used
+    // to be lost rather than merely missed (#307).
+    if (restoreTo.current !== null) return;
     const following = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
     followingRef.current = following;
-    // A pane at the live edge is not at an offset — the offset was measured at
-    // this width, and a split hands the pane a narrower one where the same
-    // number of pixels is near the top. Zero is what the store already means by
-    // following, so a pane that is rebuilt comes back to the newest message
-    // instead of to wherever its old offset now falls.
-    useAppStore.getState().setViewScroll(view, following ? 0 : el.scrollTop);
+    // The row at the top of the screen, not the offset it happens to sit at: a
+    // rebuilt pane comes back a different width, where the same offset is a
+    // different message. A pane at the live edge has no row to name — it wants
+    // whatever is newest, which is what `null` says.
+    //
+    // Off the measurement cache rather than off `getVirtualItems`, which
+    // reports the window last rendered: the virtualiser and this handler both
+    // answer the same scroll event, and the one that runs first sees the range
+    // from before it. Offsets are measured from the top of the scroller, the
+    // head included, so `scrollTop` is the right question to ask.
+    const top = following ? undefined : virtualizer.getVirtualItemForOffset(el.scrollTop);
+    useAppStore
+      .getState()
+      .setViewAnchor(view, top === undefined ? null : (rows[top.index]?.id ?? null));
     if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder, view]);
+  }, [loadOlder, view, rows, virtualizer]);
 
   const jump = useCallback(
     (msgid: string) => {
@@ -223,6 +256,9 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         <div
           ref={scrollRef}
           onScroll={onScroll}
+          onWheel={takeOver}
+          onPointerDown={takeOver}
+          onKeyDown={takeOver}
           data-testid="timeline-scroller"
           className="h-full overflow-x-hidden overflow-y-auto"
           style={{ overflowAnchor: "none" }}

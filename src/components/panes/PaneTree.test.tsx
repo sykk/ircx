@@ -38,6 +38,14 @@ beforeAll(() => {
       return this.hasAttribute("data-index") ? ESTIMATED_ROW_PX : 600;
     },
   });
+  // The padding box is the border box here, nothing having a border or a
+  // scrollbar. A zero clientHeight reads as a pane that has not been laid out.
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.offsetHeight;
+    },
+  });
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
     get(this: HTMLElement) {
@@ -107,36 +115,72 @@ describe("PaneTree", () => {
     expect(screen.getAllByLabelText("Message #ctf-ops")).toHaveLength(2);
   });
 
-  it("gives two panes on one channel their own scroll positions", async () => {
+  it("gives two panes on one channel their own reading positions", async () => {
     const [first, second] = split("row");
-    const store = useAppStore.getState();
-    act(() => {
-      store.setViewScroll(first, 1_200);
-      store.setViewScroll(second, 40);
-    });
-
-    render(<PaneTree />);
-    await settle();
-    const scrollers = screen.getAllByTestId("timeline-scroller");
-
-    expect(scrollers[0]!.scrollTop).toBe(1_200);
-    expect(scrollers[1]!.scrollTop).toBe(40);
-  });
-
-  it("does not move the other pane when one is scrolled", async () => {
-    const [first, second] = split("row");
-    act(() => useAppStore.getState().setViewScroll(second, 40));
     render(<PaneTree />);
     await settle();
     const scrollers = screen.getAllByTestId("timeline-scroller");
 
     scrollers[0]!.scrollTop = 900;
     fireEvent.scroll(scrollers[0]!);
+    scrollers[1]!.scrollTop = 4_000;
+    fireEvent.scroll(scrollers[1]!);
 
-    const { viewScroll } = useAppStore.getState();
-    expect(viewScroll[first]).toBe(900);
-    expect(viewScroll[second]).toBe(40);
-    expect(scrollers[1]!.scrollTop).toBe(40);
+    const { viewAnchor } = useAppStore.getState();
+    expect(viewAnchor[first]).toBeTruthy();
+    expect(viewAnchor[second]).toBeTruthy();
+    expect(viewAnchor[first]).not.toBe(viewAnchor[second]);
+  });
+
+  it("does not move the other pane when one is scrolled", async () => {
+    const [first, second] = split("row");
+    render(<PaneTree />);
+    await settle();
+    const scrollers = screen.getAllByTestId("timeline-scroller");
+
+    scrollers[1]!.scrollTop = 4_000;
+    fireEvent.scroll(scrollers[1]!);
+    const parked = useAppStore.getState().viewAnchor[second];
+
+    scrollers[0]!.scrollTop = 900;
+    fireEvent.scroll(scrollers[0]!);
+
+    const { viewAnchor } = useAppStore.getState();
+    expect(viewAnchor[first]).not.toBe(parked);
+    expect(viewAnchor[second]).toBe(parked);
+    expect(scrollers[1]!.scrollTop).toBe(4_000);
+  });
+
+  /** #307. A split rebuilds the pane, so the position only survives if the
+   * store carries it — and it used to be overwritten with the top of the
+   * channel on the way back. */
+  it("brings a pane back to the row it was reading after it is rebuilt", async () => {
+    const [first] = split("row");
+    const { unmount } = render(<PaneTree />);
+    await settle();
+
+    const scroller = screen.getAllByTestId("timeline-scroller")[0]!;
+    scroller.scrollTop = 4_000;
+    fireEvent.scroll(scroller);
+    const parked = useAppStore.getState().viewAnchor[first];
+    expect(parked).toBeTruthy();
+
+    unmount();
+    // The restore goes through the virtualiser, which scrolls by `scrollTo`, and
+    // jsdom has none. Put back after the render that consumes the anchor.
+    const withoutScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = function (this: HTMLElement, options: ScrollToOptions | number) {
+      this.scrollTop = typeof options === "number" ? options : (options.top ?? 0);
+    } as HTMLElement["scrollTo"];
+    try {
+      render(<PaneTree />);
+      await settle();
+    } finally {
+      HTMLElement.prototype.scrollTo = withoutScrollTo;
+    }
+
+    expect(useAppStore.getState().viewAnchor[first]).toBe(parked);
+    expect(screen.getAllByTestId("timeline-scroller")[0]!.scrollTop).toBeGreaterThan(3_000);
   });
 
   it("marks the focused pane with a rule rather than a border round it", async () => {

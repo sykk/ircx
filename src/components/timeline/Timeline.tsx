@@ -168,8 +168,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
-    useAppStore.getState().setViewScroll(view, el.scrollTop);
+    const following = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
+    followingRef.current = following;
+    // A pane at the live edge is not at an offset — the offset was measured at
+    // this width, and a split hands the pane a narrower one where the same
+    // number of pixels is near the top. Zero is what the store already means by
+    // following, so a pane that is rebuilt comes back to the newest message
+    // instead of to wherever its old offset now falls.
+    useAppStore.getState().setViewScroll(view, following ? 0 : el.scrollTop);
     if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
   }, [loadOlder, view]);
 

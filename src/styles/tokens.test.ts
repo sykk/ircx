@@ -137,6 +137,30 @@ describe.each(THEMES)("$id timeline layout", ({ id, css }) => {
   });
 });
 
+// A queued message is faded rather than annotated, so the fraction is the only
+// thing standing between the reader and the words. It is held to the body floor
+// and not the disabled one: a disabled control is exempt from AA deliberately,
+// and this is prose. The fraction was 0.55 inline in MessageRow until #337,
+// which is the dark theme's disabled value and put the light theme at 3.65:1.
+describe.each(THEMES)("$id pending messages", ({ css }) => {
+  const all = readVars(css, "");
+  const opacity = readNumber(css, "pending-opacity");
+
+  /** The app's background from global.css, which is the only surface a queued
+   * message is drawn on. The two a row can give itself are both out of reach
+   * while it is pending: --mention-bg needs a highlight, and a line we sent is
+   * not addressed to us, and --surface-active is the flash a jump leaves, which
+   * only a reply quote starts and only by msgid — the thing a message has not
+   * got yet, which is why its reply control is hidden too. */
+  it("stays readable on --surface-base", () => {
+    const text = all["text-primary"];
+    const behind = all["surface-base"];
+    if (!text || !behind) throw new Error("missing --text-primary or --surface-base");
+
+    expect(contrast(flatten(text, behind, opacity), behind)).toBeGreaterThanOrEqual(AA_BODY);
+  });
+});
+
 describe.each(THEMES)("$id disabled controls", ({ css }) => {
   const all = readVars(css, "");
   const opacity = readNumber(css, "disabled-opacity");

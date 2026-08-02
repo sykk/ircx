@@ -69,7 +69,7 @@ export function MessageRow({
         // The rule marking a mention is the block's spine, which the block
         // tints. A second one inset here sat a column away from it and said the
         // same thing twice.
-        opacity: message.delivery.state === "pending" ? 0.55 : undefined,
+        opacity: message.delivery.state === "pending" ? "var(--pending-opacity)" : undefined,
       }}
     >
       {message.replyTo && !quotedAbove && (

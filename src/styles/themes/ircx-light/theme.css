@@ -59,6 +59,11 @@
    * black. See the note in ircx-dark/theme.css for what the floor is for. */
   --disabled-opacity: 0.65;
 
+  /* Higher than the dark theme's for the same reason, against the AA floor
+   * rather than the disabled one. 0.55 was hardcoded in MessageRow until #337
+   * and put a queued message at 3.65:1 here. */
+  --pending-opacity: 0.65;
+
   /* Layout, not colour, so both built-in themes hold the same numbers. What
    * each one is for is written out in ircx-dark/theme.css; a theme that wants
    * study 05's compact or read density changes the first three. */

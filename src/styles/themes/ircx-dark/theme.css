@@ -85,6 +85,14 @@
    * result. tokens.test.ts asserts the floor. */
   --disabled-opacity: 0.55;
 
+  /* A message still queued for the socket. It has to hold --text-primary above
+   * the AA body floor over the surfaces a row is drawn on, which is a stricter
+   * job than --disabled-opacity's: a disabled control is exempt from AA on
+   * purpose, and this is prose the reader is meant to read. #334 is why it has
+   * to be legible at all — the state used to last an echo round trip and now
+   * lasts as long as the rate limiter holds the line. */
+  --pending-opacity: 0.55;
+
   /* How tightly the timeline packs. readability/READABILITY.md study 05 asks
    * for three of these — compact for log reading, comfortable for being in the
    * conversation, read for nine hours of backlog — and a density is these

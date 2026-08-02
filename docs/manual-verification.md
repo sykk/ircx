@@ -309,11 +309,12 @@ cannot be typed into by accident.
 
 What is still open:
 
-- **The topic path.** `##test` has no topic set, so no run has seen one. Core is
-  covered — `session.rs` feeds `332` and asserts what the header is told — so
-  what is left is narrower: that the header draws a topic it is given, and that
-  a `/topic` typed by the user comes back from the server changed. Whoever is
-  next in a channel that has one should look.
+- **The topic path is closed.** Both halves it named are done, and neither is
+  here any more: the header drawing a topic it is given was watched on
+  2026-07-31 and is written up under *The topic of a channel you have joined*,
+  and a `/topic` typed by the user is driven against a real server by
+  `a_topic_typed_here_comes_back_changed` in `crates/ircx-core/tests/ergo.rs`.
+  What that run found is recorded in the same section.
 - **Independent scrolling between split panes** is **verified** by the third run
   on 2026-08-01, which is the first one to split anything. Two panes on one
   channel, one sitting at the top of the history while the other was at the
@@ -1216,6 +1217,33 @@ Set by phrack on 2026-07-31 at 13:54 UTC
 The nick rather than a mask is deliberate: `crates/ircx-core/tests/ergo.rs`
 caught this printing `phrack!~u@f6u3beryjfghu.irc` earlier the same day, because
 ergo sends the whole mask in `333` where Libera sends a bare nick.
+
+**Changing it is verified too**, on 2026-08-02, and by a test rather than a
+watch: `a_topic_typed_here_comes_back_changed` in the same file types `/topic`
+and reads back what the server says.
+
+```text
+PASS  topic changed here: ircx-drive set the topic of #ircx-topic to mind the bots
+PASS  topic held on the channel: mind the bots (set by ircx-drive)
+PASS  topic refused: That needs channel operator status in #ircx-drive
+```
+
+Two things it settled that were guesses beforehand.
+
+**Joining and changing are different code paths, and only one had been seen.**
+A `332` on join lands in `on_topic` and reads *The topic of X is: …*; a change
+reads the server's own `TOPIC` back and lands in `handle_topic`, which names who
+did it. Asserting on the topic text alone would have passed on either, so the
+assertion is on the wording as well.
+
+**Every channel ergo makes is `+t`.** The first attempt at this typed `/topic`
+in the channel the run already used, where the client is not an operator, and
+the server answered `482` — so nothing came back and the step read as the change
+never arriving. It is the same shape that made the first two attempts at the
+lock icon measure the wrong thing. The test now opens its own channel for the
+case where the server says yes, and keeps the `482` as a claim of its own:
+`numeric.rs` turns it into *That needs channel operator status in #ircx-drive*,
+so a topic somebody may not set says why instead of doing nothing.
 
 ## Opening a link
 

@@ -71,9 +71,29 @@ how it is found again.
 That makes the restore answerable. A conversation the client no longer holds —
 closed before quitting, or on a network since deleted — takes its pane with it,
 and the split around it collapses the way closing a pane collapses one. A stored
-tree with nothing left in it opens no panes at all, which is where a first launch
-starts anyway. Because the question is which conversations still exist, the
-restore waits for the opening snapshot rather than running on mount.
+tree with nothing left in it restores no panes at all, which is where a first
+launch starts anyway. Because the question is which conversations still exist,
+the restore waits for the opening snapshot rather than running on mount.
+
+**A window left with no pane takes the first conversation there is** (#343). The
+restore has the window first — what the last run left outranks a conversation
+that merely exists — and this is what happens when it comes back with nothing,
+which every first launch does. It is armed rather than checked, because a first
+launch has no conversations at the moment the restore runs: onboarding saves a
+network, the connection begins, and the autojoin arrives seconds later.
+
+Until then a pane was only ever opened by a person, so a profile that connected
+and joined its channels on its own read "No conversation open" with those
+channels listed beside it. The palette worked around it for one route — a
+`/join` typed there opens what it joined — and a channel joined by
+`connect_commands` had no such route.
+
+Which conversation is the sidebar's own order, channels before queries and both
+by name: the row the eye is already going to, rather than whichever join the
+server acknowledged first. It fires once. A window that holds a pane is
+somebody's, including the one this opened, and the last pane cannot be closed —
+so the empty window is the state before the first pane of a run and nothing
+returns to it.
 
 What is not written down is where a pane was looking: the scroll position, the
 open inspector, and which pane had focus. The first pane in reading order takes

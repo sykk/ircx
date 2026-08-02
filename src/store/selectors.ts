@@ -148,6 +148,29 @@ export function selectQueriesFor(s: AppState, network: string): Query[] {
   return Object.values(s.queries).filter((q) => q.network === network);
 }
 
+/**
+ * The conversation at the top of the sidebar, which is the one an empty window
+ * opens.
+ *
+ * Reading order rather than arrival order: the channels of every network before
+ * any query and both by name, which is how `SidebarNetworks` draws them. A
+ * window that opens itself should land on the row the eye is already going to,
+ * and an autojoin arrives in whatever order the server acknowledges it.
+ */
+export function selectFirstConversation(s: AppState): ActiveTarget | null {
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+
+  for (const network of s.networkOrder) {
+    const first = selectChannelsFor(s, network).sort((a, b) => byName(a.name, b.name))[0];
+    if (first) return { network, target: first.name };
+  }
+  for (const network of s.networkOrder) {
+    const first = selectQueriesFor(s, network).sort((a, b) => byName(a.nick, b.nick))[0];
+    if (first) return { network, target: first.nick };
+  }
+  return null;
+}
+
 
 /** A character no nick can contain. `\w` and RFC 2812's `[]\^{}|-` are what one
  * can, so the boundary class is everything outside that set. */

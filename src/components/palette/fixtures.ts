@@ -104,6 +104,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     viewAnchor: {},
     consoleInput: {},
     rawAnchor: {},
+    composerError: {},
     viewOrder: [],
     activeViewId: null,
     layout: null,

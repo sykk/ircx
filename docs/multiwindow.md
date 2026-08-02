@@ -159,7 +159,15 @@ it left. That is left as it is, because a flood long enough to move the index
 has already rolled the line off the front of the buffer, and no anchor recovers
 a line that is gone.
 
+`composerError` is the third and was the least obvious, because half of what it
+protects already worked. A refused line is given back to the box, and the box
+round-trips through the backend draft, so a rebuild returned the line and lost
+only the reason — leaving the reader their message back with nothing saying why
+it had not gone, which is the state #299 exists to prevent.
+
 The cost of keying by `ViewId` is that a pane's entry has to be let go of
 everywhere a pane is: closed, pointed at another conversation, taken by the
 conversation it was showing, or blanked when its network is deleted. A pane
 handed the same id later would otherwise open holding what the last one did.
+Each of the three has a store test at each of those points, which is what caught
+`networkRemoved` being missed the first time.

@@ -862,3 +862,52 @@ describe("where a pane is reading the protocol log", () => {
     expect(store().rawAnchor[view]).toBeUndefined();
   });
 });
+
+/** The last of the three pane-scoped maps, released at the same points. #308. */
+describe("why a pane's last line was refused", () => {
+  const store = () => useAppStore.getState();
+
+  beforeEach(() => {
+    resetStore();
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+  });
+
+  it("is let go of when the pane is pointed at another conversation", () => {
+    const view = store().activeViewId!;
+    store().setComposerError(view, "Cannot send to channel");
+
+    store().setActive({ network: "libera", target: SERVER_TARGET });
+
+    expect(store().composerError[view]).toBeUndefined();
+  });
+
+  it("is let go of when the pane that earned it closes", () => {
+    store().splitActiveView("row");
+    const opened = store().activeViewId!;
+    store().setComposerError(opened, "Cannot send to channel");
+
+    store().closeView(opened);
+
+    expect(store().composerError[opened]).toBeUndefined();
+  });
+
+  it("is let go of when the conversation is closed under the pane", () => {
+    const view = store().activeViewId!;
+    store().splitActiveView("row");
+    store().setComposerError(view, "Cannot send to channel");
+
+    store().applyEvent({ type: "channelRemoved", network: "libera", name: "#ctf-ops" });
+
+    expect(store().composerError[view]).toBeUndefined();
+  });
+
+  it("is let go of when the network goes away", () => {
+    const view = store().activeViewId!;
+    store().setComposerError(view, "Cannot send to channel");
+
+    store().applyEvent({ type: "networkRemoved", network: "libera" });
+
+    expect(store().composerError[view]).toBeUndefined();
+  });
+});

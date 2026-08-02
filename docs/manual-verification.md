@@ -1624,10 +1624,42 @@ the things the dev server has no backend for.
 blank lines dropped, a CR from another window's clipboard taken off. What it
 cannot say is what a server does with the burst that comes out of a paste.
 
+**It is walked in the application** on 2026-08-01 against local `ergo`, in
+three parts, and read back with `CHATHISTORY` from a probe client rather than
+off the sender's own screen:
+
+```text
+1) len=4    test                             typed, Shift+Enter between them
+2) len=4    test
+3) len=24   first paragraph line one         pasted, CRLF, blank line between
+4) len=24   first paragraph line two
+5) len=30   second paragraph after a blank
+6) len=16   short first line                 pasted, a 704-char middle line
+7) len=466  xxx…
+8) len=238  xxx… END
+9) len=15   short last line
+```
+
+Each group carries one timestamp to the millisecond, so each is one input
+leaving as several messages rather than several submits. The blank line is not
+a message, and no `\r` reached a trailing parameter.
+
+The long line is the part worth keeping. 466 + 238 is 704 with nothing lost or
+doubled, and the 466 was predicted before it was sent: `wire_budget` derives it
+from the mask the server prepends, which for `syk__!~u@4dy55fkndsc9u.irc` in
+`#test2` is 28 bytes of prefix and 18 of envelope against 512. So the wire
+split still runs inside each line, which is where the old single-line splitter
+and the per-line split had to agree.
+
+The screen matched the wire in order and content, which is the half no test
+reaches: the first piece goes back to the composer to draw and the rest arrive
+as ordinary messages, so the two paths can disagree without a server noticing.
+
 `ircx-net`'s limiter paces the outgoing lines at five then one every 500 ms, so
 twenty pasted lines take about ten seconds to leave. **Not verified:** that a
-real network takes them at that rate without treating it as a flood. Paste
-twenty lines into a channel on Libera and watch for a `NOTICE` about excess
-flood or a kill; the pacing figures are in `crates/ircx-net/src/rate_limit.rs`
-and this is the first change that sends more than a handful of lines from one
-keystroke.
+real network takes them at that rate without treating it as a flood. Nine
+messages left in two bursts here without ergo objecting, which is well under
+what a limiter is for. Paste twenty lines into a channel on Libera and watch
+for a `NOTICE` about excess flood or a kill; the pacing figures are in
+`crates/ircx-net/src/rate_limit.rs` and this is the first change that sends
+more than a handful of lines from one keystroke.

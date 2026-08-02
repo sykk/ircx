@@ -822,3 +822,43 @@ describe("what a console pane holds", () => {
     expect(store().consoleInput[view]).toBeUndefined();
   });
 });
+
+/** The same rule as `consoleInput`, for the other thing a console pane draws.
+ * See #315. */
+describe("where a pane is reading the protocol log", () => {
+  const store = () => useAppStore.getState();
+
+  beforeEach(() => {
+    resetStore();
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    store().setActive({ network: "libera", target: SERVER_TARGET });
+  });
+
+  it("is let go of when the pane is pointed at a conversation", () => {
+    const view = store().activeViewId!;
+    store().setRawAnchor(view, 400);
+
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+
+    expect(store().rawAnchor[view]).toBeUndefined();
+  });
+
+  it("is let go of when the pane reading it closes", () => {
+    store().splitActiveView("row");
+    const opened = store().activeViewId!;
+    store().setRawAnchor(opened, 400);
+
+    store().closeView(opened);
+
+    expect(store().rawAnchor[opened]).toBeUndefined();
+  });
+
+  it("is let go of when the log's network goes away", () => {
+    const view = store().activeViewId!;
+    store().setRawAnchor(view, 400);
+
+    store().applyEvent({ type: "networkRemoved", network: "libera" });
+
+    expect(store().rawAnchor[view]).toBeUndefined();
+  });
+});

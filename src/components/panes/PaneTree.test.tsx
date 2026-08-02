@@ -81,6 +81,7 @@ beforeEach(() => {
     activeViewId: null,
     layout: null,
     rosterHidden: {},
+    rawAnchor: {},
   });
   useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
 });
@@ -453,5 +454,99 @@ describe("resizing a split", () => {
         layout.children[0].type === "split" &&
         layout.children[0].ratio,
     ).toBeCloseTo(0.75);
+  });
+});
+
+/**
+ * #315, the other half of #308. A console pane showing the protocol log kept
+ * its follow-the-tail flag in a ref and its position in the DOM, so a split
+ * anywhere in the window returned a reader who had scrolled back to the live
+ * tail.
+ */
+describe("a pane reading the protocol log", () => {
+  const store = () => useAppStore.getState();
+  const lines = Array.from(
+    { length: 1_200 },
+    (_, n) => `<< :platinum.libera.chat 322 syk ##channel${n} 1 :a topic`,
+  );
+
+  /** One console pane on `libera` with the log open, and a buffer long enough
+   * to have somewhere to scroll to. */
+  function openLog(): string {
+    act(() => {
+      useAppStore.setState({ rawLog: { libera: lines } });
+      store().openConsole("libera", true);
+    });
+    return store().activeViewId!;
+  }
+
+  function logs(): HTMLElement[] {
+    return screen.getAllByRole("log", { name: "Raw protocol log" });
+  }
+
+  it("parks where it is reading, and lets the tail go unparked", async () => {
+    const view = openLog();
+    render(<PaneTree />);
+    await settle();
+
+    logs()[0]!.scrollTop = 900;
+    fireEvent.scroll(logs()[0]!);
+    expect(store().rawAnchor[view]).toBeGreaterThan(0);
+
+    // All the way down is not a line to come back to, it is the end of the log.
+    logs()[0]!.scrollTop = logs()[0]!.scrollHeight;
+    fireEvent.scroll(logs()[0]!);
+    expect(store().rawAnchor[view]).toBe(null);
+  });
+
+  it("comes back to the line it was reading after a split rebuilds it", async () => {
+    const view = openLog();
+    render(<PaneTree />);
+    await settle();
+
+    logs()[0]!.scrollTop = 900;
+    fireEvent.scroll(logs()[0]!);
+    const parked = store().rawAnchor[view];
+    expect(parked).toBeGreaterThan(0);
+
+    // The restore goes through the virtualiser, which scrolls by `scrollTo`,
+    // and jsdom has none — the same shim the timeline's rebuild test needs.
+    const withoutScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = function (this: HTMLElement, options: ScrollToOptions | number) {
+      this.scrollTop = typeof options === "number" ? options : (options.top ?? 0);
+    } as HTMLElement["scrollTo"];
+    try {
+      act(() => store().splitActiveView("row"));
+      await settle();
+    } finally {
+      HTMLElement.prototype.scrollTo = withoutScrollTo;
+    }
+
+    // `newView` opens the second pane on the console rather than on the log,
+    // so the window holds one of these either way; the one under test is the
+    // pane that was rebuilt around it.
+    expect(store().rawAnchor[view]).toBe(parked);
+    expect(logs()[0]!.scrollTop).toBeGreaterThan(500);
+  });
+
+  /** Two logs on one network read independently, the way two panes on one
+   * channel do — the buffer is per network, the place in it is per pane. */
+  it("gives two panes on one log their own places in it", async () => {
+    const first = openLog();
+    act(() => store().splitActiveView("row"));
+    const second = store().activeViewId!;
+    act(() => store().setViewRaw(second, true));
+    render(<PaneTree />);
+    await settle();
+
+    expect(logs()).toHaveLength(2);
+    logs()[0]!.scrollTop = 400;
+    fireEvent.scroll(logs()[0]!);
+    logs()[1]!.scrollTop = 3_000;
+    fireEvent.scroll(logs()[1]!);
+
+    expect(store().rawAnchor[first]).toBeGreaterThan(0);
+    expect(store().rawAnchor[second]).toBeGreaterThan(store().rawAnchor[first]!);
+    expect(logs()[0]!.scrollTop).toBe(400);
   });
 });

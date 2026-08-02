@@ -35,7 +35,7 @@ export function ServerConsole({ view, network }: { view: ViewId | null; network:
         }}
       />
       <div className="min-h-0 flex-1">
-        {raw ? <RawLog network={network} /> : <Timeline view={view} />}
+        {raw ? <RawLog view={view} network={network} /> : <Timeline view={view} />}
       </div>
       <ConsoleComposer view={view} network={network} name={details.name} />
     </>

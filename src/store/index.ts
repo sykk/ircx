@@ -80,6 +80,8 @@ export interface AppActions {
   /** Holds one console pane's command box. Both fields together: sending clears
    * the text and the refusal at once, and a refusal puts the text back. */
   setConsoleInput: (view: ViewId, input: ConsoleInput) => void;
+  /** Parks where one pane is reading the protocol log, or `null` for the tail. */
+  setRawAnchor: (view: ViewId, line: number | null) => void;
 
   /** Opens a second pane on the focused view's target and focuses it. */
   splitActiveView: (direction: SplitDirection) => void;
@@ -149,6 +151,7 @@ const initialState: AppState = {
   views: {},
   viewAnchor: {},
   consoleInput: {},
+  rawAnchor: {},
   viewOrder: [],
   activeViewId: null,
   layout: null,
@@ -257,6 +260,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { consoleInput: { ...s.consoleInput, [view]: input } };
     }),
 
+  setRawAnchor: (view, line) =>
+    set((s) => {
+      if (!s.views[view] || s.rawAnchor[view] === line) return {};
+      return { rawAnchor: { ...s.rawAnchor, [view]: line } };
+    }),
+
   splitActiveView: (direction) =>
     set((s) => {
       const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
@@ -284,6 +293,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // pane's roster hidden.
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
       const { [view]: _typed, ...consoleInput } = s.consoleInput;
+      const { [view]: _line, ...rawAnchor } = s.rawAnchor;
       const at = s.viewOrder.indexOf(view);
       return {
         layout,
@@ -291,6 +301,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         viewAnchor,
         rosterHidden,
         consoleInput,
+        rawAnchor,
         viewOrder: paneOrder(layout),
         activeViewId:
           s.activeViewId === view
@@ -494,6 +505,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   const viewAnchor = { ...s.viewAnchor };
   const rosterHidden = { ...s.rosterHidden };
   const consoleInput = { ...s.consoleInput };
+  const rawAnchor = { ...s.rawAnchor };
   let layout = s.layout;
 
   for (const id of showing) {
@@ -505,6 +517,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     delete viewAnchor[id];
     delete rosterHidden[id];
     delete consoleInput[id];
+    delete rawAnchor[id];
   }
 
   const kept = survivor === undefined ? undefined : views[survivor];
@@ -512,6 +525,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     views[survivor] = { ...kept, network: "", target: "", selectedUser: null, raw: false };
     viewAnchor[survivor] = null;
     delete consoleInput[survivor];
+    delete rawAnchor[survivor];
   }
 
   const viewOrder = paneOrder(layout);
@@ -521,6 +535,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     viewAnchor,
     rosterHidden,
     consoleInput,
+    rawAnchor,
     viewOrder,
     activeViewId:
       s.activeViewId && viewOrder.includes(s.activeViewId)
@@ -557,7 +572,7 @@ function newView(network: string, target: string): ChatView {
  * any half-typed command belonged to the conversation it was showing, not to
  * the pane. */
 function retarget(
-  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput">,
+  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput" | "rawAnchor">,
   id: ViewId,
   network: string,
   target: string,
@@ -566,6 +581,7 @@ function retarget(
   if (!view) return {};
   if (view.network === network && view.target === target) return {};
   const { [id]: _typed, ...consoleInput } = s.consoleInput;
+  const { [id]: _line, ...rawAnchor } = s.rawAnchor;
   return {
     views: {
       ...s.views,
@@ -573,6 +589,7 @@ function retarget(
     },
     viewAnchor: { ...s.viewAnchor, [id]: null },
     consoleInput,
+    rawAnchor,
   };
 }
 
@@ -609,7 +626,11 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         ? { ...s.viewAnchor, ...Object.fromEntries(stale.map((v) => [v.id, null])) }
         : s.viewAnchor;
       const consoleInput = { ...s.consoleInput };
-      for (const view of stale) delete consoleInput[view.id];
+      const rawAnchor = { ...s.rawAnchor };
+      for (const view of stale) {
+        delete consoleInput[view.id];
+        delete rawAnchor[view.id];
+      }
 
       return {
         networks,
@@ -621,6 +642,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         views,
         viewAnchor,
         consoleInput,
+        rawAnchor,
       };
     }
 

@@ -138,6 +138,18 @@ export interface AppState {
    * lost both — a half-typed command and the reason the last one was refused,
    * which is the loss #299 was filed for. */
   consoleInput: Record<ViewId, ConsoleInput>;
+  /** Where each pane showing the protocol log is reading, as the index of the
+   * line at the top of its screen, or `null` for one following the tail. The
+   * counterpart of `viewAnchor` for the other thing a console pane can draw,
+   * and separate from it so toggling between the two keeps both.
+   *
+   * An index rather than a line, because a line has no id and its text is not
+   * unique — a `PING` recurs. That holds while the buffer only grows; once it
+   * is at `RAW_LOG_CAP` every arrival shifts the indices below it down one, so
+   * a pane rebuilt during a flood comes back further down the log than it left.
+   * Recovering that would need a sequence number the buffer does not keep, and
+   * a flood long enough to matter has already rolled the line out of it. */
+  rawAnchor: Record<ViewId, number | null>;
   /** Depth-first pane order, derived from `layout`. Focus movement and anything
    * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];

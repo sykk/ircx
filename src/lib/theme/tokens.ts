@@ -66,6 +66,10 @@ export const TOKEN_CATALOGUE: Readonly<Record<string, TokenSpec>> = {
   "--text-muted": { group: "Text", kind: "color" },
   "--text-faint": { group: "Text", kind: "color" },
   "--text-inverse": { group: "Text", kind: "color" },
+  /* Sits with the text because that is what it is solved against: the fraction
+   * is the one that keeps --text-primary readable faded over its surface, so
+   * retuning the text colour is what makes this value wrong. */
+  "--pending-opacity": { group: "Text", kind: "number" },
   "--font-smoothing": {
     group: "Text",
     kind: "keyword",

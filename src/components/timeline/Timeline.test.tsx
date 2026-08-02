@@ -908,7 +908,12 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    expect((document.querySelector('[data-msgid="a"]') as HTMLElement).style.opacity).toBe("0.55");
+    // The token rather than a fraction: what the row is dimmed by is the
+    // theme's to say, and the value it resolves to is asserted against the AA
+    // floor in src/styles/tokens.test.ts.
+    expect((document.querySelector('[data-msgid="a"]') as HTMLElement).style.opacity).toBe(
+      "var(--pending-opacity)",
+    );
     expect(screen.getByText("Not sent — Cannot send to channel")).toBeTruthy();
     expect(screen.getByText("Retry")).toBeTruthy();
   });

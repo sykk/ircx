@@ -186,6 +186,39 @@ describe("the server console", () => {
     expect(screen.getByText("/join #channel [key]")).toBeTruthy();
   });
 
+  // One line and no prose, so the arrows have no caret work to do here and
+  // always fetch a command back.
+  describe("recalling a command", () => {
+    async function submit(command: string) {
+      fireEvent.change(commandBox(), { target: { value: command } });
+      await act(async () => {
+        fireEvent.submit(commandBox());
+      });
+    }
+
+    it("steps back through what was typed and forward again", async () => {
+      render(<ChatPane view={TEST_VIEW} />);
+      await submit("/join ##test");
+      await submit("/whois phrack");
+
+      fireEvent.keyDown(commandBox(), { key: "ArrowUp" });
+      expect((commandBox() as HTMLInputElement).value).toBe("/whois phrack");
+      fireEvent.keyDown(commandBox(), { key: "ArrowUp" });
+      expect((commandBox() as HTMLInputElement).value).toBe("/join ##test");
+
+      fireEvent.keyDown(commandBox(), { key: "ArrowDown" });
+      expect((commandBox() as HTMLInputElement).value).toBe("/whois phrack");
+    });
+
+    it("keeps the console's commands apart from a channel's messages", async () => {
+      render(<ChatPane view={TEST_VIEW} />);
+      await submit("/join ##test");
+
+      expect(useAppStore.getState().inputHistory[CONSOLE]).toEqual(["/join ##test"]);
+      expect(useAppStore.getState().inputHistory[targetKey("libera", "##test")]).toBeUndefined();
+    });
+  });
+
   describe("the raw protocol log", () => {
     it("is behind the header toggle, with both directions", () => {
       render(<ChatPane view={TEST_VIEW} />);

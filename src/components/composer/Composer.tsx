@@ -10,6 +10,7 @@ import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
 import { matchCommands, runConnectionCommand } from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
+import { useRecall } from "./recall";
 
 const MAX_HEIGHT_PX = 180;
 const DRAFT_DEBOUNCE_MS = 400;
@@ -27,17 +28,23 @@ export function Composer({ view }: { view: ViewId | null }) {
 function ComposerFor({ network, target }: { network: string; target: string }) {
   const members = useMembers(network, target);
   const replying = useReplyTarget(network, target);
+  const recall = useRecall(network, target);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const completionRef = useRef<Completion | null>(null);
   const caretRef = useRef<number | null>(null);
-  const valueRef = useRef("");
+  const draftRef = useRef("");
   const typingSentAt = useRef(0);
 
+  // A line being looked at is not a draft. While one is in the box the draft
+  // stays what was typed before it, so stepping back through the history and
+  // then leaving the conversation does not throw that away.
+  const draft = recall.pending ?? value;
+
   useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
+    draftRef.current = draft;
+  }, [draft]);
 
   const candidates = useMemo(() => {
     const nicks = members.map((m) => m.nick);
@@ -54,9 +61,9 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     let cancelled = false;
     void ipc
       .getDraft(network, target)
-      .then((draft) => {
-        if (cancelled || !draft) return;
-        setValue((current) => (current === "" ? draft : current));
+      .then((stored) => {
+        if (cancelled || !stored) return;
+        setValue((current) => (current === "" ? stored : current));
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(String(e));
@@ -73,15 +80,15 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    const id = setTimeout(() => void ipc.setDraft(network, target, value), DRAFT_DEBOUNCE_MS);
+    const id = setTimeout(() => void ipc.setDraft(network, target, draft), DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [hydrated, network, target, value]);
+  }, [hydrated, network, target, draft]);
 
   // The debounce above is cancelled by the unmount that a target switch causes,
   // so the last keystrokes only survive if they are flushed here.
   useEffect(() => {
     return () => {
-      if (hydratedRef.current) void ipc.setDraft(network, target, valueRef.current);
+      if (hydratedRef.current) void ipc.setDraft(network, target, draftRef.current);
       if (typingSentAt.current !== 0) void ipc.setTyping(network, target, false);
     };
   }, [network, target]);
@@ -106,6 +113,8 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
   const onChange = (next: string) => {
     setValue(next);
     completionRef.current = null;
+    // Once a recalled line is edited it is being typed, and is the draft.
+    recall.reset();
     if (next === "") {
       stopTyping();
       return;
@@ -124,6 +133,9 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     setError(null);
     completionRef.current = null;
     stopTyping();
+    // Everything submitted is recallable, refusals included: a line the server
+    // would not take is exactly one worth getting back to fix.
+    recall.remember(text);
     void ipc.setDraft(network, target, "");
 
     // A command about the connection is performed here rather than sent: there
@@ -192,6 +204,32 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     if (e.key === "Tab") {
       e.preventDefault();
       complete(e.currentTarget);
+      return;
+    }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      const el = e.currentTarget;
+      const up = e.key === "ArrowUp";
+      // Starting a recall replaces the whole box, so it takes a caret already
+      // at the very edge of the text. Testing the caret rather than counting
+      // newlines is what makes a long line that wraps behave: it has several
+      // rows on screen and no newline in it, and the arrow has to walk through
+      // them the way the reader means it to.
+      //
+      // Once a line has been recalled the box holds history rather than
+      // anything typed, so stepping on through it needs no such caret: the
+      // first edit ends the recall and the guard applies again.
+      const caret = el.selectionStart ?? 0;
+      const atEdge =
+        caret === (el.selectionEnd ?? caret) &&
+        (up ? caret === 0 : caret === el.value.length);
+      if (recall.pending === null && !atEdge) return;
+
+      const line = up ? recall.older(el.value) : recall.newer();
+      if (line === null) return;
+      e.preventDefault();
+      completionRef.current = null;
+      caretRef.current = line.length;
+      setValue(line);
       return;
     }
     if (e.key === "Escape") {

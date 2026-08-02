@@ -105,6 +105,11 @@ export function useReplyTarget(
   );
 }
 
+/** Lines already sent in this conversation, newest first. */
+export function useInputHistory(network: string, target: string): string[] {
+  return useAppStore((s) => s.inputHistory[targetKey(network, target)] ?? EMPTY);
+}
+
 export function selectChannelsFor(s: AppState, network: string): Channel[] {
   return Object.values(s.channels).filter((c) => c.network === network);
 }

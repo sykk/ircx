@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useRecall } from "@/components/composer/recall";
 import { ConsoleHeader } from "@/components/header/ConsoleHeader";
 import { Timeline } from "@/components/timeline/Timeline";
 import { ipc } from "@/lib/ipc";
@@ -45,6 +46,7 @@ export function ServerConsole({ view, network }: { view: ViewId | null; network:
 function ConsoleComposer({ network, name }: { network: string; name: string }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const recall = useRecall(network, SERVER_TARGET);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -52,6 +54,7 @@ function ConsoleComposer({ network, name }: { network: string; name: string }) {
     if (input === "") return;
     setValue("");
     setError(null);
+    recall.remember(input);
 
     // Anything a command has to say arrives as messages on this target, so the
     // timeline above draws it; only the refusal has nowhere else to go.
@@ -81,9 +84,20 @@ function ConsoleComposer({ network, name }: { network: string; name: string }) {
         <span className="font-mono text-[var(--text-faint)]">&gt;</span>
         <input
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => {
+            recall.reset();
+            setValue(event.target.value);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") setError(null);
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            // One line, so there is no caret movement the arrows could be
+            // wanted for here — unlike the composer, they always recall.
+            const line =
+              event.key === "ArrowUp" ? recall.older(value) : recall.newer();
+            if (line === null) return;
+            event.preventDefault();
+            setValue(line);
           }}
           spellCheck={false}
           placeholder="/join #channel"

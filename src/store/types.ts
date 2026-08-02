@@ -86,6 +86,12 @@ export interface AppState {
    * rather than in the composer because it is chosen in the timeline, which is
    * a different tree, and shared by every pane on the same conversation. */
   replyTo: Record<TargetKey, string>;
+  /** Lines already sent in a conversation, newest first, for the composer to
+   * recall. Here for the same reason as `replyTo`: the composer is remounted by
+   * every switch between conversations, and what was typed before the switch has
+   * to still be there after it. Per conversation rather than one list for the
+   * client, so recalling in a channel cannot surface what was said in a query. */
+  inputHistory: Record<TargetKey, string[]>;
   /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
   /** The last `LIST` a network answered, whole. Not `channels`: these are

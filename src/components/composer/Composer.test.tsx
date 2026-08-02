@@ -34,6 +34,7 @@ beforeEach(() => {
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     timelines: {},
     replyTo: {},
+    inputHistory: {},
     members: {
       [KEY]: ["sable", "sableton", "phrack", "nyx"].map((nick) => ({
         nick,
@@ -398,5 +399,203 @@ describe("Composer replying", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel reply" }));
 
     expect(staged()).toBeUndefined();
+  });
+});
+
+/**
+ * IRC cannot amend a message it already delivered, so fixing a typo is getting
+ * the line back and saying it again. What the composer has to get right is when
+ * the arrow fetches a line and when it is still just a caret key.
+ */
+describe("Composer recall", () => {
+  /** Defaults the caret to the edge the key recalls from, which is where the
+   * reader pressing it for history has it. */
+  function arrow(
+    box: HTMLTextAreaElement,
+    key: string,
+    caret = key === "ArrowUp" ? 0 : box.value.length,
+  ) {
+    box.selectionStart = caret;
+    box.selectionEnd = caret;
+    return press(box, key);
+  }
+
+  async function afterSending(...lines: string[]) {
+    const box = await mount();
+    for (const line of lines) {
+      type(box, line);
+      press(box, "Enter");
+      await waitFor(() => expect(box.value).toBe(""));
+    }
+    return box;
+  }
+
+  it("brings the last line back into the box", async () => {
+    const box = await afterSending("the flag is in the env");
+    const event = arrow(box, "ArrowUp");
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(box.value).toBe("the flag is in the env");
+  });
+
+  it("walks further back on each press and stops at the oldest", async () => {
+    const box = await afterSending("first", "second");
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("second");
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("first");
+
+    const event = arrow(box, "ArrowUp");
+    expect(box.value).toBe("first");
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("comes forward again and gives back what was being typed", async () => {
+    const box = await afterSending("first", "second");
+    type(box, "half a thought");
+    arrow(box, "ArrowUp");
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("first");
+
+    arrow(box, "ArrowDown");
+    expect(box.value).toBe("second");
+    arrow(box, "ArrowDown");
+    expect(box.value).toBe("half a thought");
+  });
+
+  it("leaves the arrows alone when nothing has been sent here", async () => {
+    const box = await mount();
+    const up = arrow(box, "ArrowUp");
+    const down = arrow(box, "ArrowDown");
+
+    expect(up.defaultPrevented).toBe(false);
+    expect(down.defaultPrevented).toBe(false);
+    expect(box.value).toBe("");
+  });
+
+  /** Recalling replaces the whole box, so anywhere inside the text the arrow
+   * has to stay the caret key the reader is using it as. */
+  it("moves the caret instead when it is not at the edge", async () => {
+    const box = await afterSending("sent");
+    type(box, "one\ntwo");
+
+    const up = arrow(box, "ArrowUp", 5);
+    expect(up.defaultPrevented).toBe(false);
+    expect(box.value).toBe("one\ntwo");
+
+    const down = arrow(box, "ArrowDown", 5);
+    expect(down.defaultPrevented).toBe(false);
+    expect(box.value).toBe("one\ntwo");
+  });
+
+  /**
+   * The case that decided the rule. A long line wraps to several rows on screen
+   * with no newline anywhere in it, so counting newlines called the middle of it
+   * the first line and swapped the box out from under someone moving the caret.
+   * Only the caret's own position can tell those apart.
+   */
+  it("does not recall from inside a line long enough to wrap", async () => {
+    const box = await afterSending("sent");
+    const wrapped = "a long line with no newline in it that wraps on screen";
+    type(box, wrapped);
+
+    const event = arrow(box, "ArrowUp", 20);
+    expect(event.defaultPrevented).toBe(false);
+    expect(box.value).toBe(wrapped);
+  });
+
+  it("recalls once the caret reaches the start, and comes back at the end", async () => {
+    const box = await afterSending("sent");
+    type(box, "one\ntwo");
+
+    arrow(box, "ArrowUp", 0);
+    expect(box.value).toBe("sent");
+    arrow(box, "ArrowDown");
+    expect(box.value).toBe("one\ntwo");
+  });
+
+  /** Selected text is not a caret resting at the edge, whatever it starts at. */
+  it("leaves a selection anchored at the start alone", async () => {
+    const box = await afterSending("sent");
+    type(box, "select me");
+    box.selectionStart = 0;
+    box.selectionEnd = 9;
+
+    const event = press(box, "ArrowUp");
+    expect(event.defaultPrevented).toBe(false);
+    expect(box.value).toBe("select me");
+  });
+
+  /**
+   * Once the box holds history rather than anything typed, stepping on through
+   * it is not destroying anything, so it does not ask for the caret again — the
+   * caret is left at the end of each recalled line for editing.
+   */
+  it("keeps stepping without returning the caret to the start", async () => {
+    const box = await afterSending("first", "second");
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("second");
+
+    const event = arrow(box, "ArrowUp", box.value.length);
+    expect(event.defaultPrevented).toBe(true);
+    expect(box.value).toBe("first");
+  });
+
+  it("stops recalling once the line is edited", async () => {
+    const box = await afterSending("first", "second");
+    arrow(box, "ArrowUp");
+    type(box, "second thoughts");
+
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("second");
+    arrow(box, "ArrowDown");
+    expect(box.value).toBe("second thoughts");
+  });
+
+  /** A line on screen for a look is not a draft. Saving it would lose the one
+   * the user actually left half-written. */
+  it("keeps the draft as what was typed while a line is recalled", async () => {
+    const box = await afterSending("the flag is in the env");
+    type(box, "half a thought");
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("the flag is in the env");
+
+    await waitFor(() =>
+      expect(ipcMock.setDraft).toHaveBeenLastCalledWith(
+        "libera",
+        "#ctf-ops",
+        "half a thought",
+      ),
+    );
+  });
+
+  it("still has the lines after the conversation is left and returned to", async () => {
+    const { unmount } = render(<Composer view={TEST_VIEW} />);
+    const first = screen.getByLabelText("Message #ctf-ops") as HTMLTextAreaElement;
+    await waitFor(() => expect(ipcMock.getDraft).toHaveBeenCalled());
+    await act(async () => {});
+    type(first, "the flag is in the env");
+    press(first, "Enter");
+    await waitFor(() => expect(first.value).toBe(""));
+    unmount();
+
+    const box = await mount();
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("the flag is in the env");
+  });
+
+  it("recalls a command the server refused", async () => {
+    ipcMock.submitInput.mockResolvedValue({
+      kind: "rejected",
+      value: "Cannot send to #ctf-ops",
+    });
+    const box = await mount();
+    type(box, "/whois nobodu");
+    press(box, "Enter");
+    await screen.findByText("Cannot send to #ctf-ops");
+    type(box, "");
+
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("/whois nobodu");
   });
 });

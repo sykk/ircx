@@ -1575,21 +1575,37 @@ so it has no soft wrapping, no visual rows, and no native caret movement. Every
 test sets `selectionStart` itself, which asserts the rule but not that a real
 textarea puts the caret where the rule expects.
 
-**Not verified:** the arrows against a laid-out box. What to walk:
+**The arrows against a laid-out box are verified** in Chrome on 2026-08-01,
+driving the real composer with real key events. The window was the frontend on
+the Vite dev server with a seeded workspace, and the four Tauri commands the
+composer calls were stubbed, because there is no backend outside the app. Every
+figure below was read off the live `textarea`.
 
-- A line long enough to wrap onto two or three rows, with no newline in it.
-  Pressing Up from the middle must move the caret up a row and leave the text
-  alone. Only from the very start does it recall. This is the case the rule was
-  changed for — counting newlines instead called the middle of a wrapped line
-  "the first line" and replaced the box mid-edit.
-- A message with real newlines from Shift+Enter, which should behave the same
-  way for the same reason.
-- Once a line has been recalled, Up keeps stepping back without the caret being
-  sent to the start first, and the caret sits at the end of each recalled line
-  ready to be edited.
-- Stepping past the newest line with Down puts back whatever was being typed
-  before recall started.
+- **A wrapped line keeps the arrow as a caret key.** 245 characters, no newline
+  anywhere in it, laid out as two visual rows (`scrollHeight` 39 against a
+  19.5px line). From caret 122 — the middle, and on the second row — Up left all
+  245 characters untouched and moved the caret to 0. This is the case the rule
+  was changed for: counting newlines calls 122 "the first line", so the old rule
+  would have replaced the box mid-edit.
+- **From the start it recalls.** One further Up, with the caret now at 0,
+  brought back the last line sent and put the caret at its end.
+- **Real newlines behave the same way.** `first row\nsecond row` with the caret
+  at 15 moved to 7 — up one row, same column — and left the text alone.
+- **Stepping back costs one press.** Up from an empty box gave the newest line;
+  the next Up gave the one before it without the caret being returned to the
+  start first. Both landed the caret at the end of the recalled line.
+- **What was being typed comes back.** Down past the newest line restored all
+  245 characters of the paragraph that recall had been started from.
+
+**Not verified:** the same walk inside the app. Tauri renders in WebKitGTK on
+this platform and the walk above was Blink, so what it establishes is that the
+rule holds against a real laid-out textarea with native caret movement — not
+that both engines move the caret identically. Up from the first visual row is
+ordinary behaviour in both and the risk is low, but it is a different engine and
+this file is where that is said rather than assumed. Worth re-walking in the
+assembled app when somebody has one open.
 
 Nothing here is written to disk: the list is per conversation and lasts only as
 long as the app is running, so a restart is expected to empty it while the
-stored draft survives.
+stored draft survives. That much was not walked either — the archive is one of
+the things the dev server has no backend for.

@@ -2183,6 +2183,12 @@ impl SessionState {
     }
 
     pub(crate) fn emit_channel(&mut self, key: &str) {
+        // A close drops the channel and parts it, so the server's PART echo
+        // lands on one that is already gone. `channel` names a key it cannot
+        // find with an empty string, which the sidebar drew as a nameless row.
+        if !self.channels.contains_key(key) {
+            return;
+        }
         let channel = self.channel(key);
         self.emit(IrcxEvent::ChannelUpdated { channel });
     }

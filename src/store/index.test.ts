@@ -911,3 +911,68 @@ describe("why a pane's last line was refused", () => {
     expect(store().composerError[view]).toBeUndefined();
   });
 });
+
+/**
+ * `dropByNetwork` built its prefix with a literal space where `targetKey` joins
+ * with `SEP`, which is a NUL. The two never matched, so deleting a network left
+ * every channel, query, timeline and roster it owned in the store — the views
+ * were blanked, which is the visible half, and the data behind them was not.
+ *
+ * It survived because `SEP` is written as a raw byte, so both lines read as a
+ * space to anybody looking at them.
+ */
+describe("deleting a network", () => {
+  const store = () => useAppStore.getState();
+
+  beforeEach(() => {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera"), makeNetwork("oftc")],
+      [makeChannel("libera", "#ctf-ops"), makeChannel("oftc", "#linux")],
+      [makeQuery("oftc", "guest")],
+    );
+    useAppStore.setState({
+      members: {
+        [targetKey("oftc", "#linux")]: [
+          { nick: "root", account: null, prefixes: [], away: null },
+        ],
+      },
+      timelines: {
+        [targetKey("oftc", "#linux")]: {
+          messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
+          unreadFrom: null,
+          hasMore: false,
+          loadingOlder: false,
+        },
+      },
+    });
+  });
+
+  it("takes everything it owned with it", () => {
+    store().applyEvent({ type: "networkRemoved", network: "oftc" });
+
+    expect(store().channels[targetKey("oftc", "#linux")]).toBeUndefined();
+    expect(store().queries[targetKey("oftc", "guest")]).toBeUndefined();
+    expect(store().members[targetKey("oftc", "#linux")]).toBeUndefined();
+    expect(store().timelines[targetKey("oftc", "#linux")]).toBeUndefined();
+  });
+
+  it("leaves another network's alone", () => {
+    store().applyEvent({ type: "networkRemoved", network: "oftc" });
+
+    expect(store().channels[targetKey("libera", "#ctf-ops")]).toBeTruthy();
+  });
+
+  /** A network id is a prefix of another one. Matching on the id alone would
+   * take both; the separator is what stops it. */
+  it("does not take a network whose id merely starts the same way", () => {
+    seedStore(
+      [makeNetwork("oftc"), makeNetwork("oftc-eu")],
+      [makeChannel("oftc-eu", "#eu")],
+    );
+
+    store().applyEvent({ type: "networkRemoved", network: "oftc" });
+
+    expect(store().channels[targetKey("oftc-eu", "#eu")]).toBeTruthy();
+  });
+});

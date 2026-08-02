@@ -1737,3 +1737,167 @@ mod keeping_nothing {
         assert_eq!(held(&store, "#ircx"), 1);
     }
 }
+
+/// A client's own message has no `msgid` until the server echoes it back, and
+/// without `echo-message` no echo ever comes. `written_at` is what a replay of
+/// that message is recognised by instead. #333.
+mod a_replay_of_our_own_message {
+    use super::*;
+
+    /// The local copy as `say` files it: ours, client-stamped, no msgid.
+    fn ours(id: &str, timestamp: &str, text: &str) -> ChatMessage {
+        let mut message = message(id, "#ircx", timestamp, text);
+        message.sender.is_self = true;
+        message.timestamp_is_local = true;
+        message.delivery = Delivery::Pending;
+        message
+    }
+
+    /// A server stamp from about now. The match is bounded against this
+    /// machine's clock, so a fixture in 2999 is correctly refused as too old to
+    /// be the line just written — which is what `leaves_a_copy_too_old_to_be…`
+    /// below asserts on purpose.
+    fn about_now() -> String {
+        time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("format now")
+    }
+
+    /// The same line coming back inside a `CHATHISTORY` batch, stamped by the
+    /// server and carrying the msgid the local copy never got.
+    fn replayed(msgid: &str, timestamp: &str, text: &str) -> ChatMessage {
+        let mut message = with_msgid(message(msgid, "#ircx", timestamp, text), msgid);
+        message.sender.is_self = true;
+        message.timestamp_is_local = false;
+        message.delivery = Delivery::Delivered;
+        message.batch = Some("1".into());
+        message
+    }
+
+    /// Puts a copy in the archive and reports it written, which is what stamps
+    /// `written_at`.
+    fn sent(store: &Store, message: &ChatMessage) {
+        store
+            .append_messages(std::slice::from_ref(message))
+            .unwrap();
+        let mut written = message.clone();
+        written.delivery = Delivery::Sent;
+        store.update_message(&written).unwrap();
+    }
+
+    fn texts(store: &Store) -> Vec<String> {
+        store
+            .load_history(&history("#ircx", None, 50))
+            .unwrap()
+            .into_iter()
+            .map(|message| message.text)
+            .collect()
+    }
+
+    #[test]
+    fn claims_the_copy_already_drawn_instead_of_doubling_it() {
+        let store = Store::open_in_memory().unwrap();
+        let copy = ours("local-1", &about_now(), "line 07 of the paste");
+        sent(&store, &copy);
+
+        store
+            .append_messages(&[replayed("srv-1", &about_now(), "line 07 of the paste")])
+            .unwrap();
+
+        assert_eq!(texts(&store), vec!["line 07 of the paste"]);
+        let held = store.load_history(&history("#ircx", None, 50)).unwrap();
+        assert_eq!(held[0].id, "local-1", "the id the window drew it with");
+        assert!(held[0].id_is_local, "which is still the local one");
+        assert_eq!(
+            held[0].tags,
+            vec![("msgid".to_string(), Some("srv-1".to_string()))],
+            "and the msgid a reply or a reaction names"
+        );
+        assert!(held[0].timestamp_is_local, "typed time, not send time");
+    }
+
+    /// The reason a copy is matched at all is that it reached the socket.
+    /// Nothing else in the archive can have been what came back.
+    #[test]
+    fn leaves_a_copy_that_never_left() {
+        let store = Store::open_in_memory().unwrap();
+        let copy = ours("local-1", FUTURE, "into the void");
+        store.append_messages(&[copy]).unwrap();
+
+        store
+            .append_messages(&[replayed("srv-1", FUTURE, "into the void")])
+            .unwrap();
+
+        assert_eq!(
+            texts(&store).len(),
+            2,
+            "a pending copy is not what the server replayed"
+        );
+    }
+
+    #[test]
+    fn pairs_repeated_lines_up_in_the_order_they_were_said() {
+        let store = Store::open_in_memory().unwrap();
+        sent(&store, &ours("local-1", &about_now(), "ok"));
+        sent(&store, &ours("local-2", &about_now(), "ok"));
+
+        store
+            .append_messages(&[
+                replayed("srv-1", &about_now(), "ok"),
+                replayed("srv-2", &about_now(), "ok"),
+            ])
+            .unwrap();
+
+        let held = store.load_history(&history("#ircx", None, 50)).unwrap();
+        assert_eq!(held.len(), 2, "two said, two held");
+        // Which msgid landed on which copy is the whole of it: a reply names a
+        // msgid, and the two rows are identical in everything else.
+        let paired: Vec<(&str, Option<&str>)> = held
+            .iter()
+            .map(|message| {
+                let msgid = message
+                    .tags
+                    .iter()
+                    .find(|(name, _)| name == "msgid")
+                    .and_then(|(_, value)| value.as_deref());
+                (message.id.as_str(), msgid)
+            })
+            .collect();
+        assert_eq!(
+            paired,
+            vec![("local-1", Some("srv-1")), ("local-2", Some("srv-2"))],
+            "oldest copy takes the first replay"
+        );
+    }
+
+    /// Unbounded, a replay could claim a copy from weeks ago — and then the
+    /// message that actually arrived is never archived at all.
+    #[test]
+    fn leaves_a_copy_too_old_to_be_the_one_replayed() {
+        let store = Store::open_in_memory().unwrap();
+        sent(&store, &ours("local-1", ANCIENT, "ok"));
+
+        store
+            .append_messages(&[replayed("srv-1", ANCIENT, "ok")])
+            .unwrap();
+
+        assert_eq!(
+            texts(&store).len(),
+            2,
+            "the copy was written now, and the replay is stamped in 2000"
+        );
+    }
+
+    #[test]
+    fn leaves_somebody_else_saying_the_same_thing() {
+        let store = Store::open_in_memory().unwrap();
+        sent(&store, &ours("local-1", &about_now(), "ok"));
+
+        let mut theirs = replayed("srv-1", &about_now(), "ok");
+        theirs.sender.is_self = false;
+        theirs.sender.nick = "sable".into();
+        store.append_messages(&[theirs]).unwrap();
+
+        assert_eq!(texts(&store).len(), 2);
+    }
+}

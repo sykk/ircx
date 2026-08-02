@@ -187,6 +187,34 @@ describe("Composer sending", () => {
     expect(box.value).toBe("/nope");
   });
 
+  /**
+   * #318. The refusal was drawn in colour and position and announced to nobody,
+   * while the console's identical control was a live region — so a screen
+   * reader was told why a command was refused and not why a message was. The
+   * assertion is on the role rather than on the text, which the case above
+   * already covers and which passed throughout.
+   */
+  it("announces the refusal rather than only drawing it", async () => {
+    ipcMock.submitInput.mockResolvedValue({
+      kind: "rejected",
+      value: "Cannot send to #ctf-ops",
+    });
+    const box = await mount();
+    type(box, "/nope");
+    press(box, "Enter");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Cannot send to #ctf-ops");
+  });
+
+  /** Nothing to announce until something is refused: a live region that is
+   * present and empty is one a reader is told about for no reason. */
+  it("draws no live region while nothing has been refused", async () => {
+    await mount();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("shows why the command never reached the session, and gives the text back", async () => {
     ipcMock.submitInput.mockRejectedValue(
       "ergo stopped responding — reconnect it and try again",

@@ -197,36 +197,73 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // This is a second implementation of what `reduce` does for one event.
       // `reduce` is the one to trust; `index.test.ts` asserts this agrees with
       // it over a batch built to make them disagree.
-      const pending = new Map<TargetKey, Map<string, Member>>();
+      const rosters = new Map<TargetKey, Map<string, Member>>();
 
-      const flush = () => {
-        if (pending.size === 0) return;
+      const flushRosters = () => {
+        if (rosters.size === 0) return;
         const members = { ...next.members };
-        for (const [key, roster] of pending) members[key] = [...roster.values()];
+        for (const [key, roster] of rosters) members[key] = [...roster.values()];
         next = { ...next, members };
-        pending.clear();
+        rosters.clear();
+      };
+
+      // The messages reporting the same netsplit cost the same shape (#325):
+      // `mergeByTime` builds a new list per event, so a thousand arriving as a
+      // thousand events is a thousand copies of a list growing to a thousand.
+      // Held as one list the batch extends, that is one copy.
+      //
+      // Only the merge is deferred. The unread seam is still answered as each
+      // event lands, because a batch can close the channel a pane was reading
+      // and because a line you sent does not open a seam but does not stop the
+      // answer to it from opening one — and where the reader stopped is the
+      // thing #223 says people notice being wrong.
+      const timelines = new Map<TargetKey, HeldTimeline>();
+
+      const flushTimelines = () => {
+        if (timelines.size === 0) return;
+        const held = { ...next.timelines };
+        for (const [key, timeline] of timelines) {
+          // Capped here rather than per event. It is the same last 10,000
+          // either way; what differs is that an echo of a message the cap would
+          // have dropped mid-batch is still recognised as one.
+          held[key] = {
+            ...(next.timelines[key] ?? EMPTY_TIMELINE),
+            messages: capped(timeline.messages),
+            unreadFrom: timeline.unreadFrom,
+          };
+        }
+        next = { ...next, timelines: held };
+        timelines.clear();
       };
 
       for (const event of events) {
-        const roster = rosterFor(event, next, pending);
+        const roster = rosterFor(event, next, rosters);
         if (roster !== undefined) {
           applyRoster(roster, event as RosterEvent);
+          continue;
+        }
+        if (event.type === "messagesAppended") {
+          holdMessages(event, next, timelines);
           continue;
         }
         // `networkRemoved` is the only reducer other than the roster three that
         // reads `members`, so what has not been written back yet must land
         // before it runs — otherwise this batch writes a roster back over a
         // network the same batch deleted.
-
-
-        if (event.type === "networkRemoved") flush();
+        //
+        // Timelines have no such single reader: a rename moves one, a redaction
+        // rewrites one, reading a channel clears its seam. So everything that
+        // is not an append lands after the held messages do.
+        if (event.type === "networkRemoved") flushRosters();
+        flushTimelines();
 
         // Each event reduces against what the ones before it left, so a batch
         // reads the same as the same events applied one at a time.
         const patch = reduce(next, event);
         if (Object.keys(patch).length > 0) next = { ...next, ...patch };
       }
-      flush();
+      flushRosters();
+      flushTimelines();
       return next === s ? {} : next;
     }),
 
@@ -699,6 +736,69 @@ function applyRoster(roster: Map<string, Member>, event: RosterEvent): void {
   }
 }
 
+/** What `applyEvents` builds for one conversation while a batch runs: the
+ * messages it will hand the timeline, and where the seam landed on the way. */
+type HeldTimeline = { messages: ChatMessage[]; unreadFrom: string | null };
+
+/** Older messages stay in SQLite, so the window keeps its newest `TIMELINE_CAP`
+ * and nothing else. */
+function capped(messages: ChatMessage[]): ChatMessage[] {
+  return messages.length > TIMELINE_CAP ? messages.slice(-TIMELINE_CAP) : messages;
+}
+
+/**
+ * `messagesAppended` against the list this batch is building rather than
+ * against the store. Reads the same as `reduce`'s case, which is what
+ * `index.test.ts` asserts; the difference is that the list is this batch's own,
+ * so it can be extended instead of rebuilt.
+ */
+function holdMessages(
+  event: Extract<IrcxEvent, { type: "messagesAppended" }>,
+  next: AppState,
+  timelines: Map<TargetKey, HeldTimeline>,
+): void {
+  const key = targetKey(event.network, event.target);
+  const timeline = next.timelines[key] ?? EMPTY_TIMELINE;
+  const held = timelines.get(key);
+  const messages = held?.messages ?? timeline.messages;
+
+  // A duplicate is an echo or a replay carrying the timestamp of what it
+  // duplicates, so only the stretch of the window as new as the batch's oldest
+  // message can hold one. For live traffic that stretch is empty, which spares
+  // sweeping a 10k window per delivery.
+  const oldest = Math.min(...event.messages.map((m) => Date.parse(m.timestamp)));
+  const known = new Set<string>();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const seen = messages[i]!;
+    if (Date.parse(seen.timestamp) < oldest) break;
+    known.add(seen.id);
+  }
+  const fresh = event.messages.filter((m) => !known.has(m.id));
+  if (fresh.length === 0) return;
+
+  const opened = held ?? {
+    messages: timeline.messages.slice(),
+    unreadFrom: timeline.unreadFrom,
+  };
+  if (!held) timelines.set(key, opened);
+
+  const last = opened.messages[opened.messages.length - 1];
+  if (last && Date.parse(fresh[0]!.timestamp) < Date.parse(last.timestamp)) {
+    opened.messages = mergeByTime(opened.messages, fresh);
+  } else {
+    for (const message of fresh) opened.messages.push(message);
+  }
+
+  const focused = next.activeViewId ? next.views[next.activeViewId] : undefined;
+  const isActive =
+    focused?.network === event.network && focused.target === event.target;
+  // A server backfill is what was said before anybody looked, so it does not
+  // move the seam that says where looking stopped. Core keeps it out of the
+  // unread counts for the same reason.
+  const seam = fresh.find((m) => m.source !== "serverHistory");
+  opened.unreadFrom ??= isActive || !seam || seam.sender.isSelf ? null : seam.id;
+}
+
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
   switch (event.type) {
     case "networkUpdated": {
@@ -798,8 +898,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
           ...s.timelines,
           [key]: {
             ...timeline,
-            messages:
-              merged.length > TIMELINE_CAP ? merged.slice(-TIMELINE_CAP) : merged,
+            messages: capped(merged),
             unreadFrom:
               timeline.unreadFrom ??
               (isActive || !seam || seam.sender.isSelf ? null : seam.id),

@@ -220,12 +220,17 @@ minute later. Each one is a member event and a timeline message, so `n = 2,500`
 is 10,000 events carrying 5,000 messages. Median of three runs, jsdom on Node
 24, `performance.now()` around each half.
 
-| channel | events | messages | `applyEvents` | `buildRows` | rows drawn |
-|---|---|---|---|---|---|
-| 100 | 400 | 200 | 1.5 ms | 0.4 ms | 2 |
-| 500 | 2,000 | 1,000 | 3.8 ms | 1.0 ms | 2 |
-| 1,000 | 4,000 | 2,000 | 17.2 ms | 1.4 ms | 2 |
-| 2,500 | 10,000 | 5,000 | 61.6 ms | 3.0 ms | 2 |
+Taken again for #325, running the same harness against the commit before it and
+the commit after in one session. The earlier pass read higher in absolute terms
+— 61.6 ms at 2,500 where the same code reads 38.2 here — so what the table
+claims is the pair of columns, not either figure on its own.
+
+| channel | events | messages | `applyEvents` before | after | `buildRows` | rows drawn |
+|---|---|---|---|---|---|---|
+| 100 | 400 | 200 | 0.7 ms | 0.6 ms | 0.2 ms | 2 |
+| 500 | 2,000 | 1,000 | 5.0 ms | 1.9 ms | 0.9 ms | 2 |
+| 1,000 | 4,000 | 2,000 | 13.4 ms | 2.6 ms | 1.4 ms | 2 |
+| 2,500 | 10,000 | 5,000 | 38.2 ms | 9.3 ms | 2.9 ms | 2 |
 
 **The row builder is not where the cost is.** `buildRows` is linear at about
 0.6 µs a message, and the two rows are one digest and the day divider above it —
@@ -239,25 +244,30 @@ channel.
 version of this row attributed the whole of it to the roster and that was wrong.
 The same batch split into its member events and its messages:
 
-| channel | roster events | messages |
-|---|---|---|
-| 100 | 0.4 ms | 1.0 ms |
-| 500 | 0.5 ms | 3.1 ms |
-| 1,000 | 0.5 ms | 16.0 ms |
-| 2,500 | 1.4 ms | 58.5 ms |
+| channel | roster events | messages before | messages after |
+|---|---|---|---|
+| 100 | 0.1 ms | 0.4 ms | 0.2 ms |
+| 500 | 0.2 ms | 2.8 ms | 1.0 ms |
+| 1,000 | 0.5 ms | 8.0 ms | 2.7 ms |
+| 2,500 | 1.8 ms | 35.2 ms | 6.3 ms |
 
 **The roster is linear now** (#321). It was `n²/2` element copies — each
 `memberRemoved` filtering the whole list — and the batch holds the roster as a
-map of nick to member instead, so five thousand roster events cost 1.4 ms
+map of nick to member instead, so five thousand roster events cost 1.8 ms
 against the 75 ms they used to. What is left is one rebuild of the list.
 
-**The messages are the remaining `n²`.** `mergeByTime` builds a new message list
-per `messagesAppended` event, so a thousand messages arriving as a thousand
-events is a thousand merges over a growing list. It is the same shape the roster
-had and the same fix would work, but the unread seam is decided against
-`activeViewId` at the moment each event lands, and another event in the same
-batch can move it — so coalescing messages is a correctness question rather than
-a mechanical one. Filed separately.
+**The messages are linear now too** (#325), and the fix is the same shape:
+`mergeByTime` built a new list per `messagesAppended` event, so a thousand
+messages arriving as a thousand events was a thousand merges over a growing
+list, and the batch now extends one list and hands it over once. Five thousand
+messages cost 6.3 ms, about 1.3 µs each, against 35.2 ms.
+
+What made it a separate question from the roster is the unread seam, which is
+decided against `activeViewId` at the moment each event lands — and a batch can
+move that, because closing a channel takes the pane that was reading it. The
+seam is still answered per event; only the merge is deferred. `index.test.ts`
+asserts the batch agrees with `reduce` over a batch built to make them disagree,
+including a channel closing under the pane showing it.
 
 **Covers:** the store reducer and the row builder, in jsdom. **Excludes:**
 everything the real client would also be doing — parsing the lines, writing them

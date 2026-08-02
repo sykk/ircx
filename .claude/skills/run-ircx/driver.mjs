@@ -154,6 +154,10 @@ const KEYS = {
   Escape: { key: "Escape", code: "Escape", keyCode: 27 },
   Tab: { key: "Tab", code: "Tab", keyCode: 9 },
   Backspace: { key: "Backspace", code: "Backspace", keyCode: 8 },
+  ArrowUp: { key: "ArrowUp", code: "ArrowUp", keyCode: 38 },
+  ArrowDown: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
+  ArrowLeft: { key: "ArrowLeft", code: "ArrowLeft", keyCode: 37 },
+  ArrowRight: { key: "ArrowRight", code: "ArrowRight", keyCode: 39 },
 };
 const MODIFIERS = { alt: 1, ctrl: 2, control: 2, meta: 4, cmd: 4, shift: 8 };
 
@@ -172,8 +176,10 @@ async function pressKey(combo) {
     code: `Key${name.toUpperCase()}`,
     keyCode: name.toUpperCase().charCodeAt(0),
     // A character only counts as typed when it is unmodified; ctrl+k is a
-    // shortcut, not the letter k.
-    text: modifiers === 0 ? name : undefined,
+    // shortcut, not the letter k. `text` is the character the key produced, so
+    // only a one-character name has one; CDP refuses a key name there with
+    // "Invalid 'text' parameter".
+    text: modifiers === 0 && name.length === 1 ? name : undefined,
   };
 
   for (const type of ["keyDown", "keyUp"]) {
@@ -215,7 +221,10 @@ async function run(line) {
     case "click":
       await evaluate(
         `(() => { const el = document.querySelector(${JSON.stringify(argument)});
-          if (!el) throw new Error("no element matching ${argument}");
+          if (!el) throw new Error("no element matching " + ${JSON.stringify(argument)});
+          // A pointer click focuses what it lands on and el.click() does not,
+          // which leaves \`type\` inserting at whatever held the focus before.
+          el.focus?.();
           el.click(); return true; })()`,
       );
       await sleep(250);

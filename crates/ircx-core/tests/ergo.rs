@@ -42,6 +42,8 @@ use tokio::time::timeout;
 const HOST: &str = "127.0.0.1";
 const PORT: u16 = 6667;
 const CHANNEL: &str = "#ircx-drive";
+/// A channel this client opens itself, so it holds `+o` there.
+const OWN_CHANNEL: &str = "#ircx-topic";
 const TOPIC: &str = "read the FAQ before asking";
 /// Long enough for a loopback server, short enough that a server which is not
 /// running fails the run rather than hanging it.
@@ -111,6 +113,8 @@ async fn against_ergo() {
     }
 
     topic_on_join(&mut report, &mut live, &mut other).await;
+    a_topic_typed_here_comes_back_changed(&mut report, &mut live).await;
+    a_topic_refused_says_why(&mut report, &mut live).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
@@ -252,6 +256,99 @@ async fn topic_on_join(report: &mut Report, live: &mut Live, other: &mut Live) {
     match who {
         Some(message) => report.pass("topic attribution", &message.text),
         None => report.fail("topic attribution", "no `Set by` line followed it"),
+    }
+}
+
+/// The other half of the topic path, and the half no run had seen: a `/topic`
+/// typed here rather than one somebody else set before we arrived.
+///
+/// It is a different code path from the one above, which is why setting the
+/// topic as a precondition did not cover it. Joining a channel that has one
+/// reads `332` and lands in `on_topic`; changing it reads the server's own
+/// `TOPIC` line back and lands in `handle_topic`, which names who did it. The
+/// two produce different sentences, so the assertion is on the wording as well
+/// as on the text — matching only the topic would pass on either.
+async fn a_topic_typed_here_comes_back_changed(report: &mut Report, live: &mut Live) {
+    const CHANGED: &str = "mind the bots";
+    // A channel this client opens, because ergo gives the first arrival `+o` and
+    // every channel here is `+t`. Setting it in CHANNEL is what the refusal
+    // below covers; this needs the case where the server says yes.
+    if !live.join(OWN_CHANNEL).await {
+        report.fail("topic changed here", "never joined the channel it opens");
+        return;
+    }
+    live.submit(OWN_CHANNEL, &format!("/topic {CHANGED}")).await;
+
+    match live
+        .said(PATIENCE, |message| {
+            message.kind == MessageKind::Topic && message.text.contains(CHANGED)
+        })
+        .await
+    {
+        Some(message) if message.text.contains("set the topic of") => {
+            report.pass("topic changed here", &message.text)
+        }
+        Some(message) => report.fail(
+            "topic changed here",
+            &format!("came back as a join would read it: {}", message.text),
+        ),
+        None => {
+            report.fail("topic changed here", "no topic message came back");
+            return;
+        }
+    }
+
+    // The sentence is what the timeline draws; this is what the header and the
+    // sidebar draw, and nothing above would notice it going stale. Only an
+    // update that carries a topic will do — joining raises several that do not,
+    // and taking the first would assert nothing.
+    let held = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::ChannelUpdated { channel }
+                if channel.name == OWN_CHANNEL && channel.topic.is_some() =>
+            {
+                channel.topic.clone()
+            }
+            _ => None,
+        })
+        .await;
+    match held {
+        Some(topic) if topic.text == CHANGED => report.pass(
+            "topic held on the channel",
+            &format!(
+                "{} (set by {})",
+                topic.text,
+                topic.set_by.unwrap_or_default()
+            ),
+        ),
+        Some(topic) => report.fail(
+            "topic held on the channel",
+            &format!("the channel holds {:?}", topic.text),
+        ),
+        None => report.fail("topic held on the channel", "the channel holds no topic"),
+    }
+}
+
+/// The same command where the server says no. Every channel ergo makes is `+t`,
+/// so a topic typed in one this client does not hold `+o` in draws a `482` —
+/// and a numeric nobody turns into a sentence is a command that silently does
+/// nothing. The invite control's own `482` is verified in the application; this
+/// is the same numeric arriving for a different command.
+async fn a_topic_refused_says_why(report: &mut Report, live: &mut Live) {
+    live.submit(CHANNEL, "/topic something this client may not set")
+        .await;
+
+    match live
+        .said(PATIENCE, |message| {
+            message.text.contains("channel operator status")
+        })
+        .await
+    {
+        Some(message) => report.pass("topic refused", &message.text),
+        None => report.fail(
+            "topic refused",
+            "the server refused with 482 and nothing was said",
+        ),
     }
 }
 

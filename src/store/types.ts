@@ -150,6 +150,12 @@ export interface AppState {
    * Recovering that would need a sequence number the buffer does not keep, and
    * a flood long enough to matter has already rolled the line out of it. */
   rawAnchor: Record<ViewId, number | null>;
+  /** Why the last line each pane tried to send was refused, drawn above its
+   * composer. Here rather than in the composer for the reason `consoleInput`
+   * is: a rebuilt pane loses component state, and the line itself comes back
+   * through the backend draft, so losing only the reason left the reader their
+   * message returned to the box with nothing saying why. */
+  composerError: Record<ViewId, string | null>;
   /** Depth-first pane order, derived from `layout`. Focus movement and anything
    * that only needs to enumerate panes reads this rather than walking the tree. */
   viewOrder: ViewId[];

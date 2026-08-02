@@ -20,17 +20,39 @@ const CHANNEL_PREFIX = /^[#&!+]/;
 
 export function Composer({ view }: { view: ViewId | null }) {
   const pane = useView(view);
-  if (!pane || !pane.network) return null;
+  if (!view || !pane || !pane.network) return null;
   const conversation = targetKey(pane.network, pane.target);
-  return <ComposerFor key={conversation} network={pane.network} target={pane.target} />;
+  return (
+    <ComposerFor
+      key={conversation}
+      view={view}
+      network={pane.network}
+      target={pane.target}
+    />
+  );
 }
 
-function ComposerFor({ network, target }: { network: string; target: string }) {
+function ComposerFor({
+  view,
+  network,
+  target,
+}: {
+  view: ViewId;
+  network: string;
+  target: string;
+}) {
   const members = useMembers(network, target);
   const replying = useReplyTarget(network, target);
   const recall = useRecall(network, target);
   const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // In the store rather than here, keyed by the pane: a change to the layout's
+  // shape rebuilds every pane in the window (#308), and the line comes back
+  // through the draft while the reason for its refusal would not.
+  const error = useAppStore((s) => s.composerError[view] ?? null);
+  const setError = useCallback(
+    (reason: string | null) => useAppStore.getState().setComposerError(view, reason),
+    [view],
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const completionRef = useRef<Completion | null>(null);
   const caretRef = useRef<number | null>(null);
@@ -76,7 +98,10 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     return () => {
       cancelled = true;
     };
-  }, [network, target]);
+    // `setError` writes to the store rather than to component state, so it is
+    // a declared dependency where React's own setter needed none. It changes
+    // only with the pane, which does not change under a mounted composer.
+  }, [network, target, setError]);
 
   useEffect(() => {
     if (!hydrated) return;

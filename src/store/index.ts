@@ -82,6 +82,8 @@ export interface AppActions {
   setConsoleInput: (view: ViewId, input: ConsoleInput) => void;
   /** Parks where one pane is reading the protocol log, or `null` for the tail. */
   setRawAnchor: (view: ViewId, line: number | null) => void;
+  /** Holds why one pane's last line was refused, or clears it with null. */
+  setComposerError: (view: ViewId, reason: string | null) => void;
 
   /** Opens a second pane on the focused view's target and focuses it. */
   splitActiveView: (direction: SplitDirection) => void;
@@ -152,6 +154,7 @@ const initialState: AppState = {
   viewAnchor: {},
   consoleInput: {},
   rawAnchor: {},
+  composerError: {},
   viewOrder: [],
   activeViewId: null,
   layout: null,
@@ -266,6 +269,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { rawAnchor: { ...s.rawAnchor, [view]: line } };
     }),
 
+  setComposerError: (view, reason) =>
+    set((s) => {
+      if (!s.views[view] || (s.composerError[view] ?? null) === reason) return {};
+      return { composerError: { ...s.composerError, [view]: reason } };
+    }),
+
   splitActiveView: (direction) =>
     set((s) => {
       const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
@@ -294,6 +303,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
       const { [view]: _typed, ...consoleInput } = s.consoleInput;
       const { [view]: _line, ...rawAnchor } = s.rawAnchor;
+      const { [view]: _refusal, ...composerError } = s.composerError;
       const at = s.viewOrder.indexOf(view);
       return {
         layout,
@@ -302,6 +312,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         rosterHidden,
         consoleInput,
         rawAnchor,
+        composerError,
         viewOrder: paneOrder(layout),
         activeViewId:
           s.activeViewId === view
@@ -506,6 +517,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   const rosterHidden = { ...s.rosterHidden };
   const consoleInput = { ...s.consoleInput };
   const rawAnchor = { ...s.rawAnchor };
+  const composerError = { ...s.composerError };
   let layout = s.layout;
 
   for (const id of showing) {
@@ -518,6 +530,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     delete rosterHidden[id];
     delete consoleInput[id];
     delete rawAnchor[id];
+    delete composerError[id];
   }
 
   const kept = survivor === undefined ? undefined : views[survivor];
@@ -526,6 +539,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     viewAnchor[survivor] = null;
     delete consoleInput[survivor];
     delete rawAnchor[survivor];
+    delete composerError[survivor];
   }
 
   const viewOrder = paneOrder(layout);
@@ -536,6 +550,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     rosterHidden,
     consoleInput,
     rawAnchor,
+    composerError,
     viewOrder,
     activeViewId:
       s.activeViewId && viewOrder.includes(s.activeViewId)
@@ -572,7 +587,7 @@ function newView(network: string, target: string): ChatView {
  * any half-typed command belonged to the conversation it was showing, not to
  * the pane. */
 function retarget(
-  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput" | "rawAnchor">,
+  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput" | "rawAnchor" | "composerError">,
   id: ViewId,
   network: string,
   target: string,
@@ -582,6 +597,7 @@ function retarget(
   if (view.network === network && view.target === target) return {};
   const { [id]: _typed, ...consoleInput } = s.consoleInput;
   const { [id]: _line, ...rawAnchor } = s.rawAnchor;
+  const { [id]: _refusal, ...composerError } = s.composerError;
   return {
     views: {
       ...s.views,
@@ -590,6 +606,7 @@ function retarget(
     viewAnchor: { ...s.viewAnchor, [id]: null },
     consoleInput,
     rawAnchor,
+    composerError,
   };
 }
 
@@ -627,9 +644,11 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         : s.viewAnchor;
       const consoleInput = { ...s.consoleInput };
       const rawAnchor = { ...s.rawAnchor };
+      const composerError = { ...s.composerError };
       for (const view of stale) {
         delete consoleInput[view.id];
         delete rawAnchor[view.id];
+        delete composerError[view.id];
       }
 
       return {
@@ -643,6 +662,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         viewAnchor,
         consoleInput,
         rawAnchor,
+        composerError,
       };
     }
 

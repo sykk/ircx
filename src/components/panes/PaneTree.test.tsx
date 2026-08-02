@@ -550,3 +550,85 @@ describe("a pane reading the protocol log", () => {
     expect(logs()[0]!.scrollTop).toBe(400);
   });
 });
+/**
+ * The last of #308. `Composer` held the reason a line was refused in component
+ * state, so a split took it and left the reader their line back with nothing
+ * saying why it had not gone. The line itself survives — it round-trips through
+ * the backend draft, which is why this reads as the message being un-sent for
+ * no reason rather than as anything being lost.
+ */
+describe("a composer whose line the server refused", () => {
+  const store = () => useAppStore.getState();
+
+  /** The real draft store remembers; the file-wide mock answers null to
+   * everything, which would hide the half of this that already works. */
+  function rememberDrafts() {
+    const drafts = new Map<string, string>();
+    ipcMock.getDraft.mockImplementation((n: string, t: string) =>
+      Promise.resolve(drafts.get(`${n}/${t}`) ?? null),
+    );
+    ipcMock.setDraft.mockImplementation((n: string, t: string, v: string) => {
+      drafts.set(`${n}/${t}`, v);
+      return Promise.resolve();
+    });
+  }
+
+  async function refuse(reason: string) {
+    ipcMock.submitInput.mockResolvedValue({ kind: "rejected", value: reason });
+    render(<PaneTree />);
+    await settle();
+    const box = screen.getByLabelText("Message #ctf-ops");
+    fireEvent.change(box, { target: { value: "hello" } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: "Enter" });
+    });
+  }
+
+  function boxes(): HTMLTextAreaElement[] {
+    return screen.getAllByLabelText("Message #ctf-ops") as HTMLTextAreaElement[];
+  }
+
+  it("keeps the reason, and the line, when a split rebuilds the pane", async () => {
+    rememberDrafts();
+    const view = store().activeViewId!;
+    await refuse("Cannot send to channel");
+    expect(screen.getAllByText(/Cannot send to channel/)).toHaveLength(1);
+    expect(boxes()[0]!.value).toBe("hello");
+
+    act(() => store().splitActiveView("row"));
+    await settle();
+    await settle();
+
+    expect(store().composerError[view]).toBe("Cannot send to channel");
+    expect(screen.getAllByText(/Cannot send to channel/)).toHaveLength(1);
+    expect(boxes()[0]!.value).toBe("hello");
+  });
+
+  it("puts the reason on the pane that tried to send, not on the one beside it", async () => {
+    rememberDrafts();
+    await refuse("Cannot send to channel");
+
+    act(() => store().splitActiveView("row"));
+    await settle();
+    await settle();
+
+    expect(store().composerError[store().activeViewId!] ?? null).toBe(null);
+    expect(screen.getAllByText(/Cannot send to channel/)).toHaveLength(1);
+  });
+
+  it("lets go of the reason when the next line is sent", async () => {
+    rememberDrafts();
+    const view = store().activeViewId!;
+    await refuse("Cannot send to channel");
+
+    ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+    const box = boxes()[0]!;
+    fireEvent.change(box, { target: { value: "/help" } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: "Enter" });
+    });
+
+    expect(store().composerError[view] ?? null).toBe(null);
+    expect(screen.queryByText(/Cannot send to channel/)).toBeNull();
+  });
+});

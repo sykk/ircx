@@ -11,7 +11,7 @@ export function resetStore() {
 
 type ViewSlice = Pick<
   AppState,
-  "views" | "viewOrder" | "activeViewId" | "layout" | "viewAnchor" | "consoleInput" | "rawAnchor"
+  "views" | "viewOrder" | "activeViewId" | "layout" | "viewAnchor" | "consoleInput" | "rawAnchor" | "composerError"
 >;
 
 /** The id `oneView` gives its pane, for a test that renders a pane component. */
@@ -31,6 +31,7 @@ export function oneView(target: ActiveTarget | null): ViewSlice {
       viewAnchor: {},
       consoleInput: {},
       rawAnchor: {},
+      composerError: {},
     };
   }
   const id = TEST_VIEW;
@@ -42,6 +43,7 @@ export function oneView(target: ActiveTarget | null): ViewSlice {
     viewAnchor: {},
     consoleInput: {},
     rawAnchor: {},
+    composerError: {},
   };
 }
 

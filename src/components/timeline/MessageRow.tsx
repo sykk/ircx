@@ -10,6 +10,7 @@ import { bodyText } from "./groups";
 import { Markdown, Mentioned } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
+import type { FailureRun } from "./rows";
 
 interface MessageRowProps {
   message: ChatMessage;
@@ -29,6 +30,9 @@ interface MessageRowProps {
   onReply: (msgid: string) => void;
   present: ReadonlySet<string>;
   flashing: boolean;
+  /** Null unless this message failed. The run it failed with, and whether this
+   * is the row carrying the notice for it. */
+  failure: FailureRun | null;
 }
 
 export function MessageRow({
@@ -42,12 +46,12 @@ export function MessageRow({
   onReply,
   present,
   flashing,
+  failure,
 }: MessageRowProps) {
   const highlight = isHighlight(message, ownNick, present);
   // A rule raised this line to the same loudness a mention has, so it is marked
   // the same way: the row tinted, and the reason said in the words for it.
   const raised = (message.raisedBy ?? []).length > 0;
-  const failed = message.delivery.state === "failed";
   // A reaction and a reply both travel as a `+reply` naming a msgid. Until the
   // server has given this message one there is nothing to name it by, so it can
   // be answered by neither — which is the window between sending a line and its
@@ -129,7 +133,12 @@ export function MessageRow({
             <AnnotationLine key={note.plugin} note={note} />
           ))}
 
-          {failed && <FailureNotice message={message} />}
+          {/* One notice for the run rather than one for each of its lines:
+              the reason belongs to the connection, not to the message, and a
+              cut mid-paste failed 78 of them at once. Every other row of the
+              run says so in the column the reply controls would have used,
+              which a failed message never has. #341. */}
+          {failure?.last && <FailureNotice message={message} run={failure.run} />}
         </div>
 
         {/* Their own column rather than laid over the far end of the measure.
@@ -137,6 +146,14 @@ export function MessageRow({
             long line running underneath a control could not be clicked, which
             is worse than the space. */}
         <div className="flex justify-end">
+          {failure && !failure.last && (
+            <span
+              className="font-[family-name:var(--font-ui)] text-[11px]"
+              style={{ color: "var(--danger)" }}
+            >
+              Not sent
+            </span>
+          )}
           {msgid !== null && (
             <RowControls
               alone
@@ -243,14 +260,19 @@ function AnnotationLine({ note }: { note: Annotation }) {
   );
 }
 
-function FailureNotice({ message }: { message: ChatMessage }) {
+function FailureNotice({ message, run }: { message: ChatMessage; run: ChatMessage[] }) {
   const [retrying, setRetrying] = useState(false);
   const detail = message.delivery.state === "failed" ? message.delivery.detail : "";
 
+  // In the order they were said, and one at a time: they go back through the
+  // same rate limiter that was draining them when the connection went, so
+  // sending them together would only queue them together.
   const retry = async () => {
     setRetrying(true);
     try {
-      await ipc.submitInput(message.network, message.target, message.text);
+      for (const failed of run) {
+        await ipc.submitInput(failed.network, failed.target, failed.text);
+      }
     } finally {
       setRetrying(false);
     }
@@ -261,7 +283,11 @@ function FailureNotice({ message }: { message: ChatMessage }) {
       className="flex items-baseline gap-2 font-[family-name:var(--font-ui)] text-[11px]"
       style={{ color: "var(--danger)" }}
     >
-      <span>Not sent — {detail}</span>
+      <span>
+        {run.length === 1
+          ? `Not sent — ${detail}`
+          : `${run.length} messages were not sent — ${detail}`}
+      </span>
       <button
         type="button"
         onClick={retry}

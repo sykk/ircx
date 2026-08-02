@@ -1608,3 +1608,68 @@ describe("a conversation the server replayed", () => {
     expect(screen.getByText(/addressed you by name/)).toBeTruthy();
   });
 });
+
+/** #341: a cut mid-paste fails every queued line at once, and a notice under
+ * each of them said one fact about the connection as many times as there were
+ * lines. Walked at 78. */
+describe("a run of lines that failed together", () => {
+  function stranded(count: number) {
+    return Array.from({ length: count }, (_, i) =>
+      makeMessage({
+        id: `s${i}`,
+        nick: "walker",
+        text: `paste line ${i + 1}`,
+        delivery: { state: "failed", detail: "not connected to Queue" },
+      }),
+    );
+  }
+
+  it("says it once for the run, not once for each line", () => {
+    seed(stranded(78));
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getAllByText("78 messages were not sent — not connected to Queue")).toHaveLength(
+      1,
+    );
+    expect(screen.queryByText("Not sent — not connected to Queue")).toBeNull();
+    expect(screen.getAllByText("Retry")).toHaveLength(1);
+  });
+
+  /** The reserved column the reply controls would have used, which a failed
+   * message never has one for. Every line of the run still says it did not go;
+   * only the reason and the way back are said once. */
+  it("still marks every line of the run", () => {
+    seed(stranded(78));
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getAllByText("Not sent")).toHaveLength(77);
+  });
+
+  it("keeps a single failure exactly as it was", () => {
+    seed([
+      makeMessage({
+        id: "one",
+        delivery: { state: "failed", detail: "Cannot send to channel" },
+      }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(screen.getByText("Not sent — Cannot send to channel")).toBeTruthy();
+    expect(screen.queryByText("Not sent")).toBeNull();
+  });
+
+  it("sends the whole run again, in the order it was said", async () => {
+    ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+    seed(stranded(3));
+    render(<Timeline view={TEST_VIEW} />);
+
+    fireEvent.click(screen.getByText("Retry"));
+
+    await waitFor(() => expect(ipcMock.submitInput).toHaveBeenCalledTimes(3));
+    expect(ipcMock.submitInput.mock.calls.map((call) => call[2])).toEqual([
+      "paste line 1",
+      "paste line 2",
+      "paste line 3",
+    ]);
+  });
+});

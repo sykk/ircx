@@ -2035,6 +2035,15 @@ distinct reason. Recovering the paste means seventy-eight clicks. Filed as #341;
 the deepest run before this stranded 26 lines, which is a size the component is
 fine at.
 
+**Fixed in #341**, and the fixed screen was looked at the same way — the driver
+seeded with the 22 delivered and 78 failed this run produced. One notice, one
+Retry, and the other 77 lines marked in the column the reply controls would have
+used, which costs no height: the pane holds 22 messages where it held 13. The
+mark keeps its own line at every pane width, the column being a fixed 60px that
+does not shrink with the measure. What nobody has seen is the fixed screen
+arriving from a real cut rather than from a seeded copy of one, for the same
+reason the rest of this run could not be watched in the window.
+
 **The fade says nothing during a paste.** #339's premise turns out to be
 stronger than it was argued. A queued message is drawn fainter, which is a
 signal only against an unfaded row to compare it to — and in a draining paste

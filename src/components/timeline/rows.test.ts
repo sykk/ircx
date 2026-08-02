@@ -9,6 +9,7 @@ import {
   describePresenceRun,
   describeSpan,
   formatClock,
+  failureRuns,
   partitionSystemRun,
   rowIndexOfMessage,
   rowMessages,
@@ -605,5 +606,54 @@ describe("buildRows under a netsplit", () => {
     const system = rows.find((row) => row.kind === "system");
 
     expect(system && describePresence(system.messages)).toBe("2500 quit, 2500 joined");
+  });
+});
+
+describe("lines that failed together", () => {
+  function line(id: string, delivery: ChatMessage["delivery"]): ChatMessage {
+    return makeMessage({ id, nick: "walker", delivery });
+  }
+  const cut = (id: string) =>
+    line(id, { state: "failed", detail: "not connected to Queue" });
+  const gone = (id: string) => line(id, { state: "delivered" });
+
+  /** What the sizes look like per row, which is what the notice and the marks
+   * are drawn from. */
+  const shape = (messages: ChatMessage[]) =>
+    failureRuns(messages).map((mark) => (mark === null ? "-" : `${mark.run.length}${mark.last ? "!" : ""}`));
+
+  it("marks nothing where nothing failed", () => {
+    expect(shape([gone("a"), gone("b")])).toEqual(["-", "-"]);
+  });
+
+  /** A single failure is what shipped before #341, and it keeps saying exactly
+   * what it said: its own notice, on its own row. */
+  it("leaves one failure as its own run", () => {
+    expect(shape([gone("a"), cut("b"), gone("c")])).toEqual(["-", "1!", "-"]);
+  });
+
+  it("gathers a cut's worth into one run ending on the last", () => {
+    expect(shape([gone("a"), cut("b"), cut("c"), cut("d")])).toEqual(["-", "3", "3", "3!"]);
+  });
+
+  it("gives every row of a run the same messages to retry", () => {
+    const messages = [cut("a"), cut("b"), cut("c")];
+    const marks = failureRuns(messages);
+
+    expect(marks[2]!.run.map((m) => m.id)).toEqual(["a", "b", "c"]);
+    expect(marks[0]!.run).toBe(marks[2]!.run);
+  });
+
+  /** A message that got out between two failures means the connection came
+   * back, so what follows is a second event and not more of the first. */
+  it("splits a run where a message got through", () => {
+    expect(shape([cut("a"), gone("b"), cut("c")])).toEqual(["1!", "-", "1!"]);
+  });
+
+  /** Two reasons are two events even with nothing between them: one is the
+   * connection and the other is the channel refusing the line. */
+  it("splits a run where the reason changes", () => {
+    const refused = line("c", { state: "failed", detail: "Cannot send to channel" });
+    expect(shape([cut("a"), cut("b"), refused])).toEqual(["2", "2!", "1!"]);
   });
 });

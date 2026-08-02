@@ -4,7 +4,7 @@ import { nickColor } from "@/lib/nickColor";
 import { isHighlight } from "@/store/selectors";
 import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
-import { formatClock, writesOwnNick } from "./rows";
+import { failureRuns, formatClock, writesOwnNick } from "./rows";
 
 const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
 
@@ -161,6 +161,7 @@ export function MessageBlock({
 }: Props) {
   const head = messages[0]!;
   const addressed = messages.some((message) => isHighlight(message, ownNick, present));
+  const failures = failureRuns(messages);
   // A rule raises a message to the same loudness a mention has — the badge
   // does not distinguish them — so the spine says so the same way. Which line
   // and which rule is on the row, where the message is.
@@ -218,6 +219,7 @@ export function MessageBlock({
       {messages.map((message, at) => (
         <MessageRow
           key={message.id}
+          failure={failures[at]!}
           message={message}
           quotedAbove={repeatsQuote(messages, at)}
           ownNick={ownNick}

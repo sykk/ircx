@@ -357,10 +357,19 @@ test reaches.
   both real improvements, missed the cause — the measurement after each is what
   said keep going.
 
-  What is left is a netsplit, which is the other burst this entry was written
-  for and which nothing has yet seen. It differs from a `LIST` in a way that
+  **The netsplit half is measured** on 2026-08-02, and the answer is that the
+  timeline is not where the cost is. It differs from a `LIST` in a way that
   matters: a `LIST` is one numeric that now bypasses the timeline, where a split
-  is thousands of QUITs and JOINs that each legitimately belong there.
+  is thousands of QUITs and JOINs that each legitimately belong there. Five
+  thousand of them fold into one digest line and cost 3 ms to lay out; what
+  costs is the roster, where each departure copies the whole member list and a
+  2,500-member split takes 134 ms. `docs/measurements.md` has the table and the
+  method.
+
+  It is a hitch rather than the freeze `LIST` was, because it arrives as one
+  batch and costs one long frame. What is still unwalked is the same burst
+  against a real server, with the socket, the archive and the compositor in it
+  — the measurement covers two frontend stages in isolation and is a floor.
 
 **The header's invite control is verified** by the owner against Libera on
 2026-07-30. The invite arrived at the other client, and a channel without `+o`

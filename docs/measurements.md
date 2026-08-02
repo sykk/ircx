@@ -213,9 +213,49 @@ What it adds to the binary is under [size](#size). A user with no plugins never
 touches that text; the spike measured the demand-paging cost of unused text at
 around 0.1 ms.
 
+## A netsplit through the frontend
+
+A split of `n` people out of a channel of `n`, then the same `n` returning a
+minute later. Each one is a member event and a timeline message, so `n = 2,500`
+is 10,000 events carrying 5,000 messages. Median of three runs, jsdom on Node
+24, `performance.now()` around each half.
+
+| channel | events | messages | `applyEvents` | `buildRows` | rows drawn |
+|---|---|---|---|---|---|
+| 100 | 400 | 200 | 1.7 ms | 0.4 ms | 2 |
+| 500 | 2,000 | 1,000 | 7.4 ms | 1.0 ms | 2 |
+| 1,000 | 4,000 | 2,000 | 30.2 ms | 1.4 ms | 2 |
+| 2,500 | 10,000 | 5,000 | 133.9 ms | 3.0 ms | 2 |
+
+**The timeline half is not where the cost is.** `buildRows` is linear at about
+0.6 µs a message, and the two rows are one digest and the day divider above it —
+five thousand comings and goings fold into a single *2500 quit, 2500 joined*,
+with every message still held inside the row it folded into. That is what the
+digest was built for and it holds at this size. `rows.test.ts` asserts the fold
+and the count so a regression shows up as a test rather than as an unscrollable
+channel.
+
+**The roster half is quadratic.** `applyEvents` costs roughly `2.5e-5 × n²` ms
+above `n = 500`: each `memberRemoved` filters the whole roster and each
+`memberUpdated` copies it, so `n` departures from a channel of `n` is `n²/2`
+element copies. 1,000 → 2,500 is 2.5 times the people and 4.4 times the time.
+
+**134 ms is a hitch, not the freeze a `LIST` was.** It arrives as one batch, so
+it costs one long frame rather than a locked window — the thing #119 was filed
+for does not recur here. Extrapolating the same curve puts a 5,000-member split
+near 540 ms, which would be felt. Filed rather than fixed, because fixing it
+means making member events batch-aware rather than adjusting a constant.
+
+**Covers:** the store reducer and the row builder, in jsdom. **Excludes:**
+everything the real client would also be doing — parsing the lines, writing them
+to SQLite, and WebKit laying out and painting the result. The figures are the
+floor, not the whole cost.
+
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.
 - Startup with a populated archive and several networks auto-connecting.
 - Memory over a long session, or with a real backlog rendered.
-- Anything under netsplit-scale traffic.
+- A netsplit against a real server, end to end. The row above measures the two
+  frontend stages in isolation; nothing has yet driven thousands of real QUITs
+  through the socket, the archive and the compositor together.

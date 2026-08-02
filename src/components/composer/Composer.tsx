@@ -293,8 +293,16 @@ function ComposerFor({
         />
       )}
 
+      {/* A live region, the way the console's identical control is one: the
+          refusal is drawn in colour and position, and neither reaches a reader
+          who cannot see it. Announced rather than merely labelled, because it
+          answers a question the user has already asked by pressing Enter. */}
       {error && (
-        <div className="px-1 pb-1 text-[11px]" style={{ color: "var(--danger)" }}>
+        <div
+          role="alert"
+          className="px-1 pb-1 text-[11px]"
+          style={{ color: "var(--danger)" }}
+        >
           {error}
         </div>
       )}

@@ -1693,8 +1693,43 @@ finished at 7.99 s against a 7.5 s prediction, and it is worth expecting rather
 than reading as drift: the burst is whatever is left of the allowance, not a
 fresh five.
 
-**Still not walked:** a paste large enough to outrun the allowance rather than
-ride it. Twenty lines is eight seconds of a limiter behaving; what nobody has
-sent is the hundred-line paste where a user waits nearly a minute for their own
-text to leave, with nothing on screen saying why — the local copies are all
-drawn immediately, so the window looks finished while the socket is not.
+### A paste that outruns the allowance
+
+**A hundred lines is walked** against local `ergo` on 2026-08-01, timed off a
+probe in the channel:
+
+```text
+ 0.000s  001, 002, 003     the burst
+ 0.500s  004
+   …
+48.556s  100
+```
+
+All hundred arrived, in order, none lost. Ninety-seven paced gaps averaging
+501 ms against a configured 500, and a burst of three rather than five for the
+same reason the Libera run had four — the burst is whatever is left of the
+allowance, not a fresh five.
+
+So one keystroke takes the client the better part of a minute to send. **This
+entry used to say the window looks finished while the socket is not, and that
+was wrong.** `MessageRow` draws a `Pending` message at 0.55 opacity, and nothing
+else in the row changes text brightness, so a draining paste is a hard boundary
+marching down the list: solid above, faded below. Confirmed on screen at the
+36/37 line about eighteen seconds in, which is where the probe's timings put the
+front. It is legible at a glance and needs nobody to be told to look for it.
+
+Worth knowing why that holds, because it is conditional. `say` files a local
+copy as `Pending` only when `echo-message` was negotiated, and as `Sent`
+otherwise — and `Sent` is terminal and assigned at enqueue rather than at write.
+Both `ergo` and Libera negotiate it, so the progress a user sees is the common
+case, not the guaranteed one.
+
+**Still not walked:**
+
+- **A server without `echo-message`.** Every line would render solid the moment
+  it was typed while the socket drained for a minute behind it, which is the
+  case this entry originally described and no server here will produce.
+- **An ordinary message sent while a paste is draining.** It queues behind
+  everything still to go, so a one-word reply can take the rest of the minute to
+  leave while its own copy is already on screen. Nothing was watched here and
+  the composer says nothing about a queue.

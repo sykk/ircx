@@ -1655,11 +1655,46 @@ The screen matched the wire in order and content, which is the half no test
 reaches: the first piece goes back to the composer to draw and the rest arrive
 as ordinary messages, so the two paths can disagree without a server noticing.
 
-`ircx-net`'s limiter paces the outgoing lines at five then one every 500 ms, so
-twenty pasted lines take about ten seconds to leave. **Not verified:** that a
-real network takes them at that rate without treating it as a flood. Nine
-messages left in two bursts here without ergo objecting, which is well under
-what a limiter is for. Paste twenty lines into a channel on Libera and watch
-for a `NOTICE` about excess flood or a kill; the pacing figures are in
-`crates/ircx-net/src/rate_limit.rs` and this is the first change that sends
-more than a handful of lines from one keystroke.
+### The burst a paste makes
+
+**Walked against Libera** on 2026-08-01: twenty numbered lines pasted into
+`#ircx-walk` in one keystroke. All twenty arrived, in order, with no
+excess-flood `NOTICE` and no `Closing Link`.
+
+**Measure it from a second client.** Neither obvious way works, and both look
+like they do. The sender's timeline draws the local copies the moment Enter is
+pressed, because `say` hands them straight over and never waits for the socket.
+The raw log is no better: `send_line` emits its `RawLine` before `Action::Send`
+reaches the transport, so an outgoing entry records the queue rather than the
+wire — and the log carries no timestamps at all. Arrivals at another client are
+wire events and are the only thing here that is.
+
+Read off a probe joined to the same channel, first arrival as zero:
+
+```text
+0.000s  line 01   ┐
+0.055s  line 02   │  the burst
+0.055s  line 03   │
+0.055s  line 04   ┘
+0.527s  line 05   ┐
+0.993s  line 06   │  fifteen intervals, 497.7 ms each
+  …               │
+7.992s  line 20   ┘
+```
+
+Which is `rate_limit.rs` doing exactly what it says: a burst spent at once, then
+one line per 500 ms. The pacing was asserted from the constants before this and
+is measured now.
+
+Four in the burst rather than five because the bucket was a token short when
+the paste landed — a `PONG` or the composer's `+typing` TAGMSG will have taken
+one, both of which go out through the same queue. That is also why the run
+finished at 7.99 s against a 7.5 s prediction, and it is worth expecting rather
+than reading as drift: the burst is whatever is left of the allowance, not a
+fresh five.
+
+**Still not walked:** a paste large enough to outrun the allowance rather than
+ride it. Twenty lines is eight seconds of a limiter behaving; what nobody has
+sent is the hundred-line paste where a user waits nearly a minute for their own
+text to leave, with nothing on screen saying why — the local copies are all
+drawn immediately, so the window looks finished while the socket is not.

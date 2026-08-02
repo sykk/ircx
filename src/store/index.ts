@@ -11,6 +11,7 @@ import {
   type ChatMessage,
   type InstalledPlugin,
   type IrcxEvent,
+  type Member,
   type Reaction,
 } from "@/types";
 import { networkPrefix, sameTarget, targetKey, type TargetKey } from "./keys";
@@ -187,12 +188,45 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   applyEvents: (events) =>
     set((s) => {
       let next = s;
+      // A netsplit is thousands of roster changes interleaved with the messages
+      // reporting them, and each one rebuilt the whole member list: n people
+      // leaving a channel of n cost n²/2 element copies, 134 ms at n = 2,500
+      // (#321). Held as nick to member while the batch runs, each costs one
+      // lookup and the list is rebuilt once.
+      //
+      // This is a second implementation of what `reduce` does for one event.
+      // `reduce` is the one to trust; `index.test.ts` asserts this agrees with
+      // it over a batch built to make them disagree.
+      const pending = new Map<TargetKey, Map<string, Member>>();
+
+      const flush = () => {
+        if (pending.size === 0) return;
+        const members = { ...next.members };
+        for (const [key, roster] of pending) members[key] = [...roster.values()];
+        next = { ...next, members };
+        pending.clear();
+      };
+
       for (const event of events) {
+        const roster = rosterFor(event, next, pending);
+        if (roster !== undefined) {
+          applyRoster(roster, event as RosterEvent);
+          continue;
+        }
+        // `networkRemoved` is the only reducer other than the roster three that
+        // reads `members`, so what has not been written back yet must land
+        // before it runs — otherwise this batch writes a roster back over a
+        // network the same batch deleted.
+
+
+        if (event.type === "networkRemoved") flush();
+
         // Each event reduces against what the ones before it left, so a batch
         // reads the same as the same events applied one at a time.
         const patch = reduce(next, event);
         if (Object.keys(patch).length > 0) next = { ...next, ...patch };
       }
+      flush();
       return next === s ? {} : next;
     }),
 
@@ -608,6 +642,61 @@ function retarget(
     rawAnchor,
     composerError,
   };
+}
+
+/** The three events that only change who is in a channel, which `applyEvents`
+ * coalesces. Everything else in a batch goes through `reduce` one at a time. */
+type RosterEvent = Extract<
+  IrcxEvent,
+  { type: "membersReplaced" | "memberUpdated" | "memberRemoved" }
+>;
+
+/**
+ * The working roster this batch is holding for `event`'s channel, or undefined
+ * if `event` is not a roster event at all. Opens one from what the batch has
+ * built so far the first time a channel is touched.
+ */
+function rosterFor(
+  event: IrcxEvent,
+  next: AppState,
+  pending: Map<TargetKey, Map<string, Member>>,
+): Map<string, Member> | undefined {
+  if (
+    event.type !== "membersReplaced" &&
+    event.type !== "memberUpdated" &&
+    event.type !== "memberRemoved"
+  ) {
+    return undefined;
+  }
+  const key = targetKey(event.network, event.channel);
+  const held = pending.get(key);
+  if (held !== undefined) return held;
+
+  const current = next.members[key];
+  // Taking somebody out of a channel with no roster changes nothing, the way it
+  // does not in `reduce` — which is where this one falls through to. Adding one
+  // opens a roster holding them, so only the removal returns here.
+  if (current === undefined && event.type === "memberRemoved") return undefined;
+  const roster = new Map((current ?? []).map((member) => [member.nick, member]));
+  pending.set(key, roster);
+  return roster;
+}
+
+/** Insertion order is the order the list is drawn in, so `set` on somebody
+ * already there replaces them where they are rather than moving them to the
+ * end — which is what assigning into the array did. */
+function applyRoster(roster: Map<string, Member>, event: RosterEvent): void {
+  switch (event.type) {
+    case "membersReplaced":
+      roster.clear();
+      for (const member of event.members) roster.set(member.nick, member);
+      return;
+    case "memberUpdated":
+      roster.set(event.member.nick, event.member);
+      return;
+    case "memberRemoved":
+      roster.delete(event.nick);
+  }
 }
 
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {

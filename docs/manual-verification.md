@@ -361,10 +361,10 @@ test reaches.
   timeline is not where the cost is. It differs from a `LIST` in a way that
   matters: a `LIST` is one numeric that now bypasses the timeline, where a split
   is thousands of QUITs and JOINs that each legitimately belong there. Five
-  thousand of them fold into one digest line and cost 3 ms to lay out; what
-  costs is the roster, where each departure copies the whole member list and a
-  2,500-member split takes 134 ms. `docs/measurements.md` has the table and the
-  method.
+  thousand of them fold into one digest line and cost 3 ms to lay out. What
+  costs is the store: a 2,500-member split took 134 ms, of which the roster was
+  75 ms and is linear now (#321), leaving 59 ms of merging the messages one
+  event at a time. `docs/measurements.md` has the tables and the method.
 
   It is a hitch rather than the freeze `LIST` was, because it arrives as one
   batch and costs one long frame. What is still unwalked is the same burst

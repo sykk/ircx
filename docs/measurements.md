@@ -356,10 +356,12 @@ ircx's own backfill working, and it is part of what the real stack does.
 - macOS and Windows. Everything here is Linux x86-64.
 - Startup with a populated archive and several networks auto-connecting.
 - Memory over a long session, or with a real backlog rendered.
-- A netsplit against a real server, end to end. Both halves are measured
-  separately now — the frontend stages in jsdom, everything below them against a
-  local `ergo` — and neither has WebKit in it. What nothing has yet driven is
-  thousands of real QUITs all the way to the compositor.
+- A netsplit against a real server, end to end, **as a figure**. Both halves are
+  measured separately — the frontend stages in jsdom, everything below them
+  against a local `ergo` — and neither has WebKit in it. A burst has since been
+  driven through a running window and watched, which is written up under *The
+  netsplit half is measured* in `docs/manual-verification.md`; it establishes
+  that the fold and the archive hold at that scale, and it timed nothing.
 - A real netsplit. What the section above measures is a few thousand ordinary
   clients whose sockets close at once, which is the arrival rate without the
   server link, the `*.net *.split` reason or the `NETSPLIT` batch.

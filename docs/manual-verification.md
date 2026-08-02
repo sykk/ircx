@@ -372,13 +372,14 @@ test reaches.
   where the cost is again. `crates/ircx-core/tests/burst.rs` empties a channel
   of 2,500 against a local `ergo` and times what the socket, the parse, the
   session and the archive do with it: 790 ms, against the 12 ms the two frontend
-  stages spend on the same burst. Over half of it is the archive writing each
-  quit in its own transaction (#328). The frontend rounds were worth doing and
-  they were worth about one and a half percent of the burst.
+  stages spend on the same burst. Over half of that was the archive writing each
+  quit in its own transaction, which #328 batches — the same burst is 380 ms
+  now. The frontend rounds were worth doing and they were worth about three
+  percent of it.
 
-  Read the method before quoting that: the first pass put the archive on a
-  tmpfs, which made it look like a third of a 490 ms burst rather than half of a
-  790 ms one.
+  Read the method before quoting any of that: the first pass put the archive on
+  a tmpfs, which made it look like a third of a 490 ms burst rather than half of
+  a 790 ms one.
 
   It is a hitch rather than the freeze `LIST` was, because it arrives as one
   batch and costs one long frame. Two things are still unwalked: the same burst

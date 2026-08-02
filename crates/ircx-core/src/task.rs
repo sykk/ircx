@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use ircx_ipc::HistoryRequest;
@@ -19,6 +19,11 @@ use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
 use crate::session::{Action, Restored, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
+
+/// How many arrived messages the archive write will hold before going down
+/// anyway. Bounds both what a long burst costs in memory and how much of it a
+/// crash loses. See `Context::persist`.
+const ARCHIVE_BATCH: usize = 500;
 
 /// Which on-arrival hook a strike is against. A plugin can hold both, and one
 /// of them failing says nothing about the other: a rule that throws should not
@@ -312,6 +317,7 @@ async fn run(
         plugins,
         strikes: Arc::default(),
         own_inbox,
+        pending: Mutex::default(),
     };
 
     let remembered = match context.store.open_targets(&context.network) {
@@ -399,9 +405,17 @@ async fn run(
                 stop = true;
                 break;
             }
+            // What arrived is written down as soon as nothing else is waiting,
+            // so a quiet socket is as durable as it was before #328 and only a
+            // burst — where every line is followed immediately by another —
+            // holds anything back.
+            if incoming.is_empty() {
+                context.flush_archive();
+            }
         }
 
         drop(transport);
+        context.flush_archive();
         if stop {
             return;
         }
@@ -524,6 +538,8 @@ struct Context {
     /// because the inbox closing is what stops the session, and a clone held
     /// here would keep a disconnected network alive for good.
     own_inbox: mpsc::WeakSender<SessionCommand>,
+    /// Messages that have arrived and not yet been written down. See `persist`.
+    pending: Mutex<Vec<ChatMessage>>,
 }
 
 impl Context {
@@ -542,6 +558,9 @@ impl Context {
             before: None,
             limit: CONTEXT_MESSAGES,
         };
+        // A plugin asking for the conversation is asking for what was said,
+        // which includes whatever is still held from the last arrivals.
+        self.flush_archive();
         match self.store.load_history(&request) {
             Ok(messages) => Some(call.with_messages(messages)),
             Err(error) => {
@@ -594,14 +613,25 @@ impl Context {
                     };
                     match event.as_ref() {
                         IrcxEvent::MessagesAppended { messages, .. } => self.persist(messages),
-                        IrcxEvent::MessageUpdated { message } => self.update(message),
+                        // The three below reach a row a message already left,
+                        // so what is held has to be down before they run —
+                        // `update_message` on a message not in the archive
+                        // silently does nothing, which is how a delivery state
+                        // would go missing.
+                        IrcxEvent::MessageUpdated { message } => {
+                            self.flush_archive();
+                            self.update(message);
+                        }
                         IrcxEvent::ReactionChanged {
                             message,
                             nick,
                             emoji,
                             active,
                             ..
-                        } => self.record_reaction(message, nick, emoji, *active),
+                        } => {
+                            self.flush_archive();
+                            self.record_reaction(message, nick, emoji, *active);
+                        }
                         IrcxEvent::QueryRenamed { from, to, .. } => self.move_draft(from, to),
                         _ => {}
                     }
@@ -611,6 +641,11 @@ impl Context {
                     // After the send, which is what makes the message drawn
                     // before any annotator runs.
                     if let Some((target, messages)) = arrived {
+                        // A note is written against the row its message left,
+                        // and the annotator runs off this task, so it cannot be
+                        // raced with a write still held here. A network with no
+                        // plugins never reaches this and keeps the batch.
+                        self.flush_archive();
                         self.annotate(target, messages);
                     }
                 }
@@ -806,7 +841,42 @@ impl Context {
         });
     }
 
+    /// Holds what arrived rather than writing it, because each write is a
+    /// transaction and a netsplit hands this one message at a time: 2,500
+    /// quits were 2,500 commits, 444 ms of the 791 the burst cost (#328).
+    ///
+    /// What is held goes down when the incoming lines stop, so ordinary
+    /// traffic — a line, then a quiet socket — is written as immediately as it
+    /// was before. Only a burst coalesces, and a burst is the case where the
+    /// window between arriving and being durable is worth having.
     fn persist(&self, messages: &[ChatMessage]) {
+        let mut held = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
+        held.extend_from_slice(messages);
+        if held.len() < ARCHIVE_BATCH {
+            return;
+        }
+        // Long bursts do not grow this without bound, and do not put the whole
+        // of themselves at risk of a crash either.
+        let batch = std::mem::take(&mut *held);
+        drop(held);
+        self.write(&batch);
+    }
+
+    /// Writes what `persist` is holding. Cheap and safe to call when there is
+    /// nothing held, which is what lets the caller flush at every boundary
+    /// rather than reason about which ones matter.
+    fn flush_archive(&self) {
+        let batch = {
+            let mut held = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
+            if held.is_empty() {
+                return;
+            }
+            std::mem::take(&mut *held)
+        };
+        self.write(&batch);
+    }
+
+    fn write(&self, messages: &[ChatMessage]) {
         if let Err(error) = self.store.append_messages(messages) {
             warn!(%error, "could not write messages to the archive");
         }
@@ -1016,6 +1086,7 @@ mod tests {
             plugins: None,
             strikes: Arc::new(strikes),
             own_inbox: inbox.downgrade(),
+            pending: Mutex::default(),
         }
     }
 
@@ -1034,6 +1105,116 @@ mod tests {
             sasl: None,
             connect_commands: Vec::new(),
             autojoin: Vec::new(),
+        }
+    }
+
+    /// #328. A burst hands `persist` one message at a time and each write is a
+    /// transaction, so what arrives is held and written when the lines stop.
+    mod holding_a_burst {
+        use super::*;
+        use ircx_ipc::{Delivery, EncryptionState, MessageKind, MessageSource, Sender};
+
+        fn said(id: &str) -> ChatMessage {
+            ChatMessage {
+                id: id.into(),
+                id_is_local: false,
+                via: None,
+                network: "test".into(),
+                target: "#burst".into(),
+                kind: MessageKind::Privmsg,
+                sender: Sender {
+                    nick: "nyx".into(),
+                    user: None,
+                    host: None,
+                    account: None,
+                    is_self: false,
+                },
+                timestamp: "2026-08-02T13:00:00.000Z".into(),
+                timestamp_is_local: false,
+                text: "hello".into(),
+                tags: Vec::new(),
+                reply_to: None,
+                batch: None,
+                delivery: Delivery::Pending,
+                attachments: Vec::new(),
+                encryption: EncryptionState::Plaintext,
+                raw: String::new(),
+                source: MessageSource::Live,
+                raised_by: Vec::new(),
+                annotations: Vec::new(),
+                reactions: Vec::new(),
+            }
+        }
+
+        fn archived(context: &Context) -> Vec<ChatMessage> {
+            context
+                .store
+                .load_history(&HistoryRequest {
+                    network: "test".into(),
+                    target: "#burst".into(),
+                    before: None,
+                    limit: 10_000,
+                })
+                .expect("read the archive")
+        }
+
+        #[test]
+        fn holds_what_arrived_until_something_asks_for_it() {
+            let context = context(Strikes::default());
+            for id in ["a", "b", "c"] {
+                context.persist(&[said(id)]);
+            }
+
+            assert!(
+                archived(&context).is_empty(),
+                "a burst still arriving has not been committed yet"
+            );
+
+            context.flush_archive();
+            let held: Vec<String> = archived(&context).into_iter().map(|m| m.id).collect();
+            assert_eq!(held, ["a", "b", "c"]);
+        }
+
+        /// Otherwise a burst that never pauses is an unbounded list, and a
+        /// crash during one loses all of it rather than the tail.
+        #[test]
+        fn writes_a_long_burst_without_waiting_for_it_to_stop() {
+            let context = context(Strikes::default());
+            for i in 0..ARCHIVE_BATCH {
+                context.persist(&[said(&format!("m{i}"))]);
+            }
+
+            assert_eq!(archived(&context).len(), ARCHIVE_BATCH);
+        }
+
+        /// `update_message` on a message the archive does not hold silently
+        /// does nothing, so an echo arriving while its own message is still
+        /// held would lose the delivery state it carries.
+        #[tokio::test]
+        async fn lets_an_echo_reach_a_message_still_held() {
+            let context = context(Strikes::default());
+            let mut settled = said("a");
+            settled.delivery = Delivery::Delivered;
+
+            context
+                .deliver(
+                    vec![
+                        Action::Emit(Box::new(IrcxEvent::MessagesAppended {
+                            network: "test".into(),
+                            target: "#burst".into(),
+                            messages: vec![said("a")],
+                        })),
+                        Action::Emit(Box::new(IrcxEvent::MessageUpdated {
+                            message: Box::new(settled),
+                        })),
+                    ],
+                    None,
+                )
+                .await;
+
+            let held = archived(&context);
+            assert_eq!(held.len(), 1);
+            assert_eq!(held[0].delivery, Delivery::Delivered);
         }
     }
 

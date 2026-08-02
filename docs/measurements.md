@@ -283,27 +283,40 @@ handed: the socket read, the line framing, the parse, the session state and the
 archive write. Release profile, loopback, median of three runs, **archive on a
 real filesystem** — btrfs on NVMe, which is where a user's is.
 
-| channel | quit wave, wall | on cpu | rows archived |
-|---|---|---|---|
-| 100 | 26.7 ms | 30 ms | 201 |
-| 500 | 124.9 ms | 130 ms | 1,003 |
-| 1,000 | 284.7 ms | 280 ms | 2,203 |
-| 2,500 | 791.3 ms | 790 ms | 5,203 |
+| channel | wall, before #328 | after | on cpu, before | after |
+|---|---|---|---|---|
+| 100 | 26.7 ms | 8.3 ms | 30 ms | 10 ms |
+| 500 | 124.9 ms | 28.5 ms | 130 ms | 50 ms |
+| 1,000 | 284.7 ms | 72.2 ms | 280 ms | 120 ms |
+| 2,500 | 791.3 ms | 241.8 ms | 790 ms | 380 ms |
 
 **The frontend was never where a netsplit costs.** The store reducer and the row
-builder together are about 12 ms of the 2,500 row above (9.3 and 2.9); the Rust
-side is 790 ms. The two rounds of work that made the frontend linear were worth
-doing and they were worth about one and a half percent of the burst. The section
-above says its figures are a floor; the floor is a sixtieth of the building.
+builder together are about 12 ms of the 2,500 row (9.3 and 2.9); the Rust side
+was 790 ms before this section was written and is 380 ms now. The two rounds of
+work that made the frontend linear were worth doing and they were worth about
+three percent of the burst. The section above says its figures are a floor; the
+floor is a thirtieth of the building.
 
-**Over half of it is the archive**, and for the same reason #324 and #325 were
-about: each quit arrives as its own event, so each is its own `append_messages`
-and so its own SQLite transaction. Timed directly — 2,500 messages through
-`Store::append_messages`, one call each against one call with all of them, fresh
-database, release profile — that is 444 ms against 80 ms. A batched write would
-take something like 360 ms off the row above, which is the largest single thing
-left in this path. The same one-at-a-time shape, a third time, one layer further
-down. Filed as #328.
+**Over half of it was the archive**, for the same reason #324 and #325 were
+about: each quit arrives as its own event, so each was its own
+`append_messages` and so its own SQLite transaction. Timed directly — 2,500
+messages through `Store::append_messages`, one call each against one call with
+all of them, fresh database, release profile — that is 444 ms against 80 ms.
+
+#328 holds what arrives and writes it when the incoming lines stop, so a burst
+commits once per 500 messages rather than once each. It took 550 ms off the
+2,500 row, rather more than the 360 the comparison above predicted: a
+transaction costs more than its commit. What is left is about 380 ms of cpu, of
+which the batched write is 80 — so the parse, the session state and the event
+sends are now the larger half, and nothing has measured them apart.
+
+**Ordinary traffic is written down exactly as promptly as before.** The hold
+ends when nothing else is waiting on the socket, which for a line arriving on a
+quiet connection is immediately. Only a burst — where every line is followed by
+another with no gap — coalesces, and a crash during one loses at most the 500
+messages still held. Anything that reaches a row a message already left flushes
+first: an echo confirming a delivery, a reaction, a plugin reading the
+conversation, an annotator about to run.
 
 **Where the database sits changes that answer**, which is why the row above says
 which filesystem. The same comparison under `/tmp` reads 178 ms against 77 ms:
@@ -317,10 +330,11 @@ Linux now, so a harness that takes the default measures the flattering case.
 > figure would be overstating a real machine's cost. It was understating it, by
 > 3.6 times.
 
-**On cpu and wall clock come out close together** on a real filesystem, and it
-was cpu that exceeded wall on the tmpfs run — the work is spread over a tokio
-runtime, so more than one thread is busy. Cpu is what the burst costs a machine;
-the wall clock is what one client waits.
+**On cpu exceeds wall clock** wherever the burst is not waiting on a commit —
+the work is spread over a tokio runtime, so more than one thread is busy. The
+two came out level on a real filesystem before #328, which is what a session
+task blocked on `append_messages` looks like. Cpu is what the burst costs a
+machine; the wall clock is what one client waits.
 
 **Covers:** ircx's own process — everything from the socket to the events, in
 the release profile, with the archive on a real filesystem. **Excludes:**

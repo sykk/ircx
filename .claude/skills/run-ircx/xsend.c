@@ -17,6 +17,12 @@
 
 static Display *dpy;
 
+/* Between keystrokes. GTK drops one from a path typed into a file chooser at
+ * 6 ms — 3 of 3 attempts lost a character, at varying positions — and does not
+ * at 20, where 9 of 9 came through whole. WebKit's textarea took 247 characters
+ * at either. Measured on the second walk; see docs/manual-verification.md. */
+static const useconds_t GAP_US = 20000;
+
 /* Whether this keysym sits on the shifted level of the keycode it maps to. */
 static int needs_shift(KeyCode code, KeySym want) {
   int per = 0;
@@ -68,9 +74,9 @@ int main(int argc, char **argv) {
         KeySym sym = *p == ' ' ? XK_space : XStringToKeysym(name);
         if (sym == NoSymbol) sym = (KeySym)(unsigned char)*p;
         if (tap(sym, 0)) return 1;
-        usleep(6000);
+        usleep(GAP_US);
       }
-      if (a + 1 < argc) { tap(XK_space, 0); usleep(6000); }
+      if (a + 1 < argc) { tap(XK_space, 0); usleep(GAP_US); }
     }
   } else if (!strcmp(argv[1], "key")) {
     unsigned mods = 0;

@@ -143,23 +143,23 @@ describe("selector reference stability", () => {
 });
 
 describe("view state", () => {
-  it("scrolls two views on one target independently", () => {
+  it("reads two views on one target independently", () => {
     seedViews(view("a", "libera", "#ctf-ops"), view("b", "libera", "#ctf-ops"));
 
-    const { setViewScroll } = useAppStore.getState();
-    setViewScroll("a", 1200);
-    setViewScroll("b", 40);
+    const { setViewAnchor } = useAppStore.getState();
+    setViewAnchor("a", "row-old");
+    setViewAnchor("b", "row-recent");
 
-    const { viewScroll } = useAppStore.getState();
-    expect(viewScroll.a).toBe(1200);
-    expect(viewScroll.b).toBe(40);
+    const { viewAnchor } = useAppStore.getState();
+    expect(viewAnchor.a).toBe("row-old");
+    expect(viewAnchor.b).toBe("row-recent");
   });
 
-  it("resets scroll and the inspector when a view is retargeted", () => {
+  it("resets the reading position and the inspector when a view is retargeted", () => {
     seedViews(view("a", "libera", "#ctf-ops"));
 
     const store = useAppStore.getState();
-    store.setViewScroll("a", 1200);
+    store.setViewAnchor("a", "row-old");
     store.setViewSelectedUser("a", "phrack");
     store.setActive({ network: "libera", target: "#hackint" });
 
@@ -170,17 +170,17 @@ describe("view state", () => {
       selectedUser: null,
       raw: false,
     });
-    expect(useAppStore.getState().viewScroll.a).toBe(0);
+    expect(useAppStore.getState().viewAnchor.a).toBe(null);
   });
 
   it("leaves the other view alone when one is retargeted", () => {
     seedViews(view("a", "libera", "#ctf-ops"), view("b", "libera", "#ctf-ops"));
-    useAppStore.getState().setViewScroll("b", 40);
+    useAppStore.getState().setViewAnchor("b", "row-recent");
 
     useAppStore.getState().setActive({ network: "libera", target: "#hackint" });
 
     expect(useAppStore.getState().views.b).toEqual(view("b", "libera", "#ctf-ops"));
-    expect(useAppStore.getState().viewScroll.b).toBe(40);
+    expect(useAppStore.getState().viewAnchor.b).toBe("row-recent");
   });
 
   it("opens a view and focuses it when there is none", () => {
@@ -197,7 +197,7 @@ describe("view state", () => {
       useAppStore.getState().applyEvent({ type: "networkUpdated", network: network("libera") });
     });
     seedViews(view("a", "libera", "#ctf-ops"), view("b", "oftc", "#linux"));
-    useAppStore.getState().setViewScroll("a", 1200);
+    useAppStore.getState().setViewAnchor("a", "row-old");
 
     const { result } = renderHook(() => useActiveTarget());
     act(() => {

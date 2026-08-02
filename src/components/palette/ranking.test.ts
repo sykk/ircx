@@ -48,7 +48,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     replyTo: {},
     inputHistory: {},
     views: {},
-    viewScroll: {},
+    viewAnchor: {},
     viewOrder: [],
     activeViewId: null,
     layout: null,

@@ -149,6 +149,16 @@ command box is there for that reason: it saves no draft, so a split used to take
 a half-typed command and the refusal under it, which is the loss #299 was filed
 for reaching the user by a second route.
 
+`rawAnchor` is the last of them and the one that needed a different answer
+(#315). A protocol log line has no id to name it by, and its text is not unique
+— a `PING` recurs — so the anchor is the line's index rather than the line, and
+`null` means the pane is following the tail the way it does for `viewAnchor`.
+The index is exact while the buffer only grows; at `RAW_LOG_CAP` each arrival
+shifts it, so a pane rebuilt during a flood comes back further down the log than
+it left. That is left as it is, because a flood long enough to move the index
+has already rolled the line off the front of the buffer, and no anchor recovers
+a line that is gone.
+
 The cost of keying by `ViewId` is that a pane's entry has to be let go of
 everywhere a pane is: closed, pointed at another conversation, taken by the
 conversation it was showing, or blanked when its network is deleted. A pane

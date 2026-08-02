@@ -186,6 +186,20 @@ describe("Composer sending", () => {
     expect(await screen.findByText("Cannot send to #ctf-ops")).toBeTruthy();
     expect(box.value).toBe("/nope");
   });
+
+  it("shows why the command never reached the session, and gives the text back", async () => {
+    ipcMock.submitInput.mockRejectedValue(
+      "ergo stopped responding — reconnect it and try again",
+    );
+    const box = await mount();
+    type(box, "the flag is in the env");
+    press(box, "Enter");
+
+    expect(
+      await screen.findByText("ergo stopped responding — reconnect it and try again"),
+    ).toBeTruthy();
+    expect(box.value).toBe("the flag is in the env");
+  });
 });
 
 describe("Composer completion", () => {

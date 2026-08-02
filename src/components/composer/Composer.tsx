@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, CommandOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
@@ -126,6 +126,13 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
     }
   };
 
+  /** Draw the reason and give the line back, but only into an empty box: the
+   * user may have started the next message while the round trip was in flight. */
+  const refuse = (reason: string, text: string) => {
+    setError(reason);
+    setValue((current) => (current === "" ? text : current));
+  };
+
   const send = async () => {
     const text = value.trim();
     if (text === "") return;
@@ -148,7 +155,18 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
       return;
     }
 
-    const outcome = await ipc.submitInput(network, target, text, replying?.msgid);
+    // A refusal reaches here two ways. The server would not take the line, and
+    // core answers `rejected`; or the command never got as far as the session,
+    // and `App::ask` rejects the promise — the network is gone, or it stopped
+    // answering inside its reply timeout. Both already carry a sentence written
+    // for a reader, and both cost the same message if it is not shown.
+    let outcome: CommandOutcome;
+    try {
+      outcome = await ipc.submitInput(network, target, text, replying?.msgid);
+    } catch (reason) {
+      refuse(String(reason), text);
+      return;
+    }
     // Core hands the local copy of a sent line back to the caller instead of
     // emitting it, so nothing else will draw it. A server with `echo-message`
     // confirms it later as an update to this same id; one without it never
@@ -167,10 +185,7 @@ function ComposerFor({ network, target }: { network: string; target: string }) {
       return;
     }
     if (outcome.kind !== "rejected") return;
-    setError(outcome.value);
-    // Restoring only into an empty box: the user may have started the next
-    // message while the round trip was in flight.
-    setValue((current) => (current === "" ? text : current));
+    refuse(outcome.value, text);
   };
 
   const complete = (el: HTMLTextAreaElement) => {

@@ -244,6 +244,53 @@ and so indexes worse. Both corpora run through the same SQLite, same options:
 the substring index came to 624 KiB against the English corpus's 572 KiB, 9%
 more. Nothing here suggests the English figure flatters the result.
 
+## Grouping under crossfire
+
+**Measured 2026-08-03**, `src/components/timeline/groups.crossfire.test.ts`: the
+shipped `assignGroups` over generated transcripts, 40 interleavings per row.
+Disjoint pairs talking only to each other, interleaved uniformly, every answer
+addressed with `nick:`. Uniform interleaving is the arrangement most likely to
+make two conversations cross, so each row is a worst case at that density.
+
+Six-message exchanges:
+
+| at once | drawn as one rule | no rule | rules per exchange | in someone else's | refused by reach | by crossing |
+|---|---|---|---|---|---|---|
+| 1 | 100% | 0% | 1.00 | 0% | 0% | 0% |
+| 2 | 20% | 0% | 1.94 | 12% | 4% | 18% |
+| 3 | 8% | 0% | 2.34 | 20% | 11% | 24% |
+| 4 | 4% | 0% | 2.41 | 22% | 23% | 18% |
+| 6 | 3% | 0% | 2.64 | 25% | 36% | 16% |
+| 8 | 2% | 0% | 2.58 | 25% | 48% | 12% |
+
+Two-message exchanges — one message and one answer, the shortest there is:
+
+| at once | drawn as one rule | no rule | refused by reach | by crossing |
+|---|---|---|---|---|
+| 1 | 100% | 0% | 0% | 0% |
+| 2 | 74% | 14% | 0% | 13% |
+| 4 | 57% | 20% | 14% | 17% |
+| 8 | 43% | 25% | 40% | 12% |
+
+**One other conversation is enough.** Going from one to two takes six-message
+exchanges from 100% drawn as one rule to 20%, at 1.94 rules each. The second row
+is the whole story; the rest of the curve is detail.
+
+**"In someone else's" is the cost nothing had named.** A group's span takes in
+everything between the answered message and the answer, so unrelated messages
+caught in it are drawn as part of an exchange they were not in — 12% of all
+messages at two simultaneous conversations, 25% by six.
+
+**The two refusals swap places**, so neither end of the curve can be read as a
+verdict on one rule. Crossing dominates when the channel is barely crowded;
+reach dominates once it is, because most answers are out of reach before
+crossing is consulted.
+
+**Excludes:** how many conversations a real channel actually runs at once, which
+is what would place a real client on these rows. `docs/manual-verification.md`
+records the attempt and why it failed — Libera carried 3 messages in 3 minutes
+across eight channels holding 8,400 people.
+
 ## Plugin isolation
 
 Added cost per mechanism, measured exec-to-answer over 200 runs on the release

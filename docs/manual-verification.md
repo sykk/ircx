@@ -2533,19 +2533,40 @@ the hint row does not wrap the row at any width the hint itself does not already
 wrap at — both wrap below about 220px, which is the hint's own doing and older
 than this.
 
-**Nobody has listened to it.** The tree can be asserted and was; whether it
-*reads* well is a different question, and the same one #318 left behind. What
-the tests pin is that two sentences are said and a hundred are not, which is the
-failure the design was chosen to avoid — not that the two are the right two, or
-that "all sent" arrives when a reader expects it.
+**Somebody has listened now, and there is nothing to listen to** (#388). Walked
+on 2026-08-03 with Orca 49 against the assembled app, the GNOME a11y bus on and
+the app started after it.
 
-Worth an hour with a screen reader, and specifically:
+The app's half is right. Walking the AT-SPI tree with `pyatspi`, the composer's
+`role="status"` region is published, advertises `live: polite`, and its text
+changes at both edges of a forty-line paste:
 
-- Whether `Messages waiting to send` at the start of a paste and `All sent` 48 s
-  later read as a pair, or as two unrelated interruptions.
-- Whether arriving at a queued row and hearing `Waiting to send` before the text
-  is the right order, or whether it should follow the message.
-- Whether the count in the hint row wants announcing at all for somebody who
-  cannot see it — it is deliberately outside the live region, on the grounds
-  that a number changing a hundred times is noise, and that reasoning has not
-  been tested against a person.
+```text
+17:08:06  region -> 'Messages waiting to send'
+17:08:44  region -> 'All sent'
+```
+
+A screen reader is never told. From Orca's own debug log over the same window:
+
+```text
+events from ircx that Orca queued          428
+occurrences of 'Messages waiting to send'    0
+occurrences of 'All sent'                    0
+occurrences of 'is typing'                   0
+```
+
+Every event Orca did receive came from a **visible** object — the composer
+textarea. Nothing carrying a live region's new text arrived, so nothing was
+announced. The common factor is `sr-only`: the queue's two edges, `Waiting to
+send` on a pending row, and the typing region all wear it, and none of their
+changes reach the bus as an event. The elements are in the tree and readable by
+inspection — that is where the politeness and the text above came from — but a
+live region nobody is told about is not a live region.
+
+So the three questions this entry asked cannot be answered yet, and are the
+wrong ones until #388 is fixed. What is now known is worse and more useful: the
+answer to "does it read well" is that it is not read at all.
+
+**Still unheard, and unhearable here**: whether the two sentences work *as a
+pair* once they are announced. This machine has no audio hardware, so what was
+captured is what Orca would have spoken rather than what it sounded like.

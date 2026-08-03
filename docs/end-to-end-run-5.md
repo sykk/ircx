@@ -108,15 +108,53 @@ Each row carries the whole message model the spec asks for, `raw` included:
  "raw":"@msgid=…;time=…;label=ircx-2 :walker!~u@… PRIVMSG #export :second line, so the file has two of mine"}
 ```
 
+## A write that starts and cannot finish
+
+Everything above failed at `File::create`, before a byte was written, which
+leaves the other half of the export untested: the write itself. That half raises
+`StoreError::Io` rather than anything this command wrote, and it was down as
+unreachable — a disk that fills partway through is not something a walk can
+arrange.
+
+A pipe is. `mkfifo`, a reader that takes 4 KB and leaves, and `Export
+everything` aimed at it: `File::create` opens the pipe, the first 8 KB flush
+finds the reader gone, and the write fails at exactly the point a full disk
+would. Rust ignores `SIGPIPE`, so it comes back as `BrokenPipe` rather than
+killing the app.
+
+`06-midwrite-errno.png`, before:
+
+```text
+could not write the export: Broken pipe (os error 32)
+```
+
+The errno again — this one from `StoreError::Io`, which the fix above never
+touched. Worse, and only visible once somebody had seen it: **no file is
+named.** The store raises `Io` from a `write_all` into a writer it was handed;
+it never knew the path, so the one sentence a user gets about the file they
+chose does not say which file it is.
+
+The words now live in `ircx_store::in_words`, which both layers use — the store
+cannot call into `src-tauri`, and two layers wording the same failure
+differently is the thing being fixed. `export_archive` puts the path back on the
+way out, and only for `Io`: an archive that fails to read is not the file
+refusing to be written, and naming the file for it would send the reader to the
+wrong place.
+
+`07-midwrite-named.png`, after:
+
+```text
+/tmp/…/pipe2.jsonl could not be written: whatever was reading it stopped
+```
+
 ## What this run did not reach
 
 - **An export large enough to stream.** 35 KB is not a test of writing the
   archive without rendering it first, which is what `BufWriter` and
   `export_everything` are for. The 40k-message archive that
   `docs/measurements.md` measures the backlog against would be.
-- **A disk that fills mid-write.** `StorageFull` has a sentence and no evidence:
-  every failure here happened at `File::create`, before a byte was written. The
-  error from a write that starts and cannot finish comes out of `StoreError::Io`
-  instead, which still renders its `io::Error` whole — errno and all.
+- **A disk that actually fills.** The pipe reaches the same code path and the
+  same `io::ErrorKind` handling, but `StorageFull` itself still has a sentence
+  and no evidence.
 - **A screen reader.** Still nobody has heard the queue announcements, and these
   new sentences are drawn into the same `role="alert"` nobody has listened to.

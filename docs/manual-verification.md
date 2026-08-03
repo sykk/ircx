@@ -694,10 +694,17 @@ which asserts that the host survives each one. What no test reaches:
   sandbox a fetcher that answers without a network, so what they cover is the
   grant, the host list and the budget. The socket underneath is `ircx-net`'s and
   is covered by its own tests, but nothing exercises the two together.
-- **Cancelling the folder picker.** Installing through the native dialogue is
-  verified — two plugins went in that way on 2026-07-30 — but nobody has
-  cancelled one. It should leave the library alone rather than installing
-  nothing under a blank name.
+- **Cancelling the folder picker is walked** on 2026-08-03, in the assembled app
+  on `Xvfb`. Escape out of the native chooser and the sheet is exactly as it
+  was: `Nothing installed`, no error drawn, `Plugins 0` in the status bar, and
+  nothing under a blank name. `install()` returns on the `null` the picker gives
+  for a dismissal, which is the branch #167 made the point of keeping separate
+  from a rejection.
+
+  **The sheet takes the keyboard back afterwards**, which is the part worth
+  having watched: a native dialogue takes focus from the webview and there is no
+  code anywhere that hands it back. Escape closed the sheet on the first press
+  after the chooser had been and gone.
 **The grant dialogue was read cold** by the owner on 2026-07-30, against a
 plugin asking for all seven. The verdict was that the set adds up to a decision
 somebody could make — with one line that did not carry its weight.
@@ -712,9 +719,16 @@ as the qualifier on reading and sending rather than as a capability of its own.
 This is the only thing in the plugin system no test can answer, so it is worth
 re-reading whenever a summary changes rather than treating it as settled for
 good. `Permission::summary` is the one place the wording lives.
-- **Picking a folder that is not a plugin.** The likeliest mistake with a
-  picker, and the one whose message was rewritten for #89. Choosing a folder
-  with no `plugin.json` should say which file it went looking for.
+- **Picking a folder that is not a plugin is walked** the same day. A folder
+  holding a `README.md` and nothing else, chosen through the native picker:
+
+  ```text
+  /home/syk/ircx/.claude/worktrees/export-walk/zznotaplugin holds no plugin.json,
+  so there is no plugin in it to install
+  ```
+
+  Which is what #89 asked for — it names the file it went looking for rather
+  than repeating the operating system — and the library is untouched behind it.
 
 **The grant dialogue lost a typed scope** until #164. Naming one conversation
 and pressing Save stored the manifest's `*` instead: the text reached the draft

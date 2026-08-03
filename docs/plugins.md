@@ -64,6 +64,17 @@ reaches nothing — a scope left empty, or sending and reading without a
 conversation to do it in. That rule is the dialogue's; the library's floor is
 `Grants::within`, which refuses anything the manifest never asked for.
 
+**The two scopes do not spell "any" the same way, and only one of them can.**
+`"channels": ["*"]` means every conversation, which is what the shipped examples
+ask for and what `Grants::reaches` reads. `"hosts": ["*"]` means nothing:
+`Grants::reaches_host` matches a host by name and has no wildcard, because the
+permission the user is shown says *"Fetch data from the websites it names"* and
+a wildcard is the opposite of naming them.
+
+A manifest asking for it is refused at parse now, rather than installing,
+granting, and then turning down every request one at a time with nothing
+pointing back at the manifest — which is what it did until #384.
+
 **Installing over a plugin that is already there grants nothing either.** The
 grants belong to the code the user was shown, and an id is only a folder name
 that any manifest can claim, so a second install starts the question again

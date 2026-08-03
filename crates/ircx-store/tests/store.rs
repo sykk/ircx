@@ -1901,3 +1901,121 @@ mod a_replay_of_our_own_message {
         assert_eq!(texts(&store).len(), 2);
     }
 }
+
+/// FTS5's query language is a language, and the search box is a text field a
+/// person types into. `fts_phrases` quotes every whitespace-separated run and
+/// doubles a typed quote, so nothing anybody types is read as an operator —
+/// but the failure mode if that ever slips is a syntax error thrown at somebody
+/// who typed `:)`, so it is worth a battery rather than an example.
+///
+/// What each query *finds* is not asserted here. What is asserted is that
+/// searching never fails.
+#[test]
+fn nothing_a_person_can_type_is_a_syntax_error() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "a",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "the deploy is stuck and it printed :) at me",
+        )])
+        .unwrap();
+
+    for query in [
+        // FTS5 operators and syntax, typed literally.
+        "AND",
+        "OR",
+        "NOT",
+        "NEAR",
+        "*",
+        "^",
+        "\"",
+        "\"\"",
+        "(",
+        ")",
+        "()",
+        "{}",
+        "-stuck",
+        "a OR b",
+        "NEAR(a b)",
+        "col:value",
+        "\"unclosed",
+        // Punctuation that tokenises to nothing at all.
+        ":)",
+        "#",
+        "...",
+        "!!!",
+        "?",
+        "/",
+        "\\",
+        "|",
+        // Things people paste.
+        "https://example.com/a?b=1",
+        "foo_bar()",
+        "C++",
+        "C#",
+        "don't",
+        // Not Latin, and not letters.
+        "サーバー",
+        "café",
+        "🔥",
+        "🔥🔥",
+    ] {
+        let answer = store.search(&SearchRequest {
+            query: query.into(),
+            network: None,
+            target: None,
+            limit: 10,
+        });
+        assert!(
+            answer.is_ok(),
+            "searching for {query:?} failed: {:?}",
+            answer.err()
+        );
+    }
+}
+
+/// The tokeniser's reach, asserted so a change to it is a decision rather than
+/// a surprise. `messages_fts` is `unicode61`, which splits on non-alphanumerics
+/// — so a phrase matches whole tokens, and a language that does not put spaces
+/// between its words has one token per run. #378 carries what that costs.
+#[test]
+fn search_matches_whole_tokens_rather_than_substrings() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message("a", "#ircx", "2026-01-01T00:00:00Z", "the deploy is stuck"),
+            message("b", "#ircx", "2026-01-01T00:00:01Z", "サーバーが落ちた"),
+        ])
+        .unwrap();
+
+    let found = |query: &str| {
+        store
+            .search(&SearchRequest {
+                query: query.into(),
+                network: None,
+                target: None,
+                limit: 10,
+            })
+            .unwrap()
+            .len()
+    };
+
+    // A word is a token, and space-separated words are found on their own.
+    assert_eq!(found("deploy"), 1);
+    assert_eq!(
+        found("deploy stuck"),
+        1,
+        "phrases are ANDed, not adjacent-only"
+    );
+    // Part of a token is not a token.
+    assert_eq!(found("eploy"), 0);
+    // Which for a run with no spaces in it means only the whole run matches.
+    assert_eq!(found("サーバーが落ちた"), 1);
+    assert_eq!(
+        found("落ちた"),
+        0,
+        "#378: a word inside CJK text is unfindable"
+    );
+}

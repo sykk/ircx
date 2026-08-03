@@ -165,6 +165,13 @@ quit
 | `--tls` | the seeded network uses TLS, off by default |
 | `--release` | drive the release app instead of a debug build against Vite |
 | `--keep` | leave the profile behind and print where it is |
+| `--profile <dir>` | launch on a profile a `--keep` run left, as it stands |
+
+**`--profile` is how "does it survive a restart" is asked.** A run seeds a fresh
+profile, so a draft, a pane layout, a theme and its edits are all gone by the
+next one — and a good deal of `docs/manual-verification.md` is written in that
+shape. Keep a profile, do the thing, quit, and launch again on the same
+directory; nothing is seeded the second time.
 
 **`--release` is what a figure has to be measured on**, and the build for it is
 `npm run tauri build -- --no-bundle` — **not** `cargo build --release`. What

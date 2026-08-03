@@ -303,3 +303,45 @@ async fn refuses_a_url_that_is_not_http() {
         );
     }
 }
+
+/// A URL is the one part of a request that comes from whoever spoke in the
+/// channel. `Target::parse` builds the request line and the `Host` header from
+/// it without going through `single_line`, so what stops a newline reaching the
+/// wire is the `http` crate's `Uri` refusing to parse one — a property of a
+/// dependency rather than of this file, and worth a test that would notice it
+/// changing.
+///
+/// The percent-encoded form is not the same question: `%0d%0a` stays encoded
+/// through the path and is one token on the wire, which is correct.
+#[tokio::test]
+async fn a_url_carrying_a_newline_never_reaches_the_wire() {
+    for url in [
+        "http://example.invalid/a\r\nX-Injected: 1",
+        "http://example.invalid/a\nX-Injected: 1",
+        "http://example.invalid\r\n/a",
+        "http://exam\r\nple.invalid/a",
+    ] {
+        let error = fetch(url, &policy()).await.expect_err("must refuse");
+        assert!(
+            matches!(error, HttpError::UnsupportedUrl { .. }),
+            "{url:?}: {error}"
+        );
+    }
+}
+
+/// Sending them would hand a password to whichever host the link named, and
+/// the link was written by somebody else.
+#[tokio::test]
+async fn a_url_carrying_credentials_is_refused_by_name() {
+    let error = fetch("http://user:pass@example.invalid/a", &policy())
+        .await
+        .expect_err("must refuse");
+    assert!(
+        matches!(error, HttpError::CredentialsInUrl { .. }),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains("username"),
+        "the sentence should say what is wrong: {error}"
+    );
+}

@@ -707,10 +707,32 @@ which asserts that the host survives each one. What no test reaches:
   function that waits is `ircx.fetch`, and it is bounded by what is left of the
   same deadline. The path exists for the next host function that waits, and it
   is reachable only by making one misbehave.
-- **A plugin's request crossing a real socket.** The permission tests give the
-  sandbox a fetcher that answers without a network, so what they cover is the
-  grant, the host list and the budget. The socket underneath is `ircx-net`'s and
-  is covered by its own tests, but nothing exercises the two together.
+- **A plugin's request crossing a real socket is covered** by
+  `crates/ircx-core/tests/plugin_fetch.rs`, added 2026-08-03. The permission
+  tests give the sandbox a fetcher that answers without a network and
+  `ircx-net` has its own loopback tests; the seam between them is
+  `network_for_plugins`, which turns a plugin's request into a `FetchPolicy`.
+
+  What the seam carries that neither side can be asked about alone is the
+  policy's default. A plugin gets `FetchPolicy::default()` with only the budget
+  written over it, and that default refuses loopback, private and link-local
+  addresses — so **a plugin granted `network-requests` for `127.0.0.1` still
+  cannot reach the machine it is running on**, and the same for `192.168.0.1`.
+  That was a security property resting on a struct literal. It is now asserted
+  against a port something is really listening on, so a refusal cannot pass for
+  the wrong reason.
+
+  The success half dials `example.com` and is `#[ignore]`d like the other real-
+  network probes: `cargo test -p ircx-core --test plugin_fetch -- --ignored`.
+  The body comes back through the sandbox into the plugin's return value.
+
+  **The budget against a slow socket is still unreachable**, and for the same
+  reason the preview fetch is: the guard refuses every address a test can stand
+  a server on, so a server that accepts and never answers is refused before it
+  can fail to answer. A first draft asserted it anyway and passed in ten
+  milliseconds — the shape of a test that proves the opposite of its name. The
+  budget stays covered by `ircx-plugin`'s own tests, against a fetcher they can
+  make slow.
 - **Cancelling the folder picker is walked** on 2026-08-03, in the assembled app
   on `Xvfb`. Escape out of the native chooser and the sheet is exactly as it
   was: `Nothing installed`, no error drawn, `Plugins 0` in the status bar, and

@@ -28,6 +28,8 @@
 //   --nick <nick>          default walker
 //   --join <#channel>      seeded as a connect command, repeatable
 //   --tls                  the seeded network uses TLS, off by default
+//   --release              drive the release app, built by `npm run tauri build`,
+//                          which is what a figure has to be measured on
 //   --keep                 leave the profile behind and print where it is
 //
 // Needs `gcc`, `libXtst`, `Xvfb`, `xprop` and ImageMagick's `import`.
@@ -45,7 +47,6 @@ const ROOT = join(SKILL_DIR, "..", "..", "..");
  * CARGO_TARGET_DIR at an existing checkout's target. The binary is then not
  * where ROOT would put it. */
 const TARGET = process.env.CARGO_TARGET_DIR ?? join(ROOT, "target");
-const BINARY = join(TARGET, "debug", "ircx");
 
 const say = (line) => process.stdout.write(`${line}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -63,6 +64,12 @@ const NICK = flag("nick", "walker");
 const CHANNELS = flags("join");
 const TLS = process.argv.includes("--tls");
 const KEEP = process.argv.includes("--keep");
+/* A release app carries the frontend inside it and needs no dev server, so this
+ * drives what people actually run rather than a debug binary against Vite. Any
+ * figure — memory, startup, size — has to come from it; the debug build is for
+ * behaviour only. */
+const RELEASE = process.argv.includes("--release");
+const BINARY = join(TARGET, RELEASE ? "release" : "debug", "ircx");
 
 /* The window is 1200x800 in src-tauri/tauri.conf.json and there is no window
  * manager to place it, so it sits at the origin. A screen of the same size
@@ -77,7 +84,18 @@ function need(binary) {
 }
 ["gcc", "Xvfb", "xprop", "import"].forEach(need);
 
+/* `npm run tauri build`, and not `cargo build --release`: what decides whether
+ * the frontend is inside the binary or fetched from the dev server is the tauri
+ * CLI rather than the cargo profile, and both land at this same path. A window
+ * driven against the cargo one shows `Could not connect to localhost` on a
+ * white page — nothing here can tell them apart, since the embedded assets are
+ * compressed, so the first screenshot is what says which you have. */
+const BUILD_RELEASE = "run: npm run tauri build -- --no-bundle";
+
 if (!existsSync(BINARY)) {
+  /* Built rather than demanded, for the debug binary — it is a minute. A
+   * release build is `lto = true` and several. */
+  if (RELEASE) throw new Error(`no release binary at ${BINARY} — ${BUILD_RELEASE}`);
   say("ok building the app, which takes a while the first time");
   const built = spawnSync(
     "cargo",
@@ -86,6 +104,7 @@ if (!existsSync(BINARY)) {
   );
   if (built.status !== 0) throw new Error("cargo build failed");
 }
+
 
 const run = mkdtempSync(join(tmpdir(), "ircx-window-"));
 const XSEND = join(run, "xsend");
@@ -140,27 +159,30 @@ async function waitForWindow(what, timeoutMs = 90_000) {
   throw new Error(`timed out waiting for ${what}\n${appSaid.trim()}`);
 }
 
-/* Vite serves the frontend the binary loads: tauri.conf.json pins port 5183
+/* Vite serves the frontend a debug binary loads: tauri.conf.json pins port 5183
  * with strictPort, so a dev server from another checkout fails this outright
- * rather than serving somebody else's working tree. #233. */
-const vite = spawn("npm", ["run", "dev"], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
-children.push(vite);
-await new Promise((resolve, reject) => {
-  let buffer = "";
-  const timer = setTimeout(() => reject(new Error("timed out waiting for the Vite dev server")), 60_000);
-  const onData = (chunk) => {
-    buffer += chunk.toString();
-    /* The served URL rather than the port number: "Port 5183 is already in use"
-     * carries the port too, and matching that reports a dev server belonging to
-     * another checkout as this one starting up. */
-    if (!/http:\/\/localhost:5183\//.test(buffer)) return;
-    clearTimeout(timer);
-    resolve();
-  };
-  vite.stdout.on("data", onData);
-  vite.stderr.on("data", onData);
-  vite.once("exit", (code) => reject(new Error(`the dev server exited with ${code}\n${buffer}`)));
-});
+ * rather than serving somebody else's working tree. #233. A release build reads
+ * none of this — the frontend is inside it. */
+if (!RELEASE) {
+  const vite = spawn("npm", ["run", "dev"], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+  children.push(vite);
+  await new Promise((resolve, reject) => {
+    let buffer = "";
+    const timer = setTimeout(() => reject(new Error("timed out waiting for the Vite dev server")), 60_000);
+    const onData = (chunk) => {
+      buffer += chunk.toString();
+      /* The served URL rather than the port number: "Port 5183 is already in
+       * use" carries the port too, and matching that reports a dev server
+       * belonging to another checkout as this one starting up. */
+      if (!/http:\/\/localhost:5183\//.test(buffer)) return;
+      clearTimeout(timer);
+      resolve();
+    };
+    vite.stdout.on("data", onData);
+    vite.stderr.on("data", onData);
+    vite.once("exit", (code) => reject(new Error(`the dev server exited with ${code}\n${buffer}`)));
+  });
+}
 
 /* The archive has to exist before a network can go in it, and the app is what
  * creates and migrates it. So: launch once, let it write the file, and stop it

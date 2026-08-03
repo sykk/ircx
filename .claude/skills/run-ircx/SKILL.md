@@ -163,7 +163,17 @@ quit
 | `--nick <nick>` | default `walker` |
 | `--join <#channel>` | seeded as a connect command, repeatable |
 | `--tls` | the seeded network uses TLS, off by default |
+| `--release` | drive the release app instead of a debug build against Vite |
 | `--keep` | leave the profile behind and print where it is |
+
+**`--release` is what a figure has to be measured on**, and the build for it is
+`npm run tauri build -- --no-bundle` — **not** `cargo build --release`. What
+decides whether the frontend is inside the binary or fetched from the dev server
+is the tauri CLI rather than the cargo profile, and both land on
+`target/release/ircx`. A window driven against the cargo one comes up white with
+`Could not connect to localhost`, and a measurement taken there is a measurement
+of an error page. Nothing can tell them apart from outside — the embedded assets
+are compressed — so the first screenshot is the check.
 
 **Two things it cannot do**, and both bite quietly:
 

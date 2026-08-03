@@ -445,12 +445,30 @@ impl Store {
     /// Drops the config, its password and the conversations it had open.
     /// Messages from the network stay; `delete_target` is how an archive is
     /// thrown away.
+    /// Forgets a network and everything about it that is not conversation.
+    ///
+    /// The messages stay, which is what the removal screen promises: "the
+    /// conversations already archived stay on this computer". Everything else
+    /// keyed to the network goes with it, because a network id is a fresh uuid
+    /// and nothing will ever name this one again — a row left here is not kept,
+    /// it is stranded.
+    ///
+    /// `drafts` in particular. A draft is text the user typed and did not send,
+    /// it is neither a setting nor an archived conversation, and it used to
+    /// outlive the network it belonged to with no screen left that could reach
+    /// it. `delete_target` and `delete_everything` both take drafts; this is
+    /// the third door and it did not.
     pub fn remove_network(&self, id: &NetworkId) -> Result<(), StoreError> {
         self.credentials.delete(id)?;
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM networks WHERE id = ?1", params![id])?;
         tx.execute("DELETE FROM open_targets WHERE network = ?1", params![id])?;
+        tx.execute("DELETE FROM drafts WHERE network = ?1", params![id])?;
+        // Retention is a setting, and "forgets its settings" is what the screen
+        // says. A window set for a network that is gone decides nothing and
+        // reads as one somebody would have to find to change.
+        tx.execute("DELETE FROM retention WHERE network = ?1", params![id])?;
         tx.commit()?;
         Ok(())
     }

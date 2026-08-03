@@ -1720,6 +1720,29 @@ already said and this does not change: the exchange is scripted in
 `crates/ircx-core/tests/session.rs`, and nobody has watched a badge across a
 real drop.
 
+## What a removed network leaves behind
+
+Probed on 2026-08-03. There was no entry for this, and no entry for drafts at
+all.
+
+`remove_network` deleted `networks` and `open_targets` and left `drafts` and
+`retention` where they were. A network id is a fresh uuid, so nothing will ever
+name that one again — not even re-adding the same server — which makes those
+rows stranded rather than kept: no screen can reach them and nothing cleans
+them.
+
+**Drafts are the half that matters**, because a draft is text somebody typed and
+did not send. The removal screen promises "Removing it disconnects it and
+forgets its settings. The conversations already archived stay on this computer",
+and a draft is neither. `delete_target` and `delete_everything` both take drafts
+with them; this was the third door and the only one that did not. #382.
+
+**Retention is the same promise more directly** — a window is a setting, set
+from the archive sheet, and it decided nothing once its network was gone.
+
+Both go with the network now. The archived messages stay, which is what the
+screen says and what the walk left alone.
+
 ## Schema migrations
 
 `migrations.rs` is covered by two tests — that migrating is idempotent on

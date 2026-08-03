@@ -1866,6 +1866,43 @@ which is what this list was waiting for.
   built-ins do. Install a theme, edit a colour in it, relaunch, and the edit
   should be there; the window should not flash the theme's own value first.
 
+## Searching the archive
+
+Probed on 2026-08-03 against a seeded archive, and this section exists because
+nothing was written down about search at all — the entry was found rather than
+answered.
+
+**Nothing a person can type is a syntax error**, which was the thing worth
+checking first: FTS5's query language is a language and the search box is a text
+field. `fts_phrases` quotes every whitespace-separated run and doubles a typed
+quote, so `AND`, `NEAR(a b)`, `"unclosed`, `*`, `^`, `-stuck`, `col:value` and
+`:)` are all read literally. Asserted as a battery in
+`crates/ircx-store/tests/store.rs` rather than an example, because the failure
+mode is a database error thrown at somebody who typed a smiley.
+
+**Search matches whole tokens**, which is ordinary and fine for a language with
+spaces in it: `deploy` finds "the deploy is stuck" and `eploy` does not.
+
+**It is not fine for a language without them** (#378). `messages_fts` uses
+FTS5's default `unicode61`, so a run with no spaces is a single token:
+
+```text
+corpus  サーバーが落ちた
+  "サーバーが落ちた"   1 hit
+  "落ちた"            0 hits
+  "サーバー"          0 hits
+```
+
+A Japanese, Chinese or Thai conversation is searchable only by typing the whole
+message back. **And an emoji is not indexed at all** — `"🔥"` finds nothing, and
+`"failed badly"` matches across a `🔥` sitting between those two words.
+
+The fix is a different tokeniser and a migration that rebuilds the index, with a
+real trade behind it: `trigram` searches substrings in any script and imposes a
+three-character minimum, which would take `ok` and `hi` away. #378 has the
+options. What is asserted meanwhile is the current behaviour, so changing it is
+a decision rather than a surprise.
+
 ## Asking the server for what was missed
 
 **Verified against a local `ergo` on 2026-08-01**, in

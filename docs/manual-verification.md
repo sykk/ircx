@@ -1250,6 +1250,48 @@ connection that looks entirely successful, and a login that did not happen. The
 only thing saying so is one console line and a status indicator reading `not
 signed in`.
 
+**And on 2026-08-03 the trap closed on the person who built it** (#390). The
+same configuration — Libera, `SCRAM-SHA-256`, which it still does not advertise;
+a `CAP LS` probe that hour returned
+`sasl=ECDSA-NIST256P-CHALLENGE,EXTERNAL,PLAIN,SCRAM-SHA-512`. The console holds
+both halves:
+
+```text
+21:22:15  Libera.Chat does not accept SASL SCRAM-SHA-256
+21:22:56  syk is logged in as brandn
+```
+
+Between them he identified to NickServ by hand, Libera answered `900
+RPL_LOGGEDIN`, and `session.rs` sets `SaslStatus::Authenticated` from that
+numeric whether or not SASL was ever attempted. The indicator went green, the
+console line scrolled away, and he reported being "connected via SCRAM-SHA-256".
+He was not, and nothing on screen still said so.
+
+So the two sentences above — *the only thing saying so is one console line and a
+status indicator* — are both perishable. The console line scrolls. The indicator
+is overwritten by any later login. What the trap needs is something that
+outlives both, and #390 is where that decision lives.
+
+**The same session then showed what the real thing looks like**, which is the
+useful half of the comparison. The network was set to `SCRAM-SHA-512` — which
+Libera does advertise — and reconnected at 21:25:14. Three differences, all
+readable without trusting the indicator:
+
+```text
+console      no "does not accept SASL" line for this connection
+conversation SaslServ, which speaks only during a SASL exchange:
+             "Last login from: ~syk@… on Aug 03 21:24:53 2026 +0000."
+status bar   "Authenticated as brandn"
+```
+
+No NickServ traffic after the connect at all. So `SaslServ` appearing is the
+positive evidence a reader can use: the account line and the green indicator are
+produced by either route, and only the SASL one brings a service that talks to
+you about it.
+
+That is also SCRAM-SHA-512 confirmed against Libera on today's build, through
+the assembled app rather than the scripted walk that first established it.
+
 **It also settles what the earlier connection was not.** That session reported
 SHA-256 and `/whois` showed `330`. It cannot have been configured for
 SCRAM-SHA-256, because that configuration produces exactly the run above and

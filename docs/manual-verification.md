@@ -34,8 +34,25 @@ to change it.
 
 What that leaves:
 
-- **`EXTERNAL`**, which needs a client certificate and a TLS listener, and
-  **`ECDSA-NIST256P-CHALLENGE`**, which ircx does not implement.
+- **`ECDSA-NIST256P-CHALLENGE`**, which ircx does not implement.
+
+**`EXTERNAL` is not a gap in the walking, it is a gap in the client** (#373).
+This entry used to read "needs a client certificate and a TLS listener", as
+though a run with both would settle it. A run with both would fail:
+`crates/ircx-net/src/tls.rs` builds *both* configurations with
+`with_no_client_auth`, `NetworkConfig` carries no certificate, key or
+fingerprint, and nothing anywhere reads a `.pem`. EXTERNAL authenticates with
+the credentials of the layer underneath, and this client has none to offer.
+
+It was in the picker regardless, labelled `EXTERNAL — client certificate`, and
+what it bought was a connection that succeeded, a login that did not, and advice
+naming a password field that has nothing to do with it. It is out of the picker
+now, and `start_sasl` refuses it before `AUTHENTICATE` goes out for anyone whose
+stored network already names it. The variant stays in the IPC type so such a
+network still loads.
+
+Nothing here was walked against a server, and it did not need to be — the two
+lines of `tls.rs` settle it, and a walk could only have confirmed a `904`.
 
 **Both SCRAM hashes are walked**, and this section is not where that is written
 down: see **SCRAM** below, which covers SHA-256 against `ergo`, SHA-512 against

@@ -607,13 +607,30 @@ drag at all before this; `click` calls `el.click()` and moves no pointer.
   inner kept its own 50, applying it to a span grown from 476 to 735. That is
   the tree doing what it was supposed to, watched rather than assumed.
 
-- **The 15% floor does not do what a floor is for** (#367). At 760×640, dragged
-  all the way in, the pane is about 114px and the roster inside it measures
-  157px on a `shrink-0` `<aside>` — so the roster is wider than the pane and
-  wins. The timeline is gone and what is left of the composer is its hint
-  wrapped one word wide. A share cannot say "still wide enough to be a pane" on
-  a window whose width it does not know. Left unfixed on purpose: both ways out
-  need a constant that shows up in every split at every size.
+- **The 15% floor did not do what a floor is for** (#367). At 760×640, dragged
+  all the way in, the pane was about 114px and the roster inside it 157px on a
+  `shrink-0` `<aside>` — so the roster was wider than the pane and won. The
+  timeline was gone and what was left of the composer was its hint wrapped one
+  word wide.
+
+  **The roster gives way now.** `ChatPane` is a `@container` and the roster is
+  `@max-[440px]:hidden`, so it answers to its own pane rather than to the
+  window. 440 is measured: at 1200px a 323px pane wraps message text to one
+  character a line, 403 wraps at word boundaries, 483 is comfortable — and the
+  roster's ceiling is 208, so a pane wants 208 + 232 before it can hold both.
+  Across the boundary: a 480px pane keeps its roster, a 410px pane drops it, and
+  the pane opposite is untouched.
+
+  **A pixel floor on the divider was built first and taken out again.** 440 on
+  each side of the 960px a 1200px window has after the sidebar leaves 80px of
+  travel; the divider moves ±40px and freezes below about 900px of window. The
+  existing tests caught it — a drag to 70% came back 56%.
+
+  **What is left is small rather than impossible.** At 15% of 1200px the pane is
+  147px and 147px cannot be read whether or not a roster is in it. A modest
+  floor would finish it and is affordable now that the roster goes: with none to
+  fit, a pane needs about 280px, which leaves the divider 29%–71%. #367 stays
+  open carrying that.
 
 - **Not reached: touch.** Every event was `pointerType: "mouse"`. A coarse
   pointer wants a target several times this size and nothing has been asked

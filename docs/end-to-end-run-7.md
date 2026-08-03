@@ -93,11 +93,42 @@ So the floor does not do what a floor is for. `MIN_SHARE = 0.15` keeps a pane
 from vanishing, but a share cannot say "still wide enough to be a pane" on a
 window whose width it does not know.
 
-**Not fixed here**, and deliberately: both ways out — a pixel floor alongside
-the share, or dropping the roster from a pane too narrow to hold it — need a
-constant that would show up in every split at every size, and picking it is a
-design decision rather than a walk's business. #367 records the measurement and
-both options.
+### Which of the two ways out, decided by measuring both
+
+The pane was dragged to three widths at 1200px and the screenshots read:
+
+```text
+323px pane   04-pane-323-one-char-a-line.png   "morning" as m / o / r / n / i / n / g
+403px pane   05-pane-403-reads.png             "sable: did the / pane branch / land?"
+483px pane   01-an-even-split.png              comfortable
+```
+
+So a pane holding a roster wants about 440: the roster's 208px ceiling and the
+232px of conversation that read. **A pixel floor of 440 was built and then
+taken out again**, because the arithmetic kills the control. Two of them on the
+960px a 1200px window has after the sidebar leaves 80px of travel — the divider
+moves ±40px and freezes altogether below about 900px of window. The unit tests
+said it first: a drag to 70% came back 56%.
+
+**The roster gives way instead.** `ChatPane` is a `@container` and the roster
+carries `@max-[440px]:hidden`, so it answers to the pane it sits in rather than
+to the window — two panes side by side being one window and two very different
+widths. Below 440px of pane the member list goes and the conversation has the
+whole of it. The divider keeps its full range.
+
+`06-roster-gives-way.png` is the same drag as `03`: at a 147px pane the roster
+is gone and the timeline is there. Measured across the boundary — a 480px pane
+shows its roster at 157px, a 410px pane shows none, and the pane on the other
+side of the divider is untouched throughout.
+
+**What that leaves, honestly.** At 15% of a 1200px window the pane is 147px, and
+147px is too narrow to read whether or not a roster is in it — the text still
+wraps to a character a line. Dropping the roster moved that from *impossible*
+(no timeline at all, composer mangled) to *small*. Finishing it wants a modest
+floor as well, and the arithmetic is now cheap: with no roster to fit, a pane
+needs about 280px, which on that same 960px split leaves the divider 29%–71%
+rather than 44%–56%. That is a second constant and a second decision, so #367
+stays open carrying it rather than being taken here.
 
 ## What this run did not reach
 

@@ -6,7 +6,7 @@ mod error;
 mod message;
 mod migrations;
 
-pub use error::StoreError;
+pub use error::{in_words, StoreError};
 
 use std::io::Write;
 use std::path::Path;

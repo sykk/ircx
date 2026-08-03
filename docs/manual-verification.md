@@ -1932,10 +1932,17 @@ sentences the sheet keeps for those were written blind. Walked on 2026-08-02 —
   is left alone — `exportTo`'s null branch, which #167 separated from a
   rejection.
 
-What is still unwatched is a write that starts and cannot finish. Every failure
-above happened at `File::create`, so `StoreError::Io` — the one a full disk
-mid-stream would raise — has never been seen, and it still renders its
-`io::Error` with the errno on the end.
+- **A write that starts and cannot finish**, which was down as unreachable
+  until a pipe turned out to reach it: `mkfifo`, a reader that takes 4 KB and
+  leaves, and `Export everything` aimed at the pipe. The first flush finds the
+  reader gone and the write fails where a full disk would. Two more defects,
+  both fixed: the sentence carried an errno again — `Broken pipe (os error 32)`,
+  this one from `StoreError::Io` — and it **named no file at all**, because the
+  store raises `Io` from a writer it was handed and never knew the path.
+
+What is still unwatched is a disk that genuinely fills. The pipe reaches the
+same code and the same `io::ErrorKind` handling, so what is untested is only
+whether `StorageFull` arrives where it is expected to.
 
 ## Recalling a sent line in the composer
 

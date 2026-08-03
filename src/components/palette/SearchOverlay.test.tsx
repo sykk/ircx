@@ -64,9 +64,26 @@ describe("SearchOverlay", () => {
 
   it("waits for a query worth sending", () => {
     render(<SearchOverlay />);
-    type("l");
+    type("");
     expect(searchHistory).not.toHaveBeenCalled();
-    expect(screen.getByText(/at least two characters/i)).toBeTruthy();
+    expect(screen.getByText(/search this conversation/i)).toBeTruthy();
+  });
+
+  /** The floor was two of `String.length`, which counts UTF-16 code units: a
+   * surrogate pair passed it and a kanji did not. Both are one character and
+   * both are a real query now the archive can answer them. #378. */
+  it.each(["落", "🔥", "_"])("sends a one-character query: %s", async (query) => {
+    render(<SearchOverlay />);
+    type(query);
+
+    await waitFor(() =>
+      expect(searchHistory).toHaveBeenCalledWith({
+        query,
+        network: "libera",
+        target: "#ctf-ops",
+        limit: 50,
+      }),
+    );
   });
 
   it("searches the active target", async () => {

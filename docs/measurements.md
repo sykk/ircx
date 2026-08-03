@@ -196,6 +196,54 @@ costs.
 | `Store::open`, 3,006-message archive | 0.37 ms |
 | On-disk size, 3,006 rows | 1.9 MiB |
 
+### What the second search index costs
+
+**Measured 2026-08-03.** #378 gave the archive a second FTS5 index over the
+same column, tokenised into three-character runs, so a search can reach inside
+a word — the only way to search a language that does not put spaces between
+them. Both indexes are kept, because neither answers the other's queries.
+
+Through `Store::append_messages` and `Store::search` on the release profile,
+against a file-backed archive. The corpus is 3,006 lines of this repository's
+own prose clipped to 90 characters, mean 62 — close to the length of an IRC
+message, and real text rather than generated.
+
+| rows | file | `messages_fts` | `messages_substr` | share of the file |
+|---|---|---|---|---|
+| 3,006 | 1.91 MiB | 152 KiB | 0.64 MiB | 33.5% |
+| 100,000 | 52.27 MiB | 3.4 MiB | 17.56 MiB | 33.6% |
+
+**A third of the archive is now the substring index**, at both sizes: 184–224
+bytes per message against 35–52 for the whole-word one. That is what the
+decision bought, and it is the reason the choice was the owner's.
+
+Query time, best of five, 100,000 rows:
+
+| query | index | |
+|---|---|---|
+| `deploy` | `messages_fts` | 0.39 ms |
+| `落ちた` | `messages_substr` | 0.39 ms |
+| `🔥` | neither — scan | 15.3 ms |
+| `zq` | neither — scan | 12.6 ms |
+
+**The upgrade is paid once, on the launch that applies the migration**, and it
+is not free: building the index over an archive that already exists took 15 ms
+for 3,006 rows and 786 ms for 100,000 — linear, about 7.9 ms per thousand
+messages. It happens inside `Store::open`, so that launch is slower by that
+much and no later one is. A first run has nothing to index and pays nothing.
+
+**The two indexes cost the same to ask.** The scan is 30× either, and is
+reached only by a query under three characters that the whole-word index
+already answered nothing for — a lone emoji, a single CJK character. `zq` is
+the floor case, where nothing matches and the whole table is read.
+
+**Not measured:** an archive of real CJK text, which is who this was built for.
+A synthetic upper bound stands in — 3,006 messages of characters drawn at
+random from kana and 2,000 kanji, which repeats less than any real conversation
+and so indexes worse. Both corpora run through the same SQLite, same options:
+the substring index came to 624 KiB against the English corpus's 572 KiB, 9%
+more. Nothing here suggests the English figure flatters the result.
+
 ## Plugin isolation
 
 Added cost per mechanism, measured exec-to-answer over 200 runs on the release

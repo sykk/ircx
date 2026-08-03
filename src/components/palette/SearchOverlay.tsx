@@ -9,7 +9,17 @@ import type { SearchHit } from "@/types";
 
 const HIT_LIMIT = 50;
 const DEBOUNCE_MS = 150;
-const MIN_QUERY = 2;
+/**
+ * One character is a query the archive can now answer, in any script. It was
+ * two, which was two of `String.length` — UTF-16 code units — so `🔥` counted
+ * as two and passed while `落` counted as one and was refused. A whole word in
+ * Japanese and a whole message in emoji were on opposite sides of a line
+ * neither of them was drawn for. #378.
+ *
+ * A single character is answered by a scan where no index holds it, which is
+ * 15 ms against 100,000 messages and happens after the debounce below.
+ */
+const MIN_QUERY = 1;
 
 export function SearchOverlay() {
   const open = useAppStore((s) => s.searchOpen);
@@ -28,10 +38,10 @@ function Search() {
   const text = query.trim();
   // Too short to search: the last answer stays in state but is not shown, so
   // clearing it would only cost a render.
-  const shown = text.length < MIN_QUERY ? [] : hits;
+  const shown = [...text].length < MIN_QUERY ? [] : hits;
 
   useEffect(() => {
-    if (text.length < MIN_QUERY) return;
+    if ([...text].length < MIN_QUERY) return;
 
     let live = true;
     const timer = setTimeout(() => {
@@ -164,7 +174,9 @@ function Search() {
         ) : (
           shown.length === 0 && (
             <p className="px-4 py-6 text-center text-[var(--text-muted)]">
-              {text.length < MIN_QUERY ? "Type at least two characters" : `Nothing matches ${text}`}
+              {[...text].length < MIN_QUERY
+                ? "Search this conversation"
+                : `Nothing matches ${text}`}
             </p>
           )
         )}

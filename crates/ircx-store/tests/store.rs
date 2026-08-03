@@ -501,7 +501,10 @@ fn punctuation_and_operators_are_searched_for_rather_than_obeyed() {
     // Quotes, matched or not, are characters in the text being looked for.
     assert_eq!(found("\"hello\""), ["b"]);
     assert_eq!(found("said \"hello"), ["b"]);
-    assert!(found("\"").is_empty());
+    // A lone quote is a character somebody typed. No index can answer it — it
+    // tokenises to nothing and is one character long — so the scan does, and
+    // finds the message with a quote in it rather than nothing at all. #378.
+    assert_eq!(found("\""), ["b"]);
     // A bare operator is a word: `AND` used to be a syntax error.
     assert_eq!(found("AND"), ["b"]);
     // A column filter and a prefix star are neither.
@@ -2022,12 +2025,12 @@ fn nothing_a_person_can_type_is_a_syntax_error() {
     }
 }
 
-/// The tokeniser's reach, asserted so a change to it is a decision rather than
-/// a surprise. `messages_fts` is `unicode61`, which splits on non-alphanumerics
-/// — so a phrase matches whole tokens, and a language that does not put spaces
-/// between its words has one token per run. #378 carries what that costs.
+/// Which index answers, and the order they are asked in. `messages_fts` is
+/// `unicode61` and matches whole tokens; `messages_substr` is `trigram` and
+/// matches any run of three characters; below three characters neither can
+/// help and the text itself is read. #378.
 #[test]
-fn search_matches_whole_tokens_rather_than_substrings() {
+fn a_substring_is_found_only_where_a_whole_word_was_not() {
     let store = Store::open_in_memory().unwrap();
     store
         .append_messages(&[
@@ -2055,13 +2058,139 @@ fn search_matches_whole_tokens_rather_than_substrings() {
         1,
         "phrases are ANDed, not adjacent-only"
     );
-    // Part of a token is not a token.
-    assert_eq!(found("eploy"), 0);
-    // Which for a run with no spaces in it means only the whole run matches.
+    // The run with no spaces in it is one token, so the whole of it matches.
     assert_eq!(found("サーバーが落ちた"), 1);
-    assert_eq!(
-        found("落ちた"),
-        0,
-        "#378: a word inside CJK text is unfindable"
+    // And a word inside it, which is the whole point of the second index: it
+    // is the only way to search Japanese, Chinese or Thai short of typing the
+    // message back.
+    assert_eq!(found("落ちた"), 1);
+    assert_eq!(found("サーバー"), 1);
+
+    // The fallback is a fallback. Part of a Latin word is found because the
+    // whole-word index answered nothing for it — and the consequence, worth
+    // knowing: a query's results can shrink as the archive grows, because a
+    // whole-word hit appearing later stops the substring pass from running.
+    assert_eq!(found("eploy"), 1);
+
+    // Under three characters there is no trigram either, and the scan is what
+    // is left. It is the only thing that can find a lone emoji.
+    assert_eq!(found("落ち"), 1);
+    assert_eq!(found("ちた"), 1);
+}
+
+/// The other half of #378: an emoji produced no token under `unicode61` and
+/// produces no trigram either, being one character. Both indexes are blind to
+/// it and the scan is not.
+#[test]
+fn an_emoji_is_findable_and_does_not_join_the_words_around_it() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message(
+                "a",
+                "#ircx",
+                "2026-01-01T00:00:00Z",
+                "the build failed 🔥 badly",
+            ),
+            message(
+                "b",
+                "#ircx",
+                "2026-01-01T00:00:01Z",
+                "the build failed badly",
+            ),
+        ])
+        .unwrap();
+
+    let found = |query: &str| {
+        store
+            .search(&SearchRequest {
+                query: query.into(),
+                network: None,
+                target: None,
+                limit: 10,
+            })
+            .unwrap()
+            .into_iter()
+            .map(|hit| hit.message.id)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(found("🔥"), ["a"]);
+    // Which is not the same as the emoji separating the words: `unicode61`
+    // drops it, so both messages read as "failed badly" to the first index.
+    assert_eq!(found("failed badly"), ["b", "a"]);
+}
+
+/// The scan builds its own snippet, the FTS paths having a `snippet()` to do
+/// it. Same shape, so the frontend reads one thing.
+#[test]
+fn the_scanned_hit_marks_what_matched() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[message(
+            "a",
+            "#ircx",
+            "2026-01-01T00:00:00Z",
+            "everything was fine and then the build failed 🔥 and I went home \
+             before anybody could tell me why it had",
+        )])
+        .unwrap();
+
+    let hit = store
+        .search(&SearchRequest {
+            query: "🔥".into(),
+            network: None,
+            target: None,
+            limit: 10,
+        })
+        .unwrap()
+        .remove(0);
+
+    assert!(
+        hit.snippet.contains("<mark>🔥</mark>"),
+        "the hit is marked where it was found: {}",
+        hit.snippet
     );
+    assert!(
+        hit.snippet.starts_with('…') && hit.snippet.ends_with('…'),
+        "and the message it was clipped out of is shown as clipped: {}",
+        hit.snippet
+    );
+}
+
+/// A LIKE pattern is not what the user typed. Without escaping, `_` matches any
+/// character and `%` matches everything, so a search for either returns the
+/// archive.
+#[test]
+fn a_wildcard_typed_into_the_search_box_is_a_character_to_look_for() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message(
+                "a",
+                "#ircx",
+                "2026-01-01T00:00:00Z",
+                "rate_limit is the flag",
+            ),
+            message("b", "#ircx", "2026-01-01T00:00:01Z", "nothing special here"),
+            message("c", "#ircx", "2026-01-01T00:00:02Z", "100% certain"),
+        ])
+        .unwrap();
+
+    let found = |query: &str| {
+        store
+            .search(&SearchRequest {
+                query: query.into(),
+                network: None,
+                target: None,
+                limit: 10,
+            })
+            .unwrap()
+            .into_iter()
+            .map(|hit| hit.message.id)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(found("_"), ["a"]);
+    assert_eq!(found("%"), ["c"]);
 }

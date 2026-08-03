@@ -1988,28 +1988,72 @@ quote, so `AND`, `NEAR(a b)`, `"unclosed`, `*`, `^`, `-stuck`, `col:value` and
 `crates/ircx-store/tests/store.rs` rather than an example, because the failure
 mode is a database error thrown at somebody who typed a smiley.
 
-**Search matches whole tokens**, which is ordinary and fine for a language with
-spaces in it: `deploy` finds "the deploy is stuck" and `eploy` does not.
+**Search matched whole tokens and nothing else**, which is ordinary and fine
+for a language with spaces in it and useless for one without. `messages_fts`
+uses FTS5's default `unicode61`, so a run with no spaces was a single token, and
+a Japanese, Chinese or Thai conversation was searchable only by typing the whole
+message back. An emoji produced no token at all. #378.
 
-**It is not fine for a language without them** (#378). `messages_fts` uses
-FTS5's default `unicode61`, so a run with no spaces is a single token:
+**Fixed by keeping both indexes**, decided by the owner on 2026-08-03. A second
+FTS5 table over the same column, tokenised `trigram`, is asked when the
+whole-word one answers nothing. Three things follow, and the third is the one to
+know about:
 
-```text
-corpus  サーバーが落ちた
-  "サーバーが落ちた"   1 hit
-  "落ちた"            0 hits
-  "サーバー"          0 hits
-```
+- `落ちた` and `サーバー` now find `サーバーが落ちた`, which is the whole point.
+- `ok` and `hi` still work, which they would not have under `trigram` alone —
+  it matches nothing under three characters. That is what carrying both buys,
+  and it costs a third of the archive on disk (`docs/measurements.md`).
+- **A query's results can shrink as the archive grows.** `eploy` finds "the
+  deploy is stuck" today because no whole word matched it; archive a message
+  containing the word `eploy` and the substring pass stops running, and the
+  first message drops out of the results. The alternative was to union both
+  indexes on every search, which puts substring noise under every Latin query
+  that works today. Asserted either way in
+  `a_substring_is_found_only_where_a_whole_word_was_not`.
 
-A Japanese, Chinese or Thai conversation is searchable only by typing the whole
-message back. **And an emoji is not indexed at all** — `"🔥"` finds nothing, and
-`"failed badly"` matches across a `🔥` sitting between those two words.
+**A lone emoji is neither index's problem.** `🔥` is one character, so there is
+no trigram to look up and `unicode61` never made a token of it. What answers it
+is a `LIKE` scan of the messages table, reached only by a query under three
+characters that the whole-word index already failed — 15 ms against 100,000
+rows, where either index answers in 0.4. The issue claimed `trigram` fixed the
+emoji half; it does not, and that was found by probing SQLite rather than by
+reading the docs.
 
-The fix is a different tokeniser and a migration that rebuilds the index, with a
-real trade behind it: `trigram` searches substrings in any script and imposes a
-three-character minimum, which would take `ok` and `hi` away. #378 has the
-options. What is asserted meanwhile is the current behaviour, so changing it is
-a decision rather than a surprise.
+`"failed badly"` still matches across a `🔥` between those two words, because
+`unicode61` drops it and the whole-word index answers first. That is the
+tokeniser being consistent rather than a defect.
+
+### Walked in the assembled application
+
+**2026-08-03**, `window.mjs --profile` on a kept profile with five messages
+written into its archive by hand, so each path is reached by a query only that
+path can answer. All three found what they should and nothing else:
+
+| query | path | | |
+|---|---|---|---|
+| `deployment` | `messages_fts` | `the `**`deployment`**` is stuck behind a lock` | `docs/search-indexes/whole-word.png` |
+| `eploy` | `messages_substr` | `the d`**`eploy`**`ment…` | `docs/search-indexes/substring.png` |
+| `_` | scan | `rate`**`_`**`limit is the flag you wa…` | `docs/search-indexes/scan.png` |
+
+The `_` run is the one worth keeping: a LIKE pattern would have matched every
+message with a character in it, and one message came back.
+
+**It found the frontend refusing the query the issue is named for.** The
+overlay would not search below two of `String.length`, and `String.length`
+counts UTF-16 code units — so `🔥` was a surrogate pair and passed, while `落`
+was one unit and was refused. A whole word in Japanese and a whole message in
+emoji sat on opposite sides of a line drawn for neither. The floor is one
+character now, counted as characters, which is what the archive can answer.
+Nothing in the store change would have shown this; it took the running app.
+
+**Not walked: the CJK and emoji queries themselves.** `window.mjs` types
+through XTest, which maps each character to a keycode on the X layout, so
+nothing outside it can be typed at all — the first attempt at this walk sent
+`落ちた` and the palette stayed empty. The queries above are the ASCII ones that
+reach the same three paths. What is asserted directly is
+`crates/ircx-store/tests/store.rs` and `SearchOverlay.test.tsx`; a walk that
+types `🔥` into the real window needs a harness that can, and that is a gap in
+`window.mjs` rather than in the client.
 
 ## Asking the server for what was missed
 

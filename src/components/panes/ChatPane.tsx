@@ -49,7 +49,10 @@ export function ChatPane({ view }: { view: ViewId | null }) {
       onPointerDownCapture={focus}
       onFocusCapture={focus}
       className={clsx(
-        "flex h-full min-h-0 min-w-0",
+        // A container so the roster can answer to this pane's width rather than
+        // the window's: two panes side by side are the same window and very
+        // different widths, and it is the pane the roster has to fit inside.
+        "@container flex h-full min-h-0 min-w-0",
         // The rule is the focus indicator and only earns its pixel once there
         // is more than one pane to tell apart.
         split &&

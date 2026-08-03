@@ -96,12 +96,19 @@ function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: n
         event.preventDefault();
       }}
     >
+      {/* Centred in the target rather than along its leading edge, which is
+          where it used to be drawn. The four pixels were there to be caught,
+          but they all lay on one side of the line: a pointer aimed at the rule
+          and landing a pixel short of it hit a pane instead, and there was
+          nothing to say why the divider had not moved. Walked in Chrome at
+          1200px — 718 and 719 did nothing, 720 dragged. It is ±2px now,
+          around what a person is actually aiming at. */}
       <div
         aria-hidden
         className={
           row
-            ? "pointer-events-none absolute inset-y-0 left-0 w-px bg-[var(--border-default)]"
-            : "pointer-events-none absolute inset-x-0 top-0 h-px bg-[var(--border-default)]"
+            ? "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--border-default)]"
+            : "pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[var(--border-default)]"
         }
       />
     </div>

@@ -23,6 +23,9 @@
 //   text <sel>             textContent of the first match
 //   count <sel>            how many match
 //   click <sel>            click the first match
+//   drag <sel> <dx> <dy>   press at its centre, move, release — a real pointer
+//   dragxy <x> <y> <dx> <dy>  the same from a point, for asking what can be hit
+//   size <w> <h>           set the viewport, for what a layout does when narrow
 //   fill <sel> <value>     set an input's value the way React notices
 //   key <combo>            ctrl+k, Escape, Return, a
 //   wait <ms>
@@ -125,6 +128,31 @@ function send(method, params = {}) {
 
 await send("Page.enable");
 await send("Runtime.enable");
+
+/** Press, move and release, in steps rather than one jump: a handler that reads
+ * the pointer's position on every move is the thing under test, and a single
+ * 300px move would exercise one reading of it. */
+async function dragFrom(x, y, dx, dy) {
+  const steps = 12;
+  const mouse = (type, at, buttons) =>
+    send("Input.dispatchMouseEvent", {
+      type,
+      x: at.x,
+      y: at.y,
+      button: "left",
+      buttons,
+      clickCount: 1,
+      pointerType: "mouse",
+    });
+
+  await mouse("mousePressed", { x, y }, 1);
+  for (let step = 1; step <= steps; step++) {
+    await mouse("mouseMoved", { x: x + (dx * step) / steps, y: y + (dy * step) / steps }, 1);
+    await sleep(16);
+  }
+  await mouse("mouseReleased", { x: x + dx, y: y + dy }, 0);
+  await sleep(250);
+}
 
 async function evaluate(expression) {
   const { result, exceptionDetails } = await send("Runtime.evaluate", {
@@ -235,6 +263,47 @@ async function run(line) {
       );
       await sleep(250);
       return "ok clicked";
+    /* A real pointer, which `click` is not. `el.click()` dispatches one event
+     * and nothing ever moves, so anything driven by pointerdown/move/up — a
+     * divider holding `setPointerCapture` — cannot be worked by it at all.
+     * These go through the DevTools Protocol, so Chrome synthesises the pointer
+     * events from them exactly as it does for a hand on a mouse. */
+    case "drag": {
+      /* From the end: a selector holds spaces — `[aria-label="Pane width"]` is
+       * the one this was written for — and the two deltas do not. */
+      const dy = rest.at(-1);
+      const dx = rest.at(-2);
+      const selector = rest.slice(0, -2).join(" ");
+      const at = await evaluate(
+        `(() => { const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) throw new Error("no element matching " + ${JSON.stringify(selector)});
+          const r = el.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`,
+      );
+      await dragFrom(at.x, at.y, Number(dx) || 0, Number(dy) || 0);
+      return `ok dragged from ${Math.round(at.x)},${Math.round(at.y)}`;
+    }
+    /* The same from a point rather than an element, which is the only way to
+     * ask whether a target can be hit: a selector always lands dead centre. */
+    case "dragxy": {
+      const [x, y, dx, dy] = rest.map(Number);
+      await dragFrom(x, y, dx || 0, dy || 0);
+      return `ok dragged from ${x},${y}`;
+    }
+    /* The window a layout is asked about. A floor stated as a share of a split
+     * behaves differently at 700px than at 1200, and that difference is the
+     * whole question in some of these. */
+    case "size": {
+      const [width, height] = rest.map(Number);
+      await send("Emulation.setDeviceMetricsOverride", {
+        width,
+        height,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await sleep(400);
+      return `ok ${width}x${height}`;
+    }
     case "fill": {
       const [selector, ...value] = rest;
       await evaluate(

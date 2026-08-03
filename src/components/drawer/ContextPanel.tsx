@@ -89,7 +89,30 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         if (selectedNick !== null) setSelectedNick(null);
         else if (view) toggleRoster(view, false);
       }}
-      className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)] font-mono"
+      /* Below 440px of pane the roster gives way and the conversation has the
+         width. Against the pane rather than the window — `@container` is on
+         `ChatPane` — because two panes side by side are one window and two very
+         different widths.
+
+         The roster does not shrink: `shrink-0`, with a width clamped between
+         8rem and 13rem. So on a narrow pane it used to win outright, and #367
+         photographed the result at 760px with the divider dragged in — 114px of
+         pane that was all roster, the timeline gone, the composer's hint
+         wrapped one word wide.
+
+         440 is measured, not picked. Three widths dragged in Chrome and read
+         off the screenshots in `docs/end-to-end-run-7.md`: a 323px pane wraps
+         message text to one character a line, 403 wraps at word boundaries and
+         reads, 483 is comfortable. Those had a 157px roster and its ceiling is
+         208, so a pane wants about 208 + 232 before it can hold both. Below
+         that the roster is what goes, because a conversation without a member
+         list is still a conversation and a member list without a conversation
+         is not one.
+
+         A floor on the divider was measured instead and rejected: 440 on each
+         side of a 960px split leaves it about 40px of travel, which is most of
+         a control given up for a case that only bites at the end of its range. */
+      className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)] font-mono @max-[440px]:hidden"
       style={{ width: rosterWidth(members, selected !== undefined) }}
     >
       {/* Empty, and the same height and rule as the pane header a few inches to

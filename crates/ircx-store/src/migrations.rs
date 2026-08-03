@@ -13,6 +13,7 @@ const MIGRATIONS: &[&str] = &[
     UPLOAD_PROVIDER,
     UPLOAD_S3,
     WRITTEN_AT,
+    SUBSTRING_INDEX,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -252,6 +253,50 @@ CREATE TABLE raised (
 );
 "#;
 
+/// A second index over the same column, tokenised into overlapping
+/// three-character runs, so a search can reach inside a word.
+///
+/// `unicode61` splits on non-alphanumerics, which is the whole story for a
+/// language that puts spaces between its words and no story at all for one that
+/// does not: `サーバーが落ちた` is a single token, so the only query that finds
+/// it is the entire message typed back. This one indexes `サーバ`, `ーバー`,
+/// `ーが落` and so on, so `落ちた` reaches it.
+///
+/// It does not replace `messages_fts`, which is why both are here. Trigram
+/// matches nothing shorter than three characters, so it cannot answer `ok` or
+/// `hi` — ordinary Latin queries that the whole-word index answers today.
+/// Neither index is a superset of the other, and `Store::search` picks.
+///
+/// Two costs, both in `docs/measurements.md`: a third of the archive on disk,
+/// and the `rebuild` below, which is what an archive that already exists pays
+/// on the one launch that applies this — 786 ms for 100,000 messages, inside
+/// `Store::open`. Doing it in the background instead would leave a window where
+/// search answers one thing for old history and another for new, which is worse
+/// than a slow launch.
+const SUBSTRING_INDEX: &str = r#"
+CREATE VIRTUAL TABLE messages_substr USING fts5 (
+    text,
+    tokenize = 'trigram',
+    content = 'messages',
+    content_rowid = 'id'
+);
+
+INSERT INTO messages_substr (messages_substr) VALUES ('rebuild');
+
+CREATE TRIGGER messages_substr_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_substr (rowid, text) VALUES (new.id, new.text);
+END;
+
+CREATE TRIGGER messages_substr_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_substr (messages_substr, rowid, text) VALUES ('delete', old.id, old.text);
+END;
+
+CREATE TRIGGER messages_substr_update AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_substr (messages_substr, rowid, text) VALUES ('delete', old.id, old.text);
+    INSERT INTO messages_substr (rowid, text) VALUES (new.id, new.text);
+END;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,15 +358,21 @@ mod tests {
         // already there. Naming the column rather than a table keeps this
         // honest as migrations are appended: it was an insert into `raised`
         // while that was last, which by then tested the migration before it.
-        conn.execute(
-            "UPDATE messages SET written_at = '2026-01-01T00:00:01Z' WHERE message_id = 'm1'",
-            [],
-        )
-        .unwrap();
-        let stamped: Option<String> = conn
-            .query_row("SELECT written_at FROM messages", [], |row| row.get(0))
+        //
+        // For the substring index that means the backfill: a message archived
+        // before the index existed has to be in it, or search answers one thing
+        // for old history and another for new.
+        let indexed: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages_substr WHERE messages_substr MATCH '\"ell\"'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert_eq!(stamped.as_deref(), Some("2026-01-01T00:00:01Z"));
+        assert_eq!(
+            indexed, 1,
+            "the rebuild reaches history older than the index"
+        );
     }
 
     #[test]

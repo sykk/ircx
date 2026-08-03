@@ -322,17 +322,49 @@ impl Store {
     /// `req.query` is text a person typed, not an FTS5 expression: it is
     /// quoted term by term before it reaches MATCH, so a hyphen, a colon or a
     /// bare `OR` is searched for rather than obeyed.
+    ///
+    /// Whole words first, substrings only if that found nothing. Two indexes
+    /// answer different questions and neither contains the other — `messages_fts`
+    /// splits on spaces and so cannot see inside `サーバーが落ちた`,
+    /// `messages_substr` indexes three-character runs and so cannot answer `ok`.
+    /// Running the whole-word index first is also what keeps `deploy` from
+    /// dragging in `redeployment`: a substring match is the fallback, not the
+    /// default. #378.
     pub fn search(&self, req: &SearchRequest) -> Result<Vec<SearchHit>, StoreError> {
-        let query = fts_phrases(&req.query);
-        if query.is_empty() {
+        let terms: Vec<&str> = req.query.split_whitespace().collect();
+        if terms.is_empty() {
             return Ok(Vec::new());
         }
 
+        let whole_words = self.matching("messages_fts", &fts_phrases(&terms), req)?;
+        if !whole_words.is_empty() {
+            return Ok(whole_words);
+        }
+
+        // Below three characters there is no trigram to look up, so an emoji or
+        // a one-character word in a script that has them is unindexable by
+        // either table and the text itself is the only place left to look.
+        if terms.iter().all(|term| term.chars().count() >= TRIGRAM_MIN) {
+            self.matching("messages_substr", &fts_phrases(&terms), req)
+        } else {
+            self.scanning(&terms, req)
+        }
+    }
+
+    /// One of the two FTS tables, asked the same question. The table name is
+    /// interpolated because SQLite takes no parameter there; both names are
+    /// this function's own literals, never anything the user typed.
+    fn matching(
+        &self,
+        index: &str,
+        query: &str,
+        req: &SearchRequest,
+    ) -> Result<Vec<SearchHit>, StoreError> {
         let sql = format!(
-            "SELECT {columns}, snippet(messages_fts, 0, '<mark>', '</mark>', '…', 12)
-             FROM messages_fts
-             JOIN messages m ON m.id = messages_fts.rowid
-             WHERE messages_fts MATCH ?1
+            "SELECT {columns}, snippet({index}, 0, '<mark>', '</mark>', '…', 12)
+             FROM {index}
+             JOIN messages m ON m.id = {index}.rowid
+             WHERE {index} MATCH ?1
                AND (?2 IS NULL OR m.network = ?2)
                AND (?3 IS NULL OR m.target = ?3)
              ORDER BY m.timestamp DESC, m.id DESC
@@ -357,6 +389,55 @@ impl Store {
             .into_iter()
             .zip(snippets)
             .map(|(message, snippet)| SearchHit { message, snippet })
+            .collect())
+    }
+
+    /// What is left when no index can help: read the text and look. Reached
+    /// only by a query with a term under three characters that the whole-word
+    /// index already failed to answer, which in practice is a lone emoji or a
+    /// single CJK character.
+    ///
+    /// It is a scan, and the `LIKE` is what makes it one. The network and
+    /// target filters narrow it where the user has picked a conversation, and
+    /// `LIMIT` stops it early where there are hits; a query with none reads the
+    /// archive. Measured in `docs/measurements.md`.
+    fn scanning(&self, terms: &[&str], req: &SearchRequest) -> Result<Vec<SearchHit>, StoreError> {
+        // Every term has to appear, which is what the FTS paths mean by ANDing
+        // their phrases. `instr` is case-sensitive and `LIKE` is not, for ASCII;
+        // neither folds case in Japanese, which has none.
+        let conditions = (0..terms.len())
+            .map(|index| format!("m.text LIKE '%' || ?{} || '%' ESCAPE '\\'", index + 4))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let sql = format!(
+            "SELECT {columns} FROM messages m
+             WHERE (?1 IS NULL OR m.network = ?1)
+               AND (?2 IS NULL OR m.target = ?2)
+               AND {conditions}
+             ORDER BY m.timestamp DESC, m.id DESC
+             LIMIT ?3",
+            columns = message::COLUMNS,
+        );
+
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut bound: Vec<&dyn rusqlite::ToSql> = vec![&req.network, &req.target, &req.limit];
+        let escaped: Vec<String> = terms.iter().map(|term| like_literal(term)).collect();
+        bound.extend(escaped.iter().map(|term| term as &dyn rusqlite::ToSql));
+
+        let mut rows = stmt.query(bound.as_slice())?;
+        let mut found = Vec::new();
+        while let Some(row) = rows.next()? {
+            found.push(message::from_row(row)?);
+        }
+        message::attach_reactions(&conn, &mut found)?;
+
+        Ok(found
+            .into_iter()
+            .map(|message| {
+                let snippet = around_match(&message.text, terms[0]);
+                SearchHit { message, snippet }
+            })
             .collect())
     }
 
@@ -787,16 +868,73 @@ fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {
     })
 }
 
+/// The shortest query the trigram index can answer. Below it there is no
+/// three-character run to look up and MATCH returns nothing at all, which is
+/// not the same as no message containing it.
+const TRIGRAM_MIN: usize = 3;
+
 /// Turns what the user typed into an FTS5 expression that means it literally.
-/// Each whitespace-separated run becomes a quoted phrase — FTS5 reads no
-/// operator inside quotes — and a typed quote is doubled, which is how FTS5
-/// escapes one. Phrases side by side are ANDed, so every word has to appear.
-fn fts_phrases(query: &str) -> String {
-    query
-        .split_whitespace()
+/// Each term becomes a quoted phrase — FTS5 reads no operator inside quotes —
+/// and a typed quote is doubled, which is how FTS5 escapes one. Phrases side by
+/// side are ANDed, so every word has to appear.
+fn fts_phrases(terms: &[&str]) -> String {
+    terms
+        .iter()
         .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// A term as a LIKE operand rather than a pattern: `%`, `_` and the escape
+/// character itself are what the user typed, not wildcards. Without this a
+/// search for `_` matches every message with at least one character in it.
+fn like_literal(term: &str) -> String {
+    let mut escaped = String::with_capacity(term.len());
+    for character in term.chars() {
+        if matches!(character, '%' | '_' | '\\') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
+/// How much of a message travels either side of the hit, in characters. The
+/// FTS paths get this from `snippet()`, which counts tokens; there are no
+/// tokens on this path, so it counts what a reader sees.
+const SNIPPET_REACH: usize = 24;
+
+/// A snippet for the scanning path, shaped like the one `snippet()` returns:
+/// the hit inside `<mark>`, a window of text either side, and `…` wherever the
+/// message was clipped.
+/// Case is folded for ASCII and left alone otherwise, which is what SQLite's
+/// `LIKE` did to select the row — so the mark lands on what matched.
+fn around_match(text: &str, term: &str) -> String {
+    let characters: Vec<char> = text.chars().collect();
+    let needle: Vec<char> = term.chars().collect();
+    let found = characters.windows(needle.len()).position(|window| {
+        window
+            .iter()
+            .zip(&needle)
+            .all(|(here, wanted)| here.eq_ignore_ascii_case(wanted))
+    });
+    let Some(start) = found else {
+        return characters.iter().take(SNIPPET_REACH * 2).collect();
+    };
+    let end = start + needle.len();
+
+    let before = start.saturating_sub(SNIPPET_REACH);
+    let after = (end + SNIPPET_REACH).min(characters.len());
+    let slice = |from: usize, to: usize| characters[from..to].iter().collect::<String>();
+
+    format!(
+        "{}{}<mark>{}</mark>{}{}",
+        if before > 0 { "…" } else { "" },
+        slice(before, start),
+        slice(start, end),
+        slice(end, after),
+        if after < characters.len() { "…" } else { "" },
+    )
 }
 
 /// SQLite reports a malformed FTS5 query as a plain error whose message names

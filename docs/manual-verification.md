@@ -1860,6 +1860,27 @@ Two things this cost, both about driving rather than about the export:
   drops keystrokes at the rate `xsend` was typing at. It looks exactly like the
   export failing, because GTK then reports a folder that does not exist. #349.
 
+**What that walk did not reach was every way it can go wrong**, and the three
+sentences the sheet keeps for those were written blind. Walked on 2026-08-02 —
+`docs/end-to-end-run-5.md`:
+
+- **A destination that refuses the write.** A folder at `chmod 500`, which the
+  chooser accepts and `File::create` cannot use. Two defects, both fixed: the
+  sentence read `Permission denied (os error 13)`, and the `Written to …` from
+  the previous export was still on screen above it, so one sheet claimed the
+  same action had both worked and failed.
+- **A file already sitting where the export is aimed.** GTK asks, `Replace`
+  rewrites it in place at the same byte count, and the client never sees the
+  question.
+- **A dialog dismissed.** No file, no error, and the sentence already on screen
+  is left alone — `exportTo`'s null branch, which #167 separated from a
+  rejection.
+
+What is still unwatched is a write that starts and cannot finish. Every failure
+above happened at `File::create`, so `StoreError::Io` — the one a full disk
+mid-stream would raise — has never been seen, and it still renders its
+`io::Error` with the errno on the end.
+
 ## Recalling a sent line in the composer
 
 Up and Down step back through what was already sent in a conversation. Where the

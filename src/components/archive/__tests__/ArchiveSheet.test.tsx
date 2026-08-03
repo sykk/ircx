@@ -21,7 +21,9 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
   },
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save: () => Promise.resolve(null) }));
+/** Answered per test: dismissed by default, a path where one is wanted. */
+const save = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (...args: unknown[]) => save(...args) }));
 
 const KEPT = {
   messages: 4812n,
@@ -37,6 +39,7 @@ beforeEach(() => {
   setRetention.mockReset().mockResolvedValue(undefined);
   deleteArchive.mockReset().mockResolvedValue(undefined);
   exportArchive.mockReset().mockResolvedValue(120n);
+  save.mockReset().mockResolvedValue(null);
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     networks: { libera: makeNetwork("libera", { name: "Libera.Chat" }) },
@@ -187,5 +190,45 @@ describe("the archive sheet", () => {
     fireEvent.click(screen.getByText("Export everything"));
 
     await waitFor(() => expect(exportArchive).not.toHaveBeenCalled());
+  });
+
+  /**
+   * The run in `docs/end-to-end-run-5.md` met this: an export written, then a
+   * second aimed at a folder that refused it, and the sheet held both at once.
+   */
+  it("drops the last success when the next export fails", async () => {
+    save.mockResolvedValue("/tmp/first.jsonl");
+    render(<ArchiveSheet />);
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Export everything"));
+    await screen.findByText(/Written to \/tmp\/first.jsonl/);
+
+    save.mockResolvedValue("/read-only/second.jsonl");
+    exportArchive.mockRejectedValue(
+      "/read-only/second.jsonl could not be written: there is no permission to write there",
+    );
+    fireEvent.click(screen.getByText("Export everything"));
+
+    await screen.findByText(/there is no permission to write there/);
+    expect(screen.queryByText(/Written to/)).toBeNull();
+  });
+
+  /** The other way round: the failure goes when the next one works. */
+  it("drops the last failure when the next export works", async () => {
+    save.mockResolvedValue("/read-only/first.jsonl");
+    exportArchive.mockRejectedValue("/read-only/first.jsonl could not be written: that disk is read-only");
+    render(<ArchiveSheet />);
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Export everything"));
+    await screen.findByText(/that disk is read-only/);
+
+    save.mockResolvedValue("/tmp/second.jsonl");
+    exportArchive.mockResolvedValue(120n);
+    fireEvent.click(screen.getByText("Export everything"));
+
+    await screen.findByText(/Written to \/tmp\/second.jsonl/);
+    expect(screen.queryByText(/read-only/)).toBeNull();
   });
 });

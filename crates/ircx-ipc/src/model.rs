@@ -220,8 +220,17 @@ pub enum ConnectionStatus {
 pub enum SaslStatus {
     NotConfigured,
     InProgress,
-    Authenticated { account: String },
-    Failed { message: String },
+    Authenticated {
+        account: String,
+        /// Set when SASL was refused earlier on this connection and the account
+        /// arrived some other way — identifying to NickServ by hand. Both are
+        /// true at once and only one of them is something the user can act on,
+        /// so the login does not get to erase the refusal. #390.
+        refused: Option<String>,
+    },
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -130,7 +130,7 @@ export const SEED = `
       tls: false,
       status: { state: "connected" },
       currentNick: "walker",
-      sasl: { state: "authenticated", detail: { account: "walker" } },
+      sasl: { state: "authenticated", detail: { account: "walker", refused: null } },
       capsEnabled: ["message-tags", "echo-message", "server-time", "chathistory"],
       lagMs: 12,
     }],

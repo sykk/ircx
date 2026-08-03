@@ -854,7 +854,17 @@ impl SessionState {
             RPL_LOGGEDIN => {
                 let account = params.get(1).cloned().unwrap_or_default();
                 self.account = Some(account.clone());
-                self.set_sasl(SaslStatus::Authenticated { account });
+                // 900 arrives for a NickServ login as readily as for SASL, so
+                // this is the one place a login the client had no part in
+                // overwrites what the client knows. Refusing to set the account
+                // outside SASL would leave everybody who identifies by hand
+                // reading "not signed in" while signed in; carrying the refusal
+                // forward says both true things instead. #390.
+                let refused = match &self.sasl {
+                    SaslStatus::Failed { message } => Some(message.clone()),
+                    _ => None,
+                };
+                self.set_sasl(SaslStatus::Authenticated { account, refused });
             }
             RPL_SASLSUCCESS => self.end_negotiation(),
             ERR_SASLFAIL | ERR_SASLTOOLONG | ERR_SASLABORTED | ERR_NICKLOCKED => {

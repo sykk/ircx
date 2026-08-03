@@ -358,7 +358,7 @@ fn registration_asks_for_the_intersection_and_authenticates_with_sasl() {
     assert_eq!(session.sent(), vec!["CAP END"]);
     assert!(matches!(
         session.sasl_states().last(),
-        Some(SaslStatus::Authenticated { account }) if account == "sykk"
+        Some(SaslStatus::Authenticated { account, .. }) if account == "sykk"
     ));
 
     session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
@@ -2819,7 +2819,7 @@ mod scram_over_a_session {
         assert!(
             matches!(
                 session.sasl_states().last(),
-                Some(SaslStatus::Authenticated { account }) if account == "user"
+                Some(SaslStatus::Authenticated { account, .. }) if account == "user"
             ),
             "{:?}",
             session.sasl_states().last()
@@ -2854,6 +2854,60 @@ mod scram_over_a_session {
         assert!(
             session.sent().contains(&"CAP END".to_string()),
             "registration carries on rather than stopping"
+        );
+    }
+
+    /// The refusal above scrolled out of the console the moment its author
+    /// identified to NickServ by hand, and he then told me he was connected
+    /// over SCRAM-SHA-256. He was not. `900` is what a NickServ login answers
+    /// with too, so the account it names is true and says nothing about
+    /// whether SASL ever ran. #390.
+    #[test]
+    fn a_login_by_hand_does_not_erase_the_sasl_refusal_behind_it() {
+        let mut config = config();
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::ScramSha256,
+            account: "syk".into(),
+            password: Some("pencil".into()),
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=EXTERNAL,PLAIN,SCRAM-SHA-512");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+        session.feed(":irc.libera.chat 001 syk :Welcome to the Libera.Chat IRC Network syk");
+
+        // Identified by hand, some minutes later. Nothing about this exchange
+        // is SASL, and the server answers it with the same numeric.
+        session.feed(":irc.libera.chat 900 syk syk!~u@user/syk brandn :You are now logged in");
+
+        match session.sasl_states().last() {
+            Some(SaslStatus::Authenticated { account, refused }) => {
+                assert_eq!(account, "brandn", "the account is true and is not hidden");
+                assert_eq!(
+                    refused.as_deref(),
+                    Some("Libera does not accept SASL SCRAM-SHA-256"),
+                    "and the half he can act on is still on screen"
+                );
+            }
+            other => panic!("expected an authenticated status carrying the refusal: {other:?}"),
+        }
+    }
+
+    /// The other side of the same rule: an ordinary SASL login has nothing to
+    /// carry, and a caveat invented for it would be a lie in the status bar.
+    #[test]
+    fn a_sasl_login_that_worked_carries_no_caveat() {
+        let mut session = authenticating_with(SaslMechanism::Plain, "PLAIN");
+        session.feed("AUTHENTICATE +");
+        session.feed(":irc.libera.chat 900 user user!~u@host user :You are now logged in");
+
+        assert!(
+            matches!(
+                session.sasl_states().last(),
+                Some(SaslStatus::Authenticated { refused: None, .. })
+            ),
+            "{:?}",
+            session.sasl_states().last()
         );
     }
 

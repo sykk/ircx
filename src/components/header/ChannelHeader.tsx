@@ -67,6 +67,23 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
       <span className="shrink-0 text-[var(--text-muted)]">
         {channel.memberCount} {channel.memberCount === 1 ? "member" : "members"}
       </span>
+      {/* What the channel says it is for, where a reader can see it without
+       * having been present when it was said. The timeline draws it once on
+       * join and once per change and then it scrolls away, and until #345
+       * nothing else in the app drew it at all.
+       *
+       * `min-w-0 flex-1 truncate` rather than a width: the topic takes what is
+       * left after the name and the count and gives the controls their room
+       * back, so a long one cannot push them off the end. The title is how a
+       * truncated one is read. */}
+      {channel.topic !== null && channel.topic.text !== "" && (
+        <p
+          title={channel.topic.text}
+          className="selectable min-w-0 flex-1 truncate text-[var(--text-muted)]"
+        >
+          {channel.topic.text}
+        </p>
+      )}
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <HeaderButton

@@ -36,11 +36,52 @@ describe("ChannelHeader", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("names the channel and counts its members, and leaves the topic out", () => {
+  it("names the channel and counts its members", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     expect(screen.getByRole("heading", { name: CTF_OPS.name })).toBeTruthy();
     expect(screen.getByText("16 members")).toBeTruthy();
-    expect(screen.queryByText(TOPIC)).toBeNull();
+  });
+
+  /** #345: the topic crossed every layer and no component drew it, so it was
+   * visible for as long as the line announcing it stayed on screen. This test
+   * used to assert the opposite — the header dropped the topic in #32 for not
+   * being in the mockup, before anything had established that nothing else
+   * showed it either. */
+  describe("the topic", () => {
+    it("is drawn beside the count", () => {
+      render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.getByText(TOPIC)).toBeTruthy();
+    });
+
+    /** A long one truncates rather than pushing the controls off the end, so
+     * the whole of it has to be readable some other way. */
+    it("carries the whole of itself for a truncated one to be read by", () => {
+      render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.getByText(TOPIC)).toHaveProperty("title", TOPIC);
+    });
+
+    it("draws nothing where a channel has none", () => {
+      useAppStore.setState({
+        channels: { [targetKey("libera", CTF_OPS.name)]: { ...CTF_OPS, topic: null } },
+      });
+      render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.queryByText(TOPIC)).toBeNull();
+      expect(screen.getByText("16 members")).toBeTruthy();
+    });
+
+    /** A server that clears a topic sends an empty one rather than none. */
+    it("draws nothing for a topic that was cleared", () => {
+      useAppStore.setState({
+        channels: {
+          [targetKey("libera", CTF_OPS.name)]: {
+            ...CTF_OPS,
+            topic: { text: "", setBy: "sable", setAt: null },
+          },
+        },
+      });
+      const { container } = render(<ChannelHeader view={TEST_VIEW} />);
+      expect(container.querySelector("p")).toBeNull();
+    });
   });
 
   it("hides and shows this pane's member list", () => {

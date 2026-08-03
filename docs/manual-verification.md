@@ -2646,3 +2646,71 @@ the events, which the visible typing region rules out.
 Also unheard, and unhearable here: whether the two sentences work *as a pair*.
 This machine has no audio hardware, so what was captured is what Orca would have
 spoken rather than what it sounded like.
+
+### Why nothing arrives, measured without a screen reader in the way
+
+**2026-08-03.** The runs above go through Orca, which can only report what it
+was handed. This one reads the AT-SPI bus directly with an `Atspi.EventListener`
+and no screen reader running, so "no announcement" and "no event" stop being the
+same observation.
+
+Five regions were mounted in the running app, differing only in the thing under
+test: `aria-live="polite"` present from the first paint, the same mounted eight
+seconds later, `role="status"`, a plain paragraph with no ARIA at all, and one
+whose child is keyed so React replaces the element instead of rewriting its text.
+Each rewrote itself every four seconds.
+
+**The tree is right.** All five are in it, at the right depth, carrying the right
+attributes — read off the live bus:
+
+```text
+paragraph   'first paint 38'    live=polite  container-live=polite  container-relevant='additions text'
+status bar  'status 238'        live=polite  container-live=polite  container-atomic=true
+paragraph   'plain 338'         (no live attributes, as written)
+```
+
+**The events are not.** Over a 60-second window in which those regions rewrote
+themselves more than forty times, ircx emitted **no `object:text-changed` for any
+of them** — the last event of any kind came at 16.4 s, from typing into the
+command palette. The same listener against Chrome on an equivalent page counted
+`text-changed:delete` and `text-changed:insert` on every single tick.
+
+What ircx does emit says the bridge is alive rather than broken:
+
+| what happened | what reached the bus |
+|---|---|
+| typing `hello` into the palette | five `object:text-changed:insert`, one per keystroke |
+| the palette opening | `object:children-changed:add` across the dialog's subtree |
+| a live region rewriting its text | nothing |
+| a `role="status"` rewriting its text | nothing |
+| a plain paragraph rewriting its text | nothing |
+| a keyed child being replaced outright | nothing |
+
+**So it is not a live-region problem and no ARIA change fixes it.** WebKitGTK
+reports text a person typed into a form control, and does not report text the
+page wrote — with or without `aria-live`, with or without `role="status"`. The
+last row is the one that closes the obvious escape: forcing React to unmount and
+remount the child, rather than mutate its text, is also unreported, so the
+structural workaround is not available either.
+
+**Controlled three ways**, because the earlier rounds of this issue produced four
+wrong conclusions between them:
+
+- *The listener works.* Registered against Chrome first: 75 events, including the
+  live region's text. An `Atspi.EventListener` that is registered and then
+  dropped is garbage-collected and silently hears nothing, which produced one
+  false zero here before it was caught.
+- *The app is on the bus.* `ircx` appears among the desktop's applications and
+  its subtree is walkable, so the silence is not an unregistered application.
+- *The text really changed.* The probe text was read off the bus before and after
+  the listening window — `first paint 0` → `first paint 10`, `status 200` →
+  `status 210`, and so on for all four — while 267 events from other applications
+  crossed the bus in the same window. The silence is about mutations that
+  demonstrably happened.
+
+Not established: the precise rule WebKitGTK follows. Both events it *does* emit
+came moments after a keystroke, so "only input-driven updates are reported" fits
+the data, and so does "text mutation is never reported, structural insertion
+sometimes is". Telling them apart needs a probe that mutates text in direct
+response to a key, and would not change what this costs — a message arriving from
+the network is not input-driven either way.

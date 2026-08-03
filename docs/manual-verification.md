@@ -266,11 +266,28 @@ posted image, fetch clicked, and the preview drawn. The probe only ever proved
 `ircx-net` could fetch — not that the click reaches the fetch or that what comes
 back is rendered.
 
-What that leaves is the refusal seen from inside the window rather than from a
-test. A link that redirects across sites should say where it would have gone and
-not go there; `http_loopback.rs` asserts that against a server it controls and
-nobody has watched the sentence land in a conversation. The same goes for a link
-too large for the cap, and for what the timeline does with a fetch that fails.
+**A refusal has now been watched land in a conversation** (2026-08-02). Somebody
+in the channel posted `http://127.0.0.1:8899/cat.png`, the `fetch` beside it was
+clicked, and the row answered:
+
+```text
+127.0.0.1 is on your own machine or local network, and ircx will not fetch
+there on a link's say-so — open it in your browser if you meant to
+```
+
+It arrives inline beside the control, in the danger colour, and it names the
+host and what to do instead. The row is not made taller by it; what gives is the
+filename, which truncates to `cat.p…` to make room.
+
+**The other two refusals cannot be walked here, and the reason is the guard
+above.** `preview.rs` takes `FetchPolicy::default()`, which has
+`allow_local_addresses: false`, so any server a walk can stand up is refused for
+being local before it can redirect across hosts or overrun the 4 MB cap. Only
+`http_loopback.rs` — which sets that flag — reaches those paths, and it has no
+window. Watching them from inside the app needs a public host that redirects
+across sites or serves something big, which is a third party in a walk and has
+not been done. Worth knowing before somebody spends an hour standing up a local
+server for it, as this run did.
 
 ## Assembled-application testing
 
@@ -459,19 +476,45 @@ is whether it looks like one conversation or like two things sharing a box.
 `#omgwtf` and `#test1233` open side by side, each listing its own members, and
 `Ctrl+Shift+M` hid one while the other stayed. What that run did not settle:
 
-- **The seam between the pane header and the roster.** The roster's own header
-  is empty and carries the same height and rule as the pane header beside it, so
-  the line under that header should run straight on into the roster. Nothing
-  measures that. If the two rules are a pixel apart the roster reads as
-  application furniture parked next to the conversation, which is the thing this
-  replaced.
+- **The seam between the pane header and the roster is measured**, on
+  2026-08-02, and the two rules are the same rule. Read off the pixels of a
+  1200x800 window rather than judged by eye — the point of the entry was that
+  nothing measured it:
+
+  ```text
+  x        400   700   950  |  1010  1100  1180
+  rule y    83    83    83  |    83    83    83
+  ```
+
+  400 to 950 is the conversation, 1010 onward is the roster, and the line under
+  the header holds `y=83` across both with no step. Along that row the only
+  interruption is one pixel at `x=992`, where the vertical divider between pane
+  and roster crosses it.
+
+  What does differ is the surface: the roster's background is three levels
+  lighter than the conversation's (13 against 10 of 255). So the roster is told
+  apart by its ground and its divider, and not by a broken rule — which is the
+  way round this entry was written to want.
 
 - **A narrow pane was watched, and it was worse than this entry guessed.** A
   `Ctrl+\` split on a 1194px window gave the roster about 45% of each pane and
   wrapped `/help` mid-phrase — #114. The roster no longer takes a fixed column:
   it asks for the longest name it holds, between an 8rem floor and the 13rem it
-  used to always take. What is left to watch is a channel whose nicks are long
-  enough to reach that ceiling, where the old problem returns in miniature.
+  used to always take. **The ceiling was watched on 2026-08-02**, five members
+  in `#wide` on a local ergo with two nicks long enough to reach it. The column
+  measured 207px against the 208 that 13rem is, so it clamps where it says it
+  does, and the two long nicks truncate:
+
+  ```text
+  wallabywombatthe…       quartermasterandac…
+  ```
+
+  That is the design working. What the look also found is that **nothing gives
+  the whole nick back**: the inspector's heading truncates in the same column
+  and yields one more character, and `MemberRow` carries a `title` only for
+  somebody who is away, so hovering a present member says nothing. In the list
+  of who is here, a long enough name is unreadable and two of them sharing a
+  prefix are indistinguishable. #352.
 
   **What the column asked for and what it drew came apart**, found on
   2026-08-01 and fixed in #301. It reserved `<widest>ch + 2.25rem` and neither

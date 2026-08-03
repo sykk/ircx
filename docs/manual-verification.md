@@ -966,16 +966,72 @@ from somebody else, since a rejoin keeps the first opener's hue. `byName` is
 unit tested for the same-run case; the across-a-gap case is inferred from the
 code rather than seen.
 
+### What crossing costs
+
+**2026-08-03**, `src/components/timeline/groups.crossfire.test.ts`. Numbers in
+`docs/measurements.md`; what they mean is here.
+
+**Staged rather than captured, and the reason matters.** A live channel cannot
+answer this: the thing being counted is how often two exchanges cross, and on a
+staged channel that is whatever the generator was told to do. So the generator
+is not asked how often — it is asked *what happens at a given density*, sweeping
+the number of simultaneous conversations and reporting what survives. Where a
+real channel sits on that curve is the part still missing, and the section above
+says why it could not be collected.
+
+Everything below is the shipped `assignGroups` over generated transcripts:
+disjoint pairs talking only to each other, interleaved uniformly, each answer
+addressed with `nick:`. Uniform interleaving spaces two conversations as evenly
+as they can be spaced, so these are worst cases at each density rather than
+expected values.
+
+**Three findings, and the first two contradict what this document said.**
+
+**1. A long exchange is not left unmarked. It is chopped.** At one conversation
+alone, every exchange is one rule. Add a *single* second conversation and that
+falls to 20%, at 1.94 rules per exchange — the average six-message exchange is
+already drawn as two. Nothing goes completely unmarked at any density tested.
+
+**2. The shortest exchanges do lose their rule**, which is what the open
+question was really about. One message and one answer: 14% get no rule at two
+simultaneous conversations, 25% at eight. At two conversations the reach rule is
+provably not involved — asserted in the test, since nothing can be more than
+three messages away when only one other conversation is interleaving — so
+crossing took all of it.
+
+**3. A quarter of messages are drawn inside somebody else's exchange**, and this
+was not a known cost. A group's span runs from the answered message to the
+answer and takes in everything between, which `groups.ts` argues for deliberately
+— a rule with a gap in it is two rules. The price is that unrelated messages
+caught in the span are drawn as part of an exchange they were not in: 12% of all
+messages at two simultaneous conversations, 25% by six. That is a wrong rule
+rather than a missing one, and it is the number worth arguing about.
+
+**Which rule refuses changes with density**, which is why they are separated.
+At two conversations, crossing refuses 18% of answers and reach 4%. By eight it
+has inverted — reach 48%, crossing 12% — because at that density most answers
+are already out of reach before crossing is ever consulted. Reading the crowded
+end as a verdict on crossing would credit it with the reach rule's work.
+
 ### Still open
 
 - **Whether anybody but us ever types one.** No other client reads a `[topic]`
   prefix, so the grade is only worth its weight if ircx users type brackets at
   each other. The mechanism is walked; the habit is not, and cannot be until
   there are two people using it.
-- **What an unmarked exchange costs.** Two exchanges now go unmarked where one
-  crosses the other, and no live round has shown how often a real channel puts
-  them that way round. The count is measurable on a busy channel and has not
-  been measured.
+- **What an unmarked exchange costs.** Measured 2026-08-03, and the framing
+  above was wrong twice — see *What crossing costs* below. A long exchange is
+  not left unmarked, it is chopped into about two rules by the very first
+  conversation that crosses it; a two-message exchange does lose its rule
+  outright, 13% of the time at two simultaneous conversations. And a quarter of
+  messages end up drawn inside an exchange they were not in, which nothing had
+  named as a cost at all.
+
+  Still open: **how many conversations a real channel runs at once.** That is
+  the one input the study cannot supply, and the attempt to capture it found
+  Libera too quiet to carry the question — 3 messages in 3 minutes across eight
+  channels holding 8,400 people, on a Monday evening. Two exchanges cannot cross
+  at that rate.
 
 ## The annotator
 

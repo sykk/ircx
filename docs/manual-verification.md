@@ -662,6 +662,19 @@ drag at all before this; `click` calls `el.click()` and moves no pointer.
   above another is short rather than narrow, and nobody has taken that
   measurement.
 
+  **The floor clamps a drag and not a split**, which `docs/end-to-end-run-10.md`
+  met in the assembled app: a third side-by-side split on a 1200px window gives
+  240px panes, narrower than any drag would allow. Deliberate. Those panes read
+  — the roster has dropped, the text wraps at word boundaries and the composer
+  works — and refusing to split would leave somebody on a small window with one
+  pane instead of two. The floor exists to stop a drag destroying a pane by
+  degrees; a split makes an even, deliberate one.
+
+  **Both rules were seen together in WebKitGTK** on the same run: at 480px a
+  pane keeps its roster, at 240px it drops it and keeps its conversation. The
+  browser walk set the threshold and measured the boundary; that run is the same
+  rule in the engine that ships.
+
 - **Not reached: touch.** Every event was `pointerType: "mouse"`. A coarse
   pointer wants a target several times this size and nothing has been asked
   about one.

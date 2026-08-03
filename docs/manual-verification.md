@@ -1783,11 +1783,39 @@ wrote none of them: the archive held 61 before and 61 after, and none of the fiv
 was in it. That is the setting working, and the sheet says so in the same breath
 so a conversation that empties on close does not read as a bug.
 
-**Not verified:** the export. `save()` opens a real file dialog, which the
-harness cannot answer, so the button was watched doing nothing when the dialog
-is dismissed and the writing itself is covered only by the store's tests. Export
-one conversation and one archive, and read the file back — it is JSON Lines, one
-message per line, and `jq` is enough to check it.
+**The export is verified**, on 2026-08-02, and it took a harness that can answer
+a file dialog — `window.mjs`, which #348 added and which this was the first
+thing to use. Both buttons, both files read back with `jq`.
+
+`Export #export` opened a GTK save dialog pre-filled `#export.jsonl` with a
+`JSON Lines` filter, defaulting to the checkout it was launched from. Saved to
+`/tmp/ircx-export.jsonl`:
+
+```text
+lines 5, valid JSON 5, targets #export, networks walk, oldest first
+kinds: 1 join, 2 privmsg, 2 server
+the line typed into the composer a minute earlier, back out of the file
+```
+
+`Export everything` wrote 46 lines — **the same 46 the sheet had just claimed**
+in `46 messages, 140 KB on this machine` — all valid, oldest first, 41 of them
+console output against the network and the same 5 in `#export`. So the per-target
+export is a subset of the whole one and the count on the sheet is the count in
+the file.
+
+**The sheet says where it went**, which nothing had seen either: `Written to
+/tmp/ircx-export.jsonl — 3.3 KB.` appears under the buttons after a save.
+
+Two things this cost, both about driving rather than about the export:
+
+- **The success line reflows the sheet.** Adding `Written to …` moved both
+  export buttons up 17px, so a click aimed from the screenshot before the first
+  export missed the second button entirely. The `docs/end-to-end-run-4.md` rule
+  — screenshot, click, let nothing arrive in between — has to include the app's
+  own replies to what you just did.
+- **A path typed into the dialog arrived mangled**, twice out of three: GTK
+  drops keystrokes at the rate `xsend` was typing at. It looks exactly like the
+  export failing, because GTK then reports a folder that does not exist. #349.
 
 ## Recalling a sent line in the composer
 
@@ -1820,13 +1848,37 @@ figure below was read off the live `textarea`.
 - **What was being typed comes back.** Down past the newest line restored all
   245 characters of the paragraph that recall had been started from.
 
-**Not verified:** the same walk inside the app. Tauri renders in WebKitGTK on
-this platform and the walk above was Blink, so what it establishes is that the
-rule holds against a real laid-out textarea with native caret movement — not
-that both engines move the caret identically. Up from the first visual row is
-ordinary behaviour in both and the risk is low, but it is a different engine and
-this file is where that is said rather than assumed. Worth re-walking in the
-assembled app when somebody has one open.
+**The same walk inside the app is verified**, on 2026-08-02, against WebKitGTK
+rather than Blink. The rule holds in both engines.
+
+Read differently, though, and the difference is worth knowing before anybody
+repeats it. Nothing outside the process can ask WebKit for `selectionStart`, so
+where the Blink walk quoted caret offsets, this one has only what the composer
+draws — which turns out to be enough, because every case the rule distinguishes
+either replaces the text or does not.
+
+Two lines were sent, then a 247-character sentence with no newline in it was
+typed, laid out as two visual rows in the real box. The caret was put in the
+middle of the second row **by clicking there**, which is how a person would do
+it:
+
+```text
+Up      247 characters still there   caret moved up a row
+Up      247 characters still there   caret moved to the start
+Up      "bravo two"                  recalled, the box replaced
+Down    247 characters back          what was being typed, restored whole
+```
+
+From an empty box the steps are the same as the Blink walk found them: `Up` gave
+`bravo two`, `Up` again gave `alpha one`, `Down` came back to `bravo two`, and
+`Down` again left the box empty.
+
+It takes one press more than the Blink walk did, and that is not an engine
+difference. That walk set the caret to 122, which was the start of the second
+row, so one `Up` reached position 0; a click into the middle of the row lands
+mid-column and takes two. What both engines agree on is the thing the rule was
+changed for: a wrapped line keeps `Up` as a caret key, and recall waits until
+the caret is already at the start.
 
 Nothing here is written to disk: the list is per conversation and lasts only as
 long as the app is running, so a restart is expected to empty it while the

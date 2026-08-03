@@ -31,6 +31,8 @@
 //   --release              drive the release app, built by `npm run tauri build`,
 //                          which is what a figure has to be measured on
 //   --keep                 leave the profile behind and print where it is
+//   --profile <dir>        launch on a profile a --keep run left, as it stands,
+//                          which is how "does it survive a restart" is asked
 //
 // Needs `gcc`, `libXtst`, `Xvfb`, `xprop` and ImageMagick's `import`.
 import { spawn, spawnSync } from "node:child_process";
@@ -106,6 +108,12 @@ if (!existsSync(BINARY)) {
 }
 
 
+/* A profile from an earlier `--keep` run, launched again as it stands. Whether
+ * something survives a restart — a draft, a pane layout, a theme and its edits
+ * — cannot be asked of a profile that is seeded fresh every time, and that is
+ * the shape half of `docs/manual-verification.md` is written in. */
+const REUSE = flag("profile", null);
+
 const run = mkdtempSync(join(tmpdir(), "ircx-window-"));
 const XSEND = join(run, "xsend");
 const compiled = spawnSync("gcc", ["-O2", "-o", XSEND, join(SKILL_DIR, "xsend.c"), "-lX11", "-lXtst"], {
@@ -137,7 +145,7 @@ await sleep(700);
  * DISPLAY alone opens on the operator's real desktop while this Xvfb stays
  * black and nothing says why. #347. */
 const { WAYLAND_DISPLAY: _wayland, ...inherited } = process.env;
-const HOME_DIR = join(run, "data");
+const HOME_DIR = REUSE ?? join(run, "data");
 const appEnv = { ...inherited, DISPLAY, GDK_BACKEND: "x11", XDG_DATA_HOME: HOME_DIR };
 const ARCHIVE = join(HOME_DIR, "chat.ircx.app", "ircx.sqlite3");
 
@@ -193,36 +201,43 @@ if (!RELEASE) {
   });
 }
 
-/* The archive has to exist before a network can go in it, and the app is what
- * creates and migrates it. So: launch once, let it write the file, and stop it
- * again. Onboarding is on screen for those few seconds and is never answered. */
-const first = startApp();
-await waitForWindow("the app to create its profile");
-first.kill();
-await sleep(1500);
+/* A reused profile has its archive and its network already, and seeding a
+ * second one would answer a different question than the one being asked. */
+if (!REUSE) {
+  /* The archive has to exist before a network can go in it, and the app is what
+   * creates and migrates it. So: launch once, let it write the file, and stop it
+   * again. Onboarding is on screen for those few seconds and is never answered. */
+  const first = startApp();
+  await waitForWindow("the app to create its profile");
+  first.kill();
+  await sleep(1500);
+  seedNetwork();
+}
 
-const db = new DatabaseSync(ARCHIVE);
-db.prepare(
-  `INSERT INTO networks (id, name, host, port, tls, tls_verify, nick, alt_nicks, username,
-                         realname, sasl_mechanism, sasl_account, connect_commands, autojoin,
-                         auto_connect)
-   VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, NULL, NULL, ?, '[]', 1)`,
-).run(
-  "walk",
-  "walk",
-  HOST,
-  Number(PORT),
-  TLS ? 1 : 0,
-  0,
-  NICK,
-  NICK,
-  NICK,
-  JSON.stringify(CHANNELS.map((channel) => `/join ${channel}`)),
-);
-db.close();
+function seedNetwork() {
+  const db = new DatabaseSync(ARCHIVE);
+  db.prepare(
+    `INSERT INTO networks (id, name, host, port, tls, tls_verify, nick, alt_nicks, username,
+                           realname, sasl_mechanism, sasl_account, connect_commands, autojoin,
+                           auto_connect)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, NULL, NULL, ?, '[]', 1)`,
+  ).run(
+    "walk",
+    "walk",
+    HOST,
+    Number(PORT),
+    TLS ? 1 : 0,
+    0,
+    NICK,
+    NICK,
+    NICK,
+    JSON.stringify(CHANNELS.map((channel) => `/join ${channel}`)),
+  );
+  db.close();
+}
 
 startApp();
-await waitForWindow("the app to come back with its network");
+await waitForWindow(REUSE ? "the app to come back up on that profile" : "the app to come back with its network");
 
 const xsend = (...args) => {
   const done = spawnSync(XSEND, args, { env: { ...process.env, DISPLAY } });

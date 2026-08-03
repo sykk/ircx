@@ -5,10 +5,12 @@ import { applyDensity, applyOverrides, applyTheme, storeThemeId, storedThemeId }
 import { DEFAULT_DENSITY, type DensityId, storeDensity, storedDensity } from "./density";
 import { FALLBACK_THEME_ID, catalogue } from "./load";
 import { storedOverrides } from "./overrides";
+import { rememberInstalled, rememberedInstalled } from "./remembered";
 
-/** The theme the window opens in, resolved from the built-ins alone so it can
- * be applied before the first paint. A theme installed on disk cannot be read
- * synchronously; it lands a moment later, when `startThemes` resolves.
+/** The theme the window opens in, resolved before the first paint: the
+ * built-ins, plus the installed theme the last run painted, which is kept in
+ * localStorage because reading the themes directory takes a command to the
+ * backend and the first paint cannot wait for one.
  *
  * The edits made to that theme are read the same way, from localStorage, for
  * the same reason: they are part of what the window looks like, and a window
@@ -22,7 +24,8 @@ export function applyOpeningTheme(): void {
   const wanted = storedThemeId() ?? FALLBACK_THEME_ID;
   const density = storedDensity() ?? DEFAULT_DENSITY;
   const overrides = storedOverrides();
-  const { themes } = catalogue();
+  const remembered = rememberedInstalled();
+  const { themes } = catalogue(remembered ? [remembered] : []);
 
   useAppStore.setState({ themes, themeId: wanted, density, overrides });
   applyDensity(density);
@@ -41,6 +44,11 @@ export function selectTheme(id: string): void {
   setThemeId(id);
   storeThemeId(id);
   applyTheme(themes.find((theme) => theme.id === id) ?? null);
+  /* The id alone is not enough to paint an installed theme on the next launch,
+   * so the files go with it. Choosing a built-in clears the record: the id
+   * would resolve without it, and a stale copy of a theme nobody is using is
+   * a stale copy waiting to be painted. */
+  rememberInstalled(fromDisk.find((source) => source.id === id) ?? null);
 }
 
 /** The same three things for the density, in one place for the same reason.
@@ -52,11 +60,24 @@ export function selectDensity(id: DensityId): void {
   storeDensity(id);
 }
 
+/** The themes directory as the backend last sent it. Held because what has to
+ * be written down for the next launch is the two files a theme arrived as, and
+ * everything downstream of `catalogue` has parsed them into tokens. */
+let fromDisk: ThemeSource[] = [];
+
 function publish(installed: ThemeSource[]): void {
+  fromDisk = installed;
   const loaded = catalogue(installed);
   const { themeId, setThemeCatalogue } = useAppStore.getState();
   setThemeCatalogue(loaded);
   applyTheme(loaded.themes.find((theme) => theme.id === themeId) ?? null);
+
+  /* Kept from what the backend just sent rather than from the catalogue, so
+   * the next launch opens on the same two files this one was given. A theme in
+   * force that is not in this list has been deleted or renamed, and the window
+   * has already fallen back above — remembering it would open the next launch
+   * on a theme that is gone. */
+  rememberInstalled(installed.find((source) => source.id === themeId) ?? null);
 
   for (const { id, problems } of loaded.broken) {
     console.warn(`ircx could not load the theme ${id}:\n  ${problems.join("\n  ")}`);

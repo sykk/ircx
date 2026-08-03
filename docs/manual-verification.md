@@ -1673,20 +1673,46 @@ What that leaves:
 The two built-in themes are exercised by every test run and by every render, so
 the loader, the validator and the picker are covered. What is not:
 
-- **The themes directory.** `list_themes` resolves `app_data_dir()/themes` and
-  reads each subdirectory's `theme.json` and `theme.css`. No test creates that
-  directory, because no test has an app data dir. Copy
-  `src/styles/themes/ircx-light` into it under another name, relaunch, and it
-  should appear in the palette under "theme".
-- **Hot reload.** A task polls the directory's metadata every two seconds and
-  re-emits the whole directory when anything changes. Edit a colour in an
-  installed theme with the app running: the window should follow within a couple
-  of seconds, without a relaunch. Deleting the theme that is in force should
-  drop the window back to the built-in dark one rather than leaving it
-  half-styled.
+**Walked on 2026-08-03** in the assembled app on `Xvfb`, against a real app data
+directory — `docs/end-to-end-run-6.md`. The window harness draws in WebKitGTK,
+which is what this list was waiting for.
+
+- **The themes directory is walked.** `src/styles/themes/ircx-light` copied to
+  `<profile>/themes/harbour` under a name of its own **while the app was
+  running**, and it was in the palette four seconds later without a relaunch,
+  reading `light · the themes walk · 1.0.0`. It draws.
+- **Hot reload is walked.** `--surface-sidebar` edited in the installed
+  `theme.css`: the sidebar, title bar and status bar followed within the poll,
+  nothing restarted. Deleting the theme while it was in force dropped the window
+  to the built-in dark one, whole rather than half-styled.
+- **An edit survives a restart.** `--surface-base` set through the appearance
+  editor, the app relaunched on the same profile, and the edit still there. This
+  needed `window.mjs --profile`, which the run added: every run before it seeded
+  a fresh profile, so nothing that only matters across a restart could be asked
+  at all.
+- **The opening paint was the one that failed** (#364). The entry below asked
+  whether the window flashes the theme's own value before its edits; it does
+  not, and what it flashes instead is the **built-in dark theme**, for about
+  130ms on every launch. Measured off a 30fps capture of the display, with a
+  built-in theme as the control on the same profile:
+
+  ```text
+  installed theme   1.27s white → 1.50s rgb(10,13,18) → 1.63s the theme
+  built-in light    1.27s white → stays
+  ```
+
+  `applyOpeningTheme` resolved the catalogue from the built-ins alone, so an
+  installed theme was `applyTheme(null)` until the backend answered, and `null`
+  uncovers the dark theme `global.css` imports statically. The theme's two files
+  are now kept in `localStorage` beside the edits that were already kept there
+  for this exact reason, and the `rgb(10,13,18)` frame is gone. A screenshot
+  cannot see any of this — four frames — so what answered it was recording the
+  display rather than photographing it.
+
 - **`color-scheme` on a real window.** The manifest's `appearance` is written to
   the root element, which is what makes native scrollbars and form controls flip.
-  Headless Chrome does not draw either, so nobody has seen it take effect.
+  The root attribute is confirmed; the run had no native scrollbar or form
+  control in view to watch flip, so what the attribute *does* is still unseen.
 - **What a browser does with a value it cannot parse.** The appearance editor
   refuses a value holding a stray `;` or `!` because `setProperty` is specified
   to ignore a custom property whose value is not a `<declaration-value>` —

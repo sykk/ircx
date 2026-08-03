@@ -264,6 +264,22 @@ impl Manifest {
                 "asks for network-requests without naming a host",
             ));
         }
+        // `*` is a channel word, not a host one. `Grants::reaches` reads it as
+        // "any" and `Grants::reaches_host` does not, deliberately — the
+        // permission the user is shown says "Fetch data from the websites it
+        // names", and a wildcard would be the opposite of naming them.
+        //
+        // Refused here rather than left to fail later. A manifest can say
+        // `"channels": ["*"]` and the shipped examples do, so `"hosts": ["*"]`
+        // is the obvious next thing to write — and it installed, granted, and
+        // then refused every request one at a time, with nothing pointing back
+        // at the manifest. #384.
+        if self.requests.hosts.iter().any(|host| host == "*") {
+            return Err(ManifestError::Undeclared(
+                "asks for network-requests with * as a host, which reaches nothing: \
+                 name each host it fetches from",
+            ));
+        }
         for channel in &self.requests.channels {
             if channel != "*" && channel.len() > MAX_NAME {
                 return Err(ManifestError::Undeclared(
@@ -314,4 +330,59 @@ pub enum ManifestError {
     Undeclared(&'static str),
     #[error("it never asked for {0}, so it cannot be granted")]
     NotRequested(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn asking(hosts: &str) -> Result<Manifest, ManifestError> {
+        Manifest::parse(
+            format!(
+                r#"{{"id":"probe","name":"Probe","version":"1.0.0","entry":"main.js",
+                    "description":"a probe","permissions":["network-requests"],
+                    "hosts":{hosts}}}"#
+            )
+            .as_bytes(),
+        )
+    }
+
+    /// `*` is a channel word. `Grants::reaches` reads it as "any" and
+    /// `Grants::reaches_host` does not — so a manifest asking for it installed,
+    /// granted, and then refused every request one at a time with nothing
+    /// pointing back at the manifest. The shipped examples all say
+    /// `"channels": ["*"]`, which is what makes it the obvious thing to write.
+    /// #384.
+    #[test]
+    fn a_wildcard_host_is_refused_at_the_manifest() {
+        let refused = asking(r#"["*"]"#).expect_err("a wildcard host reaches nothing");
+        assert!(
+            matches!(refused, ManifestError::Undeclared(said) if said.contains("reaches nothing")),
+            "got {refused:?}"
+        );
+    }
+
+    #[test]
+    fn a_wildcard_among_named_hosts_is_refused_too() {
+        assert!(asking(r#"["example.com","*"]"#).is_err());
+    }
+
+    #[test]
+    fn named_hosts_are_what_it_wants() {
+        let manifest = asking(r#"["example.com","api.example.com"]"#).expect("names two hosts");
+        assert_eq!(manifest.requests.hosts.len(), 2);
+    }
+
+    /// The channel side is unchanged, and is the reason the host side reads as
+    /// an oversight rather than a rule.
+    #[test]
+    fn a_wildcard_channel_is_still_how_you_say_anywhere() {
+        let manifest = Manifest::parse(
+            br#"{"id":"probe","name":"Probe","version":"1.0.0","entry":"main.js",
+                "description":"a probe","permissions":["access-channels"],
+                "channels":["*"]}"#,
+        )
+        .expect("a wildcard channel is allowed");
+        assert!(manifest.requests.reaches("#anywhere"));
+    }
 }

@@ -1259,6 +1259,26 @@ status indicator* — are both perishable. The console line scrolls. The indicat
 is overwritten by any later login. What the trap needs is something that
 outlives both, and #390 is where that decision lives.
 
+**The same session then showed what the real thing looks like**, which is the
+useful half of the comparison. The network was set to `SCRAM-SHA-512` — which
+Libera does advertise — and reconnected at 21:25:14. Three differences, all
+readable without trusting the indicator:
+
+```text
+console      no "does not accept SASL" line for this connection
+conversation SaslServ, which speaks only during a SASL exchange:
+             "Last login from: ~syk@… on Aug 03 21:24:53 2026 +0000."
+status bar   "Authenticated as brandn"
+```
+
+No NickServ traffic after the connect at all. So `SaslServ` appearing is the
+positive evidence a reader can use: the account line and the green indicator are
+produced by either route, and only the SASL one brings a service that talks to
+you about it.
+
+That is also SCRAM-SHA-512 confirmed against Libera on today's build, through
+the assembled app rather than the scripted walk that first established it.
+
 **It also settles what the earlier connection was not.** That session reported
 SHA-256 and `/whois` showed `330`. It cannot have been configured for
 SCRAM-SHA-256, because that configuration produces exactly the run above and

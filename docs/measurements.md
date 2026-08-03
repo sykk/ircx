@@ -49,10 +49,20 @@ figure.
 
 | | measured | bytes | |
 |---|---|---|---|
-| `ircx` release binary, stripped | 2026-08-01 | 11,320,792 | 10.80 MiB |
+| `ircx` release binary, stripped | 2026-08-02 | 11,332,952 | 10.81 MiB |
+| the same | 2026-08-01 | 11,320,792 | 10.80 MiB |
 | the same, when the plugin runtime landed (#88) | 2026-07-30 | 10,570,584 | 10.08 MiB |
+| **the application binary, frontend inside it** | 2026-08-02 | 11,897,816 | 11.35 MiB |
 
-Rust side only — no frontend bundle embedded, no installer packaging.
+The first three are the Rust side only — no frontend bundle embedded, no
+installer packaging. **11,932 bytes over a day**, across the delivery-state
+work (#332, #334, #335), the burst batching and the migration test.
+
+The last row is what a user runs, and it is new here. `npm run tauri build`
+embeds the built frontend in the binary; `cargo build --release` does not, and
+both land on `target/release/ircx`. So the difference between the two rows —
+**564,864 bytes, 551.6 KiB** — is `dist/` compressed into the executable, and
+the figure this file has always quoted is the one without it.
 
 **Covers:** `cargo build --release -p ircx` on the profile in the workspace
 `Cargo.toml` — `lto = true`, `opt-level = "s"`, `strip = true`, `panic`
@@ -112,10 +122,48 @@ divides each shared page among the processes mapping it, and 176.3 MiB is.
 **Covers:** `smaps_rollup` for the whole process tree, 45 seconds after `exec`,
 after the connection settled. Release profile, Linux x86-64, one sample on one
 machine. **Excludes:** any real backlog. WebKit's share moves with what the page
-holds, and this page held nothing.
+holds, and this page held nothing — which is measured below.
 
 **Under two fifths of it is ours.** The Rust side is 66.6 MiB of the 176.3 —
 38% — and the two WebKit processes are the rest.
+
+### What a backlog costs
+
+**Measured 2026-08-02**, same method, two samples from one process: the channel
+empty, then the same channel holding 3,007 messages put there by three clients
+and drawn in the timeline.
+
+| PSS | empty | 3,007 messages | difference |
+|---|---|---|---|
+| **whole application** | **221.6 MiB** | **260.2 MiB** | **+38.5 MiB** |
+| `ircx` — Rust, Tauri, GTK | 70.9 MiB | 73.4 MiB | +2.5 MiB |
+| `WebKitWebProcess` | 131.1 MiB | 167.1 MiB | +36.0 MiB |
+| `WebKitNetworkProcess` | 19.6 MiB | 19.7 MiB | +0.02 MiB |
+
+**The page is where a backlog lands.** 36.0 of the 38.5 MiB is WebKit — 94% of
+it — against 2.5 MiB for the Rust side holding the same messages in its window
+and its archive. Per message: about 13.1 KiB in total, of which 0.87 KiB is
+ours. The row above predicted this in words and now has a number.
+
+The 2.5 MiB the Rust side takes is worth reading against the 7.2 MiB that
+`ircx-core` alone took for 3,006 messages in a test process, measured
+differently and quoted below: that harness held every message with no window to
+draw them, and this one is the whole backend of a running client.
+
+**Covers:** `npm run tauri build` — see below, it is not the same as
+`cargo build --release` — driven by `.claude/skills/run-ircx/window.mjs
+--release` on `Xvfb`, connected to a local `ergo`, one channel, the flood paced
+by ergo's own fakelag at 6 messages a second and sampled 45 seconds after the
+last one arrived.
+
+**The absolute level is not comparable to the row above, and the difference is
+not explained.** 221.6 MiB empty against that row's 176.3 MiB is 45 MiB more for
+a client holding less. Two things differ and this run cannot say which
+did it: the display server — `Xvfb` renders in software with no GPU, where the
+row above was a real compositor — and a day of frontend, which grew by 551.6
+KiB of compressed assets over the same interval. **The difference between the
+two columns is what this measures**, both taken minutes apart in one process on
+one display, and that is the figure to quote.
 
 ### The row this replaces measured something else
 
@@ -355,7 +403,8 @@ ircx's own backfill working, and it is part of what the real stack does.
 
 - macOS and Windows. Everything here is Linux x86-64.
 - Startup with a populated archive and several networks auto-connecting.
-- Memory over a long session, or with a real backlog rendered.
+- Memory over a long session. A rendered backlog is measured above; what a
+  client left open for days does is not.
 - A netsplit against a real server, end to end, **as a figure**. Both halves are
   measured separately — the frontend stages in jsdom, everything below them
   against a local `ergo` — and neither has WebKit in it. A burst has since been

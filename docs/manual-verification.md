@@ -1796,10 +1796,31 @@ which is what this list was waiting for.
   cannot see any of this — four frames — so what answered it was recording the
   display rather than photographing it.
 
-- **`color-scheme` on a real window.** The manifest's `appearance` is written to
-  the root element, which is what makes native scrollbars and form controls flip.
-  The root attribute is confirmed; the run had no native scrollbar or form
-  control in view to watch flip, so what the attribute *does* is still unseen.
+- **`color-scheme` on a real window is walked** on 2026-08-03, and the entry it
+  replaces was asking the wrong question — `docs/end-to-end-run-9.md`.
+
+  **The scrollbar was never `color-scheme`'s.** It does flip with the theme —
+  thumb `rgb(49,58,70)` dark against `rgb(206,212,218)` light — but
+  `global.css` styles it, `::-webkit-scrollbar-thumb { background:
+  var(--border-strong) }`, and that token is `#313a46` and `#b6bfc9` in the two
+  themes. It is not a native control and would flip with no `color-scheme`
+  anywhere. The form controls the entry also named are token-styled in
+  `fields.tsx` for the same reason.
+
+  **What is left is the one surface the page cannot style**, and it ignores the
+  attribute. A `<select>` popup under ircx Light is black with white text and a
+  blue selection bar; under ircx Dark it is the same, and cropped to the popup
+  `compare -metric AE` between the two is **0**. WebKitGTK draws it with the GTK
+  theme. `apply.ts` sets `root.style.colorScheme` from the manifest correctly
+  and nothing observable depends on it.
+
+  So on this platform the attribute does nothing anybody can see, which is not a
+  reason to stop setting it — a platform that honours it costs nothing here. It
+  is a reason to stop recording it as unverified.
+
+  **The defect it uncovered is #375**: a light theme is light until somebody
+  opens a dropdown, and then it is the desktop's black panel. Fixing that means
+  drawing the list instead of asking the platform for one.
 - **What a browser does with a value it cannot parse.** The appearance editor
   refuses a value holding a stray `;` or `!` because `setProperty` is specified
   to ignore a custom property whose value is not a `<declaration-value>` —

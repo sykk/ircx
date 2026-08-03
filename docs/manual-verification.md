@@ -2533,40 +2533,40 @@ the hint row does not wrap the row at any width the hint itself does not already
 wrap at — both wrap below about 220px, which is the hint's own doing and older
 than this.
 
-**Somebody has listened now, and there is nothing to listen to** (#388). Walked
-on 2026-08-03 with Orca 49 against the assembled app, the GNOME a11y bus on and
+**Half-answered on 2026-08-03, and the half that is answered is the app's**
+(#388). Walked with Orca 49 against the assembled app, the GNOME a11y bus on and
 the app started after it.
 
-The app's half is right. Walking the AT-SPI tree with `pyatspi`, the composer's
-`role="status"` region is published, advertises `live: polite`, and its text
-changes at both edges of a forty-line paste:
+**What the app does is right, and is measured now.** Walking the AT-SPI tree with
+`pyatspi`, the composer's `role="status"` region is published, advertises
+`live: polite`, and its text changes at both edges of a forty-line paste:
 
 ```text
 17:08:06  region -> 'Messages waiting to send'
 17:08:44  region -> 'All sent'
 ```
 
-A screen reader is never told. From Orca's own debug log over the same window:
+Thirty-eight seconds apart. The typing region behaves the same way. So the DOM
+shape the tests assert does survive into the accessibility tree, with the right
+politeness and the right text at the right moments. That is more than was known
+before, and it is the part to keep.
 
-```text
-events from ircx that Orca queued          428
-occurrences of 'Messages waiting to send'    0
-occurrences of 'All sent'                    0
-occurrences of 'is typing'                   0
-```
+**Whether a screen reader announces it is still open.** Orca spoke neither
+sentence, and that measurement does not carry the weight it first appeared to:
 
-Every event Orca did receive came from a **visible** object — the composer
-textarea. Nothing carrying a live region's new text arrived, so nothing was
-announced. The common factor is `sr-only`: the queue's two edges, `Waiting to
-send` on a pending row, and the typing region all wear it, and none of their
-changes reach the bus as an event. The elements are in the tree and readable by
-inspection — that is where the politeness and the text above came from — but a
-live region nobody is told about is not a live region.
+- The first runs were taken with the window **not focused**. Orca's own log named
+  `plasmashell` as the application it was tracking, and it suppresses live
+  regions for unfocused applications, so those runs prove nothing.
+- Focused, Orca does read the app — `main content`, `Message #queue`, `entry.`,
+  `Focus mode` — and still said neither sentence.
+- **There is no control.** Nothing here establishes that Orca announces a live
+  region in *any* application on this machine, so the silence cannot yet be
+  attributed to this client rather than to Orca's own configuration.
 
-So the three questions this entry asked cannot be answered yet, and are the
-wrong ones until #388 is fixed. What is now known is worse and more useful: the
-answer to "does it read well" is that it is not read at all.
+The next step is that control: a live region in a browser on the same machine,
+focused, logged the same way. Until it runs, "the announcements do not reach a
+screen reader" is a hypothesis, not a finding.
 
-**Still unheard, and unhearable here**: whether the two sentences work *as a
-pair* once they are announced. This machine has no audio hardware, so what was
-captured is what Orca would have spoken rather than what it sounded like.
+Also unheard, and unhearable here: whether the two sentences work *as a pair*.
+This machine has no audio hardware, so what was captured is what Orca would have
+spoken rather than what it sounded like.

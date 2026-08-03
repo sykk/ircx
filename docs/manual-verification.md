@@ -2588,19 +2588,61 @@ the hint row does not wrap the row at any width the hint itself does not already
 wrap at — both wrap below about 220px, which is the hint's own doing and older
 than this.
 
-**Nobody has listened to it.** The tree can be asserted and was; whether it
-*reads* well is a different question, and the same one #318 left behind. What
-the tests pin is that two sentences are said and a hundred are not, which is the
-failure the design was chosen to avoid — not that the two are the right two, or
-that "all sent" arrives when a reader expects it.
+**Half-answered on 2026-08-03, and the half that is answered is the app's**
+(#388). Walked with Orca 49 against the assembled app, the GNOME a11y bus on and
+the app started after it.
 
-Worth an hour with a screen reader, and specifically:
+**What the app does is right, and is measured now.** Walking the AT-SPI tree with
+`pyatspi`, the composer's `role="status"` region is published, advertises
+`live: polite`, and its text changes at both edges of a forty-line paste:
 
-- Whether `Messages waiting to send` at the start of a paste and `All sent` 48 s
-  later read as a pair, or as two unrelated interruptions.
-- Whether arriving at a queued row and hearing `Waiting to send` before the text
-  is the right order, or whether it should follow the message.
-- Whether the count in the hint row wants announcing at all for somebody who
-  cannot see it — it is deliberately outside the live region, on the grounds
-  that a number changing a hundred times is noise, and that reasoning has not
-  been tested against a person.
+```text
+17:08:06  region -> 'Messages waiting to send'
+17:08:44  region -> 'All sent'
+```
+
+Thirty-eight seconds apart. The typing region behaves the same way. So the DOM
+shape the tests assert does survive into the accessibility tree, with the right
+politeness and the right text at the right moments. That is more than was known
+before, and it is the part to keep.
+
+**A screen reader is not told, and there is a control for it now.** The first
+runs were taken with the window unfocused, which proves nothing — Orca's log
+named `plasmashell` as the application it was tracking, and it suppresses live
+regions for unfocused applications. Focused, and with a control on the same
+machine, the comparison is clean.
+
+The control is a page with two live regions updating every six seconds — one
+visible with `aria-live="polite"`, one carrying Tailwind's exact `sr-only` rules
+with `role="status"` — in Chrome, which needs `--force-renderer-accessibility`
+before it publishes anything at all. Counted out of Orca's own log:
+
+```text
+                                    speech   braille   event seen
+Chrome, visible aria-live              17       72        yes
+Chrome, sr-only role=status             0       38        yes
+ircx, visible typing region             0        0        no
+```
+
+Two separate things fall out of that.
+
+**Nothing from ircx reaches Orca.** Not speech, not braille, not the event. In
+Chrome the same shape of region is received and brailled even when it is not
+spoken, so the client is not merely losing an announcement — it is not emitting
+one. That is a real difference between the two engines rather than a setting.
+
+**And `sr-only` suppresses speech even where it works.** Chrome's clipped region
+was received and brailled and never spoken. So the composer's queue
+announcements — the two sentences this whole entry is about — carry `sr-only`,
+and even if their events did arrive they would reach braille and not a voice.
+The typing indicator does not carry it, which is why it is the fair comparison
+above.
+
+Two disproven guesses, both worth not repeating: that React creating the text
+node rather than mutating it was the cause — a permanently non-empty text node
+changed nothing, verified live through HMR — and that `sr-only` was what stopped
+the events, which the visible typing region rules out.
+
+Also unheard, and unhearable here: whether the two sentences work *as a pair*.
+This machine has no audio hardware, so what was captured is what Orca would have
+spoken rather than what it sounded like.

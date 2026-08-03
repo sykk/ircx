@@ -80,9 +80,27 @@ function Sheet() {
     if (!busy) closeSheet(false);
   }
 
+  /**
+   * The sheet reports what the last thing you did came to, and one thing at a
+   * time.
+   *
+   * A success used to survive every later failure, so an export refused by the
+   * folder it was aimed at drew a red sentence under "Written to …" from two
+   * clicks ago — one screen saying the same action both worked and did not.
+   * Cancelling still reports nothing, so what is already there stays.
+   */
+  function succeeded(text: string) {
+    setSaid(text);
+    setError(null);
+  }
+
+  function failed(reason: unknown, fallback: string) {
+    setError(reasonOr(reason, fallback));
+    setSaid(null);
+  }
+
   async function keepFor(scope: "network" | "target", days: string) {
     if (network === null) return;
-    setError(null);
     try {
       await ipc.setRetention(
         network,
@@ -90,14 +108,13 @@ function Sheet() {
         days === "" ? null : Number(days),
       );
       read();
-      setSaid(nowKeeping(days));
+      succeeded(nowKeeping(days));
     } catch (reason) {
-      setError(reasonOr(reason, "That could not be saved."));
+      failed(reason, "That could not be saved.");
     }
   }
 
   async function exportTo(scope: ArchiveScope, suggested: string) {
-    setError(null);
     // Dismissing the dialog and failing to open one are different answers, and
     // catching both as null is how #167 hid a refused permission for as long as
     // it did. The dialog resolves to null when the user says no and rejects
@@ -106,16 +123,16 @@ function Sheet() {
     try {
       path = await chooseSavePath(suggested, [{ name: "JSON Lines", extensions: ["jsonl"] }]);
     } catch (reason) {
-      setError(reasonOr(reason, "The save dialog could not be opened."));
+      failed(reason, "The save dialog could not be opened.");
       return;
     }
     if (typeof path !== "string") return;
     setBusy(true);
     try {
       const bytes = await ipc.exportArchive(scope, path);
-      setSaid(`Written to ${path} — ${formatBytes(bytes)}.`);
+      succeeded(`Written to ${path} — ${formatBytes(bytes)}.`);
     } catch (reason) {
-      setError(reasonOr(reason, "The export could not be written."));
+      failed(reason, "The export could not be written.");
     }
     setBusy(false);
   }
@@ -123,14 +140,13 @@ function Sheet() {
   async function destroy() {
     if (pending === null) return;
     setBusy(true);
-    setError(null);
     try {
       await ipc.deleteArchive(pending.scope);
-      setSaid(`${pending.what} deleted. There is no undo, and there was none.`);
+      succeeded(`${pending.what} deleted. There is no undo, and there was none.`);
       setPending(null);
       read();
     } catch (reason) {
-      setError(reasonOr(reason, "That could not be deleted."));
+      failed(reason, "That could not be deleted.");
     }
     setBusy(false);
   }

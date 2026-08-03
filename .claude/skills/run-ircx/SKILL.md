@@ -246,6 +246,14 @@ The `CARGO_TARGET_DIR` is not optional in a fresh worktree — see Gotchas.
   `CARGO_TARGET_DIR` at an existing checkout's `target/` and `cargo test`
   finishes in seconds. Cargo locks it, so a concurrent build blocks rather than
   corrupts.
+
+  **`window.mjs` needs one more step when you do that**, because the binary in a
+  shared target directory belongs to whichever checkout built it last and
+  `window.mjs` skips its build whenever a binary exists. Run
+  `CARGO_TARGET_DIR=… cargo build --manifest-path src-tauri/Cargo.toml
+  --no-default-features` first — 14 seconds, since the dependencies are the
+  shared part. Skip it and #233 stops the run and names the worktree the binary
+  came from, which reads as a stale dev server and is not one.
 - **Assigning `.value` to an input does nothing React can see.** React installs
   its own setter and listens for the event after it, so a plain assignment
   updates the DOM while React's state keeps the old value — the field looks

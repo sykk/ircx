@@ -122,6 +122,15 @@ const DISPLAY = `:${freeDisplay()}`;
 const xvfb = spawn("Xvfb", [DISPLAY, "-screen", "0", `${WIDTH}x${HEIGHT}x24`], {
   stdio: ["ignore", "ignore", "pipe"],
 });
+/* Nothing here wants Xvfb's warnings, but a pipe nobody reads is not the same
+ * as a closed one: node backs stdio pipes with socketpairs, so the warnings sit
+ * in a buffer that fills. Xvfb starts by running xkbcomp and waiting for it,
+ * and xkbcomp's own keymap warnings are enough to fill it on a host that also
+ * has something to say about its GPU. It then blocks in a write forever, Xvfb
+ * waits on it forever, and the display accepts no connections — so every later
+ * `xprop` hangs rather than failing, and the run makes no progress and no
+ * error. Drained, not ignored: an Xvfb that dies still says why. */
+xvfb.stderr.resume();
 await sleep(700);
 
 /* GTK prefers Wayland when WAYLAND_DISPLAY is set, so an app started with

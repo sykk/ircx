@@ -310,8 +310,7 @@ pub async fn export_archive(
 ) -> Result<u64, String> {
     // Streamed rather than rendered into memory first: "Everything" on an old
     // archive is the whole archive.
-    let file = std::fs::File::create(&path)
-        .map_err(|error| format!("{path} could not be written: {error}"))?;
+    let file = std::fs::File::create(&path).map_err(|error| unwritable(&path, &error))?;
     let mut out = std::io::BufWriter::new(file);
     let store = app.store();
     match &scope {
@@ -322,10 +321,37 @@ pub async fn export_archive(
     }
     let file = out
         .into_inner()
-        .map_err(|error| format!("{path} could not be written: {error}"))?;
+        .map_err(|error| unwritable(&path, error.error()))?;
     file.metadata()
         .map(|meta| meta.len())
-        .map_err(|error| format!("{path} could not be written: {error}"))
+        .map_err(|error| unwritable(&path, &error))
+}
+
+/// Why a file would not take the export, in the words somebody looking at the
+/// save dialog would use for it.
+///
+/// `io::Error` renders as "Permission denied (os error 13)", and the errno is
+/// the half of that a log wants. The kinds a person can do something about say
+/// what to do instead; the rest keep the system's own words without the number.
+fn unwritable(path: &str, error: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+
+    let why = match error.kind() {
+        ErrorKind::PermissionDenied => "there is no permission to write there".to_owned(),
+        ErrorKind::NotFound => "that folder does not exist".to_owned(),
+        ErrorKind::IsADirectory => "that is a folder, not a file".to_owned(),
+        ErrorKind::ReadOnlyFilesystem => "that disk is read-only".to_owned(),
+        ErrorKind::StorageFull => "the disk is full".to_owned(),
+        // Whatever the OS said, up to the errno it ends with.
+        _ => {
+            let said = error.to_string();
+            match said.find(" (os error ") {
+                Some(at) => said[..at].to_owned(),
+                None => said,
+            }
+        }
+    };
+    format!("{path} could not be written: {why}")
 }
 
 /// There is no undo. Whatever asks for this has to have said so.
@@ -337,5 +363,52 @@ pub async fn delete_archive(app: State<'_, App>, scope: ArchiveScope) -> Result<
             store.delete_target(network, target).map_err(describe)
         }
         ArchiveScope::Everything => store.delete_everything().map_err(describe),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error, ErrorKind};
+
+    use super::unwritable;
+
+    #[test]
+    fn a_refused_folder_says_what_to_do_about_it() {
+        let said = unwritable(
+            "/srv/backups/ircx.jsonl",
+            &Error::from(ErrorKind::PermissionDenied),
+        );
+        assert_eq!(
+            said,
+            "/srv/backups/ircx.jsonl could not be written: there is no permission to write there"
+        );
+    }
+
+    /// The walk that found this met it as "Permission denied (os error 13)".
+    #[test]
+    fn no_sentence_carries_an_errno() {
+        for kind in [
+            ErrorKind::PermissionDenied,
+            ErrorKind::NotFound,
+            ErrorKind::IsADirectory,
+            ErrorKind::ReadOnlyFilesystem,
+            ErrorKind::StorageFull,
+            ErrorKind::WouldBlock,
+        ] {
+            let said = unwritable("/tmp/x.jsonl", &Error::from(kind));
+            assert!(!said.contains("os error"), "{kind:?} said {said}");
+        }
+    }
+
+    /// A kind with nothing written for it keeps the system's words, which are
+    /// still a sentence once the number is off the end.
+    #[test]
+    fn an_unnamed_kind_keeps_what_the_system_said() {
+        // ENOTTY, which Rust has no `ErrorKind` for and renders with an errno.
+        let said = unwritable("/tmp/x.jsonl", &Error::from_raw_os_error(25));
+        assert_eq!(
+            said,
+            "/tmp/x.jsonl could not be written: Inappropriate ioctl for device"
+        );
     }
 }

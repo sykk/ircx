@@ -276,6 +276,17 @@ The `CARGO_TARGET_DIR` is not optional in a fresh worktree — see Gotchas.
   so `(` and `)` are unreachable through it. Use `type`, which goes through
   `Input.insertText` and is layout-independent. This matters for anything
   pasting a CSS value like `rgb(...)` or `url(...)`.
+- **Do not type a path into GTK's *folder* chooser.** Its location bar (`ctrl+l`)
+  duplicates injected characters: `/tmp/notaplugin` arrived as
+  `/tmp/nootaplugin`, and a longer one as `claude-aude-1000` for `claude-1000`.
+  Shortening the path does not help — a four-character prefix mangled too — and
+  it is not the dropped-keystroke fault #349 fixed, because characters are being
+  *added*. The save dialogue's Name field takes a typed path perfectly well; this
+  is the folder chooser specifically.
+
+  Navigate it by clicking instead. Put the folder somewhere the chooser already
+  lists — the app's own working directory is where it opens — then click its row
+  and click Open. `docs/end-to-end-run-8.md` walks it that way.
 - **Backend-dependent UI is empty, not broken.** Without `--seeded` every
   `invoke` rejects, so the network list, plugins, uploads and themes installed on
   disk show their backend-absent state — the plugins sheet renders "no backend:

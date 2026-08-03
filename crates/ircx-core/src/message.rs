@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ircx_ipc::{
     ChatMessage, Delivery, EncryptionState, IrcxEvent, MessageKind, MessageSource, Sender,
 };
@@ -242,6 +244,18 @@ impl SessionState {
         // each gap is closed once rather than per message — and a page that came
         // back full is a page with more behind it.
         let mut filled: Vec<(String, u32, String, Option<String>)> = Vec::new();
+        // What each conversation already held when this batch began, kept
+        // because the loop below moves the mark forward as it goes and the
+        // question is about the mark before any of it arrived. See `was_missed`.
+        let held_before: HashMap<String, Option<String>> = batch
+            .messages
+            .iter()
+            .map(|message| {
+                let key = self.fold(&message.target);
+                let held = self.archived.get(&key).cloned();
+                (key, held)
+            })
+            .collect();
         for message in batch.messages {
             // A first page is not an interruption: it is a conversation the
             // user has only just met, and none of it was theirs to miss. What
@@ -253,7 +267,11 @@ impl SessionState {
             // same case. Ergo narrates the reader's own comings and goings as
             // messages from a service, and a badge counting those says five
             // where three things were said. #221.
-            if live || (missed && self.in_conversation(&message.target, &message.sender.nick)) {
+            if live
+                || (missed
+                    && self.in_conversation(&message.target, &message.sender.nick)
+                    && self.was_missed(&message, &held_before))
+            {
                 self.count_towards_unread(&message);
             }
             if missed {
@@ -325,6 +343,37 @@ impl SessionState {
     /// machine's clock; letting one move the other means a fast clock asks for
     /// the gap from after the messages in it, and they are missed for good.
     /// Asking from too far back only re-fetches what the archive then refuses.
+    /// Whether a replayed message is one the reader was not here for, rather
+    /// than one they already have.
+    ///
+    /// A gap is asked for from the newest thing the conversation holds, and
+    /// `history::at` truncates that to the milliseconds the resume format
+    /// carries — deliberately, since "at worst asks again for a message already
+    /// held". The archive refuses the duplicate on the way in. The unread count
+    /// did not, so every reconnect handed the reader back the last thing they
+    /// had read and put a badge on it. #379.
+    ///
+    /// Strictly newer, which cuts the other way for a message sharing the exact
+    /// server timestamp of the last one read: it arrives, it is drawn, and it
+    /// is not counted. That is a millisecond collision against a badge that was
+    /// wrong on every reconnect, and it is the trade this takes.
+    fn was_missed(
+        &self,
+        message: &ChatMessage,
+        held_before: &HashMap<String, Option<String>>,
+    ) -> bool {
+        // A conversation with nothing behind it cannot have handed anything
+        // back, and a locally-stamped message is not on the server's clock at
+        // all, so neither is measured against a watermark.
+        if message.timestamp_is_local {
+            return true;
+        }
+        match held_before.get(&self.fold(&message.target)) {
+            Some(Some(held)) => message.timestamp.as_str() > held.as_str(),
+            _ => true,
+        }
+    }
+
     fn remember_newest(&mut self, message: &ChatMessage) {
         if message.timestamp_is_local {
             return;

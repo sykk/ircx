@@ -1677,6 +1677,36 @@ right one:
   arrival at it. Whether a badge should reappear underneath a pane the user is
   looking at but not reading is not settled.
 
+**A reconnect used to hand back the last message you had read, with a 1 on it**
+(#380), found by probing this on 2026-08-03 rather than from an entry — there
+was none. A gap is asked for from the newest thing a conversation holds, and
+`history::at` truncates that to the milliseconds the resume format carries. The
+truncation is deliberate and its own comment gives the cost: "at worst asks
+again for a message already held — the archive refuses the duplicate". The
+archive does. The badge did not:
+
+```text
+live message, msgid=abc          unread 1
+mark_read                        unread 0
+gap fill returns abc and def     unread 2   ← 1 was right
+```
+
+It bit on every reconnect where a conversation's newest message was stamped by
+this machine rather than by the server — `archived` keeps nanoseconds and the
+resume carries milliseconds — and on any server that includes the boundary
+message in its own answer.
+
+A replayed message is measured against the watermark the conversation held
+*before* the batch began now, rather than the one the loop moves forward as it
+goes. Strictly newer, so a genuinely missed message sharing the exact server
+timestamp of the last one read is drawn and not counted — a millisecond
+collision against a badge that was wrong on every reconnect.
+
+**Still no evidence for the count against a real socket**, which this section
+already said and this does not change: the exchange is scripted in
+`crates/ircx-core/tests/session.rs`, and nobody has watched a badge across a
+real drop.
+
 ## Schema migrations
 
 `migrations.rs` is covered by two tests — that migrating is idempotent on

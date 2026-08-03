@@ -3323,6 +3323,59 @@ mod what_a_backfill_counts {
         assert_eq!(unread(&session, "#ircx"), 1);
     }
 
+    /// A gap is asked for from the newest thing the conversation holds, and
+    /// `history::at` truncates that to the milliseconds the resume format
+    /// carries — on purpose, because "at worst asks again for a message already
+    /// held". The archive refuses that duplicate. The badge used to keep it:
+    /// the reader was handed back the last thing they had read, with a 1 on it,
+    /// on every reconnect.
+    #[test]
+    fn what_comes_back_that_was_already_read_is_not_unread_again() {
+        let mut session = registered_holding("#ircx", "2026-07-31T09:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(
+            "@msgid=abc;time=2026-07-31T09:30:00.500Z :phrack!p@h PRIVMSG #ircx :the live one",
+        );
+        assert_eq!(unread(&session, "#ircx"), 1);
+        let actions = session.state.mark_read("#ircx");
+        session.apply(actions);
+        assert_eq!(unread(&session, "#ircx"), 0);
+
+        replay(
+            &mut session,
+            &[
+                "@batch=1;msgid=abc;time=2026-07-31T09:30:00.500Z :phrack!p@h \
+                 PRIVMSG #ircx :the live one",
+                "@batch=1;msgid=def;time=2026-07-31T09:31:00.000Z :phrack!p@h \
+                 PRIVMSG #ircx :genuinely missed",
+            ],
+        );
+
+        assert_eq!(
+            unread(&session, "#ircx"),
+            1,
+            "only the message that arrived while nobody was looking"
+        );
+    }
+
+    /// The whole page can be one the reader already has, which is what a
+    /// reconnect with nothing said in the gap looks like.
+    #[test]
+    fn a_page_of_nothing_new_leaves_the_badge_alone() {
+        let mut session = registered_holding("#ircx", "2026-07-31T09:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed("@time=2026-07-31T09:30:00.500Z :phrack!p@h PRIVMSG #ircx :the live one");
+        let actions = session.state.mark_read("#ircx");
+        session.apply(actions);
+
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:30:00.500Z :phrack!p@h PRIVMSG #ircx :the live one"],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 0);
+    }
+
     /// The restart case, which is the one #223 was filed for: the archive says
     /// where the conversation left off, and everything after it was missed.
     #[test]

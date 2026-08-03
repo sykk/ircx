@@ -2551,21 +2551,42 @@ shape the tests assert does survive into the accessibility tree, with the right
 politeness and the right text at the right moments. That is more than was known
 before, and it is the part to keep.
 
-**Whether a screen reader announces it is still open.** Orca spoke neither
-sentence, and that measurement does not carry the weight it first appeared to:
+**A screen reader is not told, and there is a control for it now.** The first
+runs were taken with the window unfocused, which proves nothing — Orca's log
+named `plasmashell` as the application it was tracking, and it suppresses live
+regions for unfocused applications. Focused, and with a control on the same
+machine, the comparison is clean.
 
-- The first runs were taken with the window **not focused**. Orca's own log named
-  `plasmashell` as the application it was tracking, and it suppresses live
-  regions for unfocused applications, so those runs prove nothing.
-- Focused, Orca does read the app — `main content`, `Message #queue`, `entry.`,
-  `Focus mode` — and still said neither sentence.
-- **There is no control.** Nothing here establishes that Orca announces a live
-  region in *any* application on this machine, so the silence cannot yet be
-  attributed to this client rather than to Orca's own configuration.
+The control is a page with two live regions updating every six seconds — one
+visible with `aria-live="polite"`, one carrying Tailwind's exact `sr-only` rules
+with `role="status"` — in Chrome, which needs `--force-renderer-accessibility`
+before it publishes anything at all. Counted out of Orca's own log:
 
-The next step is that control: a live region in a browser on the same machine,
-focused, logged the same way. Until it runs, "the announcements do not reach a
-screen reader" is a hypothesis, not a finding.
+```text
+                                    speech   braille   event seen
+Chrome, visible aria-live              17       72        yes
+Chrome, sr-only role=status             0       38        yes
+ircx, visible typing region             0        0        no
+```
+
+Two separate things fall out of that.
+
+**Nothing from ircx reaches Orca.** Not speech, not braille, not the event. In
+Chrome the same shape of region is received and brailled even when it is not
+spoken, so the client is not merely losing an announcement — it is not emitting
+one. That is a real difference between the two engines rather than a setting.
+
+**And `sr-only` suppresses speech even where it works.** Chrome's clipped region
+was received and brailled and never spoken. So the composer's queue
+announcements — the two sentences this whole entry is about — carry `sr-only`,
+and even if their events did arrive they would reach braille and not a voice.
+The typing indicator does not carry it, which is why it is the fair comparison
+above.
+
+Two disproven guesses, both worth not repeating: that React creating the text
+node rather than mutating it was the cause — a permanently non-empty text node
+changed nothing, verified live through HMR — and that `sr-only` was what stopped
+the events, which the visible typing region rules out.
 
 Also unheard, and unhearable here: whether the two sentences work *as a pair*.
 This machine has no audio hardware, so what was captured is what Orca would have

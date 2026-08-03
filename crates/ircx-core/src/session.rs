@@ -621,6 +621,21 @@ impl SessionState {
             ));
             return false;
         }
+        // EXTERNAL authenticates with the credentials of the layer underneath,
+        // which for IRC is the TLS client certificate — and this client
+        // presents none: `ircx-net` builds both TLS configurations with
+        // `with_no_client_auth`, and nothing in `NetworkConfig` carries a
+        // certificate to present. Sending it anyway gets a 904 whose sentence
+        // sends the reader to a password field that has nothing to do with it.
+        // #373.
+        if credentials.mechanism == SaslMechanism::External {
+            self.fail_sasl(
+                "ircx cannot present a client certificate, so SASL EXTERNAL has nothing to \
+                 authenticate with. Choose another mechanism in this network's settings."
+                    .to_owned(),
+            );
+            return false;
+        }
 
         self.set_sasl(SaslStatus::InProgress);
         self.send_command(

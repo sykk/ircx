@@ -1038,17 +1038,30 @@ fn a_server_without_sasl_degrades_to_a_plain_connection() {
         .any(|text| text.contains("without authenticating")));
 }
 
+/// This asserted the empty payload EXTERNAL answers with, which was the right
+/// shape for a mechanism this client could use — and it cannot. EXTERNAL
+/// authenticates with the TLS client certificate, `ircx-net` builds both
+/// configurations with `with_no_client_auth`, and nothing in a network's
+/// settings carries a certificate to present. So the exchange the old test
+/// pinned was one that could only ever end in a `904`.
+///
+/// The refusal that replaced it is in `scram_over_a_session`, beside the other
+/// mechanism cases. #373.
 #[test]
-fn sasl_external_sends_the_empty_payload() {
+fn sasl_external_is_not_offered_to_the_server_at_all() {
     let mut session = Harness::new(sasl_config(SaslMechanism::External, None));
     session.connect();
     session.feed(":irc.libera.chat CAP * LS :sasl=EXTERNAL");
     session.sent();
 
     session.feed(":irc.libera.chat CAP * ACK :sasl");
-    assert_eq!(session.sent(), vec!["AUTHENTICATE EXTERNAL"]);
-    session.feed("AUTHENTICATE +");
-    assert_eq!(session.sent(), vec!["AUTHENTICATE +"]);
+    assert!(
+        !session
+            .sent()
+            .iter()
+            .any(|line| line.starts_with("AUTHENTICATE")),
+        "a mechanism with nothing to authenticate with is not started"
+    );
 }
 
 #[test]
@@ -2841,6 +2854,49 @@ mod scram_over_a_session {
         assert!(
             session.sent().contains(&"CAP END".to_string()),
             "registration carries on rather than stopping"
+        );
+    }
+
+    /// EXTERNAL is offered by nearly every server and cannot be used by this
+    /// client: it authenticates with the TLS client certificate, and `ircx-net`
+    /// builds both configurations with `with_no_client_auth`. Sent anyway it
+    /// draws a `904` whose sentence points at a password field that has nothing
+    /// to do with it, so it is refused here instead. #373.
+    #[test]
+    fn external_is_refused_before_it_is_sent_rather_than_by_the_server() {
+        let mut config = config();
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::External,
+            account: "user".into(),
+            password: None,
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,SCRAM-SHA-512");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+
+        let sent = session.sent();
+        assert!(
+            !sent.iter().any(|line| line.starts_with("AUTHENTICATE")),
+            "nothing should have been offered to the server: {sent:?}"
+        );
+        assert!(
+            sent.contains(&"CAP END".to_string()),
+            "registration carries on unauthenticated rather than stopping"
+        );
+
+        let said: Vec<String> = session
+            .messages()
+            .iter()
+            .map(|message| message.text.clone())
+            .filter(|text| text.contains("certificate"))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                "ircx cannot present a client certificate, so SASL EXTERNAL has nothing to \
+              authenticate with. Choose another mechanism in this network's settings."
+            ]
         );
     }
 

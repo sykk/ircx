@@ -36,10 +36,21 @@ interface Props {
   error: string | null;
 }
 
+/**
+ * What can be chosen, which is not everything `SaslMechanism` can name.
+ *
+ * EXTERNAL is absent on purpose. It authenticates with the credentials of the
+ * layer underneath — for IRC, the TLS client certificate — and this client
+ * presents none: `ircx-net` builds both TLS configurations with
+ * `with_no_client_auth` and nothing in a network's settings carries a
+ * certificate. It was offered here, labelled with the very thing it had no way
+ * to accept, and what it bought was a connection that succeeded and a login
+ * that did not. #373. The variant stays in the IPC type so a network already
+ * storing it still loads; `start_sasl` refuses it with a sentence.
+ */
 const MECHANISMS: { value: SaslMechanism | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: "PLAIN", label: "PLAIN — account and password" },
-  { value: "EXTERNAL", label: "EXTERNAL — client certificate" },
   { value: "SCRAM-SHA-256", label: "SCRAM-SHA-256 — password, never sent" },
   { value: "SCRAM-SHA-512", label: "SCRAM-SHA-512 — password, never sent" },
 ];

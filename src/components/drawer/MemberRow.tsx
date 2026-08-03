@@ -38,7 +38,18 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
             : { background: nickColor(member.nick) }
         }
       />
+      {/* The name is on the element that truncates rather than on the button,
+       * which already carries the away reason and takes its accessible name
+       * from this text — a title there would be read back as a description
+       * repeating the name. A reader hovering a clipped nick gets the whole of
+       * it; nothing else changes. #352.
+       *
+       * Whether it is clipped at all is decided by CSS: the column is a
+       * `clamp(8rem, <widest>ch + 3.5rem, 13rem)` and only names past the
+       * ceiling lose anything, which is not knowable here. So it is set for
+       * every row rather than for the rows that need it. */}
       <span
+        title={member.nick}
         className={`truncate ${away ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"}`}
       >
         {member.nick}

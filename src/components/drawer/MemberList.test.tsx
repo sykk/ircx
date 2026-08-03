@@ -85,6 +85,28 @@ describe("MemberList", () => {
     expect(within(wren).getByText("wren").className).toContain("--text-muted");
   });
 
+  /** #352: the column stops at 13rem, so a long enough nick truncates and the
+   * inspector truncates it again. Nothing gave the whole of it back — the row
+   * carried a title only for somebody away. */
+  it("keeps the whole nick on the element that clips it", () => {
+    show([member("wallabywombatthelongest")]);
+
+    const name = screen.getByText("wallabywombatthelongest");
+    expect(name.className).toContain("truncate");
+    expect(name).toHaveProperty("title", "wallabywombatthelongest");
+  });
+
+  /** The button's own title is the away reason and stays that: it is where the
+   * state belongs, and it is what the row is announced with. */
+  it("leaves the away reason where it was", () => {
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
+
+    const wren = screen.getByRole("button", { name: /wren/ });
+    expect(wren).toHaveProperty("title", "Away: sleep");
+    expect(within(wren).getByText("wren")).toHaveProperty("title", "wren");
+  });
+
   it("hollows the presence dot for an away member rather than fading it", () => {
     show();
     fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));

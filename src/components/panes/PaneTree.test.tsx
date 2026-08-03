@@ -321,15 +321,18 @@ describe("resizing a split", () => {
   /** jsdom lays nothing out, so a divider asking its parent how wide the split
    * is gets zero and refuses to move. This is the only geometry these tests
    * need: one split, 1000 by 800, with its top left at the origin. */
-  function measured() {
+  /** jsdom lays nothing out, so every figure the divider reads comes from here.
+   * The width is a parameter because the pixel floor turns on it: a split too
+   * narrow for two floors behaves differently from one that fits them. */
+  function measured({ width = 1000 } = {}) {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       x: 0,
       y: 0,
       left: 0,
       top: 0,
-      right: 1000,
+      right: width,
       bottom: 800,
-      width: 1000,
+      width,
       height: 800,
       toJSON: () => ({}),
     });
@@ -396,6 +399,12 @@ describe("resizing a split", () => {
     expect(ratio()).toBeCloseTo(0.25);
   });
 
+  /**
+   * `MIN_SHARE` is 0.15 and cannot be what stops here: a share does not know
+   * the window, and 15% of a real one is 147px of conversation wrapping message
+   * text to a character a line. The floor is 280px against this mocked 1000px
+   * split, so 0.28. #367.
+   */
   it("leaves both sides a pane rather than a sliver", async () => {
     measured();
     split("row");
@@ -403,6 +412,45 @@ describe("resizing a split", () => {
     await settle();
 
     drag(divider(), { clientX: 5, clientY: 400 });
+
+    expect(ratio()).toBeCloseTo(0.28);
+  });
+
+  it("holds the far side to the same floor", async () => {
+    measured();
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    drag(divider(), { clientX: 995, clientY: 400 });
+
+    expect(ratio()).toBeCloseTo(0.72);
+  });
+
+  /** A split too narrow to give both sides the floor gets an even one, which
+   * is the best the space allows. Refusing to move at all would read as a
+   * broken divider. */
+  it("halves a split too small for two panes rather than sticking", async () => {
+    measured({ width: 400 });
+    split("row");
+    render(<PaneTree />);
+    await settle();
+
+    drag(divider(), { clientX: 20, clientY: 400 });
+
+    expect(ratio()).toBeCloseTo(0.5);
+  });
+
+  /** The floor is a width, so a stacked split is not its business — a pane
+   * above another is short rather than narrow, and that measurement has not
+   * been taken. */
+  it("does not apply the width floor to a stacked split", async () => {
+    measured();
+    split("column");
+    render(<PaneTree />);
+    await settle();
+
+    drag(divider("Pane height"), { clientX: 500, clientY: 40 });
 
     expect(ratio()).toBeCloseTo(0.15);
   });

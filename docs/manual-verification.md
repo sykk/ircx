@@ -643,11 +643,24 @@ drag at all before this; `click` calls `el.click()` and moves no pointer.
   travel; the divider moves ±40px and freezes below about 900px of window. The
   existing tests caught it — a drag to 70% came back 56%.
 
-  **What is left is small rather than impossible.** At 15% of 1200px the pane is
-  147px and 147px cannot be read whether or not a roster is in it. A modest
-  floor would finish it and is affordable now that the roster goes: with none to
-  fit, a pane needs about 280px, which leaves the divider 29%–71%. #367 stays
-  open carrying that.
+  **The floor that finishes it is `MIN_PANE_PX = 280`**, added once the roster
+  drop had made it affordable. A share cannot say "wide enough to be a pane" on
+  a window whose width it does not know, so `Divider` clamps against the span it
+  already measures; the store's `MIN_SHARE` stays underneath as the backstop.
+
+  Walked at 1200px: the divider stops with the pane at **283px, `aria-valuenow`
+  29**, its roster dropped, message text wrapping at word boundaries and the
+  composer's hint on one line. The far side stops at 677px and 71. So 29%–71%
+  of travel, against the 44%–56% a 440px floor would have left — 440 being what
+  a pane needs when it has to hold a roster too, which is exactly the case the
+  roster drop removes. The two constants work together and neither would do on
+  its own.
+
+  A split too narrow for two floors gets an even one rather than a divider that
+  will not move: that starts below a 560px split, narrower than the app opens
+  at. The floor is a width, so a stacked split is not its business — a pane
+  above another is short rather than narrow, and nobody has taken that
+  measurement.
 
 - **Not reached: touch.** Every event was `pointerType: "mouse"`. A coarse
   pointer wants a target several times this size and nothing has been asked

@@ -7,6 +7,27 @@ import { ChatPane } from "./ChatPane";
 /** How far an arrow key moves a divider, as a share of the split. */
 const KEY_STEP = 0.02;
 
+/**
+ * How narrow a side-by-side pane may be dragged, in pixels.
+ *
+ * `MIN_SHARE` in the store is a share, and a share cannot say "still wide
+ * enough to be a pane" on a window whose width it does not know: 15% of a
+ * 1200px window is 147px, and 147px of conversation wraps message text to about
+ * a character a line.
+ *
+ * 280 is measured, in `docs/end-to-end-run-7.md` and again in run 10. A pane
+ * with its roster dropped — which happens below 440px, `ContextPanel` — is all
+ * conversation, and 280 of it is where the text goes back to wrapping at word
+ * boundaries. The roster case is not this constant's business precisely because
+ * the roster gets out of the way first: these two work together, and a floor
+ * big enough to hold a roster as well would be 440 and would leave the divider
+ * ±40px of travel on a 1200px window, which is most of a control given up.
+ *
+ * Side by side only. A pane stacked above another is short rather than narrow,
+ * which is its own measurement and nobody has taken it.
+ */
+const MIN_PANE_PX = 280;
+
 export function PaneTree() {
   const layout = useAppStore((s) => s.layout);
   if (!layout) return <ChatPane view={null} />;
@@ -59,6 +80,23 @@ function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: n
     return row ? (clientX - split.left) / span : (clientY - split.top) / span;
   };
 
+  /**
+   * The same share with neither side below `MIN_PANE_PX`, which the store's
+   * share floor cannot express.
+   *
+   * Halved rather than refused when the split is too small to give both sides
+   * that much: an even split is the best the space allows, and a divider that
+   * will not move at all reads as broken. That case starts around a 600px
+   * split, which is a window narrower than the app opens at.
+   */
+  const held = (share: number): number => {
+    if (!row) return share;
+    const span = self.current?.parentElement?.getBoundingClientRect().width;
+    if (!span) return share;
+    const floor = Math.min(MIN_PANE_PX / span, 0.5);
+    return Math.min(Math.max(share, floor), 1 - floor);
+  };
+
   return (
     <div
       ref={self}
@@ -81,7 +119,7 @@ function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: n
       onPointerMove={(event) => {
         if (!dragging) return;
         const share = shareAt(event.clientX, event.clientY);
-        if (share !== null) setSplitRatio(path, share);
+        if (share !== null) setSplitRatio(path, held(share));
       }}
       onPointerUp={(event) => {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -90,8 +128,8 @@ function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: n
       onKeyDown={(event) => {
         const back = row ? "ArrowLeft" : "ArrowUp";
         const on = row ? "ArrowRight" : "ArrowDown";
-        if (event.key === back) setSplitRatio(path, ratio - KEY_STEP);
-        else if (event.key === on) setSplitRatio(path, ratio + KEY_STEP);
+        if (event.key === back) setSplitRatio(path, held(ratio - KEY_STEP));
+        else if (event.key === on) setSplitRatio(path, held(ratio + KEY_STEP));
         else return;
         event.preventDefault();
       }}

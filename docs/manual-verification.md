@@ -34,8 +34,20 @@ to change it.
 
 What that leaves:
 
-- **Mechanisms other than PLAIN.** Libera also offers `EXTERNAL`,
-  `ECDSA-NIST256P-CHALLENGE` and `SCRAM-SHA-512`. ircx requests PLAIN only.
+- **`EXTERNAL`**, which needs a client certificate and a TLS listener, and
+  **`ECDSA-NIST256P-CHALLENGE`**, which ircx does not implement.
+
+**Both SCRAM hashes are walked**, and this section is not where that is written
+down: see **SCRAM** below, which covers SHA-256 against `ergo`, SHA-512 against
+Libera over TLS 1.3, both failure paths, and a proxy that cannot prove itself.
+Three of those walks are scripted in `crates/ircx-core/tests/scram_ergo.rs` so
+they can be re-run against a change to `scram.rs` rather than done again by
+hand.
+
+> This section said "ircx requests PLAIN only" until 2026-08-03, which stopped
+> being true when SCRAM shipped and was contradicted by the SCRAM section forty
+> pages down. A file this size can disagree with itself; a claim about what is
+> unverified is worth grepping for before it is trusted.
 
 > Testing a wrong password by sending `/msg NickServ IDENTIFY` does **not**
 > exercise SASL. SASL happens during registration, before you can message
@@ -1181,6 +1193,24 @@ it knew the password, so the account was not signed in and something is
 answering for it. The password is not what is wrong here — check the address
 and port this network points at.
 ```
+
+**Three of these walks are scripted**, on 2026-08-03, in
+`crates/ircx-core/tests/scram_ergo.rs`: the SHA-256 exchange, the wrong
+password, and the mechanism ergo does not offer. They assert what the walks
+above found rather than finding anything — the point is that a change to
+`scram.rs` can be put back in front of a real server in two seconds instead of
+being walked by hand again.
+
+```text
+ergo run --conf ircd.yaml &
+# once, as nick `scramwalk`: /msg NickServ REGISTER correct-horse-battery
+cargo test -p ircx-core --test scram_ergo -- --ignored --nocapture
+```
+
+The third is the one worth having as an assertion rather than prose. A mechanism
+the server does not offer connects unauthenticated, a `904` abandons
+registration, and the difference between them is a decision rather than an
+accident — the kind that is quietly reversed by somebody tidying an error path.
 
 **Not walked**:
 

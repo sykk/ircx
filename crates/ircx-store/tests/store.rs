@@ -746,6 +746,52 @@ fn removing_a_network_forgets_the_conversations_it_had_open() {
     assert!(store.open_targets(&id).unwrap().is_empty());
 }
 
+/// A draft is text somebody typed and did not send. It is neither a setting nor
+/// an archived conversation, so "forgets its settings, the conversations stay"
+/// does not cover it — and a network id is a fresh uuid, so nothing would ever
+/// name this one again. It outlived the network with no screen left that could
+/// reach it. #382.
+#[test]
+fn removing_a_network_takes_its_unsent_drafts() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera")).unwrap();
+    let other = store.save_network(&network("OFTC")).unwrap();
+    store
+        .set_draft(&id, "#ircx", "half-typed and private")
+        .unwrap();
+    store
+        .set_draft(&other, "#debian", "somebody else's")
+        .unwrap();
+
+    store.remove_network(&id).unwrap();
+
+    assert_eq!(store.get_draft(&id, "#ircx").unwrap(), None);
+    assert_eq!(
+        store.get_draft(&other, "#debian").unwrap().as_deref(),
+        Some("somebody else's"),
+        "another network's drafts are not its business"
+    );
+}
+
+/// The removal screen says it "forgets its settings", and a retention window is
+/// one — set from the archive sheet, and deciding nothing once the network it
+/// belongs to is gone.
+#[test]
+fn removing_a_network_takes_its_retention_windows() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera")).unwrap();
+    let other = store.save_network(&network("OFTC")).unwrap();
+    store.set_retention(&id, None, Some(90)).unwrap();
+    store.set_retention(&id, Some("#ircx"), Some(30)).unwrap();
+    store.set_retention(&other, None, Some(7)).unwrap();
+
+    store.remove_network(&id).unwrap();
+
+    assert_eq!(store.retention(&id, None).unwrap(), None);
+    assert_eq!(store.retention(&id, Some("#ircx")).unwrap(), None);
+    assert_eq!(store.retention(&other, None).unwrap(), Some(Some(7)));
+}
+
 #[test]
 fn removing_a_network_drops_the_password_and_keeps_the_archive() {
     let store = Store::open_in_memory().unwrap();

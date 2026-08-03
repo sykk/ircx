@@ -585,22 +585,39 @@ watched.
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom
-lays nothing out. So every figure in those tests is one this file supplied, and
-what nobody has done is drag one.
+lays nothing out. So every figure in those tests is one this file supplied.
 
-- **Whether the divider can be hit.** It draws a one-pixel rule inside a
-  four-pixel target. Four pixels is a guess at the smallest thing a pointer can
-  reliably catch, checked against nothing.
+**Dragged on 2026-08-03**, in Chrome through `driver.mjs` with real pointer
+events — `docs/end-to-end-run-7.md`. Chrome rather than the window: this is a
+question about layout and pointer geometry, and WebKitGTK has no selectors, so
+every figure there would be eyeballed off a screenshot. The driver could not
+drag at all before this; `click` calls `el.click()` and moves no pointer.
 
-- **A nested split.** Dragging an outer divider changes the space its children
-  divide, and each child's own ratio then applies to the new width. That falls
-  out of the tree rather than being arranged, so it is worth watching a
-  three-deep layout rather than assuming it.
+- **The divider could be hit, but not where it was drawn** (#368). `w-1` is a
+  4px box and the rule was drawn at `left-0`, on its leading edge, so the entire
+  target lay to one side of the line. At x=720: `718` and `719` did nothing,
+  `720` dragged. Aiming at the rule and landing a pixel short pressed a pane,
+  and half of every near miss falls short. The rule is centred in the target
+  now — measured again after, it is drawn at 721.5 in a 720–724 box, so a press
+  1.5px short of the line drags. Whether 4px is *enough* is still open; it is a
+  measured ±2px rather than an unmeasured 4px.
 
-- **The 15% floor.** It is a share of the split, not a width, so on a narrow
-  window 15% of half a window is a very small pane — and the roster inside it is
-  a fixed 208px that will not shrink. Drag one all the way in on a small window
-  and see what the conversation has left.
+- **A nested split holds.** Split side by side, split the right pane top and
+  bottom, drag the outer divider 260px left: the outer went 50 → 23 and the
+  inner kept its own 50, applying it to a span grown from 476 to 735. That is
+  the tree doing what it was supposed to, watched rather than assumed.
+
+- **The 15% floor does not do what a floor is for** (#367). At 760×640, dragged
+  all the way in, the pane is about 114px and the roster inside it measures
+  157px on a `shrink-0` `<aside>` — so the roster is wider than the pane and
+  wins. The timeline is gone and what is left of the composer is its hint
+  wrapped one word wide. A share cannot say "still wide enough to be a pane" on
+  a window whose width it does not know. Left unfixed on purpose: both ways out
+  need a constant that shows up in every split at every size.
+
+- **Not reached: touch.** Every event was `pointerType: "mouse"`. A coarse
+  pointer wants a target several times this size and nothing has been asked
+  about one.
 
 - **Where a resize goes when the app closes.** Into `viewState.ts`, alongside
   the sidebar width, since #287. The tree is written down as the conversations

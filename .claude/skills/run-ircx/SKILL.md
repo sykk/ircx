@@ -99,10 +99,19 @@ the middle of, and a query. `#ircx`'s members are picked for the roster's width
 arithmetic: a voiced one, an away one, and `wallabywombat` to reach the ceiling.
 A line typed into the composer is kept, so `ArrowUp` brings it back.
 
+**`click` is not a pointer.** It calls `el.click()`, so nothing moves and no
+`pointerdown` sequence happens — anything driven by pointer events, such as the
+pane divider with its `setPointerCapture`, cannot be worked by it. `drag` and
+`dragxy` go through the DevTools Protocol instead, which is a real pointer as
+far as the page is concerned. `dragxy` is the one that answers "can this be
+hit": a selector always lands dead centre, which is the question nobody is
+asking.
+
 **This is where the layout defects are.** jsdom lays nothing out, so a whole
 class of bug — a name truncated by a sub-pixel shortfall, a header wrapping into
-a row of fixed height, a scroller clamped before it was measured — cannot be
-caught by `vitest` at all. #299, #300, #301 and #307 were each found here, and
+a row of fixed height, a scroller clamped before it was measured, a four-pixel
+target lying entirely to one side of the line it draws — cannot be caught by
+`vitest` at all. #299, #300, #301 and #307 were each found here, and
 none of them had a failing test until a browser had shown the defect first.
 
 Adding a handler to `seed.mjs`: key it off the **Rust** parameter names, not the
@@ -118,6 +127,9 @@ handler rejects by name, so a walk that reaches past the seed says so.
 | `text <sel>` | `textContent` of the first match |
 | `count <sel>` | how many match — `0` is how you assert something closed |
 | `click <sel>` | click the first match |
+| `drag <sel> <dx> <dy>` | press at its centre, move in steps, release |
+| `dragxy <x> <y> <dx> <dy>` | the same from a point, for asking what a target catches |
+| `size <w> <h>` | set the viewport, for what a layout does when narrow |
 | `fill <sel> <value>` | set an input's value the way React notices |
 | `filllabel <label> <value>` | the same, finding the field by its visible label |
 | `type <text>` | insert text at the focus |

@@ -83,7 +83,7 @@ describe("Connecting", () => {
 
   it.each<[SaslStatus, string]>([
     [{ state: "inProgress" }, "Authenticating"],
-    [{ state: "authenticated", detail: { account: "sable" } }, "Authenticated as sable"],
+    [{ state: "authenticated", detail: { account: "sable", refused: null } }, "Authenticated as sable"],
     [
       { state: "failed", detail: { message: "Invalid account credentials" } },
       "Authentication failed: Invalid account credentials",

@@ -113,7 +113,7 @@ export function seedMockupWorkspace() {
       makeNetwork("libera", {
         name: "Libera.Chat",
         host: "irc.libera.chat",
-        sasl: { state: "authenticated", detail: { account: "sable" } },
+        sasl: { state: "authenticated", detail: { account: "sable", refused: null } },
         capsEnabled: [
           "sasl",
           "server-time",

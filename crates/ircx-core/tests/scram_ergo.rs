@@ -149,7 +149,7 @@ async fn scram_sha_256_signs_in_against_ergo() {
         seen.numerics
     );
     match seen.sasl {
-        Some(SaslStatus::Authenticated { account }) => assert_eq!(account, ACCOUNT),
+        Some(SaslStatus::Authenticated { account, .. }) => assert_eq!(account, ACCOUNT),
         other => panic!("expected Authenticated, got {other:?}"),
     }
     assert!(

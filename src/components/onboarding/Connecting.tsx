@@ -135,7 +135,9 @@ function saslLine(status: SaslStatus, detailInAlert: boolean): string {
     case "inProgress":
       return "Authenticating";
     case "authenticated":
-      return `Authenticated as ${status.detail.account}`;
+      return status.detail.refused === null
+        ? `Authenticated as ${status.detail.account}`
+        : `Signed in as ${status.detail.account}, but SASL was refused`;
     case "failed":
       return detailInAlert
         ? "Authentication failed"

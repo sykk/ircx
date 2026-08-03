@@ -124,7 +124,7 @@ describe("StatusBar", () => {
     it("says so, and as whom", () => {
       const bar = mount(
         { state: "connected" },
-        { sasl: { state: "authenticated", detail: { account: "sable" } } },
+        { sasl: { state: "authenticated", detail: { account: "sable", refused: null } } },
       );
       expect(bar.textContent).toContain("signed in as sable");
       expect(screen.getByLabelText("Authenticated as sable")).toBeTruthy();
@@ -150,6 +150,31 @@ describe("StatusBar", () => {
       ).toBeTruthy();
     });
 
+    /** Both facts at once, and the bar can only put one of them in the label.
+     * The account wins it, because it is the one the reader is checking; the
+     * refusal is the one they can act on, so it goes where the detail goes.
+     * #390. */
+    it("keeps saying SASL was refused under an account that arrived another way", () => {
+      const bar = mount(
+        { state: "connected" },
+        {
+          sasl: {
+            state: "authenticated",
+            detail: {
+              account: "brandn",
+              refused: "Libera.Chat does not accept SASL SCRAM-SHA-256",
+            },
+          },
+        },
+      );
+      expect(bar.textContent).toContain("signed in as brandn");
+      expect(
+        screen.getByLabelText(
+          "Signed in as brandn. Libera.Chat does not accept SASL SCRAM-SHA-256",
+        ),
+      ).toBeTruthy();
+    });
+
     it("says it is still trying, while it is", () => {
       const bar = mount({ state: "connected" }, { sasl: { state: "inProgress" } });
       expect(bar.textContent).toContain("signing in");
@@ -170,7 +195,7 @@ describe("StatusBar", () => {
     it("says something different in each state", () => {
       const seen = new Set<string>();
       for (const sasl of [
-        { state: "authenticated", detail: { account: "sable" } },
+        { state: "authenticated", detail: { account: "sable", refused: null } },
         { state: "failed", detail: { message: "bad password" } },
         { state: "inProgress" },
         { state: "notConfigured" },

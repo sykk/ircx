@@ -65,7 +65,7 @@ export const LIBERA: Network = {
   tls: true,
   status: { state: "connected" },
   currentNick: "sable",
-  sasl: { state: "authenticated", detail: { account: "sable" } },
+  sasl: { state: "authenticated", detail: { account: "sable", refused: null } },
   capsEnabled: ["server-time", "multi-prefix", "account-notify"],
   lagMs: 42,
 };

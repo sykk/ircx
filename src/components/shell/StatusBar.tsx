@@ -187,15 +187,23 @@ function Sasl({ status }: { status: SaslStatus }) {
  *
  * The same argument the timeline makes about a mention: a colour says the
  * client noticed something and cannot say what it noticed.
+ *
+ * The label stays green under a refusal because the account is real — the
+ * person is signed in, and saying otherwise would be the same mistake pointing
+ * the other way. What the tooltip carries is the half they can act on.
  */
 function saslDisplay(status: SaslStatus): [string, string, string] {
   switch (status.state) {
-    case "authenticated":
+    case "authenticated": {
+      const { account, refused } = status.detail;
       return [
-        `signed in as ${status.detail.account}`,
+        `signed in as ${account}`,
         "var(--state-connected)",
-        `Authenticated as ${status.detail.account}`,
+        refused === null
+          ? `Authenticated as ${account}`
+          : `Signed in as ${account}. ${refused}`,
       ];
+    }
     case "inProgress":
       return ["signing in", "var(--state-connecting)", "Authenticating"];
     case "failed":

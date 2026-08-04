@@ -2977,7 +2977,7 @@ sheet is — the sheet restored to a disconnected element, which is to say to
 opener, and Escape out of a sheet reached through `Ctrl+K` lands on the button
 the user started from. That is the client's ordinary path, not an edge of one.
 
-### What this run did not reach
+### What the browser walk did not reach
 
 - **The channel list.** It opens on a `/list` answer, which the driver's seed
   does not serve. It is the same call as the four sheets that were walked —
@@ -2987,7 +2987,71 @@ the user started from. That is the client's ordinary path, not an edge of one.
   Tauri delivers and the browser cannot. They are covered in jsdom instead, for
   the half jsdom can see: the confirmation takes focus when it appears, and
   Escape cancels it. Their Tab ring is unwalked.
-- **WebKitGTK.** All of the above is Chrome. Sequential focus navigation is not
-  somewhere the two engines are known to differ, and the assembled app has no
-  selectors to ask with, so this is left as it stands rather than guessed at
-  from a screenshot.
+
+### The same walk in the engine that ships
+
+**2026-08-04.** Everything above is Chrome, and #388 is what happens when
+Chrome is taken to speak for WebKitGTK. So the walk was run again against the
+assembled app on `Xvfb`, reading focus off the AT-SPI bus rather than from a
+selector — which is what the window has instead of one.
+
+Both builds were driven identically: Tab once to put focus on something, `Ctrl+K`,
+open Appearance, twelve Tabs, Escape. `main` at `2a8373b` is the control, and it
+is what makes the after run mean anything: an instrument that reports focus
+inside the dialog and nothing else would look the same as a working trap.
+
+```text
+              main (2a8373b)                     with the hook
+opener        button 'Open command palette'      button 'Open command palette'
+sheet open    dialog 'Appearance'                dialog 'Appearance'
+tab 1-8       the sheet's eight controls         the sheet's eight controls
+tab 9         nothing focused                    button 'Close appearance'  ← wraps
+tab 10        button 'Open command palette'      toggle 'ircx Dark'
+tab 11        button 'Minimise'                  button 'Edit the colours…'
+tab 12        button 'Maximise'                  toggle 'ircx Light'
+Escape        button 'Maximise', sheet open      button 'Open command palette'
+```
+
+Every chain in the right-hand column runs through `dialog:'Appearance'`. The
+left-hand column leaves it at the ninth Tab and reaches the window's own
+titlebar at the eleventh, which is the Chrome result to the keystroke.
+
+`focus-in-modals/01-escape-reaches-nothing.png` is that state photographed on
+`main`: the sheet still open, because Escape reached whatever had focus rather
+than the dialog, and the **Maximise button focused with its tooltip up** while a
+modal is on screen. `focus-in-modals/02-focus-comes-back.png` is the same moment
+with the hook — sheet closed, focus ring back on the `Ctrl+K` button that opened
+it.
+
+So the restore survives the palette hand-over in WebKitGTK too, which is the
+part that needed watching: it is the one behaviour here that depends on effect
+ordering rather than on the browser.
+
+**Four things the instrument needed**, all of which produced a wrong answer
+first:
+
+- **The bus the desktop advertises was dead.** `org.a11y.Bus` handed back
+  `/run/user/1000/at-spi/bus_0` and connecting to it was refused. A private
+  `dbus-daemon --config-file=/usr/share/defaults/at-spi2/accessibility.conf`
+  with `at-spi2-registryd` started explicitly against it is what worked — the
+  same shape as the false zero this file already records for announcements.
+- **`GTK_MODULES=gail:atk-bridge` is required.** Without it the app never
+  reaches the bus at all and the desktop has no applications on it. Nothing
+  says so; the tree is simply empty.
+- **A GTK control window is no use for focus.** There is no window manager on
+  the `Xvfb` display, so a second window is never activated and emits no focus
+  events however often it calls `grab_focus`. ircx emits them because with no
+  window manager X input focus lands on it by default. The control here is
+  therefore the `main` build rather than a second application, and a focus run
+  cannot borrow the emitter the announcement runs used.
+- **The focused chain is focused all the way down.** The frame's scroll pane
+  carries `FOCUSED` exactly as the button inside the web view does, so a walk
+  that stops at its first match reports the scroll pane every time and the
+  answer never changes. Take the deepest.
+
+### What the WebKitGTK run did not reach
+
+- **A release build.** Both builds above are debug against Vite, which means
+  `StrictMode`, which means the harder case rather than the shipped one — the
+  restore is the code path that behaves differently under it, and it is the one
+  watched here. What is unwalked is the easier path.

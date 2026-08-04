@@ -2814,3 +2814,66 @@ the data, and so does "text mutation is never reported, structural insertion
 sometimes is". Telling them apart needs a probe that mutates text in direct
 response to a key, and would not change what this costs — a message arriving from
 the network is not input-driven either way.
+
+### The way out, which is not in the page at all
+
+**2026-08-04.** The finding above is right and the conclusion drawn from it was
+too wide: no *ARIA* workaround exists, which was read as no workaround. The
+announcement cannot leave through the page. It can leave through the window.
+
+**Why the page is genuinely closed**, now traced to source rather than inferred
+from silence. WebKit's `AXObjectCacheAtspi.cpp` handles nineteen notifications
+in `postPlatformNotification` and a live region changing is not among them — it
+reaches `default: break;`. The text signals it does emit come from the editing
+pipeline, `postTextStateChangePlatformNotification`, which is why a keystroke
+into a control is reported and nothing the page writes ever is. That accounts
+for every row of the table above without appealing to an unknown rule.
+
+Orca closes the other end independently. `live_region_presenter.py` returns
+False for anything that is not `object:text-changed:insert`, with a comment
+saying so deliberately — user agents fire both children-changed and
+text-changed, and answering to both double-presents. So the one event Orca will
+act on for a live region is the one WebKitGTK will never send. Mounting a real
+accessible object to force `children-changed` was the obvious remaining trick
+and it dies here even where it works.
+
+**`object:announcement` is not subject to either.** Orca registers it in
+`script.py` and speaks it unconditionally — `present_message(event.any_data)`,
+no live-region check, no politeness queue, no focus rule. ATK carries an
+`announcement` signal on every `AtkObject`, and this window is GTK3, so the
+window's own accessible can emit one. Measured on the bus, both halves:
+
+```text
+announcement [emitter.py] 'announcement 4'      <- control, still running
+announcement [ircx]       'Messages waiting to send'
+announcement [emitter.py] 'announcement 5'
+announcement [ircx]       'All sent'
+```
+
+The ircx lines are the composer's two queue sentences, from the assembled app
+against a local `ergo`: twelve lines sent as one message, `4 waiting to send` in
+the hint row at the moment of the first, the second arriving when the last had
+gone. `src-tauri/src/announce.rs` is the mechanism and `commands::announce` the
+command; the DOM region stays, because it is what a browser reads and what the
+walk driver asserts.
+
+**Two false zeros were produced getting here**, both looking exactly like the
+real finding. The first: `at-spi-bus-launcher` came up with no registry behind
+it, so the emitter logged `Could not obtain desktop path or name` and nothing
+reached anything — fixed by pinning `AT_SPI_BUS_ADDRESS` from `org.a11y.Bus` and
+starting `at-spi2-registryd` explicitly. The second: `ergo` resolves `languages`
+against its working directory, so started from elsewhere it exits before it
+listens; the app spent that run reconnecting, never drew a composer, and
+reported zero announcements from a path nothing had walked. The control in the
+transcript above — a GTK window announcing on a timer for the length of the run
+— is there so a zero from ircx can be told from a watcher that was never
+listening. Any future run of this should keep it.
+
+**What is still unheard.** Nobody has listened to this with a screen reader
+actually speaking; what is established is that Orca receives it and that its own
+code path speaks what it receives. The questions #339 left — whether the two
+sentences read as a pair, whether `Waiting to send` belongs before or after the
+text — are unchanged and still want an hour with audio hardware. And the rest of
+the client still announces into the page alone: the typing indicator and about
+fifteen `role="alert"` paragraphs reach nobody, which is now a routing job
+rather than an open question.

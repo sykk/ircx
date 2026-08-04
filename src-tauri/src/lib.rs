@@ -1,3 +1,4 @@
+mod announce;
 mod commands;
 mod events;
 mod preview;
@@ -199,6 +200,7 @@ pub fn run() {
             commands::set_retention,
             commands::export_archive,
             commands::delete_archive,
+            commands::announce,
         ])
         .setup(|app| {
             let store = match open_store(app.handle()) {

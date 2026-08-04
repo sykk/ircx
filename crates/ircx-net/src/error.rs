@@ -27,6 +27,26 @@ pub enum NetError {
     #[error("{host} is not a name a TLS certificate can be checked against")]
     InvalidHostname { host: String },
 
+    #[error("the client certificate at {path} could not be read: {source}")]
+    ClientCertificateUnreadable {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("{path} holds a private key and no certificate, so there is nothing to present")]
+    ClientCertificateMissing { path: String },
+
+    #[error("{path} holds a certificate and no private key, and both have to be in the one file")]
+    ClientKeyMissing { path: String },
+
+    #[error("the certificate and private key in {path} do not go together: {source}")]
+    ClientCertificateRejected {
+        path: String,
+        #[source]
+        source: rustls::Error,
+    },
+
     #[error("the connection is closed")]
     Closed,
 

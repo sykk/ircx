@@ -1,12 +1,17 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::WantsClientCert;
 use rustls::crypto::CryptoProvider;
 use rustls::{
-    ClientConfig, ClientConnection, DigitallySignedStruct, ProtocolVersion, RootCertStore,
-    SignatureScheme,
+    ClientConfig, ClientConnection, ConfigBuilder, DigitallySignedStruct, ProtocolVersion,
+    RootCertStore, SignatureScheme,
 };
-use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls_pemfile::Item;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+
+use crate::error::NetError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TlsInfo {
@@ -26,7 +31,9 @@ impl std::fmt::Display for TlsInfo {
     }
 }
 
-pub(crate) fn client_config(verify: bool) -> ClientConfig {
+/// How the server's own certificate is judged, which both configurations settle
+/// before they differ over what to present in return.
+fn verifying(verify: bool) -> ConfigBuilder<ClientConfig, WantsClientCert> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
@@ -36,14 +43,85 @@ pub(crate) fn client_config(verify: bool) -> ClientConfig {
         tracing::warn!("connecting without certificate verification");
         return builder
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(AcceptAnyCertificate { provider }))
-            .with_no_client_auth();
+            .with_custom_certificate_verifier(Arc::new(AcceptAnyCertificate { provider }));
     }
 
     let roots = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
     };
-    builder.with_root_certificates(roots).with_no_client_auth()
+    builder.with_root_certificates(roots)
+}
+
+pub(crate) fn client_config(verify: bool) -> ClientConfig {
+    verifying(verify).with_no_client_auth()
+}
+
+/// A connection that presents a certificate of its own.
+///
+/// This is what SASL EXTERNAL authenticates with: the mechanism says "use the
+/// credentials of the layer underneath", and for IRC that layer is TLS. The
+/// server matches the certificate's fingerprint against an account somebody
+/// registered it to, so what makes it work is the file being the same one the
+/// account service was told about — not the file being valid.
+///
+/// Fails rather than connecting without one. A certificate that was configured
+/// and then silently not presented is a login that fails for no stated reason.
+pub(crate) fn client_config_with_certificate(
+    verify: bool,
+    path: &Path,
+) -> Result<ClientConfig, NetError> {
+    let (chain, key) = read_identity(path)?;
+    verifying(verify)
+        .with_client_auth_cert(chain, key)
+        .map_err(|source| NetError::ClientCertificateRejected {
+            path: path.display().to_string(),
+            source,
+        })
+}
+
+/// The certificate chain and the private key that signs for it, from one PEM
+/// file.
+///
+/// One file rather than two: a certfp identity is a thing a user generates in a
+/// single `openssl req` and keeps together, and every client that reads one
+/// reads it whole.
+fn read_identity(
+    path: &Path,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), NetError> {
+    let pem = std::fs::read(path).map_err(|source| NetError::ClientCertificateUnreadable {
+        path: path.display().to_string(),
+        source,
+    })?;
+
+    let mut chain = Vec::new();
+    let mut key = None;
+    for item in rustls_pemfile::read_all(&mut pem.as_slice()) {
+        let item = item.map_err(|source| NetError::ClientCertificateUnreadable {
+            path: path.display().to_string(),
+            source,
+        })?;
+        match item {
+            Item::X509Certificate(cert) => chain.push(cert),
+            // The first key wins. A file holding two is answering a question
+            // nobody asked, and picking the later one would be no better.
+            Item::Pkcs1Key(found) => key = key.or(Some(PrivateKeyDer::Pkcs1(found))),
+            Item::Pkcs8Key(found) => key = key.or(Some(PrivateKeyDer::Pkcs8(found))),
+            Item::Sec1Key(found) => key = key.or(Some(PrivateKeyDer::Sec1(found))),
+            _ => {}
+        }
+    }
+
+    if chain.is_empty() {
+        return Err(NetError::ClientCertificateMissing {
+            path: path.display().to_string(),
+        });
+    }
+    let Some(key) = key else {
+        return Err(NetError::ClientKeyMissing {
+            path: path.display().to_string(),
+        });
+    };
+    Ok((chain, key))
 }
 
 pub(crate) fn tls_info(conn: &ClientConnection) -> TlsInfo {
@@ -135,5 +213,94 @@ mod tests {
         assert!(!webpki_roots::TLS_SERVER_ROOTS.is_empty());
         client_config(true);
         client_config(false);
+    }
+
+    /// A self-signed certificate and its key, as PEM. Generated rather than
+    /// checked in: a private key in the repository is a private key somebody
+    /// has to explain, and every scanner that reads the tree will find it.
+    fn identity() -> (String, String) {
+        let made = rcgen::generate_simple_self_signed(vec!["ircx.test".to_owned()])
+            .expect("rcgen can make a self-signed certificate");
+        (made.cert.pem(), made.signing_key.serialize_pem())
+    }
+
+    fn written(name: &str, contents: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("ircx-{name}-{}.pem", std::process::id()));
+        std::fs::write(&path, contents).expect("the temp directory is writable");
+        path
+    }
+
+    #[test]
+    fn presents_a_certificate_and_key_from_one_file() {
+        let (cert, key) = identity();
+        let path = written("whole", &format!("{cert}{key}"));
+
+        assert!(client_config_with_certificate(true, &path).is_ok());
+        assert!(client_config_with_certificate(false, &path).is_ok());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The order people's files are actually in varies, and a file that works
+    /// in one client and not this one would be read as this client's fault.
+    #[test]
+    fn reads_the_key_before_the_certificate_too() {
+        let (cert, key) = identity();
+        let path = written("reversed", &format!("{key}{cert}"));
+
+        assert!(client_config_with_certificate(true, &path).is_ok());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn says_which_half_of_the_file_is_missing() {
+        let (cert, key) = identity();
+
+        let no_key = written("cert-only", &cert);
+        let reason = client_config_with_certificate(true, &no_key)
+            .expect_err("a certificate with no key cannot be presented")
+            .to_string();
+        assert!(reason.contains("no private key"), "{reason}");
+        assert!(reason.contains(&no_key.display().to_string()), "{reason}");
+
+        let no_cert = written("key-only", &key);
+        let reason = client_config_with_certificate(true, &no_cert)
+            .expect_err("a key with no certificate cannot be presented")
+            .to_string();
+        assert!(reason.contains("no certificate"), "{reason}");
+
+        std::fs::remove_file(&no_key).ok();
+        std::fs::remove_file(&no_cert).ok();
+    }
+
+    /// Naming the path matters more here than anywhere else: the usual way to
+    /// arrive is a typo in a setting nothing else reads.
+    #[test]
+    fn names_the_file_it_could_not_open() {
+        let missing = std::env::temp_dir().join("ircx-no-such-certificate.pem");
+
+        let reason = client_config_with_certificate(true, &missing)
+            .expect_err("a file that is not there cannot be read")
+            .to_string();
+
+        assert!(reason.contains(&missing.display().to_string()), "{reason}");
+    }
+
+    /// A certificate and a key that were never a pair. Two identities pasted
+    /// into one file is the shape of a copy that went half wrong.
+    #[test]
+    fn refuses_a_key_that_does_not_sign_for_the_certificate() {
+        let (cert, _) = identity();
+        let (_, other_key) = identity();
+        let path = written("mismatched", &format!("{cert}{other_key}"));
+
+        let reason = client_config_with_certificate(true, &path)
+            .expect_err("a key that signs for something else is not an identity")
+            .to_string();
+        assert!(reason.contains("do not go together"), "{reason}");
+        assert!(reason.contains(&path.display().to_string()), "{reason}");
+
+        std::fs::remove_file(&path).ok();
     }
 }

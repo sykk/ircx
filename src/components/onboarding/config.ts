@@ -45,6 +45,11 @@ export interface Draft {
   port: string;
   tls: boolean;
   tlsVerify: boolean;
+  /** Path to the PEM this network presents, or "" for none. What SASL EXTERNAL
+   * authenticates with. Carried through the draft with no field drawing it yet,
+   * because a draft that dropped it would clear a saved certificate the first
+   * time somebody opened this network's settings and pressed save. */
+  clientCertificate: string;
   nick: string;
   altNicks: string;
   username: string;
@@ -67,6 +72,7 @@ export function emptyDraft(): Draft {
     port: String(TLS_PORT),
     tls: true,
     tlsVerify: true,
+    clientCertificate: "",
     nick: "",
     altNicks: "",
     username: "",
@@ -100,6 +106,7 @@ export function draftOf(config: NetworkConfig): Draft {
     port: String(config.port),
     tls: config.tls,
     tlsVerify: config.tlsVerify,
+    clientCertificate: config.clientCertificate ?? "",
     nick: config.nick,
     altNicks: config.altNicks.join(" "),
     username: config.username,
@@ -142,6 +149,7 @@ export function toConfig(draft: Draft): NetworkConfig {
     port: parsePort(draft.port) ?? (draft.tls ? TLS_PORT : PLAIN_PORT),
     tls: draft.tls,
     tlsVerify: draft.tlsVerify,
+    clientCertificate: draft.clientCertificate.trim() || null,
     nick,
     altNicks: words(draft.altNicks),
     username: draft.username.trim() || nick,

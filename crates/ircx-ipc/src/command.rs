@@ -54,6 +54,11 @@ pub struct NetworkConfig {
     pub tls: bool,
     /// Skipping verification is a per-network opt-in for self-signed servers.
     pub tls_verify: bool,
+    /// A PEM file holding the certificate to present and the key that signs for
+    /// it, which is what SASL EXTERNAL authenticates with. A path rather than
+    /// the material: the file is the one thing the user already has, and a copy
+    /// in the keyring would be a second secret to keep in step with the first.
+    pub client_certificate: Option<String>,
     pub nick: String,
     pub alt_nicks: Vec<String>,
     pub username: String,

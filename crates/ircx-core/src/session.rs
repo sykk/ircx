@@ -81,6 +81,9 @@ pub struct SessionConfig {
     pub port: u16,
     pub tls: bool,
     pub tls_verify: bool,
+    /// The PEM this network presents, if SASL EXTERNAL is to have anything to
+    /// authenticate with.
+    pub client_certificate: Option<String>,
     pub nick: String,
     pub alt_nicks: Vec<String>,
     pub username: String,
@@ -105,6 +108,7 @@ impl SessionConfig {
             port: config.port,
             tls: config.tls,
             tls_verify: config.tls_verify,
+            client_certificate: config.client_certificate.clone(),
             nick: config.nick.clone(),
             alt_nicks: config.alt_nicks.clone(),
             username: config.username.clone(),
@@ -622,16 +626,17 @@ impl SessionState {
             return false;
         }
         // EXTERNAL authenticates with the credentials of the layer underneath,
-        // which for IRC is the TLS client certificate — and this client
-        // presents none: `ircx-net` builds both TLS configurations with
-        // `with_no_client_auth`, and nothing in `NetworkConfig` carries a
-        // certificate to present. Sending it anyway gets a 904 whose sentence
-        // sends the reader to a password field that has nothing to do with it.
-        // #373.
-        if credentials.mechanism == SaslMechanism::External {
+        // which for IRC is the TLS client certificate. Refused where there is
+        // none to present rather than sent anyway: the 904 that comes back
+        // otherwise is answered with a sentence about a password, and EXTERNAL
+        // has no password in it. #373, #401.
+        if credentials.mechanism == SaslMechanism::External
+            && self.config.client_certificate.is_none()
+        {
             self.fail_sasl(
-                "ircx cannot present a client certificate, so SASL EXTERNAL has nothing to \
-                 authenticate with. Choose another mechanism in this network's settings."
+                "SASL EXTERNAL authenticates with a client certificate, and this network has \
+                 none set. Choose a certificate file in this network's settings, or another \
+                 mechanism."
                     .to_owned(),
             );
             return false;

@@ -695,6 +695,7 @@ fn config(network: &str, nick: &str) -> SessionConfig {
         port: PORT,
         tls: false,
         tls_verify: false,
+        client_certificate: None,
         nick: nick.into(),
         alt_nicks: Vec::new(),
         username: "ircxdrive".into(),

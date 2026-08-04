@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -308,6 +309,9 @@ async fn run(
         config.tls,
         config.tls_verify,
     );
+    // Beside the tuple rather than in it: a fifth field read as `endpoint.4`
+    // says nothing about what it is.
+    let client_certificate = config.client_certificate.clone().map(PathBuf::from);
     let mut session = SessionState::new(config);
     let mut backoff = Backoff::new(BackoffPolicy::default());
     let context = Context {
@@ -360,6 +364,7 @@ async fn run(
             port: endpoint.1,
             tls: endpoint.2,
             tls_verify: endpoint.3,
+            client_certificate: client_certificate.clone(),
             ..ConnectionConfig::default()
         })
         .await;
@@ -1108,6 +1113,7 @@ mod tests {
             port: 6667,
             tls: false,
             tls_verify: false,
+            client_certificate: None,
             nick: "ircx".into(),
             alt_nicks: Vec::new(),
             username: "ircx".into(),

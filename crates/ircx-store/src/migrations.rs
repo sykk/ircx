@@ -14,6 +14,7 @@ const MIGRATIONS: &[&str] = &[
     UPLOAD_S3,
     WRITTEN_AT,
     SUBSTRING_INDEX,
+    CLIENT_CERTIFICATE,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -178,6 +179,17 @@ CREATE TABLE reactions (
 );
 
 CREATE UNIQUE INDEX idx_reactions_one_each ON reactions (network, msgid, nick, emoji);
+"#;
+
+/// The PEM a network presents to authenticate with SASL EXTERNAL. Null for
+/// every network configured before this, which is every network that has been
+/// configured: nothing could present one until #401.
+///
+/// The path, not the key. A private key copied in here would be a second copy
+/// of the secret with none of the file's permissions, and the passwords beside
+/// it are in the keyring rather than in this file for the same reason.
+const CLIENT_CERTIFICATE: &str = r#"
+ALTER TABLE networks ADD COLUMN client_certificate TEXT;
 "#;
 
 /// Which plugin produced a message, by its id. Null for everything the client
@@ -373,6 +385,49 @@ mod tests {
             indexed, 1,
             "the rebuild reaches history older than the index"
         );
+    }
+
+    /// #401. The networks somebody already configured have to survive gaining
+    /// the column, and come back with nothing in it rather than with a path
+    /// they never set.
+    #[test]
+    fn a_network_configured_before_the_column_keeps_its_settings() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in MIGRATIONS.iter().take(MIGRATIONS.len() - 1) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS schema_version (
+                 version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
+        )
+        .unwrap();
+        for version in 1..MIGRATIONS.len() as u32 {
+            conn.execute(
+                "INSERT INTO schema_version (version, applied_at) VALUES (?1, '')",
+                [version],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO networks (id, name, host, port, tls, tls_verify, nick, alt_nicks,
+                                   username, realname, connect_commands, autojoin, auto_connect)
+             VALUES ('n1','Libera','irc.libera.chat',6697,1,1,'sable','[]','sable','Sable',
+                     '[]','[]',1)",
+            [],
+        )
+        .unwrap();
+
+        migrate(&mut conn).unwrap();
+
+        let (nick, certificate): (String, Option<String>) = conn
+            .query_row(
+                "SELECT nick, client_certificate FROM networks WHERE id = 'n1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(nick, "sable");
+        assert_eq!(certificate, None);
     }
 
     #[test]

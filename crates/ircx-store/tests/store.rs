@@ -76,6 +76,7 @@ fn network(name: &str) -> NetworkConfig {
         connect_commands: vec!["MODE sykk +i".into()],
         autojoin: vec!["#ircx".into()],
         auto_connect: true,
+        client_certificate: None,
     }
 }
 
@@ -635,6 +636,7 @@ fn networks_round_trip_without_the_password() {
     assert_eq!(saved.connect_commands, config.connect_commands);
     assert_eq!(saved.autojoin, config.autojoin);
     assert_eq!(saved.auto_connect, config.auto_connect);
+    assert_eq!(saved.client_certificate, config.client_certificate);
 
     let sasl = saved.sasl.as_ref().unwrap();
     assert_eq!(sasl.mechanism, SaslMechanism::Plain);
@@ -643,6 +645,35 @@ fn networks_round_trip_without_the_password() {
     assert_eq!(
         store.sasl_password(&id).unwrap().as_deref(),
         Some("hunter2")
+    );
+}
+
+/// #401. The path is the whole of what is stored — a certificate that came back
+/// as `None` would be a network that silently stopped presenting one, and the
+/// login it authenticates would fail with nothing to point at.
+#[test]
+fn a_network_keeps_the_certificate_it_was_given() {
+    let store = Store::open_in_memory().unwrap();
+    let mut config = network("Libera");
+    config.client_certificate = Some("/home/sable/.irc/libera.pem".into());
+
+    let id = store.save_network(&config).unwrap();
+    let saved = &store.list_networks().unwrap()[0];
+    assert_eq!(
+        saved.client_certificate.as_deref(),
+        Some("/home/sable/.irc/libera.pem")
+    );
+
+    // And taking it away is a thing that has to stick, or a user who removed it
+    // goes on presenting it.
+    let mut without = saved.clone();
+    without.client_certificate = None;
+    store.save_network(&without).unwrap();
+    assert_eq!(store.list_networks().unwrap()[0].client_certificate, None);
+
+    assert_eq!(
+        store.list_networks().unwrap()[0].id.as_deref(),
+        Some(id.as_str())
     );
 }
 
@@ -1423,6 +1454,7 @@ mod upload_provider {
                 connect_commands: vec![],
                 autojoin: vec![],
                 auto_connect: false,
+                client_certificate: None,
             })
             .unwrap();
         store.save_upload_provider(&provider()).unwrap();
@@ -1570,6 +1602,7 @@ mod archive_controls {
                 connect_commands: vec![],
                 autojoin: vec![],
                 auto_connect: true,
+                client_certificate: None,
             })
             .unwrap();
 

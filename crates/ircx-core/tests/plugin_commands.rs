@@ -42,6 +42,7 @@ fn config() -> SessionConfig {
         port: 6697,
         tls: true,
         tls_verify: true,
+        client_certificate: None,
         nick: "sykk".into(),
         alt_nicks: Vec::new(),
         username: "sykk".into(),

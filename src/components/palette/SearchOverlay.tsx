@@ -6,6 +6,7 @@ import { stripIrcFormatting } from "@/lib/ircFormat";
 import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 const HIT_LIMIT = 50;
 const DEBOUNCE_MS = 150;
@@ -31,6 +32,7 @@ function Search() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
   const [selected, setSelected] = useState(0);
 
   const network = active?.network ?? null;

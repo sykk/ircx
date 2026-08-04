@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { draftOf, emptyDraft } from "./config";
 import { Onboarding, type OnboardingStart } from "./Onboarding";
 
@@ -23,6 +24,7 @@ function Sheet({ network }: { network: string | null }) {
     network === null ? { step: "server", draft: emptyDraft() } : null,
   );
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
 
   useEffect(() => {
     if (network === null) return;

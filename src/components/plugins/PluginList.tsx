@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import type { InstalledPlugin } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { grantLine } from "./grants";
 
 /**
@@ -26,6 +27,7 @@ export function PluginList({
   onPermissions: (plugin: string) => void;
   onRemove: (plugin: string) => void;
 }) {
+  useAnnounce(unavailable);
   const [confirming, setConfirming] = useState<string | null>(null);
 
   return (

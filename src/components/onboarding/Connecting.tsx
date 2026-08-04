@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { connectionColor } from "@/components/shell/connection";
 import { useChannelsFor, useNetwork } from "@/store/selectors";
 import type { Channel, ConnectionStatus, Network, SaslStatus } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { LinkButton, PrimaryButton, SecondaryButton } from "./fields";
 
 interface Props {
@@ -28,6 +29,7 @@ export function Connecting({ network, error, onRetry, onBack, onDone }: Props) {
   }, [connected, onDone]);
 
   const failure = net?.status.state === "failed" ? net.status.detail.message : error;
+  useAnnounce(failure);
 
   // core publishes one sentence on two statuses: a login the server refused
   // fails the connection too, so the same words reach the step and the alert.

@@ -5,6 +5,7 @@ import { runConnectionCommand } from "@/components/composer/commands";
 import { applyTheme, selectDensity, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import {
   buildCandidates,
   commandLineCandidate,
@@ -31,6 +32,7 @@ function Palette() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
 
   const channels = useAppStore((s) => s.channels);
   const queries = useAppStore((s) => s.queries);

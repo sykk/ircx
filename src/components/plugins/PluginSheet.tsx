@@ -3,6 +3,7 @@ import { SecondaryButton } from "@/components/onboarding/fields";
 import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { PermissionsForm } from "./PermissionsForm";
 import { PluginList } from "./PluginList";
 
@@ -28,6 +29,7 @@ function Sheet() {
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
 
   // Nothing in the sheet takes focus on its own — the list is buttons and the
   // form starts on a checkbox — so without this the keydown below fires from

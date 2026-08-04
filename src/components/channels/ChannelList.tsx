@@ -4,6 +4,7 @@ import { TextField } from "@/components/onboarding/fields";
 import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ChannelListing } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 const ROW_HEIGHT = 44;
 
@@ -34,6 +35,7 @@ function Sheet({ network }: { network: string }) {
   const held = useAppStore((s) => s.channelList[network]);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
   // Typing stays responsive while twenty-two thousand rows are re-filtered.
   const needle = useDeferredValue(filter).trim().toLowerCase();
 

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { SaslMechanism } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import {
   draftProblems,
   hasStoredPassword,
@@ -66,6 +67,7 @@ export function ServerForm({
   busy,
   error,
 }: Props) {
+  useAnnounce(error);
   const [submitted, setSubmitted] = useState(false);
   const [removing, setRemoving] = useState(false);
   /** An id means the network is already saved, so this is its settings rather

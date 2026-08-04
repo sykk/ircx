@@ -2889,5 +2889,30 @@ What that does not reach is Orca. WebKit maps an ARIA alert to the AT-SPI
 which is the dialog. Read from source rather than heard, so what is measured is
 that the event arrives and what is inferred is that nothing acts on it.
 
-Either way both go through `announce` now, which is a routing job rather than an
-open question.
+### Routing the rest, and the two things left out of it
+
+**2026-08-04**, #397. Every `role="alert"` in the client now calls `useAnnounce`
+alongside the markup, which stays: the ARIA is correct, it is what a browser
+reads, and it is what the walk driver asserts. Twenty alerts across seventeen
+components, and two deliberate omissions.
+
+**The typing indicator does not announce.** It is the one region here whose
+whole purpose is peripheral — it changes constantly and says little, and
+"somebody is typing" repeating through a busy channel is the noise the queue
+design already refused when it kept the count out of its own live region. Drawn
+only, on purpose, so that a later reader does not file it as an oversight.
+
+**The alert inside the upload dialog does not announce either.**
+`DropToUpload.tsx` draws its refusal inside a `role="dialog" aria-modal`, and a
+dialog is presented on its own when it opens. Announcing the paragraph as well
+would say it twice. The rule that falls out: announce an alert that appears in
+place, not one that arrives as part of something already announced.
+
+Seen on the bus from the assembled app, a refused command in `#a11y`:
+
+```text
+[ircx] object:announcement -> `/nonsensecommand` is not a command ircx knows. `/help` lists the ones it does.
+```
+
+Which is the same sentence the screenshot shows in the composer, now leaving by
+both routes.

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import {
   CheckField,
   Note,
@@ -48,6 +49,7 @@ export function PermissionsForm({
   onSave: (grants: PluginGrants) => void;
   onCancel: () => void;
 }) {
+  useAnnounce(error);
   const [draft, setDraft] = useState<PluginGrants>(plugin.grants);
   const asked = plugin.requests;
   /* #163. Held here rather than inside the input, so saving can see it. A name

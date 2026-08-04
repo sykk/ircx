@@ -4,6 +4,7 @@ import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useChannelForView, useNetwork } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { ClosePaneButton } from "./ClosePaneButton";
 import { HeaderButton } from "./HeaderButton";
 import { MembersIcon, OverflowIcon, SearchIcon } from "./icons";
@@ -23,6 +24,7 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
   const [inviting, setInviting] = useState(false);
   const [invitee, setInvitee] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
 
   if (channel === undefined) return null;
 

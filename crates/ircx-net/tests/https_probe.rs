@@ -1,8 +1,9 @@
 //! The preview fetch against real servers, because `http_loopback.rs` drives
-//! everything else over plaintext: TLS there would need a certificate fixture,
-//! so nothing in the suite has watched this code complete a handshake. It also
-//! sets `alpn_protocols` where the IRC transport does not, and that is a
-//! property of the connection rather than of the framing above it.
+//! everything else over plaintext. `client_certificate.rs` watches the IRC
+//! transport complete a handshake on loopback now that there is a certificate
+//! fixture to do it with, but not this code: the fetch sets `alpn_protocols`
+//! where the IRC transport does not, and that is a property of the connection
+//! rather than of the framing above it.
 //!
 //! Ignored by default, like `sasl_probe.rs`, and for the same reason: it opens
 //! connections to somebody else's machines.

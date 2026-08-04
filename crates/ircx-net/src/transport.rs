@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +27,11 @@ pub struct ConnectionConfig {
     /// opt-in for self-signed servers, never a fallback: `Default` sets it
     /// `true` and a failed handshake stays failed.
     pub tls_verify: bool,
+    /// A PEM file holding the certificate to present and the key that signs for
+    /// it. What SASL EXTERNAL authenticates with, and read at connect time
+    /// rather than held in memory, so replacing an expired one takes a
+    /// reconnect rather than a restart.
+    pub client_certificate: Option<PathBuf>,
     /// Covers name resolution, the TCP connect, and the TLS handshake together.
     pub connect_timeout: Duration,
 }
@@ -37,6 +43,7 @@ impl Default for ConnectionConfig {
             port: 6697,
             tls: true,
             tls_verify: true,
+            client_certificate: None,
             connect_timeout: Duration::from_secs(30),
         }
     }
@@ -198,7 +205,11 @@ async fn establish(
             host: config.host.clone(),
         }
     })?;
-    let connector = TlsConnector::from(Arc::new(tls::client_config(config.tls_verify)));
+    let client_config = match config.client_certificate.as_deref() {
+        Some(path) => tls::client_config_with_certificate(config.tls_verify, path)?,
+        None => tls::client_config(config.tls_verify),
+    };
+    let connector = TlsConnector::from(Arc::new(client_config));
     let stream = connector
         .connect(name, tcp)
         .await

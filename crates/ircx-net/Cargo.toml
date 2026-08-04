@@ -13,9 +13,11 @@ httparse.workspace = true
 tokio-rustls.workspace = true
 rustls.workspace = true
 rustls-pki-types.workspace = true
+rustls-pemfile.workspace = true
 webpki-roots.workspace = true
 tracing.workspace = true
 x509-parser = { version = "0.18", default-features = false }
 
 [dev-dependencies]
+rcgen = "0.14.8"
 tokio = { workspace = true, features = ["test-util"] }

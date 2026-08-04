@@ -64,6 +64,7 @@ describe("toConfig", () => {
       port: 6697,
       tls: true,
       tlsVerify: true,
+      clientCertificate: null,
       nick: "sable",
       sasl: null,
       autoConnect: true,
@@ -137,6 +138,7 @@ describe("toConfig", () => {
       port: "6667",
       tls: false,
       tlsVerify: false,
+      clientCertificate: "",
       nick: " sable ",
       altNicks: "sable_",
       username: "sbl",
@@ -156,6 +158,7 @@ describe("toConfig", () => {
       port: 6667,
       tls: false,
       tlsVerify: false,
+      clientCertificate: null,
       nick: "sable",
       altNicks: ["sable_"],
       username: "sbl",
@@ -165,6 +168,33 @@ describe("toConfig", () => {
       autojoin: ["#linux"],
       autoConnect: false,
     });
+  });
+
+  /** #401. No form field draws the certificate yet, so nothing would have
+   * noticed the draft dropping it — until somebody opened a network's settings,
+   * changed their nick, pressed save, and stopped being able to log in. */
+  it("carries a certificate through a round trip that never displays it", () => {
+    const saved: NetworkConfig = {
+      id: "n1",
+      name: "Libera",
+      host: "irc.libera.chat",
+      port: 6697,
+      tls: true,
+      tlsVerify: true,
+      clientCertificate: "/home/sable/.irc/libera.pem",
+      nick: "sable",
+      altNicks: [],
+      username: "sable",
+      realname: "Sable",
+      sasl: { mechanism: "EXTERNAL", account: "sable", password: null },
+      connectCommands: [],
+      autojoin: [],
+      autoConnect: true,
+    };
+
+    expect(toConfig(draftOf(saved)).clientCertificate).toBe("/home/sable/.irc/libera.pem");
+    // And a network with none keeps none, rather than gaining an empty path.
+    expect(toConfig(draftOf({ ...saved, clientCertificate: null })).clientCertificate).toBeNull();
   });
 });
 

@@ -382,6 +382,7 @@ fn config(network: &str) -> SessionConfig {
         port: port(),
         tls: false,
         tls_verify: false,
+        client_certificate: None,
         nick: format!("ircx-{network}"),
         alt_nicks: Vec::new(),
         username: "ircxburst".into(),

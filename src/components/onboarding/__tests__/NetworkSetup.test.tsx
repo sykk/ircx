@@ -28,6 +28,7 @@ const LIBERA: NetworkConfig = {
   port: 6697,
   tls: true,
   tlsVerify: true,
+  clientCertificate: null,
   nick: "sable",
   altNicks: ["sable_"],
   username: "sable",

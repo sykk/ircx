@@ -23,7 +23,8 @@ use serde::Serialize;
 use credentials::{CredentialStore, MemoryCredentials, OsKeyring};
 
 const NETWORK_COLUMNS: &str = "id, name, host, port, tls, tls_verify, nick, alt_nicks, username, \
-     realname, sasl_mechanism, sasl_account, connect_commands, autojoin, auto_connect";
+     realname, sasl_mechanism, sasl_account, connect_commands, autojoin, auto_connect, \
+     client_certificate";
 
 /// A network-wide retention rule is stored as a target override with no target.
 const DEFAULT_TARGET: &str = "";
@@ -484,7 +485,7 @@ impl Store {
         self.conn().execute(
             &format!(
                 "INSERT INTO networks ({NETWORK_COLUMNS})
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                  ON CONFLICT (id) DO UPDATE SET
                      name = excluded.name,
                      host = excluded.host,
@@ -499,7 +500,8 @@ impl Store {
                      sasl_account = excluded.sasl_account,
                      connect_commands = excluded.connect_commands,
                      autojoin = excluded.autojoin,
-                     auto_connect = excluded.auto_connect"
+                     auto_connect = excluded.auto_connect,
+                     client_certificate = excluded.client_certificate"
             ),
             params![
                 id,
@@ -517,6 +519,7 @@ impl Store {
                 to_json(&config.connect_commands)?,
                 to_json(&config.autojoin)?,
                 config.auto_connect,
+                config.client_certificate,
             ],
         )?;
 
@@ -865,6 +868,7 @@ fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {
         connect_commands: from_json_column(row, 12)?,
         autojoin: from_json_column(row, 13)?,
         auto_connect: row.get(14)?,
+        client_certificate: row.get(15)?,
     })
 }
 
@@ -989,6 +993,7 @@ mod tests {
                 connect_commands: vec![],
                 autojoin: vec!["#ircx".into()],
                 auto_connect: true,
+                client_certificate: None,
             })
             .unwrap();
 

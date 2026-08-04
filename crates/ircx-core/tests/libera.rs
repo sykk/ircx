@@ -248,6 +248,7 @@ fn config(network: &str, nick: &str, primary: &str) -> SessionConfig {
         port: PORT,
         tls: true,
         tls_verify: true,
+        client_certificate: None,
         nick: primary.into(),
         alt_nicks: if nick == primary {
             Vec::new()

@@ -463,6 +463,7 @@ mod tests {
             connect_commands: vec![],
             autojoin: vec![],
             auto_connect: false,
+            client_certificate: None,
         }
     }
 

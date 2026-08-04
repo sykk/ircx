@@ -9,7 +9,14 @@ id: string | null, name: string, host: string, port: number, tls: boolean,
 /**
  * Skipping verification is a per-network opt-in for self-signed servers.
  */
-tlsVerify: boolean, nick: string, altNicks: Array<string>, username: string, realname: string, sasl: SaslConfig | null, 
+tlsVerify: boolean, 
+/**
+ * A PEM file holding the certificate to present and the key that signs for
+ * it, which is what SASL EXTERNAL authenticates with. A path rather than
+ * the material: the file is the one thing the user already has, and a copy
+ * in the keyring would be a second secret to keep in step with the first.
+ */
+clientCertificate: string | null, nick: string, altNicks: Array<string>, username: string, realname: string, sasl: SaslConfig | null, 
 /**
  * Sent verbatim after registration, one command per entry, no leading slash.
  */

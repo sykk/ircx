@@ -65,6 +65,7 @@ async fn walk_with(nick: &str, password: &str, mechanism: SaslMechanism) -> Walk
         port: PORT,
         tls: false,
         tls_verify: false,
+        client_certificate: None,
         nick: nick.into(),
         alt_nicks: Vec::new(),
         username: nick.into(),

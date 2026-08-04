@@ -33,6 +33,7 @@ fn config() -> SessionConfig {
         port: 6697,
         tls: true,
         tls_verify: true,
+        client_certificate: None,
         nick: "sykk".into(),
         alt_nicks: Vec::new(),
         username: "sykk".into(),
@@ -1038,17 +1039,13 @@ fn a_server_without_sasl_degrades_to_a_plain_connection() {
         .any(|text| text.contains("without authenticating")));
 }
 
-/// This asserted the empty payload EXTERNAL answers with, which was the right
-/// shape for a mechanism this client could use — and it cannot. EXTERNAL
-/// authenticates with the TLS client certificate, `ircx-net` builds both
-/// configurations with `with_no_client_auth`, and nothing in a network's
-/// settings carries a certificate to present. So the exchange the old test
-/// pinned was one that could only ever end in a `904`.
-///
-/// The refusal that replaced it is in `scram_over_a_session`, beside the other
-/// mechanism cases. #373.
+/// EXTERNAL authenticates with the TLS client certificate, so a network with
+/// none set has nothing to authenticate with and the exchange could only end in
+/// a `904`. #373 refused it here rather than on the wire; #401 made the refusal
+/// conditional, and `external_is_offered_once_a_certificate_is_set` is the
+/// other side of it.
 #[test]
-fn sasl_external_is_not_offered_to_the_server_at_all() {
+fn sasl_external_is_not_offered_without_a_certificate() {
     let mut session = Harness::new(sasl_config(SaslMechanism::External, None));
     session.connect();
     session.feed(":irc.libera.chat CAP * LS :sasl=EXTERNAL");
@@ -2911,11 +2908,10 @@ mod scram_over_a_session {
         );
     }
 
-    /// EXTERNAL is offered by nearly every server and cannot be used by this
-    /// client: it authenticates with the TLS client certificate, and `ircx-net`
-    /// builds both configurations with `with_no_client_auth`. Sent anyway it
-    /// draws a `904` whose sentence points at a password field that has nothing
-    /// to do with it, so it is refused here instead. #373.
+    /// EXTERNAL is offered by nearly every server, and a network with no
+    /// certificate set has nothing to answer it with. Sent anyway it draws a
+    /// `904` whose sentence points at a password field that has nothing to do
+    /// with it, so it is refused here instead. #373, #401.
     #[test]
     fn external_is_refused_before_it_is_sent_rather_than_by_the_server() {
         let mut config = config();
@@ -2948,9 +2944,53 @@ mod scram_over_a_session {
         assert_eq!(
             said,
             [
-                "ircx cannot present a client certificate, so SASL EXTERNAL has nothing to \
-              authenticate with. Choose another mechanism in this network's settings."
+                "SASL EXTERNAL authenticates with a client certificate, and this network has \
+              none set. Choose a certificate file in this network's settings, or another \
+              mechanism."
             ]
+        );
+    }
+
+    /// The other side of the refusal above. What the client presents is settled
+    /// during the handshake, long before this, so all that is left here is to
+    /// name the mechanism and answer the empty challenge with `+`. #401.
+    #[test]
+    fn external_is_offered_once_a_certificate_is_set() {
+        let mut config = config();
+        config.client_certificate = Some("/home/sable/.irc/libera.pem".into());
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::External,
+            account: "user".into(),
+            password: None,
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,SCRAM-SHA-512");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+
+        assert!(
+            session
+                .sent()
+                .contains(&"AUTHENTICATE EXTERNAL".to_string()),
+            "{:?}",
+            session.sent()
+        );
+
+        session.feed("AUTHENTICATE +");
+        assert!(
+            session.sent().contains(&"AUTHENTICATE +".to_string()),
+            "the empty challenge is answered with the empty payload: {:?}",
+            session.sent()
+        );
+
+        session.feed(":irc.libera.chat 900 user user!~u@host user :You are now logged in");
+        assert!(
+            matches!(
+                session.sasl_states().last(),
+                Some(SaslStatus::Authenticated { .. })
+            ),
+            "{:?}",
+            session.sasl_states().last()
         );
     }
 

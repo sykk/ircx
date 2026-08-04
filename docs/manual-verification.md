@@ -2873,7 +2873,21 @@ listening. Any future run of this should keep it.
 actually speaking; what is established is that Orca receives it and that its own
 code path speaks what it receives. The questions #339 left — whether the two
 sentences read as a pair, whether `Waiting to send` belongs before or after the
-text — are unchanged and still want an hour with audio hardware. And the rest of
-the client still announces into the page alone: the typing indicator and about
-fifteen `role="alert"` paragraphs reach nobody, which is now a routing job
-rather than an open question.
+text — are unchanged and still want an hour with audio hardware.
+
+**The rest of the client still announces into the page alone, and it divides in
+two.** The typing indicator rewrites the text of a live region, which is the
+shape measured silent above — no event of any kind. The `role="alert"`
+paragraphs are a different case and were nearly filed as the same one. They are
+mounted rather than rewritten, and an insertion *is* reported: driving a refusal
+in the assembled app put `object:children-changed:add -> notification ''` on the
+bus, alongside the header and buttons of the channel that had just opened.
+
+What that does not reach is Orca. WebKit maps an ARIA alert to the AT-SPI
+`notification` role, and the branch that would present it —
+`scripts/web/script.py`, `is_alert(event.any_data)` — tests for `Role.ALERT`,
+which is the dialog. Read from source rather than heard, so what is measured is
+that the event arrives and what is inferred is that nothing acts on it.
+
+Either way both go through `announce` now, which is a routing job rather than an
+open question.

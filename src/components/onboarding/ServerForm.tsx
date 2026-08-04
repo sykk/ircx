@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { SaslMechanism } from "@/types";
+import { chooseFile, ipc, reasonOr } from "@/lib/ipc";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import {
   draftProblems,
@@ -38,22 +39,20 @@ interface Props {
 }
 
 /**
- * What can be chosen, which is not everything `SaslMechanism` can name.
+ * What can be chosen, which is every mechanism this client can perform.
  *
- * EXTERNAL is absent on purpose. It authenticates with the credentials of the
- * layer underneath — for IRC, the TLS client certificate — and this client
- * presents none: `ircx-net` builds both TLS configurations with
- * `with_no_client_auth` and nothing in a network's settings carries a
- * certificate. It was offered here, labelled with the very thing it had no way
- * to accept, and what it bought was a connection that succeeded and a login
- * that did not. #373. The variant stays in the IPC type so a network already
- * storing it still loads; `start_sasl` refuses it with a sentence.
+ * EXTERNAL was taken out in #373 for the right reason — it names the client
+ * certificate in its own label and nothing here could present one, so choosing
+ * it bought a connection that succeeded and a login that did not. #401 built
+ * the certificate, so it is a choice again. Choosing it without one is refused
+ * before the form is submitted rather than by the server.
  */
 const MECHANISMS: { value: SaslMechanism | "none"; label: string }[] = [
   { value: "none", label: "None" },
   { value: "PLAIN", label: "PLAIN — account and password" },
   { value: "SCRAM-SHA-256", label: "SCRAM-SHA-256 — password, never sent" },
   { value: "SCRAM-SHA-512", label: "SCRAM-SHA-512 — password, never sent" },
+  { value: "EXTERNAL", label: "EXTERNAL — client certificate" },
 ];
 
 export function ServerForm({
@@ -80,7 +79,7 @@ export function ServerForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (problems.host || problems.port || problems.nick) return;
+    if (problems.host || problems.port || problems.nick || problems.clientCertificate) return;
     onSubmit();
   }
 
@@ -207,6 +206,13 @@ export function ServerForm({
                 hint="Defaults to your nickname."
               />
             )}
+            {draft.mechanism === "EXTERNAL" && (
+              <CertificateField
+                path={draft.clientCertificate}
+                onChange={(clientCertificate) => onChange({ clientCertificate })}
+                missing={shown("clientCertificate", draft.clientCertificate)}
+              />
+            )}
             {needsPassword(draft.mechanism) &&
               (hasStoredPassword(draft) ? (
                 <StoredPassword onReplace={() => onChange({ password: "" })} />
@@ -298,6 +304,106 @@ export function ServerForm({
 
 /** `save_network` writes the password to the keyring and never reads it back,
  * so an empty box here would read as a lost credential. */
+/** What the backend said about one path. Held together so neither half can be
+ * shown against a file it did not come from. */
+interface Read {
+  path: string;
+  fingerprint: string | null;
+  problem: string | null;
+}
+
+/**
+ * The PEM a network presents, and the fingerprint of it.
+ *
+ * The fingerprint is the point of the field. A certificate authenticates
+ * nothing until the account service has been told about it — `/msg NickServ
+ * CERT ADD <fingerprint>` — and a user who cannot read it here has to go and
+ * ask `openssl` for the same number.
+ *
+ * Read through the backend on every change of path, because the frontend
+ * cannot open a file and should not: what this window sees of the certificate
+ * is the fingerprint and nothing else.
+ */
+function CertificateField({
+  path,
+  onChange,
+  missing,
+}: {
+  path: string;
+  onChange: (path: string) => void;
+  /** Set when the mechanism needs a file and none has been named. Separate from
+   * the backend's answer about the file itself, which cannot be asked yet. */
+  missing: string | null;
+}) {
+  const wanted = path.trim();
+  const [read, setRead] = useState<Read | null>(null);
+
+  useEffect(() => {
+    if (wanted === "") return;
+    let live = true;
+    void ipc.certificateFingerprint(wanted).then(
+      (fingerprint) => live && setRead({ path: wanted, fingerprint, problem: null }),
+      (reason: unknown) =>
+        live &&
+        setRead({
+          path: wanted,
+          fingerprint: null,
+          problem: reasonOr(reason, "That file could not be read as a certificate."),
+        }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [wanted]);
+
+  /* What was read stands for the path it was read from and no other, so a path
+   * halfway through being typed shows nothing rather than the fingerprint of
+   * the file named before it. */
+  const answer = read?.path === wanted ? read : null;
+  const problem = answer?.problem ?? null;
+  const fingerprint = answer?.fingerprint ?? null;
+  useAnnounce(problem);
+
+  async function browse() {
+    const picked = await chooseFile("Choose a certificate", [
+      { name: "Certificate and key", extensions: ["pem", "crt", "p12"] },
+    ]);
+    if (picked !== null) onChange(picked);
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <TextField
+        label="Certificate file"
+        value={path}
+        onChange={onChange}
+        placeholder="~/.irc/libera.pem"
+        hint="One PEM holding the certificate and its private key."
+        error={missing}
+      />
+      <div className="flex items-center gap-2">
+        <LinkButton onClick={() => void browse()}>Choose a file</LinkButton>
+      </div>
+      {problem !== null && (
+        <p role="alert" className="text-[12px] text-[var(--danger)]">
+          {problem}
+        </p>
+      )}
+      {fingerprint !== null && (
+        <div className="flex flex-col gap-1">
+          {/* The command rather than the fingerprint on its own: registering it
+              is the step between choosing a file and being able to log in, and
+              the fingerprint is in the line to be copied with it. */}
+          <p className="selectable break-all font-[family-name:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
+            /msg NickServ CERT ADD {fingerprint}
+          </p>
+          <Note>Run that on the network first — until you do, it logs in nobody.</Note>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StoredPassword({ onReplace }: { onReplace: () => void }) {
   return (
     <div className="flex flex-col gap-1">

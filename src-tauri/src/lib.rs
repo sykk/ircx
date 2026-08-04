@@ -201,6 +201,7 @@ pub fn run() {
             commands::export_archive,
             commands::delete_archive,
             commands::announce,
+            commands::certificate_fingerprint,
         ])
         .setup(|app| {
             let store = match open_store(app.handle()) {

@@ -177,6 +177,7 @@ export interface DraftProblems {
   host?: string;
   port?: string;
   nick?: string;
+  clientCertificate?: string;
 }
 
 /** Everything the form can catch before the server does. */
@@ -198,6 +199,14 @@ export function draftProblems(draft: Draft): DraftProblems {
 
   const nick = nicknameProblem(draft.nick.trim(), nickLimitFor(draft.host));
   if (nick) problems.nick = nick;
+
+  // Caught here rather than at the server, which answers a certificate-less
+  // EXTERNAL with a 904 and no clue as to which setting is empty. Whether the
+  // file is a certificate is the backend's to say; that it was named is this
+  // form's.
+  if (draft.mechanism === "EXTERNAL" && draft.clientCertificate.trim() === "") {
+    problems.clientCertificate = "EXTERNAL logs in with a certificate. Choose the file first.";
+  }
 
   return problems;
 }

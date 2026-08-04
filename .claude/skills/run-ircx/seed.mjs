@@ -150,6 +150,12 @@ export const SEED = `
   const handlers = {
     get_snapshot: () => snapshot,
     list_network_configs: () => [],
+    // A certificate the walk never has to hold: the fingerprint is what the
+    // form draws, and reading a real PEM is a test in ircx-net rather than this.
+    certificate_fingerprint: ({ path }) =>
+      path.endsWith(".pem")
+        ? "4c2c2e3f8b8a5d6e7f0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60"
+        : Promise.reject(path + " holds no certificate, so there is nothing to present"),
     list_members: ({ channel }) => members[channel] ?? [],
     // Pages backwards the way the archive does. It used to answer nothing at
     // all to a request carrying "before", so no walk could reach a second page

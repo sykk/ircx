@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { draftOf, emptyDraft } from "./config";
 import { Onboarding, type OnboardingStart } from "./Onboarding";
 
@@ -19,6 +20,9 @@ export function NetworkSetup() {
 }
 
 function Sheet({ network }: { network: string | null }) {
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
+
   const closeSetup = useAppStore((s) => s.closeSetup);
   const [start, setStart] = useState<OnboardingStart | null>(
     network === null ? { step: "server", draft: emptyDraft() } : null,
@@ -62,9 +66,11 @@ function Sheet({ network }: { network: string | null }) {
     >
       <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label={network === null ? "Add a network" : "Network settings"}
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;

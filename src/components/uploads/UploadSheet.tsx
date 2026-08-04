@@ -10,6 +10,7 @@ import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { UploadMethod, UploadProvider } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 const METHODS: { value: UploadMethod; label: string }[] = [
   { value: "PUT", label: "PUT — the address names the file" },
@@ -70,9 +71,7 @@ function Sheet() {
   useAnnounce(error);
 
   const dialog = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
+  useDialogFocus(dialog);
 
   useEffect(() => {
     let live = true;

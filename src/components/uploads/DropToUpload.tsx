@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import { formatBytes } from "@/lib/bytes";
 import { ipc, onFileDrop, reasonOr } from "@/lib/ipc";
 import { useActiveTarget } from "@/store/selectors";
 import type { FileToUpload } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 /**
  * Dropping a file on the window uploads it to the conversation in focus.
@@ -118,108 +119,154 @@ export function DropToUpload() {
       {/* Stored, and it opens for nobody. Shown instead of sent, with the
           address in full so it can be copied once the bucket is fixed. */}
       {dead !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-[var(--scrim)]" />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="The link was not sent"
-            className="relative flex w-[min(520px,92vw)] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] p-6 shadow-[var(--shadow-overlay)]"
-          >
-            <h2 className="text-[15px] font-semibold">The link was not sent</h2>
-            <p role="alert" className="text-[12px] text-[var(--warning)]">
-              {dead.why}
-            </p>
-            <p className="selectable break-all font-[family-name:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
-              {dead.link}
-            </p>
-            <div className="flex items-center gap-2">
-              <PrimaryButton
-                onClick={() => {
-                  setDead(null);
-                  setPending(null);
-                }}
-              >
-                Close
-              </PrimaryButton>
-              <SecondaryButton
-                onClick={() => {
-                  if (active === null) return;
-                  void ipc.submitInput(active.network, active.target, dead.link);
-                  setDead(null);
-                  setPending(null);
-                }}
-              >
-                Send it anyway
-              </SecondaryButton>
-            </div>
+        <Modal
+          label="The link was not sent"
+          width="520px"
+          onEscape={() => {
+            setDead(null);
+            setPending(null);
+          }}
+        >
+          <h2 className="text-[15px] font-semibold">The link was not sent</h2>
+          <p role="alert" className="text-[12px] text-[var(--warning)]">
+            {dead.why}
+          </p>
+          <p className="selectable break-all font-[family-name:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
+            {dead.link}
+          </p>
+          <div className="flex items-center gap-2">
+            <PrimaryButton
+              onClick={() => {
+                setDead(null);
+                setPending(null);
+              }}
+            >
+              Close
+            </PrimaryButton>
+            <SecondaryButton
+              onClick={() => {
+                if (active === null) return;
+                void ipc.submitInput(active.network, active.target, dead.link);
+                setDead(null);
+                setPending(null);
+              }}
+            >
+              Send it anyway
+            </SecondaryButton>
           </div>
-        </div>
+        </Modal>
       )}
 
       {pending !== null && dead === null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-[var(--scrim)]" />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Upload"
-            className="relative flex w-[min(460px,92vw)] flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] p-6 shadow-[var(--shadow-overlay)]"
-          >
-            <h2 className="text-[15px] font-semibold">
-              {pending.length === 1 ? "Upload this file?" : `Upload ${pending.length} files?`}
-            </h2>
-            <ul className="flex flex-col gap-1 text-[13px]">
-              {pending.map((file) => (
-                <li key={file.path} className="flex items-baseline justify-between gap-3">
-                  <span className="truncate font-[family-name:var(--font-mono)]">{file.name}</span>
-                  <span
-                    className="shrink-0 text-[12px] tabular-nums"
-                    style={{
-                      color: refused(file) ? "var(--danger)" : "var(--text-faint)",
-                    }}
-                  >
-                    {file.unreadable !== null
-                      ? "cannot be read"
-                      : file.tooLarge
-                        ? "too large"
-                        : formatBytes(file.bytes)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-[12px] text-[var(--text-muted)]">
-              {host === null ? (
-                <>No upload provider is configured, so there is nowhere to send this.</>
-              ) : (
-                <>
-                  It goes to <strong>{host}</strong>, and the link is sent to{" "}
-                  <strong>{active.target}</strong>. Anyone with the link can read it.
-                </>
-              )}
-            </p>
-
-            {error !== null && (
-              <p role="alert" className="text-[12px] text-[var(--danger)]">
-                {error}
-              </p>
+        <Modal
+          label="Upload"
+          width="460px"
+          // Escape is the Cancel button, and Cancel is refused mid-upload for the
+          // same reason: the file is already on its way.
+          onEscape={busy ? undefined : () => setPending(null)}
+        >
+          <h2 className="text-[15px] font-semibold">
+            {pending.length === 1 ? "Upload this file?" : `Upload ${pending.length} files?`}
+          </h2>
+          <ul className="flex flex-col gap-1 text-[13px]">
+            {pending.map((file) => (
+              <li key={file.path} className="flex items-baseline justify-between gap-3">
+                <span className="truncate font-[family-name:var(--font-mono)]">{file.name}</span>
+                <span
+                  className="shrink-0 text-[12px] tabular-nums"
+                  style={{
+                    color: refused(file) ? "var(--danger)" : "var(--text-faint)",
+                  }}
+                >
+                  {file.unreadable !== null
+                    ? "cannot be read"
+                    : file.tooLarge
+                      ? "too large"
+                      : formatBytes(file.bytes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[12px] text-[var(--text-muted)]">
+            {host === null ? (
+              <>No upload provider is configured, so there is nowhere to send this.</>
+            ) : (
+              <>
+                It goes to <strong>{host}</strong>, and the link is sent to{" "}
+                <strong>{active.target}</strong>. Anyone with the link can read it.
+              </>
             )}
+          </p>
 
-            <div className="flex items-center gap-2">
-              <PrimaryButton
-                disabled={busy || host === null || pending.some(refused)}
-                onClick={() => void send()}
-              >
-                {busy ? "Uploading…" : "Upload"}
-              </PrimaryButton>
-              <SecondaryButton disabled={busy} onClick={() => setPending(null)}>
-                Cancel
-              </SecondaryButton>
-            </div>
+          {error !== null && (
+            <p role="alert" className="text-[12px] text-[var(--danger)]">
+              {error}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2">
+            <PrimaryButton
+              disabled={busy || host === null || pending.some(refused)}
+              onClick={() => void send()}
+            >
+              {busy ? "Uploading…" : "Upload"}
+            </PrimaryButton>
+            <SecondaryButton disabled={busy} onClick={() => setPending(null)}>
+              Cancel
+            </SecondaryButton>
           </div>
-        </div>
+        </Modal>
       )}
     </>
+  );
+}
+
+/**
+ * The wrapper both of this file's dialogs draw, mounted only while its dialog is
+ * shown.
+ *
+ * It exists because `useDialogFocus` runs when the component holding it mounts,
+ * and these two are conditional markup inside a component that mounts with the
+ * app. Everything else this client puts in a modal already has a component of
+ * its own that appears with it.
+ *
+ * `onEscape` is optional, for a dialog with nothing safe to do with the key at
+ * that moment. The focus is kept either way.
+ */
+function Modal({
+  label,
+  width,
+  onEscape,
+  children,
+}: {
+  label: string;
+  width: string;
+  onEscape?: (() => void) | undefined;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-[var(--scrim)]" />
+      <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || onEscape === undefined) return;
+          event.stopPropagation();
+          onEscape();
+        }}
+        style={{ width: `min(${width}, 92vw)` }}
+        className="relative flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] p-6 shadow-[var(--shadow-overlay)]"
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 

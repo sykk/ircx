@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { ThemeList } from "./ThemeList";
 import { TokenEditor } from "./TokenEditor";
 
@@ -28,9 +29,7 @@ function Sheet() {
   // without this the keydown below fires from wherever focus was left and
   // Escape never reaches the dialog.
   const dialog = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
+  useDialogFocus(dialog);
 
   function close() {
     closeSheet(false);

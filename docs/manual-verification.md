@@ -2916,3 +2916,78 @@ Seen on the bus from the assembled app, a refused command in `#a11y`:
 
 Which is the same sentence the screenshot shows in the composer, now leaving by
 both routes.
+
+## Focus in a modal
+
+**2026-08-04**, #399. Nine dialogs declare `role="dialog" aria-modal="true"`,
+which tells a screen reader the rest of the page is not there. The keyboard had
+not been told, and this is what it did about it.
+
+Walked with `.claude/skills/run-ircx/driver.mjs`, which is the only instrument
+that can answer the question: jsdom implements no sequential focus navigation,
+so a `keydown` of `Tab` moves nothing there, and every vitest assertion about a
+dialog's focus is an assertion about what the code decided rather than what a
+browser did. `src/hooks/useDialogFocus.test.tsx` covers the first; only a walk
+covers the second.
+
+### What it was
+
+Tab out of the appearance sheet on `main` at `2a8373b`, one keystroke at a
+time. Eight stops belong to the sheet. The ninth does not:
+
+```text
+step  inside  what has focus
+   8    yes   Read                       ← the last of the sheet
+   9     NO   body
+  10     NO   Open command palette
+  11     NO   Minimise
+  12     NO   Maximise
+  13     NO   Close
+  14     NO   Add a network
+```
+
+Steps 11 to 13 are the window's own titlebar. The palette took two Tabs to
+reach the same place. Closing any dialog left `document.activeElement` on
+`<body>`, so the way back to what the user was doing began at the top of the
+document.
+
+### What it is
+
+Every dialog now runs `useDialogFocus`. Walked after the change: 20 Tabs each
+in the plugins, archive, upload-provider and search dialogs, 25 in network
+setup, 30 in appearance — **no keystroke left any of them**, the ring turning
+around at the last stop instead. Each was opened from the header's palette
+button, and each put focus back on it when Escape closed it.
+
+Two things the walk decided rather than confirmed.
+
+**The palette's query field lost focus to a fix meant to protect it.** The dev
+server runs under `StrictMode`, which mounts every effect twice, and a restore
+that ran synchronously in the cleanup moved focus out of the palette between the
+two mounts — leaving the container holding focus and the field unable to be
+typed into. It is why the restore is deferred by a microtask and skipped when
+anything is open by the time it runs. Worth knowing generally: a walk is a walk
+of the development build, and an effect that is not idempotent behaves there in
+a way it never will in the shipped app.
+
+**A sheet opened from the palette had nothing to go back to.** The palette
+closes as the sheet opens, so the field that had focus is unmounted before the
+sheet is — the sheet restored to a disconnected element, which is to say to
+`<body>`. A dialog opened while focus is inside another now inherits that one's
+opener, and Escape out of a sheet reached through `Ctrl+K` lands on the button
+the user started from. That is the client's ordinary path, not an edge of one.
+
+### What this run did not reach
+
+- **The channel list.** It opens on a `/list` answer, which the driver's seed
+  does not serve. It is the same call as the four sheets that were walked —
+  container focus, Escape, no field of its own — so what is unwalked is the
+  wiring rather than the behaviour.
+- **The two dialogs in `DropToUpload`.** They need a real file drop, which
+  Tauri delivers and the browser cannot. They are covered in jsdom instead, for
+  the half jsdom can see: the confirmation takes focus when it appears, and
+  Escape cancels it. Their Tab ring is unwalked.
+- **WebKitGTK.** All of the above is Chrome. Sequential focus navigation is not
+  somewhere the two engines are known to differ, and the assembled app has no
+  selectors to ask with, so this is left as it stands rather than guessed at
+  from a screenshot.

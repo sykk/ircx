@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { formatClock } from "@/components/timeline/rows";
 import { ipc } from "@/lib/ipc";
@@ -7,6 +7,7 @@ import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 const HIT_LIMIT = 50;
 const DEBOUNCE_MS = 150;
@@ -28,6 +29,9 @@ export function SearchOverlay() {
 }
 
 function Search() {
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
+
   const active = useActiveTarget();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -122,9 +126,11 @@ function Search() {
     <div className="fixed inset-0 z-50 flex justify-center pt-[10vh]" onMouseDown={close}>
       <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Search history"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
         className="relative flex max-h-[74vh] w-[min(720px,92vw)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"

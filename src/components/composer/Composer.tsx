@@ -59,6 +59,13 @@ function ComposerFor({
   const queueSaid =
     queued > 1 ? "Messages waiting to send" : queued === 0 && saidBefore ? "All sent" : saidBefore;
   if (queueSaid !== saidBefore) setSaidBefore(queueSaid);
+  // The region below is the announcement everywhere but here, where it is drawn
+  // correctly and never spoken — `src-tauri/src/announce.rs` says why. Both
+  // paths rather than either: the region is what a browser reads, and no
+  // backend answers in the one the frontend is driven in.
+  useEffect(() => {
+    if (queueSaid) void ipc.announce(queueSaid).catch(() => {});
+  }, [queueSaid]);
   const [value, setValue] = useState("");
   // In the store rather than here, keyed by the pane: a change to the layout's
   // shape rebuilds every pane in the window (#308), and the line comes back

@@ -14,6 +14,7 @@ const { ipcMock } = vi.hoisted(() => ({
     submitInput: vi.fn(),
     connectNetwork: vi.fn(),
     disconnectNetwork: vi.fn(),
+    announce: vi.fn(),
   },
 }));
 
@@ -29,6 +30,7 @@ beforeEach(() => {
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
   ipcMock.connectNetwork.mockResolvedValue(undefined);
   ipcMock.disconnectNetwork.mockResolvedValue(undefined);
+  ipcMock.announce.mockResolvedValue(undefined);
 
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),

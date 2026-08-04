@@ -1822,6 +1822,7 @@ name = "ircx"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "gtk",
  "ircx-core",
  "ircx-ipc",
  "ircx-net",

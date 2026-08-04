@@ -209,6 +209,16 @@ pub async fn set_draft(
         .map_err(describe)
 }
 
+/// Says something to a screen reader, which a live region in this window
+/// cannot. `crate::announce` has the why.
+#[tauri::command]
+pub async fn announce(window: tauri::WebviewWindow, message: String) -> Result<(), String> {
+    if !message.is_empty() {
+        crate::announce::say(window, message);
+    }
+    Ok(())
+}
+
 /// The themes directory, read whole. Themes install by being copied in, so
 /// there is nothing to register and nothing to keep in sync.
 #[tauri::command]

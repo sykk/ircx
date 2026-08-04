@@ -166,6 +166,13 @@ export const ipc = {
   setPluginGrants: (plugin: string, grants: PluginGrants) =>
     invoke<InstalledPlugin>("set_plugin_grants", { plugin, grants }),
   removePlugin: (plugin: string) => invoke<void>("remove_plugin", { plugin }),
+
+  /** Says `message` to a screen reader, through the window rather than the
+   * page: a live region in this webview reaches the accessibility tree
+   * correctly and is never announced from it. `src-tauri/src/announce.rs` has
+   * the why. Rejects only where there is no backend to ask, which is every
+   * browser the frontend is driven in, so callers let it fail. */
+  announce: (message: string) => invoke<void>("announce", { message }),
 };
 
 /**

@@ -4,6 +4,7 @@ import { formatBytes } from "@/lib/bytes";
 import { ipc, onFileDrop, reasonOr } from "@/lib/ipc";
 import { useActiveTarget } from "@/store/selectors";
 import type { FileToUpload } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 /**
  * Dropping a file on the window uploads it to the conversation in focus.
@@ -24,6 +25,7 @@ export function DropToUpload() {
   const [host, setHost] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
   /** An address that was stored and will not open, held so it can be read and
    * copied rather than sent. */
   const [dead, setDead] = useState<{ link: string; why: string } | null>(null);

@@ -14,6 +14,7 @@ const exportArchive = vi.fn();
 vi.mock("@/lib/ipc", async (importOriginal) => ({
   ...(await importOriginal<typeof Ipc>()),
   ipc: {
+    announce: vi.fn(() => Promise.resolve()),
     archiveSummary: (...args: unknown[]) => summary(...args),
     setRetention: (...args: unknown[]) => setRetention(...args),
     deleteArchive: (...args: unknown[]) => deleteArchive(...args),

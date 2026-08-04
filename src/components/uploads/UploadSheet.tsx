@@ -9,6 +9,7 @@ import {
 import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { UploadMethod, UploadProvider } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 const METHODS: { value: UploadMethod; label: string }[] = [
   { value: "PUT", label: "PUT — the address names the file" },
@@ -66,6 +67,7 @@ function Sheet() {
   const [stored, setStored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
 
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {

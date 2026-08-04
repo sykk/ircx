@@ -13,6 +13,7 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
   ipc: {
     saveNetwork: (config: NetworkConfig) => saveNetwork(config),
     connectNetwork: (network: string) => connectNetwork(network),
+    announce: vi.fn(() => Promise.resolve()),
   },
   onIrcxEvent: vi.fn(),
 }));

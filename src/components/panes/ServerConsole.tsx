@@ -7,6 +7,7 @@ import { useAppStore } from "@/store";
 import { useNetwork, useView } from "@/store/selectors";
 import type { ConsoleInput, ViewId } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { RawLog } from "./RawLog";
 
 /** A command box nothing has been typed into. One shared object, so the
@@ -63,6 +64,7 @@ function ConsoleComposer({
   const { text: value, error } = useAppStore(
     (s) => (view ? s.consoleInput[view] : undefined) ?? EMPTY,
   );
+  useAnnounce(error);
   const setConsoleInput = useAppStore((s) => s.setConsoleInput);
   const recall = useRecall(network, SERVER_TARGET);
 

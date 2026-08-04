@@ -10,6 +10,7 @@ import {
   TextField,
 } from "./fields";
 import { nicknameProblem } from "./nickname";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 interface Props {
   draft: Draft;
@@ -34,6 +35,7 @@ export function PublicNetworkForm({
   busy,
   error,
 }: Props) {
+  useAnnounce(error);
   const [submitted, setSubmitted] = useState(false);
   const nickError = nicknameProblem(draft.nick.trim(), preset.nickLimit);
   const showNickError = nickError && (submitted || draft.nick.length > 0);

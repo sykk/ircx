@@ -5,6 +5,7 @@ import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 
 /**
  * What a retention window may be set to.
@@ -52,6 +53,7 @@ function Sheet() {
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
   const [said, setSaid] = useState<string | null>(null);
 
   const dialog = useRef<HTMLDivElement>(null);

@@ -7,6 +7,7 @@ import { DropToUpload } from "../DropToUpload";
 
 const { ipcMock, drops } = vi.hoisted(() => ({
   ipcMock: {
+    announce: vi.fn(() => Promise.resolve()),
     getUploadProvider: vi.fn(),
     describeUploads: vi.fn(),
     uploadFile: vi.fn(),

@@ -14,7 +14,7 @@ const { ipcMock } = vi.hoisted(() => ({
     submitInput: vi.fn(),
     connectNetwork: vi.fn(),
     disconnectNetwork: vi.fn(),
-    announce: vi.fn(),
+    announce: vi.fn(() => Promise.resolve()),
   },
 }));
 

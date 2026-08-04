@@ -4,6 +4,7 @@ import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
 import { sameTarget, splitTargetKey, type TargetKey } from "@/store/keys";
 import type { Member } from "@/types";
+import { useAnnounce } from "@/hooks/useAnnounce";
 import { BackIcon } from "./icons";
 import { actionsFor, rankOf } from "./members";
 
@@ -24,6 +25,7 @@ export function UserInspector({
   onBack,
 }: UserInspectorProps) {
   const [error, setError] = useState<string | null>(null);
+  useAnnounce(error);
   const membersByTarget = useAppStore((s) => s.members);
 
   const shared = useMemo(() => {

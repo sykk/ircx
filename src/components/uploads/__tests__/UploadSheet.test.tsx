@@ -7,6 +7,7 @@ import { UploadSheet } from "../UploadSheet";
 
 const { ipcMock } = vi.hoisted(() => ({
   ipcMock: {
+    announce: vi.fn(() => Promise.resolve()),
     getUploadProvider: vi.fn(),
     saveUploadProvider: vi.fn(),
     removeUploadProvider: vi.fn(),

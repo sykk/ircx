@@ -10,7 +10,6 @@ import { PaneTree } from "./PaneTree";
 
 const { ipcMock } = vi.hoisted(() => ({
   ipcMock: {
-    announce: vi.fn(() => Promise.resolve()),
     getDraft: vi.fn(),
     setDraft: vi.fn(),
     setTyping: vi.fn(),

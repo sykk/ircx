@@ -9,12 +9,7 @@ import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { CommandPalette } from "./CommandPalette";
 
 const { ipcMock } = vi.hoisted(() => ({
-  ipcMock: {
-    submitInput: vi.fn(),
-    connectNetwork: vi.fn(),
-    disconnectNetwork: vi.fn(),
-    announce: vi.fn(() => Promise.resolve()),
-  },
+  ipcMock: { submitInput: vi.fn(), connectNetwork: vi.fn(), disconnectNetwork: vi.fn() },
 }));
 vi.mock("@/lib/ipc", () => ({ ipc: ipcMock }));
 

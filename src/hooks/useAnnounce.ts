@@ -19,6 +19,15 @@ import { ipc } from "@/lib/ipc";
  */
 export function useAnnounce(message: string | null | undefined): void {
   useEffect(() => {
-    if (message) void ipc.announce(message).catch(() => {});
+    if (!message) return;
+    // Nothing the announcement does may reach the render. This runs in an
+    // effect from seventeen components, and an error raised here would take
+    // down one whose only fault was having something to say — over a side
+    // channel that is allowed to be silent. The synchronous case is real: a
+    // test double standing in for `ipc` need only carry what its component
+    // calls, which is the convention here and predates this hook.
+    void Promise.resolve()
+      .then(() => ipc.announce(message))
+      .catch(() => {});
   }, [message]);
 }

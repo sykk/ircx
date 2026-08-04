@@ -8,7 +8,6 @@ import { PluginSheet } from "../PluginSheet";
 
 const { ipcMock, chooseFolder } = vi.hoisted(() => ({
   ipcMock: {
-    announce: vi.fn(() => Promise.resolve()),
     pluginPermissions: vi.fn(),
     installPlugin: vi.fn(),
     setPluginGrants: vi.fn(),

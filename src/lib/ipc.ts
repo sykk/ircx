@@ -173,6 +173,12 @@ export const ipc = {
    * the why. Rejects only where there is no backend to ask, which is every
    * browser the frontend is driven in, so callers let it fail. */
   announce: (message: string) => invoke<void>("announce", { message }),
+
+  /** The SHA-256 of a certificate file, lowercase hex, for the user to register
+   * with their account service. Rejects with a sentence naming the file when it
+   * cannot be read or holds no certificate. */
+  certificateFingerprint: (path: string) =>
+    invoke<string>("certificate_fingerprint", { path }),
 };
 
 /**
@@ -197,6 +203,17 @@ export async function openExternal(url: string): Promise<void> {
  * reason `invoke` is: a component does not reach for a Tauri plugin itself. */
 export async function chooseFolder(title: string): Promise<string | null> {
   const picked = await open({ directory: true, title });
+  return typeof picked === "string" ? picked : null;
+}
+
+/** The native file picker, or null if it was dismissed. Wrapped as
+ * `chooseFolder` is. The filter is a hint rather than a rule — a certificate
+ * saved as `.crt` or with no extension is still one. */
+export async function chooseFile(
+  title: string,
+  filters: { name: string; extensions: string[] }[],
+): Promise<string | null> {
+  const picked = await open({ directory: false, multiple: false, title, filters });
   return typeof picked === "string" ? picked : null;
 }
 

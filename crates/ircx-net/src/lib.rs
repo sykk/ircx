@@ -16,5 +16,5 @@ pub use backoff::{Backoff, BackoffPolicy};
 pub use error::{DisconnectReason, NetError};
 pub use framing::MAX_LINE_BYTES;
 pub use rate_limit::RateLimit;
-pub use tls::TlsInfo;
+pub use tls::{certificate_fingerprint, TlsInfo};
 pub use transport::{ConnectionConfig, LineSender, Transport, TransportEvent};

@@ -17,6 +17,7 @@ rustls-pemfile.workspace = true
 webpki-roots.workspace = true
 tracing.workspace = true
 x509-parser = { version = "0.18", default-features = false }
+ring = "0.17"
 
 [dev-dependencies]
 rcgen = "0.14.8"

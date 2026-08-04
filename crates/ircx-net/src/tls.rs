@@ -124,6 +124,26 @@ fn read_identity(
     Ok((chain, key))
 }
 
+/// The SHA-256 of the certificate in `path`, lowercase hex.
+///
+/// What a user has to give their account service — `/msg NickServ CERT ADD
+/// <this>` — before a certificate authenticates anything. Read from the file
+/// rather than from a live connection so it can be shown while the network is
+/// being set up, which is when it is needed.
+///
+/// The first certificate in the file, which is the one presented. Anything
+/// after it is a chain a certfp server never looks at.
+pub fn certificate_fingerprint(path: &Path) -> Result<String, NetError> {
+    let (chain, _) = read_identity(path)?;
+    let first = chain.first().expect("read_identity refuses an empty chain");
+    let digest = ring::digest::digest(&ring::digest::SHA256, first.as_ref());
+    Ok(digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
 pub(crate) fn tls_info(conn: &ClientConnection) -> TlsInfo {
     let protocol = match conn.protocol_version() {
         Some(ProtocolVersion::TLSv1_3) => "TLS 1.3".to_owned(),
@@ -285,6 +305,38 @@ mod tests {
             .to_string();
 
         assert!(reason.contains(&missing.display().to_string()), "{reason}");
+    }
+
+    /// The fingerprint is what a user types at NickServ, so it has to be the
+    /// digest of the certificate itself rather than of the file, the PEM text
+    /// or the key beside it. Checked against the DER `rcgen` hands back, hashed
+    /// here independently of the code under test.
+    #[test]
+    fn the_fingerprint_is_the_sha256_of_the_certificate() {
+        let made = rcgen::generate_simple_self_signed(vec!["ircx.test".to_owned()])
+            .expect("rcgen can make a self-signed certificate");
+        let path = written(
+            "fingerprint",
+            &format!("{}{}", made.cert.pem(), made.signing_key.serialize_pem()),
+        );
+
+        let expected: String = ring::digest::digest(&ring::digest::SHA256, made.cert.der())
+            .as_ref()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+
+        let found = certificate_fingerprint(&path).expect("the file holds a certificate");
+        assert_eq!(found, expected);
+        assert_eq!(found.len(), 64, "sha256 in hex is 64 characters: {found}");
+        assert!(
+            found
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()),
+            "lowercase hex is what an account service is given: {found}"
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 
     /// A certificate and a key that were never a pair. Two identities pasted

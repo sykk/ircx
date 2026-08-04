@@ -219,6 +219,20 @@ pub async fn announce(window: tauri::WebviewWindow, message: String) -> Result<(
     Ok(())
 }
 
+/// The SHA-256 of a certificate file, for the user to register with their
+/// account service before SASL EXTERNAL can authenticate them.
+///
+/// Read here rather than in the frontend because the frontend has no way to
+/// read a file, and should not: the path is one the user chose in a dialog and
+/// the fingerprint is the only part of the file this window ever sees.
+#[tauri::command]
+pub async fn certificate_fingerprint(path: String) -> Result<String, String> {
+    // `NetError`'s own sentences are written for a reader — they name the file
+    // and which half of it is missing — so there is nothing to translate.
+    ircx_net::certificate_fingerprint(std::path::Path::new(&path))
+        .map_err(|reason| reason.to_string())
+}
+
 /// The themes directory, read whole. Themes install by being copied in, so
 /// there is nothing to register and nothing to keep in sync.
 #[tauri::command]

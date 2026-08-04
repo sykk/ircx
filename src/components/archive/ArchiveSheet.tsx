@@ -6,6 +6,7 @@ import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 /**
  * What a retention window may be set to.
@@ -57,9 +58,7 @@ function Sheet() {
   const [said, setSaid] = useState<string | null>(null);
 
   const dialog = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
+  useDialogFocus(dialog);
 
   const network = here?.network ?? null;
   const target = here?.target ?? null;

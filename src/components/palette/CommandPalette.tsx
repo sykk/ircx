@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
 import { runConnectionCommand } from "@/components/composer/commands";
@@ -6,6 +6,7 @@ import { applyTheme, selectDensity, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import {
   buildCandidates,
   commandLineCandidate,
@@ -29,6 +30,9 @@ export function CommandPalette() {
 /** Mounted only while open, so the candidate list is built on open and the
  * palette costs nothing while the user is reading. */
 function Palette() {
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
+
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -247,9 +251,11 @@ function Palette() {
     <div className="fixed inset-0 z-50 flex justify-center pt-[12vh]" onMouseDown={close}>
       <div className="absolute inset-0 bg-[var(--scrim)]" />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
         className="relative flex max-h-[70vh] w-[min(640px,92vw)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"

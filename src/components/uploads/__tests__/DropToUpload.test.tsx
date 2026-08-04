@@ -80,6 +80,24 @@ describe("dropping a file on the window", () => {
     expect(screen.queryByRole("dialog", { name: "Upload" })).toBeNull();
   });
 
+  /** #399. A confirmation that appears over the composer with focus left
+   * behind it is one the keyboard has to go looking for, and Escape reaches a
+   * dialog only from inside it. */
+  it("takes focus when it appears, and cancels on Escape", async () => {
+    render(<DropToUpload />);
+    drop(["/home/sable/photo.png"]);
+    const dialog = await screen.findByRole("dialog", { name: "Upload" });
+
+    // The focus lands in an effect, which can run after the dialog is in the
+    // document rather than with it.
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Upload" })).toBeNull();
+    expect(ipcMock.uploadFile).not.toHaveBeenCalled();
+  });
+
   it("uploads and puts the link in the conversation", async () => {
     render(<DropToUpload />);
     drop(["/home/sable/photo.png"]);
@@ -222,6 +240,20 @@ describe("an address that will not open", () => {
     expect(
       await screen.findByText("https://s3.example.com/bucket/ab-photo.png"),
     ).toBeTruthy();
+  });
+
+  /** #399. The second dialog this file draws, and it replaces the first, so
+   * focus is inside a dialog that is going away. */
+  it("takes focus from the confirmation it replaces, and closes on Escape", async () => {
+    await dropAndConfirm();
+    const dialog = await screen.findByRole("dialog", { name: "The link was not sent" });
+
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(ipcMock.submitInput).not.toHaveBeenCalled();
   });
 
   /** The client is wrong about this sometimes — a provider can serve a link it

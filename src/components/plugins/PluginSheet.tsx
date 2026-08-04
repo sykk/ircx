@@ -4,6 +4,7 @@ import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { PermissionsForm } from "./PermissionsForm";
 import { PluginList } from "./PluginList";
 
@@ -35,9 +36,7 @@ function Sheet() {
   // form starts on a checkbox — so without this the keydown below fires from
   // wherever focus was left and Escape never reaches the dialog.
   const dialog = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
+  useDialogFocus(dialog);
 
   /** Closing mid-request loses the answer: an install lands with its
    * permissions never asked, and a failed save reports into a sheet that has

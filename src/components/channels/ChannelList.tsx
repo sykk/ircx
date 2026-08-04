@@ -1,10 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TextField } from "@/components/onboarding/fields";
 import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ChannelListing } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 const ROW_HEIGHT = 44;
 
@@ -46,9 +47,7 @@ function Sheet({ network }: { network: string }) {
 
   const dialog = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
+  useDialogFocus(dialog);
 
   // Nothing the virtualiser returns leaves this component, so the compiler
   // skipping it costs nothing.

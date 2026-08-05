@@ -87,6 +87,9 @@ function Search() {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // An open IME composition owns the keys: its Enter commits a candidate,
+    // not the selected hit.
+    if (event.nativeEvent.isComposing) return;
     const move = (delta: number) => {
       if (shown.length === 0) return;
       setSelected((((selected + delta) % shown.length) + shown.length) % shown.length);

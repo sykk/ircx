@@ -212,6 +212,9 @@ function Palette() {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // An open IME composition owns the keys: its Enter commits a candidate,
+    // not the selected result.
+    if (event.nativeEvent.isComposing) return;
     const move = (delta: number) => {
       if (results.length === 0) return;
       setSelected((((at + delta) % results.length) + results.length) % results.length);

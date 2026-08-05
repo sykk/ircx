@@ -11,6 +11,7 @@
 //! that owns it. Without one, nothing about plugins is built, started or paid
 //! for.
 
+mod archive;
 mod caps;
 mod casemap;
 mod dispatch;
@@ -33,7 +34,9 @@ pub use plugins::{
     PluginCall,
 };
 pub use session::{Action, Restored, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET};
-pub use task::{spawn_network, spawn_network_with_plugins, NetworkHandle, SessionCommand};
+pub use task::{
+    spawn_network, spawn_network_with_plugins, ArchiveWrites, NetworkHandle, SessionCommand,
+};
 
 /// The plugin system, re-exported so the application installs and grants
 /// through the same types the session enforces against.

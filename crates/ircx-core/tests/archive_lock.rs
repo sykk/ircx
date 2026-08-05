@@ -1,9 +1,10 @@
 //! What a long archive operation costs a live connection.
 //!
 //! `Store` is one `Connection` behind a `Mutex`, shared by every network's
-//! connection task and by every command the window can run — search, export,
-//! delete. `Context::write` calls `append_messages` on the connection task
-//! itself, which is the task that reads the socket and answers `PING`.
+//! archive writer thread and by every command the window can run — search,
+//! export, delete. Since #410 the connection task hands its writes to the
+//! writer rather than taking that mutex itself, so what this measures now is
+//! what the handover left behind.
 //!
 //! So the question is not whether SQLite can do two things at once. It is
 //! whether a `PING` is answered while somebody is exporting their archive. WAL
@@ -11,8 +12,17 @@
 //! serialises everything anyway.
 //!
 //! The measurement is the round trip of a `PING` the scripted server sends,
-//! taken twice — once against a quiet archive and once while
-//! `export_everything` is running over a large one.
+//! taken against a quiet archive and then while `export_everything` and
+//! `delete_everything` run over a large one.
+//!
+//! **The quiet number is not zero and has nothing to do with the archive.**
+//! `RateLimit::default()` is a bucket of five with a 500ms interval, and
+//! registration spends the five, so a `PONG` waits one interval however idle
+//! everything else is. It stays at 500ms whether the burst before it is 900
+//! messages or 100, which is what says it is a timer rather than work. #410 was
+//! filed claiming that floor was the connection task writing its own burst
+//! inline; it was not, and the writer moving off the task left it exactly where
+//! it was.
 //!
 //! ```text
 //! cargo test -p ircx-core --test archive_lock -- --ignored --nocapture
@@ -36,8 +46,8 @@ const CHANNEL: &str = "#load";
 /// Enough that an export takes long enough to see. A real archive of a year's
 /// reading is larger than this.
 const ARCHIVED: usize = 60_000;
-/// Above `ARCHIVE_BATCH`, so the connection task has to take the lock while the
-/// export is holding it.
+/// Enough that the writer is still working through the burst when the export
+/// takes the lock away from it.
 const BURST: usize = 900;
 
 fn config(port: u16) -> SessionConfig {

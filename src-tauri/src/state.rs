@@ -353,9 +353,11 @@ impl App {
         })
     }
 
-    /// Sends QUIT everywhere and gives the writes a moment to land.
+    /// Sends QUIT everywhere, gives the goodbyes a moment, and waits for the
+    /// archive however long it needs.
     pub async fn shutdown(&self) {
         let handles: Vec<NetworkHandle> = self.guard().drain().map(|(_, handle)| handle).collect();
+        let writes: Vec<_> = handles.iter().map(NetworkHandle::writes).collect();
         let closing: Vec<_> = handles
             .into_iter()
             .map(|handle| tokio::spawn(handle.shutdown(Some(DEFAULT_QUIT.into()))))
@@ -367,6 +369,13 @@ impl App {
             }
         })
         .await;
+        // The grace bounds the goodbye, not the record. A session that could
+        // not finish in time still queued its writes, and the writer threads
+        // die with the process — leaving now is how what was said would go
+        // quietly missing.
+        for writer in writes {
+            writer.drained().await;
+        }
     }
 
     async fn publish(&self, event: IrcxEvent) {

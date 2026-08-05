@@ -1,9 +1,10 @@
 //! What a long archive operation costs a live connection.
 //!
 //! `Store` is one `Connection` behind a `Mutex`, shared by every network's
-//! connection task and by every command the window can run — search, export,
-//! delete. `Context::write` calls `append_messages` on the connection task
-//! itself, which is the task that reads the socket and answers `PING`.
+//! archive writer thread and by every command the window can run — search,
+//! export, delete. Since #410 the connection task hands its writes to the
+//! writer rather than taking that mutex itself, so what this measures now is
+//! what the handover left behind.
 //!
 //! So the question is not whether SQLite can do two things at once. It is
 //! whether a `PING` is answered while somebody is exporting their archive. WAL
@@ -45,8 +46,8 @@ const CHANNEL: &str = "#load";
 /// Enough that an export takes long enough to see. A real archive of a year's
 /// reading is larger than this.
 const ARCHIVED: usize = 60_000;
-/// Above `ARCHIVE_BATCH`, so the connection task has to take the lock while the
-/// export is holding it.
+/// Enough that the writer is still working through the burst when the export
+/// takes the lock away from it.
 const BURST: usize = 900;
 
 fn config(port: u16) -> SessionConfig {

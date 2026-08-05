@@ -204,6 +204,7 @@ pub struct NetworkHandle {
     network: NetworkId,
     commands: mpsc::Sender<SessionCommand>,
     task: JoinHandle<()>,
+    archive: Archive,
 }
 
 impl NetworkHandle {
@@ -215,6 +216,15 @@ impl NetworkHandle {
         self.commands.clone()
     }
 
+    /// A handle on this network's archive writer that outlives the session.
+    /// Taken before `shutdown` consumes the handle, so the caller can still
+    /// wait for the writes of a session that would not finish in time.
+    pub fn writes(&self) -> ArchiveWrites {
+        ArchiveWrites {
+            archive: self.archive.clone(),
+        }
+    }
+
     pub async fn shutdown(self, reason: Option<String>) {
         let _ = self
             .commands
@@ -222,6 +232,22 @@ impl NetworkHandle {
             .await;
         drop(self.commands);
         let _ = self.task.await;
+    }
+}
+
+/// The one question the app may ask a network's archive from outside: whether
+/// everything queued so far is on disk.
+pub struct ArchiveWrites {
+    archive: Archive,
+}
+
+impl ArchiveWrites {
+    /// Resolves once every write asked for before this call is written. The
+    /// writer is a thread of its own answering from its queue, so this works
+    /// whatever the session task is doing — a socket that will not take its
+    /// QUIT cannot hold the record hostage.
+    pub async fn drained(&self) {
+        self.archive.drained().await;
     }
 }
 
@@ -248,11 +274,23 @@ pub fn spawn_network_with_plugins(
     let (commands, inbox) = mpsc::channel(COMMAND_QUEUE);
     let network = config.network.clone();
     let session = commands.downgrade();
-    let task = tokio::spawn(supervise(config, store, events, inbox, plugins, session));
+    // Opened here rather than in the task, so the handle keeps a way to wait
+    // for the writes of a session that is gone or stuck.
+    let archive = Archive::open(Arc::clone(&store));
+    let task = tokio::spawn(supervise(
+        config,
+        store,
+        events,
+        inbox,
+        plugins,
+        session,
+        archive.clone(),
+    ));
     NetworkHandle {
         network,
         commands,
         task,
+        archive,
     }
 }
 
@@ -265,10 +303,20 @@ async fn supervise(
     inbox: mpsc::Receiver<SessionCommand>,
     plugins: Option<Arc<PluginRuntime>>,
     session: mpsc::WeakSender<SessionCommand>,
+    archive: Archive,
 ) {
     let network = config.network.clone();
     let name = config.name.clone();
-    let outcome = tokio::spawn(run(config, store, events.clone(), inbox, plugins, session)).await;
+    let outcome = tokio::spawn(run(
+        config,
+        store,
+        events.clone(),
+        inbox,
+        plugins,
+        session,
+        archive,
+    ))
+    .await;
 
     if outcome.as_ref().is_err_and(|error| error.is_panic()) {
         let message = format!("The connection to {name} stopped unexpectedly");
@@ -295,9 +343,10 @@ async fn run(
     config: SessionConfig,
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
-    mut inbox: mpsc::Receiver<SessionCommand>,
+    inbox: mpsc::Receiver<SessionCommand>,
     plugins: Option<Arc<PluginRuntime>>,
     own_inbox: mpsc::WeakSender<SessionCommand>,
+    archive: Archive,
 ) {
     let endpoint = (
         config.host.clone(),
@@ -308,12 +357,11 @@ async fn run(
     // Beside the tuple rather than in it: a fifth field read as `endpoint.4`
     // says nothing about what it is.
     let client_certificate = config.client_certificate.clone().map(PathBuf::from);
-    let mut session = SessionState::new(config);
-    let mut backoff = Backoff::new(BackoffPolicy::default());
+    let session = SessionState::new(config);
     let context = Context {
         waiting: Arc::new(Waiting::default()),
         network: session.network_id().clone(),
-        archive: Archive::open(Arc::clone(&store)),
+        archive,
         store,
         events,
         plugins,
@@ -321,6 +369,23 @@ async fn run(
         own_inbox,
     };
 
+    drive(endpoint, client_certificate, session, inbox, &context).await;
+    // Every way out — a restore that could not be delivered, a connect that
+    // was refused, the inbox closing — ends with the session's writes on
+    // disk, not only the orderly stop.
+    context.archive.drained().await;
+}
+
+/// A session's whole life between construction and the final drain: connect,
+/// read, reconnect, until told to stop for good.
+async fn drive(
+    endpoint: (String, u16, bool, bool),
+    client_certificate: Option<PathBuf>,
+    mut session: SessionState,
+    mut inbox: mpsc::Receiver<SessionCommand>,
+    context: &Context,
+) {
+    let mut backoff = Backoff::new(BackoffPolicy::default());
     let remembered = match context.store.open_targets(&context.network) {
         Ok(targets) => targets,
         Err(error) => {
@@ -372,7 +437,7 @@ async fn run(
                 if context.deliver(actions, None).await {
                     return;
                 }
-                if !wait_to_retry(&mut backoff, &mut session, &context, &mut inbox).await {
+                if !wait_to_retry(&mut backoff, &mut session, context, &mut inbox).await {
                     return;
                 }
                 continue;
@@ -398,7 +463,7 @@ async fn run(
                     None => break,
                 },
                 command = inbox.recv() => match command {
-                    Some(command) => apply(command, &mut session, &context).await,
+                    Some(command) => apply(command, &mut session, context).await,
                     None => { stop = true; break }
                 },
                 // The writer ends with the connection, so a closed mark is the
@@ -420,9 +485,8 @@ async fn run(
         }
 
         drop(transport);
-        // The one place this task waits for the archive on purpose: a session
-        // that has stopped is a session whose last messages have to be down
-        // before it says so.
+        // Before `on_disconnected` on purpose: a session that has stopped is
+        // a session whose last messages have to be down before it says so.
         context.archive.drained().await;
         if stop {
             return;
@@ -431,7 +495,7 @@ async fn run(
         if context.deliver(actions, None).await {
             return;
         }
-        if !wait_to_retry(&mut backoff, &mut session, &context, &mut inbox).await {
+        if !wait_to_retry(&mut backoff, &mut session, context, &mut inbox).await {
             return;
         }
     }
@@ -625,9 +689,12 @@ impl Context {
             limit: CONTEXT_MESSAGES,
         };
         // A plugin asking for the conversation is asking for what was said,
-        // which includes whatever the writer has not reached yet. This is the
-        // only read here that waits for the archive, and it waits on the
-        // plugin's own path rather than on the one that reads the socket.
+        // which includes whatever the writer has not reached yet. The wait
+        // runs on the connection task — the socket is not read while a
+        // command gathers its context — so a store held busy by an export
+        // holds the socket too. That is the price of handing the plugin a
+        // complete conversation, and it is paid only when somebody types a
+        // command that was granted the messages.
         self.archive.drained().await;
         match self.store.load_history(&request) {
             Ok(messages) => Some(call.with_messages(messages)),
@@ -1026,14 +1093,6 @@ impl Context {
         });
     }
 
-    /// Holds what arrived rather than writing it, because each write is a
-    /// transaction and a netsplit hands this one message at a time: 2,500
-    /// quits were 2,500 commits, 444 ms of the 791 the burst cost (#328).
-    ///
-    /// What is held goes down when the incoming lines stop, so ordinary
-    /// traffic — a line, then a quiet socket — is written as immediately as it
-    /// was before. Only a burst coalesces, and a burst is the case where the
-    /// window between arriving and being durable is worth having.
     /// Hands what arrived to the writer. Batching is its problem now, and the
     /// connection's part is one channel send.
     async fn persist(&self, messages: &[ChatMessage]) {

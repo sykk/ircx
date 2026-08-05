@@ -288,7 +288,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           ...read,
         };
       }
-      return { ...retarget(s, id, target.network, target.target), ...read };
+      const moved = retarget(s, id, target.network, target.target);
+      return { ...moved, ...read, ...leftBehind(s, moved.views ?? s.views, target) };
     }),
 
   showTarget: (target) => {
@@ -297,9 +298,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       get().setActive(target);
       return;
     }
-    // Reading it is reading it wherever it was already open, so the unread rule
-    // and the recency list move either way.
-    set((s) => ({ activeViewId: showing, ...readingTarget(s, target) }));
+    // Reading it is reading it wherever it was already open, so the recency
+    // list and the conversation being left move either way.
+    set((s) => ({
+      activeViewId: showing,
+      ...readingTarget(s, target),
+      ...leftBehind(s, s.views, target),
+    }));
   },
 
   openConsole: (network, raw = false) => {
@@ -369,6 +374,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const layout = removeLeaf(s.layout, view);
       if (!layout) return {};
 
+      const closed = s.views[view]!;
       const { [view]: _closed, ...views } = s.views;
       const { [view]: _read, ...viewAnchor } = s.viewAnchor;
       // Otherwise a later pane handed the same id would open with the closed
@@ -378,6 +384,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { [view]: _line, ...rawAnchor } = s.rawAnchor;
       const { [view]: _refusal, ...composerError } = s.composerError;
       const at = s.viewOrder.indexOf(view);
+      // Closing the focused pane is leaving its conversation: the seam it was
+      // read under would otherwise wait, stale, for the next visit.
+      const seam =
+        s.activeViewId === view &&
+        closed.network &&
+        !Object.values(views).some(
+          (v) => v.network === closed.network && v.target === closed.target,
+        )
+          ? clearedSeam(s, closed.network, closed.target)
+          : {};
       return {
         layout,
         views,
@@ -391,6 +407,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           s.activeViewId === view
             ? (s.viewOrder[at + 1] ?? s.viewOrder[at - 1] ?? null)
             : s.activeViewId,
+        ...seam,
       };
     }),
 
@@ -633,23 +650,48 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
 }
 
 /**
- * What reading a target does whichever pane it is read in. The unread rule is
- * placed on switch rather than on scroll, so it holds still while the user
- * reads, and it lives beside the target rather than the view: having read a
- * channel in one pane means having read it.
+ * What reading a target does whichever pane it is read in: it moves to the
+ * top of the recency list. Its unread seam is deliberately left standing —
+ * the seam is what the reader switched here to see, and it holds still while
+ * they read. Leaving is what clears it; see `leftBehind`.
  */
-function readingTarget(
-  s: AppState,
-  target: ActiveTarget,
-): Pick<AppState, "recent" | "timelines"> {
+function readingTarget(s: AppState, target: ActiveTarget): Pick<AppState, "recent"> {
   const key = targetKey(target.network, target.target);
-  const timeline = s.timelines[key];
   return {
-    timelines: timeline
-      ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
-      : s.timelines,
     recent: [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP),
   };
+}
+
+/**
+ * The seam of the conversation being left. Read while it was active, so it
+ * clears — but only once no pane shows it. On screen it holds where it is,
+ * and the pane that retargets or closes off it is what finally takes it. The
+ * rule lives beside the target rather than the view: having read a channel
+ * in one pane means having read it.
+ */
+function leftBehind(
+  s: AppState,
+  views: AppState["views"],
+  next: ActiveTarget,
+): Partial<Pick<AppState, "timelines">> {
+  const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
+  if (!active || !active.network) return {};
+  if (active.network === next.network && active.target === next.target) return {};
+  const shown = Object.values(views).some(
+    (view) => view.network === active.network && view.target === active.target,
+  );
+  return shown ? {} : clearedSeam(s, active.network, active.target);
+}
+
+function clearedSeam(
+  s: AppState,
+  network: string,
+  target: string,
+): Partial<Pick<AppState, "timelines">> {
+  const key = targetKey(network, target);
+  const timeline = s.timelines[key];
+  if (!timeline || timeline.unreadFrom === null) return {};
+  return { timelines: { ...s.timelines, [key]: { ...timeline, unreadFrom: null } } };
 }
 
 function newView(network: string, target: string): ChatView {

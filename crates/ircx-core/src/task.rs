@@ -16,15 +16,11 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
 
+use crate::archive::Archive;
 use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
 use crate::session::{Action, Restored, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
-
-/// How many arrived messages the archive write will hold before going down
-/// anyway. Bounds both what a long burst costs in memory and how much of it a
-/// crash loses. See `Context::persist`.
-const ARCHIVE_BATCH: usize = 500;
 
 /// Which on-arrival hook a strike is against. A plugin can hold both, and one
 /// of them failing says nothing about the other: a rule that throws should not
@@ -317,12 +313,12 @@ async fn run(
     let context = Context {
         waiting: Arc::new(Waiting::default()),
         network: session.network_id().clone(),
+        archive: Archive::open(Arc::clone(&store)),
         store,
         events,
         plugins,
         strikes: Arc::default(),
         own_inbox,
-        pending: Mutex::default(),
     };
 
     let remembered = match context.store.open_targets(&context.network) {
@@ -421,17 +417,13 @@ async fn run(
                 stop = true;
                 break;
             }
-            // What arrived is written down as soon as nothing else is waiting,
-            // so a quiet socket is as durable as it was before #328 and only a
-            // burst — where every line is followed immediately by another —
-            // holds anything back.
-            if incoming.is_empty() {
-                context.flush_archive();
-            }
         }
 
         drop(transport);
-        context.flush_archive();
+        // The one place this task waits for the archive on purpose: a session
+        // that has stopped is a session whose last messages have to be down
+        // before it says so.
+        context.archive.drained().await;
         if stop {
             return;
         }
@@ -488,14 +480,16 @@ async fn apply(
             reply_to,
             reply,
         } => {
-            if let Some(call) = context.plugin_call(session, &target, &input) {
+            if let Some(call) = context.plugin_call(session, &target, &input).await {
                 let (outcome, actions) = context.run_plugin(session, call).await;
                 let _ = reply.send(outcome);
                 return actions;
             }
             let (outcome, actions) = session.submit(&target, &input, reply_to.as_deref());
             if let CommandOutcome::Sent(message) = &outcome {
-                context.persist(std::slice::from_ref(message.as_ref()));
+                context
+                    .persist(std::slice::from_ref(message.as_ref()))
+                    .await;
             }
             let _ = reply.send(outcome);
             actions
@@ -554,8 +548,10 @@ struct Context {
     /// because the inbox closing is what stops the session, and a clone held
     /// here would keep a disconnected network alive for good.
     own_inbox: mpsc::WeakSender<SessionCommand>,
-    /// Messages that have arrived and not yet been written down. See `persist`.
-    pending: Mutex<Vec<ChatMessage>>,
+    /// Where every change to the archive goes. Held rather than done, because
+    /// the connection task is the one thing that must never wait on the
+    /// archive. #410, and `crate::archive` says the rest.
+    archive: Archive,
     /// Messages an annotator has not caught up with, and which conversations
     /// already have a worker on them. See `annotate`. #406.
     waiting: Arc<Waiting>,
@@ -611,7 +607,12 @@ impl Context {
     /// The plugin command this input names, with the conversation's recent
     /// messages attached if the plugin was granted them. The archive is not
     /// read at all otherwise.
-    fn plugin_call(&self, session: &SessionState, target: &str, input: &str) -> Option<PluginCall> {
+    async fn plugin_call(
+        &self,
+        session: &SessionState,
+        target: &str,
+        input: &str,
+    ) -> Option<PluginCall> {
         let runtime = self.plugins.as_ref()?;
         let call = session.plugin_command(runtime, target, input)?;
         if !call.wants_messages() {
@@ -624,8 +625,10 @@ impl Context {
             limit: CONTEXT_MESSAGES,
         };
         // A plugin asking for the conversation is asking for what was said,
-        // which includes whatever is still held from the last arrivals.
-        self.flush_archive();
+        // which includes whatever the writer has not reached yet. This is the
+        // only read here that waits for the archive, and it waits on the
+        // plugin's own path rather than on the one that reads the socket.
+        self.archive.drained().await;
         match self.store.load_history(&request) {
             Ok(messages) => Some(call.with_messages(messages)),
             Err(error) => {
@@ -677,27 +680,24 @@ impl Context {
                         _ => None,
                     };
                     match event.as_ref() {
-                        IrcxEvent::MessagesAppended { messages, .. } => self.persist(messages),
-                        // The three below reach a row a message already left,
-                        // so what is held has to be down before they run —
-                        // `update_message` on a message not in the archive
-                        // silently does nothing, which is how a delivery state
-                        // would go missing.
-                        IrcxEvent::MessageUpdated { message } => {
-                            self.flush_archive();
-                            self.update(message);
+                        IrcxEvent::MessagesAppended { messages, .. } => {
+                            self.persist(messages).await
                         }
+                        // The three below reach a row a message already left.
+                        // They queue behind its insert rather than flushing it
+                        // first, which is the same guarantee by a shorter route
+                        // — `update_message` on a message the archive does not
+                        // hold silently does nothing, which is how a delivery
+                        // state would go missing.
+                        IrcxEvent::MessageUpdated { message } => self.update(message).await,
                         IrcxEvent::ReactionChanged {
                             message,
                             nick,
                             emoji,
                             active,
                             ..
-                        } => {
-                            self.flush_archive();
-                            self.record_reaction(message, nick, emoji, *active);
-                        }
-                        IrcxEvent::QueryRenamed { from, to, .. } => self.move_draft(from, to),
+                        } => self.record_reaction(message, nick, emoji, *active).await,
+                        IrcxEvent::QueryRenamed { from, to, .. } => self.move_draft(from, to).await,
                         _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
@@ -707,22 +707,16 @@ impl Context {
                     // before any annotator runs.
                     if let Some((target, messages)) = arrived {
                         // A note is written against the row its message left,
-                        // and the annotator runs off this task, so it cannot be
-                        // raced with a write still held here. A network with no
-                        // plugins never reaches this and keeps the batch.
-                        self.flush_archive();
+                        // and the annotator's write goes through the same queue
+                        // behind that row's insert, so it finds it there.
                         self.annotate(target, messages);
                     }
                 }
                 Action::Remember(target) => {
-                    if let Err(error) = self.store.remember_target(&self.network, &target) {
-                        warn!(%error, "could not record an open conversation");
-                    }
+                    self.archive.remember(self.network.clone(), target).await;
                 }
                 Action::Forget(target) => {
-                    if let Err(error) = self.store.forget_target(&self.network, &target) {
-                        warn!(%error, "could not forget a closed conversation");
-                    }
+                    self.archive.forget(self.network.clone(), target).await;
                 }
                 Action::Notify { target, messages } => self.notify(target, messages),
                 Action::Close => close = true,
@@ -838,7 +832,7 @@ impl Context {
         let strikes = Arc::clone(&self.strikes);
         let events = self.events.clone();
         let network = self.network.clone();
-        let store = Arc::clone(&self.store);
+        let archive = self.archive.clone();
         let own_inbox = self.own_inbox.clone();
         let waiting_for = Arc::clone(&self.waiting);
         tokio::spawn(async move {
@@ -894,11 +888,14 @@ impl Context {
                         // the archive is the only place a note outside the open
                         // window survives, and a conversation reopened tomorrow
                         // reads it back rather than running the annotator again.
-                        if let Err(error) =
-                            store.set_annotation(&network, &note.message, &plugin, &note.text)
-                        {
-                            warn!(%error, "could not write an annotation to the archive");
-                        }
+                        archive
+                            .annotation(
+                                network.clone(),
+                                note.message.clone(),
+                                plugin.clone(),
+                                note.text.clone(),
+                            )
+                            .await;
                         let event = IrcxEvent::MessageAnnotated {
                             network: network.clone(),
                             target: target.clone(),
@@ -941,7 +938,7 @@ impl Context {
         let strikes = Arc::clone(&self.strikes);
         let events = self.events.clone();
         let network = self.network.clone();
-        let store = Arc::clone(&self.store);
+        let archive = self.archive.clone();
         let own_inbox = self.own_inbox.clone();
         let waiting_for = Arc::clone(&self.waiting);
         tokio::spawn(async move {
@@ -996,9 +993,9 @@ impl Context {
                         // where a raise outside the open window survives, so a
                         // conversation reopened tomorrow still shows what was worth
                         // reading in it.
-                        if let Err(error) = store.set_raised(&network, &message, &plugin) {
-                            warn!(%error, "could not write a raised message to the archive");
-                        }
+                        archive
+                            .raised(network.clone(), message.clone(), plugin.clone())
+                            .await;
                         let first = already.insert(message.clone());
                         let event = IrcxEvent::MessageRaised {
                             network: network.clone(),
@@ -1037,65 +1034,40 @@ impl Context {
     /// traffic — a line, then a quiet socket — is written as immediately as it
     /// was before. Only a burst coalesces, and a burst is the case where the
     /// window between arriving and being durable is worth having.
-    fn persist(&self, messages: &[ChatMessage]) {
-        let mut held = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
-        held.extend_from_slice(messages);
-        if held.len() < ARCHIVE_BATCH {
-            return;
-        }
-        // Long bursts do not grow this without bound, and do not put the whole
-        // of themselves at risk of a crash either.
-        let batch = std::mem::take(&mut *held);
-        drop(held);
-        self.write(&batch);
-    }
-
-    /// Writes what `persist` is holding. Cheap and safe to call when there is
-    /// nothing held, which is what lets the caller flush at every boundary
-    /// rather than reason about which ones matter.
-    fn flush_archive(&self) {
-        let batch = {
-            let mut held = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
-            if held.is_empty() {
-                return;
-            }
-            std::mem::take(&mut *held)
-        };
-        self.write(&batch);
-    }
-
-    fn write(&self, messages: &[ChatMessage]) {
-        if let Err(error) = self.store.append_messages(messages) {
-            warn!(%error, "could not write messages to the archive");
-        }
+    /// Hands what arrived to the writer. Batching is its problem now, and the
+    /// connection's part is one channel send.
+    async fn persist(&self, messages: &[ChatMessage]) {
+        self.archive.append(messages.to_vec()).await;
     }
 
     /// The words somebody was part way through, moved with the person they were
     /// for. Everything else about a renamed conversation moves in the frontend;
     /// this is the one piece that lives on disk.
-    fn move_draft(&self, from: &str, to: &str) {
-        if let Err(error) = self.store.move_draft(&self.network, from, to) {
-            warn!(%error, "could not move a draft to the name its conversation now has");
-        }
+    async fn move_draft(&self, from: &str, to: &str) {
+        self.archive
+            .move_draft(self.network.clone(), from.to_owned(), to.to_owned())
+            .await;
     }
 
     /// The archive is the only place a reaction outside the open window
     /// survives, so it is written whether or not the message it names is here.
-    fn record_reaction(&self, message: &str, nick: &str, emoji: &str, active: bool) {
-        let stored = self
-            .store
-            .set_reaction(&self.network, message, nick, emoji, active);
-        if let Err(error) = stored {
-            warn!(%error, "could not write a reaction to the archive");
-        }
+    async fn record_reaction(&self, message: &str, nick: &str, emoji: &str, active: bool) {
+        self.archive
+            .reaction(
+                self.network.clone(),
+                message.to_owned(),
+                nick.to_owned(),
+                emoji.to_owned(),
+                active,
+            )
+            .await;
     }
 
     /// The archived copy was written while the message was still in flight, so
-    /// a confirmation has to reach the row it left behind.
-    fn update(&self, message: &ChatMessage) {
-        if let Err(error) = self.store.update_message(message) {
-            warn!(%error, "could not update a message in the archive");
-        }
+    /// a confirmation has to reach the row it left behind. It reaches it because
+    /// the insert went through the same queue first, in order.
+    async fn update(&self, message: &ChatMessage) {
+        self.archive.update(message.clone()).await;
     }
 }
 
@@ -1267,14 +1239,15 @@ mod tests {
     fn context(strikes: Strikes) -> Context {
         let (events, _held) = mpsc::channel(8);
         let (inbox, _also_held) = mpsc::channel(8);
+        let store = Arc::new(Store::open_in_memory().expect("an in-memory archive"));
         Context {
             network: "test".into(),
-            store: Arc::new(Store::open_in_memory().expect("an in-memory archive")),
+            archive: Archive::open(Arc::clone(&store)),
+            store,
             events,
             plugins: None,
             strikes: Arc::new(strikes),
             own_inbox: inbox.downgrade(),
-            pending: Mutex::default(),
             waiting: Arc::new(Waiting::default()),
         }
     }
@@ -1348,33 +1321,35 @@ mod tests {
                 .expect("read the archive")
         }
 
-        #[test]
-        fn holds_what_arrived_until_something_asks_for_it() {
+        /// What was handed over is down once the writer has been given the
+        /// chance, and in the order it was handed over. Before #410 this
+        /// asserted the opposite — that a burst was held on this task until
+        /// something asked for it — which is the holding the writer replaced.
+        #[tokio::test]
+        async fn what_arrived_is_written_in_the_order_it_arrived() {
             let context = context(Strikes::default());
             for id in ["a", "b", "c"] {
-                context.persist(&[said(id)]);
+                context.persist(&[said(id)]).await;
             }
 
-            assert!(
-                archived(&context).is_empty(),
-                "a burst still arriving has not been committed yet"
-            );
+            context.archive.drained().await;
 
-            context.flush_archive();
             let held: Vec<String> = archived(&context).into_iter().map(|m| m.id).collect();
             assert_eq!(held, ["a", "b", "c"]);
         }
 
-        /// Otherwise a burst that never pauses is an unbounded list, and a
-        /// crash during one loses all of it rather than the tail.
-        #[test]
-        fn writes_a_long_burst_without_waiting_for_it_to_stop() {
+        /// A burst that never pauses used to be a list on this task, which a
+        /// crash during one lost whole. Nothing asks for a pause now.
+        #[tokio::test]
+        async fn writes_a_long_burst_without_waiting_for_it_to_stop() {
             let context = context(Strikes::default());
-            for i in 0..ARCHIVE_BATCH {
-                context.persist(&[said(&format!("m{i}"))]);
+            for i in 0..500 {
+                context.persist(&[said(&format!("m{i}"))]).await;
             }
 
-            assert_eq!(archived(&context).len(), ARCHIVE_BATCH);
+            context.archive.drained().await;
+
+            assert_eq!(archived(&context).len(), 500);
         }
 
         /// `update_message` on a message the archive does not hold silently
@@ -1401,6 +1376,8 @@ mod tests {
                     None,
                 )
                 .await;
+
+            context.archive.drained().await;
 
             let held = archived(&context);
             assert_eq!(held.len(), 1);

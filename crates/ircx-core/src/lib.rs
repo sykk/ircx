@@ -11,6 +11,7 @@
 //! that owns it. Without one, nothing about plugins is built, started or paid
 //! for.
 
+mod archive;
 mod caps;
 mod casemap;
 mod dispatch;

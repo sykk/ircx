@@ -11,8 +11,17 @@
 //! serialises everything anyway.
 //!
 //! The measurement is the round trip of a `PING` the scripted server sends,
-//! taken twice — once against a quiet archive and once while
-//! `export_everything` is running over a large one.
+//! taken against a quiet archive and then while `export_everything` and
+//! `delete_everything` run over a large one.
+//!
+//! **The quiet number is not zero and has nothing to do with the archive.**
+//! `RateLimit::default()` is a bucket of five with a 500ms interval, and
+//! registration spends the five, so a `PONG` waits one interval however idle
+//! everything else is. It stays at 500ms whether the burst before it is 900
+//! messages or 100, which is what says it is a timer rather than work. #410 was
+//! filed claiming that floor was the connection task writing its own burst
+//! inline; it was not, and the writer moving off the task left it exactly where
+//! it was.
 //!
 //! ```text
 //! cargo test -p ircx-core --test archive_lock -- --ignored --nocapture

@@ -2951,6 +2951,35 @@ mod scram_over_a_session {
         );
     }
 
+    /// A server that refuses the certificate says so in terms of the
+    /// certificate. The sentence every other mechanism gets sends the reader to
+    /// a password field, and EXTERNAL has no password — which is the complaint
+    /// #373 made about the refusal before one was ever sent, and was still true
+    /// of the one that comes back. Found by walking it against ergo. #401.
+    #[test]
+    fn a_refused_certificate_is_not_a_password_problem() {
+        let mut config = config();
+        config.client_certificate = Some("/home/sable/.irc/libera.pem".into());
+        config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::External,
+            account: "certwalk".into(),
+            password: None,
+        });
+        let mut session = Harness::new(config);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=EXTERNAL");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+        session.feed("AUTHENTICATE +");
+        session.feed(":irc.libera.chat 904 * :SASL authentication failed");
+
+        let Some(SaslStatus::Failed { message }) = session.sasl_states().last() else {
+            panic!("{:?}", session.sasl_states().last());
+        };
+        assert!(message.contains("certwalk"), "{message}");
+        assert!(message.contains("fingerprint"), "{message}");
+        assert!(!message.contains("password"), "{message}");
+    }
+
     /// The other side of the refusal above. What the client presents is settled
     /// during the handshake, long before this, so all that is left here is to
     /// name the mechanism and answer the empty challenge with `+`. #401.

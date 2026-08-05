@@ -65,6 +65,13 @@ pub fn split_for_wire(text: &str, budget: usize) -> Vec<String> {
         while !rest.is_char_boundary(end) {
             end -= 1;
         }
+        // A budget narrower than the first character still takes the whole
+        // character: a piece over budget beats a loop that never ends. The
+        // budget can genuinely be that small — `wire_budget` subtracts a
+        // server-sent hostmask from 510 and floors at one.
+        if end == 0 {
+            end = rest.chars().next().map_or(rest.len(), char::len_utf8);
+        }
         if let Some(space) = rest[..end].rfind(' ') {
             if space * 2 > end {
                 end = space;
@@ -242,6 +249,18 @@ mod tests {
     fn a_word_longer_than_the_budget_is_cut_rather_than_dropped() {
         let pieces = split_for_wire(&"a".repeat(25), 10);
         assert_eq!(pieces, vec!["a".repeat(10), "a".repeat(10), "a".repeat(5)]);
+    }
+
+    /// A budget narrower than the first character used to loop forever: the
+    /// boundary walk reached zero, an empty piece was pushed, and `rest`
+    /// never shrank. The budget is real — `wire_budget` subtracts a
+    /// server-sent hostmask from the line and floors at one — so a hostile
+    /// `CHGHOST` plus one multibyte keystroke froze the session for good.
+    #[test]
+    fn a_budget_narrower_than_a_character_takes_the_character_whole() {
+        assert_eq!(split_for_wire("é", 1), vec!["é"]);
+        assert_eq!(split_for_wire("éé", 1), vec!["é", "é"]);
+        assert_eq!(split_for_wire("日本語", 2), vec!["日", "本", "語"]);
     }
 
     #[test]

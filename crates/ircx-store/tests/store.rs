@@ -572,6 +572,187 @@ fn prune_honours_the_target_override() {
     assert_eq!(store.prune().unwrap(), 0);
 }
 
+/// IRC compares targets without case and rows written before #190 hold
+/// whichever casing arrived, so `load_history` matches without case — but the
+/// destructive and bulk paths matched exactly. Deleting "#chan" left rows
+/// archived as "#Chan" standing, and the display then showed the very rows
+/// the user had just watched being deleted; a retention window and a
+/// keep-nothing rule missed them the same way.
+mod a_target_is_one_conversation_whatever_its_casing {
+    use super::*;
+
+    #[test]
+    fn deleting_it_takes_the_other_casings_with_it() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "hello")])
+            .unwrap();
+
+        store.delete_target("libera", "#chan").unwrap();
+
+        assert!(store
+            .load_history(&history("#chan", None, 10))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn a_retention_window_reaches_rows_archived_under_another_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", ANCIENT, "old")])
+            .unwrap();
+        store
+            .set_retention("libera", Some("#chan"), Some(30))
+            .unwrap();
+
+        assert_eq!(store.prune().unwrap(), 1);
+    }
+
+    #[test]
+    fn keep_nothing_suppresses_whichever_casing_the_wire_uses() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .set_retention("libera", Some("#chan"), Some(0))
+            .unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "hello")])
+            .unwrap();
+
+        assert!(store
+            .load_history(&history("#chan", None, 10))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn a_search_filtered_to_it_sees_every_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message(
+                "a",
+                "#Chan",
+                "2026-01-01T00:00:00Z",
+                "findable words",
+            )])
+            .unwrap();
+
+        let hits = store
+            .search(&SearchRequest {
+                query: "findable".into(),
+                network: None,
+                target: Some("#chan".into()),
+                limit: 10,
+            })
+            .unwrap();
+
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn an_export_of_it_carries_every_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "kept words")])
+            .unwrap();
+
+        let mut out = Vec::new();
+        store.export_target("libera", "#chan", &mut out).unwrap();
+
+        assert!(String::from_utf8(out).unwrap().contains("kept words"));
+    }
+}
+
+/// What a message owned goes with it. Only `delete_everything` cleared the
+/// reactions, annotations and raised tables, so a retention window or a
+/// per-conversation delete left who-reacted-with-what and a plugin's
+/// paraphrase of the message on disk forever — and a message archived again
+/// later under the same msgid was haunted by them. A row waiting for a
+/// message the archive never held is a different thing and still waits;
+/// arrival-before-archive is why these tables have no foreign key.
+mod what_a_deleted_message_owned {
+    use super::*;
+
+    fn haunted(store: &Store) -> ChatMessage {
+        let message = with_msgid(
+            message("m", "#ircx", "2026-01-01T00:00:00Z", "hello"),
+            "msgid-1",
+        );
+        store
+            .append_messages(std::slice::from_ref(&message))
+            .unwrap();
+        store
+            .set_reaction("libera", "msgid-1", "nick2", "lol", true)
+            .unwrap();
+        store
+            .set_annotation("libera", "msgid-1", "translator", "a paraphrase")
+            .unwrap();
+        store.set_raised("libera", "msgid-1", "urgency").unwrap();
+        message
+    }
+
+    fn archived_again(store: &Store, message: &ChatMessage) -> ChatMessage {
+        store
+            .append_messages(std::slice::from_ref(message))
+            .unwrap();
+        let held = store.load_history(&history("#ircx", None, 10)).unwrap();
+        assert_eq!(held.len(), 1);
+        held.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn goes_with_a_deleted_conversation() {
+        let store = Store::open_in_memory().unwrap();
+        let message = haunted(&store);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        let read = archived_again(&store, &message);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
+    }
+
+    #[test]
+    fn goes_with_a_retention_expiry() {
+        let store = Store::open_in_memory().unwrap();
+        let old = with_msgid(message("m", "#ircx", ANCIENT, "hello"), "msgid-1");
+        store.append_messages(std::slice::from_ref(&old)).unwrap();
+        store
+            .set_reaction("libera", "msgid-1", "nick2", "lol", true)
+            .unwrap();
+        store.set_retention("libera", None, Some(30)).unwrap();
+
+        assert_eq!(store.prune().unwrap(), 1);
+
+        let read = archived_again(&store, &old);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+    }
+
+    #[test]
+    fn a_row_still_waiting_for_its_message_keeps_waiting() {
+        let store = Store::open_in_memory().unwrap();
+        // A reaction to a message this archive has never held.
+        store
+            .set_reaction("libera", "not-here-yet", "nick2", "lol", true)
+            .unwrap();
+        haunted(&store);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        // The awaited message arrives at last; its reaction is still there.
+        let awaited = with_msgid(
+            message("w", "#other", "2026-01-01T00:00:00Z", "worth waiting for"),
+            "not-here-yet",
+        );
+        store
+            .append_messages(std::slice::from_ref(&awaited))
+            .unwrap();
+        let held = store.load_history(&history("#other", None, 10)).unwrap();
+        assert_eq!(held[0].reactions.len(), 1);
+    }
+}
+
 #[test]
 fn a_network_without_retention_keeps_everything() {
     let store = Store::open_in_memory().unwrap();

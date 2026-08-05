@@ -6,6 +6,13 @@ pub use ircx_proto::numeric::{
     RPL_SASLSUCCESS, RPL_TOPIC, RPL_WELCOME,
 };
 
+/// The three other ways a server refuses a NICK. During registration each is
+/// as final as 433, so `session.rs` hands them the same fallback; once
+/// registered they describe a failed rename, which the text below says.
+pub const ERR_ERRONEUSNICKNAME: u16 = 432;
+pub const ERR_NICKCOLLISION: u16 = 436;
+pub const ERR_UNAVAILRESOURCE: u16 = 437;
+
 pub const RPL_AWAY: u16 = 301;
 pub const RPL_LISTSTART: u16 = 321;
 pub const RPL_LIST: u16 = 322;

@@ -367,7 +367,7 @@ impl Store {
              JOIN messages m ON m.id = {index}.rowid
              WHERE {index} MATCH ?1
                AND (?2 IS NULL OR m.network = ?2)
-               AND (?3 IS NULL OR m.target = ?3)
+               AND (?3 IS NULL OR m.target = ?3 COLLATE NOCASE)
              ORDER BY m.timestamp DESC, m.id DESC
              LIMIT ?4",
             columns = message::COLUMNS,
@@ -695,20 +695,28 @@ impl Store {
         // CASE, not COALESCE: a target row with NULL days means keep forever
         // and has to beat the network default rather than fall through to it.
         // Comparing against a NULL window is never true, so those rows stay.
-        let deleted = self.conn().execute(
-            "DELETE FROM messages WHERE id IN (
-                 SELECT m.id
+        const EXPIRED: &str = "SELECT m.id
                  FROM messages m
-                 LEFT JOIN retention t ON t.network = m.network AND t.target = m.target
+                 LEFT JOIN retention t ON t.network = m.network
+                     AND t.target = m.target COLLATE NOCASE
                  LEFT JOIN retention n ON n.network = m.network AND n.target = ''
                  WHERE m.timestamp < strftime(
                      '%Y-%m-%dT%H:%M:%SZ',
                      'now',
                      '-' || (CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END) || ' days'
-                 )
-             )",
+                 )";
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        take_what_messages_owned(
+            &tx,
+            &format!(
+                "SELECT e.network, e.server_msgid FROM messages e
+                  WHERE e.id IN ({EXPIRED}) AND e.server_msgid IS NOT NULL"
+            ),
             [],
         )?;
+        let deleted = tx.execute(&format!("DELETE FROM messages WHERE id IN ({EXPIRED})"), [])?;
+        tx.commit()?;
         Ok(deleted as u64)
     }
 
@@ -723,7 +731,7 @@ impl Store {
         let sql = format!(
             "SELECT {columns}
              FROM messages m
-             WHERE m.network = ?1 AND m.target = ?2
+             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
              ORDER BY m.timestamp, m.id",
             columns = message::COLUMNS,
         );
@@ -806,17 +814,45 @@ impl Store {
     pub fn delete_target(&self, network: &str, target: &str) -> Result<(), StoreError> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM messages WHERE network = ?1 AND target = ?2",
+        take_what_messages_owned(
+            &tx,
+            "SELECT network, server_msgid FROM messages
+              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
+                AND server_msgid IS NOT NULL",
             params![network, target],
         )?;
         tx.execute(
-            "DELETE FROM drafts WHERE network = ?1 AND target = ?2",
+            "DELETE FROM messages WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
+            params![network, target],
+        )?;
+        tx.execute(
+            "DELETE FROM drafts WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
         )?;
         tx.commit()?;
         Ok(())
     }
+}
+
+/// Takes the reactions, annotations and raised marks of the messages `owned`
+/// selects, before those messages go. Only rows a doomed message actually
+/// claims: one still waiting for a message that never arrived is a different
+/// thing — arrival-before-archive is why these tables have no foreign key —
+/// and it keeps waiting. What this stops is who-reacted-with-what and a
+/// plugin's paraphrase of a message outliving the message a retention window
+/// or a deletion was asked to remove.
+fn take_what_messages_owned(
+    tx: &rusqlite::Transaction,
+    owned: &str,
+    params: impl rusqlite::Params + Clone,
+) -> Result<(), StoreError> {
+    for table in ["reactions", "annotations", "raised"] {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE (network, msgid) IN ({owned})"),
+            params.clone(),
+        )?;
+    }
+    Ok(())
 }
 
 /// Whether this conversation is written down at all.
@@ -829,7 +865,7 @@ fn keeps_anything(conn: &Connection, network: &str, target: &str) -> Result<bool
         .query_row(
             "SELECT CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END
              FROM (SELECT 1) one
-             LEFT JOIN retention t ON t.network = ?1 AND t.target = ?2
+             LEFT JOIN retention t ON t.network = ?1 AND t.target = ?2 COLLATE NOCASE
              LEFT JOIN retention n ON n.network = ?1 AND n.target = ''",
             params![network, target],
             |row| row.get(0),

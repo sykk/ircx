@@ -238,6 +238,24 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         timelines.clear();
       };
 
+      // The raw log is the shape #321 fixed for rosters, unfixed until every
+      // line of a `/list` went through `reduce` one at a time: each copied a
+      // log of up to 2,000 entries, tens of millions of element copies in one
+      // batch. Held as the batch's new lines and joined to the log once.
+      const rawLines = new Map<string, string[]>();
+
+      const flushRawLines = () => {
+        if (rawLines.size === 0) return;
+        const rawLog = { ...next.rawLog };
+        for (const [network, lines] of rawLines) {
+          const joined = [...(rawLog[network] ?? []), ...lines];
+          rawLog[network] =
+            joined.length > RAW_LOG_CAP ? joined.slice(-RAW_LOG_CAP) : joined;
+        }
+        next = { ...next, rawLog };
+        rawLines.clear();
+      };
+
       for (const event of events) {
         const roster = rosterFor(event, next, rosters);
         if (roster !== undefined) {
@@ -246,6 +264,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         }
         if (event.type === "messagesAppended") {
           holdMessages(event, next, timelines);
+          continue;
+        }
+        if (event.type === "rawLine") {
+          const line = `${event.outgoing ? ">>" : "<<"} ${event.line}`;
+          const held = rawLines.get(event.network);
+          if (held) held.push(line);
+          else rawLines.set(event.network, [line]);
           continue;
         }
         // `networkRemoved` is the only reducer other than the roster three that
@@ -258,6 +283,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // is not an append lands after the held messages do.
         if (event.type === "networkRemoved") flushRosters();
         flushTimelines();
+        flushRawLines();
 
         // Each event reduces against what the ones before it left, so a batch
         // reads the same as the same events applied one at a time.
@@ -266,6 +292,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       }
       flushRosters();
       flushTimelines();
+      flushRawLines();
       return next === s ? {} : next;
     }),
 
@@ -288,7 +315,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           ...read,
         };
       }
-      return { ...retarget(s, id, target.network, target.target), ...read };
+      const moved = retarget(s, id, target.network, target.target);
+      return { ...moved, ...read, ...leftBehind(s, moved.views ?? s.views, target) };
     }),
 
   showTarget: (target) => {
@@ -297,9 +325,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       get().setActive(target);
       return;
     }
-    // Reading it is reading it wherever it was already open, so the unread rule
-    // and the recency list move either way.
-    set((s) => ({ activeViewId: showing, ...readingTarget(s, target) }));
+    // Reading it is reading it wherever it was already open, so the recency
+    // list and the conversation being left move either way.
+    set((s) => ({
+      activeViewId: showing,
+      ...readingTarget(s, target),
+      ...leftBehind(s, s.views, target),
+    }));
   },
 
   openConsole: (network, raw = false) => {
@@ -369,6 +401,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const layout = removeLeaf(s.layout, view);
       if (!layout) return {};
 
+      const closed = s.views[view]!;
       const { [view]: _closed, ...views } = s.views;
       const { [view]: _read, ...viewAnchor } = s.viewAnchor;
       // Otherwise a later pane handed the same id would open with the closed
@@ -378,6 +411,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { [view]: _line, ...rawAnchor } = s.rawAnchor;
       const { [view]: _refusal, ...composerError } = s.composerError;
       const at = s.viewOrder.indexOf(view);
+      // Closing the focused pane is leaving its conversation: the seam it was
+      // read under would otherwise wait, stale, for the next visit.
+      const seam =
+        s.activeViewId === view &&
+        closed.network &&
+        !Object.values(views).some(
+          (v) => v.network === closed.network && v.target === closed.target,
+        )
+          ? clearedSeam(s, closed.network, closed.target)
+          : {};
       return {
         layout,
         views,
@@ -391,6 +434,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           s.activeViewId === view
             ? (s.viewOrder[at + 1] ?? s.viewOrder[at - 1] ?? null)
             : s.activeViewId,
+        ...seam,
       };
     }),
 
@@ -439,13 +483,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const timeline = s.timelines[key] ?? EMPTY_TIMELINE;
       const known = new Set(timeline.messages.map((m) => m.id));
       const fresh = older.filter((m) => !known.has(m.id));
+      // Paging backwards stops at the cap (#331) — the same figure appends
+      // hold the other end to. Only the scroll handler's own diligence
+      // enforced it before, and the handler had none: holding scroll-up grew
+      // the window without bound, and every later live message paid for its
+      // size. The newest of the page is what fits, so the window stays
+      // contiguous; a page that had to be cut ends the paging.
+      const room = Math.max(0, TIMELINE_CAP - timeline.messages.length);
+      const kept = fresh.slice(Math.max(0, fresh.length - room));
       return {
         timelines: {
           ...s.timelines,
           [key]: {
             ...timeline,
-            messages: [...fresh, ...timeline.messages],
-            hasMore,
+            messages: [...kept, ...timeline.messages],
+            hasMore: kept.length < fresh.length ? false : hasMore,
             loadingOlder: false,
           },
         },
@@ -633,23 +685,48 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
 }
 
 /**
- * What reading a target does whichever pane it is read in. The unread rule is
- * placed on switch rather than on scroll, so it holds still while the user
- * reads, and it lives beside the target rather than the view: having read a
- * channel in one pane means having read it.
+ * What reading a target does whichever pane it is read in: it moves to the
+ * top of the recency list. Its unread seam is deliberately left standing —
+ * the seam is what the reader switched here to see, and it holds still while
+ * they read. Leaving is what clears it; see `leftBehind`.
  */
-function readingTarget(
-  s: AppState,
-  target: ActiveTarget,
-): Pick<AppState, "recent" | "timelines"> {
+function readingTarget(s: AppState, target: ActiveTarget): Pick<AppState, "recent"> {
   const key = targetKey(target.network, target.target);
-  const timeline = s.timelines[key];
   return {
-    timelines: timeline
-      ? { ...s.timelines, [key]: { ...timeline, unreadFrom: null } }
-      : s.timelines,
     recent: [key, ...s.recent.filter((k) => k !== key)].slice(0, RECENT_CAP),
   };
+}
+
+/**
+ * The seam of the conversation being left. Read while it was active, so it
+ * clears — but only once no pane shows it. On screen it holds where it is,
+ * and the pane that retargets or closes off it is what finally takes it. The
+ * rule lives beside the target rather than the view: having read a channel
+ * in one pane means having read it.
+ */
+function leftBehind(
+  s: AppState,
+  views: AppState["views"],
+  next: ActiveTarget,
+): Partial<Pick<AppState, "timelines">> {
+  const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
+  if (!active || !active.network) return {};
+  if (active.network === next.network && active.target === next.target) return {};
+  const shown = Object.values(views).some(
+    (view) => view.network === active.network && view.target === active.target,
+  );
+  return shown ? {} : clearedSeam(s, active.network, active.target);
+}
+
+function clearedSeam(
+  s: AppState,
+  network: string,
+  target: string,
+): Partial<Pick<AppState, "timelines">> {
+  const key = targetKey(network, target);
+  const timeline = s.timelines[key];
+  if (!timeline || timeline.unreadFrom === null) return {};
+  return { timelines: { ...s.timelines, [key]: { ...timeline, unreadFrom: null } } };
 }
 
 function newView(network: string, target: string): ChatView {
@@ -842,6 +919,13 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         delete composerError[view.id];
       }
 
+      // Everything else keyed by the network or its conversations goes with
+      // it. Left behind, a network re-added under the same id resurrected the
+      // dead raw log, stale typing expiries and reply targets, and a whole
+      // /list answer — and editing networks grew the store monotonically.
+      const { [event.network]: _log, ...rawLog } = s.rawLog;
+      const { [event.network]: _list, ...channelList } = s.channelList;
+      const prefix = networkPrefix(event.network);
       return {
         networks,
         networkOrder: s.networkOrder.filter((n) => n !== event.network),
@@ -849,6 +933,12 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         queries: dropByNetwork(s.queries, event.network),
         timelines: dropByNetwork(s.timelines, event.network),
         members: dropByNetwork(s.members, event.network),
+        typing: dropByNetwork(s.typing, event.network),
+        replyTo: dropByNetwork(s.replyTo, event.network),
+        inputHistory: dropByNetwork(s.inputHistory, event.network),
+        rawLog,
+        channelList,
+        recent: s.recent.filter((key) => !key.startsWith(prefix)),
         views,
         viewAnchor,
         consoleInput,

@@ -367,7 +367,7 @@ impl Store {
              JOIN messages m ON m.id = {index}.rowid
              WHERE {index} MATCH ?1
                AND (?2 IS NULL OR m.network = ?2)
-               AND (?3 IS NULL OR m.target = ?3)
+               AND (?3 IS NULL OR m.target = ?3 COLLATE NOCASE)
              ORDER BY m.timestamp DESC, m.id DESC
              LIMIT ?4",
             columns = message::COLUMNS,
@@ -699,7 +699,8 @@ impl Store {
             "DELETE FROM messages WHERE id IN (
                  SELECT m.id
                  FROM messages m
-                 LEFT JOIN retention t ON t.network = m.network AND t.target = m.target
+                 LEFT JOIN retention t ON t.network = m.network
+                     AND t.target = m.target COLLATE NOCASE
                  LEFT JOIN retention n ON n.network = m.network AND n.target = ''
                  WHERE m.timestamp < strftime(
                      '%Y-%m-%dT%H:%M:%SZ',
@@ -723,7 +724,7 @@ impl Store {
         let sql = format!(
             "SELECT {columns}
              FROM messages m
-             WHERE m.network = ?1 AND m.target = ?2
+             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
              ORDER BY m.timestamp, m.id",
             columns = message::COLUMNS,
         );
@@ -807,11 +808,11 @@ impl Store {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
         tx.execute(
-            "DELETE FROM messages WHERE network = ?1 AND target = ?2",
+            "DELETE FROM messages WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
         )?;
         tx.execute(
-            "DELETE FROM drafts WHERE network = ?1 AND target = ?2",
+            "DELETE FROM drafts WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
         )?;
         tx.commit()?;
@@ -829,7 +830,7 @@ fn keeps_anything(conn: &Connection, network: &str, target: &str) -> Result<bool
         .query_row(
             "SELECT CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END
              FROM (SELECT 1) one
-             LEFT JOIN retention t ON t.network = ?1 AND t.target = ?2
+             LEFT JOIN retention t ON t.network = ?1 AND t.target = ?2 COLLATE NOCASE
              LEFT JOIN retention n ON n.network = ?1 AND n.target = ''",
             params![network, target],
             |row| row.get(0),

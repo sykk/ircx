@@ -2823,6 +2823,47 @@ mod scram_over_a_session {
         );
     }
 
+    /// A reconnect starts the exchange over. The spent exchange used to
+    /// survive the disconnect — only an abort ever cleared it — so the next
+    /// connection's `AUTHENTICATE +` was read as the end of an empty
+    /// challenge, verified against the old exchange, and answered with
+    /// `AUTHENTICATE *`: every network blip on a SCRAM network became a
+    /// permanently failed connection blaming the server's address.
+    #[test]
+    fn a_reconnect_starts_a_fresh_exchange() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        let first = session.sent();
+        let nonce = nonce_from(&first[0]);
+        let combined = format!("{nonce}{SERVER_PART}");
+        let server_first = format!("r={combined},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+        session.sent();
+        let auth = format!("n=user,r={nonce},{server_first},c=biws,r={combined}");
+        let signature = server_signature("pencil", SALT, 4096, &auth);
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode(format!("v={signature}"))
+        ));
+        session.feed(":irc.libera.chat 903 sykk :SASL authentication successful");
+        session.sent();
+
+        session.state.on_disconnected("the connection ended");
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,SCRAM-SHA-512 message-tags");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+        session.sent();
+
+        session.feed("AUTHENTICATE +");
+        let reopened = session.sent();
+        assert_eq!(reopened.len(), 1, "one line answers the go-ahead");
+        let client_first = payload(&reopened[0]);
+        assert!(
+            client_first.starts_with("n,,n=user,r="),
+            "the go-ahead opens a fresh exchange rather than closing a stale one: {client_first}"
+        );
+    }
+
     /// A mechanism the server never offered is not an authentication failure:
     /// the client says so and carries on unauthenticated, per the degradation
     /// rule. Pinned because it is quiet — `ergo` advertises SHA-256, a user

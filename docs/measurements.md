@@ -494,6 +494,92 @@ the two larger sizes the archive holds about 200 more rows than the burst sent,
 because the server replayed channel history to the client while it ran. That is
 ircx's own backfill working, and it is part of what the real stack does.
 
+## What an archive command costs the connection
+
+**Measured 2026-08-05.** `crates/ircx-core/tests/archive_lock.rs`: a scripted
+server bursts 900 messages, sends a `PING`, and times the `PONG` — once with the
+archive quiet, once while `export_everything` runs over it, once while
+`delete_everything` does. 60,000 messages archived, 27 MB on disk, release
+profile, median of three runs, **archive on a real filesystem** — btrfs on NVMe,
+which the harness does not do by itself; see the last note in this section.
+
+`Store` is one SQLite connection behind a mutex, shared by every network and by
+every command the archive sheet can run, and before #412 `Context::write` took
+that mutex on the task that reads the socket. WAL is on and buys nothing
+against a Rust mutex.
+
+| | before #412 | after |
+|---|---|---|
+| `PONG`, archive quiet | 500.4 ms | 501.2 ms |
+| `PONG` during an export | 500.5 ms | 500.8 ms |
+| `PONG` during a delete | 1,050.9 ms | 501.1 ms |
+| the export itself | 265.5 ms | 268.6 ms |
+| the delete itself | 796.9 ms | 798.2 ms |
+
+**The 500 ms both columns sit at is the flood guard, not the archive.**
+`RateLimit::default()` is a bucket of five with a 500 ms interval, and
+registration spends the five, so a `PONG` waits one interval however idle
+everything else is. It does not move when the burst before it goes from 900
+messages to 100, which is what says it is a timer rather than work. #410 was
+filed claiming that floor was `ARCHIVE_BATCH` being written inline on the
+connection task; moving every write off that task left it exactly where it
+stands in both columns above.
+
+**That floor is also this probe's blind spot.** The command starts as the burst
+does, so a stall that ends inside the interval the `PONG` spends waiting anyway
+is absorbed by it and reads as free. That is the export in the
+before column: it takes 265 ms, and the answer was not going out inside 500 ms
+regardless. The delete takes 797 ms, outlasts the interval, and costs the answer
+550 ms. So the probe answers whether an archive command delays a `PONG` rather
+than how long it blocks the connection task — a command shorter than the
+interval delays nothing measurable here, and a longer one delays the answer by
+less than it blocked.
+
+**The operations did not get faster, and were not meant to.** The export is
+268.6 ms after and the delete 798.2 ms. What changed is that every write now
+goes to one writer thread per network over a channel, so the work happens beside
+the connection task rather than on it.
+
+**The issue's own numbers were debug-profile numbers.** #410 and #411 were
+filed on the same harness built without optimisation, where the archive work
+takes long enough that both commands outlast the interval:
+
+| debug profile | before #412 | after |
+|---|---|---|
+| `PONG` during an export | 2,038 ms | 500.4 ms |
+| `PONG` during a delete | 1,877 ms | 500.7 ms |
+| the export itself | 1,894 ms | 1,901 ms |
+| the delete itself | 1,375 ms | 1,351 ms |
+
+The debug export is 7.1× the release one and the debug delete 1.7×. What they
+cost the answer is 1,538 ms for the export against nothing measurable, and
+1,376 ms for the delete against 550 ms — so the 1.5 s the issue quoted for an
+export at this size is a delay no user on a release build could have had. The
+fault was real; at 60,000 messages it is the delete that shows it.
+
+**The stall grows faster than the archive does.** The same probe with `ARCHIVED`
+raised to 240,000 — 109 MB, four times the size, two runs — puts the export at
+1.09 s and the delete at 3.45 s before #412, both about 4.2× their 60,000
+figures. What they cost the answer is 0.68 s and 3.58 s, against nothing
+measurable and 0.55 s. The commands are linear in the archive and the delay is
+not, because the flood guard absorbs a fixed 500 ms of it however large the rest
+gets — and at 240,000 the export is no longer free either. After #412 both sit
+at 501 ms at that size too. This is why the fix stands on an archive as modest
+as 60,000 messages, which is a few months of a few channels.
+
+**Where the database sits changes the delete and not the export.** Under `/tmp`,
+a tmpfs, the debug delete is 1,194 ms against 1,375 ms on btrfs and the debug
+export 1,898 ms against 1,894 ms: the delete writes and cares where it writes,
+the export reads and does not. `tempfile::tempdir` takes the default, which on
+this machine is the tmpfs, so every figure above sets `TMPDIR` to a directory on
+the disk. Taking the default would understate what the lock cost — the `PONG`
+during a debug delete is 1,657 ms there against 1,877 ms here.
+
+**Covers:** one network's connection task against its own archive, with the
+commands run from the same process. **Excludes:** any stall under 500 ms, for
+the reason above; a second network writing at the same time; and the search
+query the same mutex also serialises, which no figure here has timed.
+
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.

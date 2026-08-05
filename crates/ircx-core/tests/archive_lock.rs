@@ -24,13 +24,28 @@
 //! inline; it was not, and the writer moving off the task left it exactly where
 //! it was.
 //!
+//! **A stall that ends inside that interval does not show here at all**, because
+//! the answer was not going out inside it regardless. That is enough to miss a
+//! command outright: at `ARCHIVED` the release-profile export takes 265ms and
+//! reads as free even before the writer existed, and at four times the archive
+//! the same export costs the answer 0.68s. So this measures whether a command
+//! delays a `PONG`, not how long it blocked the connection task.
+//!
 //! ```text
-//! cargo test -p ircx-core --test archive_lock -- --ignored --nocapture
+//! TMPDIR=/some/path/on/a/disk \
+//!   cargo test --release -p ircx-core --test archive_lock -- --ignored --nocapture
 //! ```
 //!
+//! Both of those matter to the numbers. `tempfile::tempdir` follows `TMPDIR`,
+//! which is a tmpfs on most Linux, and a delete on a tmpfs is faster than one
+//! on the disk a user's archive sits on. The debug profile takes 7.1× as long
+//! over the export as the release profile does, and #410 and #411 were filed on
+//! the debug one.
+//!
 //! It prints and asserts nothing about the timings, like `burst.rs`: a
-//! measurement that fails the build on a slow machine is one nobody runs. #410
-//! has the numbers it was filed on.
+//! measurement that fails the build on a slow machine is one nobody runs.
+//! `docs/measurements.md` has both profiles, both filesystems, and what each
+//! one is worth.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

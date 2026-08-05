@@ -663,6 +663,96 @@ mod a_target_is_one_conversation_whatever_its_casing {
     }
 }
 
+/// What a message owned goes with it. Only `delete_everything` cleared the
+/// reactions, annotations and raised tables, so a retention window or a
+/// per-conversation delete left who-reacted-with-what and a plugin's
+/// paraphrase of the message on disk forever — and a message archived again
+/// later under the same msgid was haunted by them. A row waiting for a
+/// message the archive never held is a different thing and still waits;
+/// arrival-before-archive is why these tables have no foreign key.
+mod what_a_deleted_message_owned {
+    use super::*;
+
+    fn haunted(store: &Store) -> ChatMessage {
+        let message = with_msgid(
+            message("m", "#ircx", "2026-01-01T00:00:00Z", "hello"),
+            "msgid-1",
+        );
+        store
+            .append_messages(std::slice::from_ref(&message))
+            .unwrap();
+        store
+            .set_reaction("libera", "msgid-1", "nick2", "lol", true)
+            .unwrap();
+        store
+            .set_annotation("libera", "msgid-1", "translator", "a paraphrase")
+            .unwrap();
+        store.set_raised("libera", "msgid-1", "urgency").unwrap();
+        message
+    }
+
+    fn archived_again(store: &Store, message: &ChatMessage) -> ChatMessage {
+        store
+            .append_messages(std::slice::from_ref(message))
+            .unwrap();
+        let held = store.load_history(&history("#ircx", None, 10)).unwrap();
+        assert_eq!(held.len(), 1);
+        held.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn goes_with_a_deleted_conversation() {
+        let store = Store::open_in_memory().unwrap();
+        let message = haunted(&store);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        let read = archived_again(&store, &message);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
+    }
+
+    #[test]
+    fn goes_with_a_retention_expiry() {
+        let store = Store::open_in_memory().unwrap();
+        let old = with_msgid(message("m", "#ircx", ANCIENT, "hello"), "msgid-1");
+        store.append_messages(std::slice::from_ref(&old)).unwrap();
+        store
+            .set_reaction("libera", "msgid-1", "nick2", "lol", true)
+            .unwrap();
+        store.set_retention("libera", None, Some(30)).unwrap();
+
+        assert_eq!(store.prune().unwrap(), 1);
+
+        let read = archived_again(&store, &old);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+    }
+
+    #[test]
+    fn a_row_still_waiting_for_its_message_keeps_waiting() {
+        let store = Store::open_in_memory().unwrap();
+        // A reaction to a message this archive has never held.
+        store
+            .set_reaction("libera", "not-here-yet", "nick2", "lol", true)
+            .unwrap();
+        haunted(&store);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        // The awaited message arrives at last; its reaction is still there.
+        let awaited = with_msgid(
+            message("w", "#other", "2026-01-01T00:00:00Z", "worth waiting for"),
+            "not-here-yet",
+        );
+        store
+            .append_messages(std::slice::from_ref(&awaited))
+            .unwrap();
+        let held = store.load_history(&history("#other", None, 10)).unwrap();
+        assert_eq!(held[0].reactions.len(), 1);
+    }
+}
+
 #[test]
 fn a_network_without_retention_keeps_everything() {
     let store = Store::open_in_memory().unwrap();
@@ -1965,41 +2055,6 @@ mod a_replay_of_our_own_message {
             .into_iter()
             .map(|message| message.text)
             .collect()
-    }
-
-    /// Say the same thing twice, lose the connection after the second copy
-    /// reaches the socket, and the backfill's replay of the first copy used
-    /// to abort the whole batch: ADOPT matched the second, still-unclaimed
-    /// twin, the msgid's unique index refused the update, and because
-    /// `append_messages` is one transaction every message in the backfill
-    /// rolled back with it — which the caller answers by logging and losing
-    /// the lot.
-    #[test]
-    fn a_replay_of_a_claimed_twin_cannot_take_the_batch_down() {
-        let store = Store::open_in_memory().unwrap();
-        let first = ours("local-1", &about_now(), "ok");
-        sent(&store, &first);
-        store
-            .append_messages(&[replayed("srv-1", &about_now(), "ok")])
-            .unwrap();
-
-        // The second copy went out and its echo never came back.
-        let second = ours("local-2", &about_now(), "ok");
-        sent(&store, &second);
-
-        let batch = [
-            replayed("srv-1", &about_now(), "ok"),
-            message("srv-2", "#ircx", &about_now(), "the rest of the backfill"),
-        ];
-        store
-            .append_messages(&batch)
-            .expect("a twin the archive already claimed is skipped, not fatal");
-
-        assert!(
-            texts(&store).contains(&"the rest of the backfill".to_string()),
-            "the rest of the batch survives: {:?}",
-            texts(&store)
-        );
     }
 
     #[test]

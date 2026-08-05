@@ -695,9 +695,7 @@ impl Store {
         // CASE, not COALESCE: a target row with NULL days means keep forever
         // and has to beat the network default rather than fall through to it.
         // Comparing against a NULL window is never true, so those rows stay.
-        let deleted = self.conn().execute(
-            "DELETE FROM messages WHERE id IN (
-                 SELECT m.id
+        const EXPIRED: &str = "SELECT m.id
                  FROM messages m
                  LEFT JOIN retention t ON t.network = m.network
                      AND t.target = m.target COLLATE NOCASE
@@ -706,10 +704,19 @@ impl Store {
                      '%Y-%m-%dT%H:%M:%SZ',
                      'now',
                      '-' || (CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END) || ' days'
-                 )
-             )",
+                 )";
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        take_what_messages_owned(
+            &tx,
+            &format!(
+                "SELECT e.network, e.server_msgid FROM messages e
+                  WHERE e.id IN ({EXPIRED}) AND e.server_msgid IS NOT NULL"
+            ),
             [],
         )?;
+        let deleted = tx.execute(&format!("DELETE FROM messages WHERE id IN ({EXPIRED})"), [])?;
+        tx.commit()?;
         Ok(deleted as u64)
     }
 
@@ -807,6 +814,13 @@ impl Store {
     pub fn delete_target(&self, network: &str, target: &str) -> Result<(), StoreError> {
         let mut conn = self.conn();
         let tx = conn.transaction()?;
+        take_what_messages_owned(
+            &tx,
+            "SELECT network, server_msgid FROM messages
+              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
+                AND server_msgid IS NOT NULL",
+            params![network, target],
+        )?;
         tx.execute(
             "DELETE FROM messages WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
@@ -818,6 +832,27 @@ impl Store {
         tx.commit()?;
         Ok(())
     }
+}
+
+/// Takes the reactions, annotations and raised marks of the messages `owned`
+/// selects, before those messages go. Only rows a doomed message actually
+/// claims: one still waiting for a message that never arrived is a different
+/// thing — arrival-before-archive is why these tables have no foreign key —
+/// and it keeps waiting. What this stops is who-reacted-with-what and a
+/// plugin's paraphrase of a message outliving the message a retention window
+/// or a deletion was asked to remove.
+fn take_what_messages_owned(
+    tx: &rusqlite::Transaction,
+    owned: &str,
+    params: impl rusqlite::Params + Clone,
+) -> Result<(), StoreError> {
+    for table in ["reactions", "annotations", "raised"] {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE (network, msgid) IN ({owned})"),
+            params.clone(),
+        )?;
+    }
+    Ok(())
 }
 
 /// Whether this conversation is written down at all.

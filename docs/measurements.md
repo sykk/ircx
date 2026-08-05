@@ -45,6 +45,61 @@ figure.
 > binary against the Vite dev server. Nothing in those documents is a startup
 > measurement, and they should not be cited as one.
 
+### With something in the profile
+
+**Measured 2026-08-05**, `.claude/skills/run-ircx/startup.mjs`. The table above
+is an empty profile, which was listed here as the thing it excluded: a person's
+profile has an archive in it and networks that dial on launch.
+
+Same anchors, same method — release build, real compositor, `WAYLAND_DEBUG`,
+exec on the launcher's clock — three runs a condition. Medians, except the last
+column, for the reason under it.
+
+| profile | first message | surface, no content | first frame | ircx on screen |
+|---|---|---|---|---|
+| empty | 45.2 ms | 79.5 ms | 715.8 ms | 764–845 ms |
+| a network, not dialling, empty archive | 46.7 ms | 80.3 ms | 718.6 ms | 762–851 ms |
+| 100,000 messages, a network, not dialling | 45.5 ms | 81.0 ms | 722.1 ms | 763–859 ms |
+| 100,000 messages, three networks dialling | 45.5 ms | 78.5 ms | 716.2 ms | 761–862 ms |
+
+**Nothing in a profile moves any of it.** A 60 MB archive and three networks
+dialling put the first frame at 716.2 ms against an empty profile's 715.8 ms,
+and the spread inside one condition — 715.6 to 726.5 ms for the second row —
+is wider than the gap between any two of them.
+
+**The last column is two clusters rather than a number.** Across all twelve runs
+it is either 761–777 ms or 843–862 ms, in every condition including the empty
+one, so it is not the profile that decides which. **This is what the 722–819 ms
+in the table above is**: those three runs were 819, 722 and 819, which is the
+same split read as a range. Quote the pair, not a median between them, and do
+not read a difference between two conditions off one run each.
+
+**The networks are connected before the window exists.** All three finished
+registering 241–275 ms after exec, against a first frame at 716 ms. Dialling
+does not delay startup because it is over before there is anything to delay —
+against this server. A real one is slower and mostly not ircx: the 5.84 s figure
+above is largely Libera's identd timeout, and it lands on the same path, off the
+one that draws.
+
+**Why the archive cannot matter is structural, not a margin.** Nothing on the
+path to a first frame reads a message. Conversations are restored from
+`open_targets` inside `drive()` in `task.rs` — on the connection task, after
+registration — and the timeline then asks for one page per conversation, not for
+the archive. A profile a hundred times larger would be read a page at a time
+just the same.
+
+**Covers:** `exec` of `target/release/ircx` to each mark, XDG profile seeded on
+disk, `npm run tauri build -- --no-bundle`, warm page cache, one machine, one
+compositor. The dialling rows answer to
+`.claude/skills/run-ircx/quickserver.mjs`, which completes registration
+immediately and deliberately: what a real server costs is the server's, and the
+figure above is what ircx does with it.
+
+**Excludes:** a cold page cache, a packaged bundle, TLS, SASL, and **when the
+restored conversation is drawn** — the frame that puts messages on screen is
+another buffer on the same surface and the compositor cannot tell it from any
+later one. That it is drawn at all was checked by screenshot rather than timed.
+
 ## Size
 
 | | measured | bytes | |
@@ -583,7 +638,11 @@ query the same mutex also serialises, which no figure here has timed.
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.
-- Startup with a populated archive and several networks auto-connecting.
+- **When a restored conversation is on screen.** Startup with a populated
+  archive and dialling networks is measured above, up to the frame that puts
+  ircx on screen. The later frame that puts the messages there is not
+  distinguishable from the compositor's side, so what a person waits for to
+  read a restored channel is still unmeasured.
 - Memory over a long session. A rendered backlog is measured above; what a
   client left open for days does is not.
 - A netsplit against a real server, end to end, **as a figure**. Both halves are

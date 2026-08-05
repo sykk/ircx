@@ -9,7 +9,7 @@ import {
   seedStore,
 } from "@/components/shell/fixtures";
 import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Member } from "@/types";
-import { useAppStore } from "./index";
+import { TIMELINE_CAP, useAppStore } from "./index";
 import { targetKey } from "./keys";
 import { ratioOf } from "./layout";
 import type { StoredLayout } from "./types";
@@ -91,6 +91,44 @@ describe("the echo of a message you sent", () => {
     });
 
     expect(timeline()?.hasMore).toBe(false);
+  });
+});
+
+describe("paging backwards", () => {
+  /** #331 states the invariant — paging backwards stops at TIMELINE_CAP —
+   * but only the auto-fill effect honoured it; the scroll handler paged
+   * without a cap and the store took whatever it was handed. Holding
+   * scroll-up against a deep archive grew the window without bound, and
+   * every later live message paid O(window) for it. */
+  it("stops at the cap the appends hold the other end to", () => {
+    const seed = Array.from({ length: TIMELINE_CAP - 2 }, (_, i) =>
+      makeMessage({ id: `m-${i}` }),
+    );
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true },
+      },
+    }));
+
+    const page = Array.from({ length: 5 }, (_, i) => makeMessage({ id: `old-${i}` }));
+    useAppStore.getState().prependHistory(KEY, page, true);
+
+    const held = timeline()!;
+    expect(held.messages).toHaveLength(TIMELINE_CAP);
+    // The newest of the page is what fits, keeping the window contiguous.
+    expect(held.messages[0]!.id).toBe("old-3");
+    expect(held.messages[1]!.id).toBe("old-4");
+    expect(held.hasMore).toBe(false);
+    expect(held.loadingOlder).toBe(false);
+  });
+
+  it("keeps paging while there is room", () => {
+    useAppStore
+      .getState()
+      .prependHistory(KEY, [makeMessage({ id: "old" })], true);
+
+    expect(timeline()!.hasMore).toBe(true);
   });
 });
 
@@ -234,20 +272,56 @@ describe("showing a target", () => {
     expect(targets()).toEqual(["#ctf-ops", "#linux"]);
   });
 
-  it("counts as reading it wherever it was already open", () => {
-    const [first] = twoPanes();
+  function markUnread(key: string, from: string) {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: [], unreadFrom: "m-7", hasMore: true, loadingOlder: false },
+        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false },
       },
     }));
+  }
+
+  /** The seam is what the reader switched here to see: it survives the
+   * switch and holds while they read. Clearing it on arrival made it
+   * unreachable in a single-pane window — every path to a conversation went
+   * through the clear. */
+  it("keeps the seam of the conversation being switched to", () => {
+    const [first] = twoPanes();
+    markUnread(KEY, "m-7");
 
     store().showTarget({ network: "libera", target: "#ctf-ops" });
 
     expect(store().activeViewId).toBe(first);
-    expect(store().timelines[KEY]!.unreadFrom).toBeNull();
+    expect(store().timelines[KEY]!.unreadFrom).toBe("m-7");
     expect(store().recent[0]).toBe(KEY);
+  });
+
+  it("clears the seam of a conversation left off the screen", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    markUnread(KEY, "m-7");
+    store().setActive({ network: "libera", target: "#hackint" });
+
+    expect(store().timelines[KEY]!.unreadFrom).toBeNull();
+  });
+
+  it("holds the seam while another pane still shows the conversation", () => {
+    // Both panes on #ctf-ops, then the focused one moves away.
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    markUnread(KEY, "m-7");
+    store().setActive({ network: "libera", target: "#hackint" });
+
+    expect(store().timelines[KEY]!.unreadFrom).toBe("m-7");
+  });
+
+  it("clears the seam when closing the focused pane takes it off the screen", () => {
+    const [, second] = twoPanes();
+    const hackint = targetKey("libera", "#hackint");
+    markUnread(hackint, "m-7");
+
+    store().closeView(second);
+
+    expect(store().timelines[hackint]!.unreadFrom).toBeNull();
   });
 
   it("opens the first pane when there are none at all", () => {
@@ -820,6 +894,56 @@ describe("what a console pane holds", () => {
     store().applyEvent({ type: "networkRemoved", network: "libera" });
 
     expect(store().consoleInput[view]).toBeUndefined();
+  });
+});
+
+/** A removed network dropped its channels, queries, timelines and members —
+ * and left everything else it keyed: typing expiries, reply targets, input
+ * history, up to 2,000 raw-log lines and a whole /list answer, forever. A
+ * network re-added under the same id resurrected the lot, and editing
+ * networks grew the store monotonically. */
+describe("removing a network", () => {
+  const store = () => useAppStore.getState();
+  const gone = targetKey("libera", "#ctf-ops");
+  const kept = targetKey("oftc", "#tor");
+
+  beforeEach(() => {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera"), makeNetwork("oftc")],
+      [makeChannel("libera", "#ctf-ops"), makeChannel("oftc", "#tor")],
+    );
+    for (const network of ["libera", "oftc"]) {
+      store().applyEvent({ type: "rawLine", network, line: "PING", outgoing: false });
+      store().applyEvent({
+        type: "channelsListed",
+        network,
+        channels: [],
+        truncated: false,
+      });
+    }
+    store().setReplyTo("libera", "#ctf-ops", "msg-1");
+    store().setReplyTo("oftc", "#tor", "msg-2");
+    store().rememberInput("libera", "#ctf-ops", "typed here");
+    store().rememberInput("oftc", "#tor", "typed there");
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    store().applyEvent({ type: "networkRemoved", network: "libera" });
+  });
+
+  it("takes every map the network keyed with it", () => {
+    expect(store().rawLog["libera"]).toBeUndefined();
+    expect(store().channelList["libera"]).toBeUndefined();
+    expect(store().replyTo[gone]).toBeUndefined();
+    expect(store().inputHistory[gone]).toBeUndefined();
+    expect(store().recent).not.toContain(gone);
+  });
+
+  it("leaves the other networks' entries standing", () => {
+    expect(store().rawLog["oftc"]).toHaveLength(1);
+    expect(store().channelList["oftc"]).toBeTruthy();
+    expect(store().replyTo[kept]).toBe("msg-2");
+    expect(store().inputHistory[kept]).toEqual(["typed there"]);
   });
 });
 

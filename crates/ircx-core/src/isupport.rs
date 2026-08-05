@@ -11,6 +11,10 @@ pub struct ISupport {
     /// The four `CHANMODES` classes: list, always-argument, argument on set, flag.
     pub chanmodes: [String; 4],
     pub network: Option<String>,
+    /// Prefixes a message target may carry to reach a slice of a channel:
+    /// Libera's `STATUSMSG=@+` makes `@#chan` the ops of `#chan`. Empty when
+    /// the server names none, which is the RFC default.
+    pub statusmsg: String,
     /// The most history one `CHATHISTORY` may ask for. `None` is the server
     /// stating no limit, not a limit of zero.
     pub chathistory: Option<u32>,
@@ -25,6 +29,7 @@ impl Default for ISupport {
             prefixes: vec![('o', '@'), ('v', '+')],
             chanmodes: ["b".into(), "k".into(), "l".into(), "imnpst".into()],
             network: None,
+            statusmsg: String::new(),
             chathistory: None,
             targmax: Vec::new(),
         }
@@ -63,6 +68,7 @@ impl ISupport {
                 }
             }
             "NETWORK" if !value.is_empty() => self.network = Some(value.into()),
+            "STATUSMSG" => self.statusmsg = value.into(),
             // Ergo sends `CHATHISTORY=1000` and `draft/CHATHISTORY=1000` while
             // the capability is still a draft; either is the same statement.
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = value.parse().ok(),
@@ -79,6 +85,7 @@ impl ISupport {
             "PREFIX" => self.prefixes = defaults.prefixes,
             "CHANMODES" => self.chanmodes = defaults.chanmodes,
             "NETWORK" => self.network = None,
+            "STATUSMSG" => self.statusmsg = defaults.statusmsg,
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = None,
             "TARGMAX" => self.targmax = Vec::new(),
             _ => {}
@@ -90,6 +97,14 @@ impl ISupport {
             .chars()
             .next()
             .is_some_and(|c| self.chantypes.contains(c))
+    }
+
+    /// The channel a `STATUSMSG`-prefixed target reaches: `@#chan` is
+    /// `#chan`, spoken only to its ops. `None` when the target carries no
+    /// such prefix, or what is left is not a channel.
+    pub fn statusmsg_channel<'a>(&self, target: &'a str) -> Option<&'a str> {
+        let channel = target.trim_start_matches(|c| self.statusmsg.contains(c));
+        (channel.len() < target.len() && self.is_channel(channel)).then_some(channel)
     }
 
     pub fn prefix_for_mode(&self, mode: char) -> Option<char> {
@@ -191,6 +206,13 @@ mod tests {
         assert_eq!(isupport.chanmodes[3], "CFLMPQRSTcgimnprstuz");
         assert_eq!(isupport.casemapping, CaseMapping::Rfc1459);
         assert_eq!(isupport.network.as_deref(), Some("Libera.Chat"));
+        assert_eq!(isupport.statusmsg, "@+");
+        assert_eq!(isupport.statusmsg_channel("@#chan"), Some("#chan"));
+        assert_eq!(isupport.statusmsg_channel("+#chan"), Some("#chan"));
+        // A prefix has to leave a channel behind, and a bare channel or nick
+        // carries none.
+        assert_eq!(isupport.statusmsg_channel("#chan"), None);
+        assert_eq!(isupport.statusmsg_channel("@nick"), None);
         assert_eq!(isupport.targmax("PRIVMSG"), Some(4));
         assert_eq!(isupport.targmax("KICK"), Some(1));
         // `ACCEPT:` states no limit; `JOIN` is not listed at all.
@@ -226,5 +248,8 @@ mod tests {
         assert!(isupport.is_channel("#ircx"));
         assert!(!isupport.is_channel("sable"));
         assert_eq!(isupport.prefix_for_mode('o'), Some('@'));
+        // And names no STATUSMSG prefixes: without the token nothing is
+        // stripped, so `@#chan` stays whatever the classifier made of it.
+        assert_eq!(isupport.statusmsg_channel("@#chan"), None);
     }
 }

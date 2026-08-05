@@ -290,7 +290,15 @@ async fn write_task(
 
         let mut frame = queued.line.into_bytes();
         frame.extend_from_slice(b"\r\n");
-        if let Err(error) = writer.write_all(&frame).await {
+        // The flush is load-bearing on the TLS path: `write_all` only hands
+        // the line to rustls, and when the socket was not ready the
+        // ciphertext waits in its buffer for the next write — which for a
+        // lone PONG on an idle queue is never. Plain TCP flushes for free.
+        let sent = async {
+            writer.write_all(&frame).await?;
+            writer.flush().await
+        };
+        if let Err(error) = sent.await {
             debug!(%error, "outbound write failed");
             let _ = stop_tx.send(Some(DisconnectReason::Io(error.to_string())));
             break;

@@ -892,6 +892,13 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         delete composerError[view.id];
       }
 
+      // Everything else keyed by the network or its conversations goes with
+      // it. Left behind, a network re-added under the same id resurrected the
+      // dead raw log, stale typing expiries and reply targets, and a whole
+      // /list answer — and editing networks grew the store monotonically.
+      const { [event.network]: _log, ...rawLog } = s.rawLog;
+      const { [event.network]: _list, ...channelList } = s.channelList;
+      const prefix = networkPrefix(event.network);
       return {
         networks,
         networkOrder: s.networkOrder.filter((n) => n !== event.network),
@@ -899,6 +906,12 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         queries: dropByNetwork(s.queries, event.network),
         timelines: dropByNetwork(s.timelines, event.network),
         members: dropByNetwork(s.members, event.network),
+        typing: dropByNetwork(s.typing, event.network),
+        replyTo: dropByNetwork(s.replyTo, event.network),
+        inputHistory: dropByNetwork(s.inputHistory, event.network),
+        rawLog,
+        channelList,
+        recent: s.recent.filter((key) => !key.startsWith(prefix)),
         views,
         viewAnchor,
         consoleInput,

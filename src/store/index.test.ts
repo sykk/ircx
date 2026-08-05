@@ -897,6 +897,56 @@ describe("what a console pane holds", () => {
   });
 });
 
+/** A removed network dropped its channels, queries, timelines and members —
+ * and left everything else it keyed: typing expiries, reply targets, input
+ * history, up to 2,000 raw-log lines and a whole /list answer, forever. A
+ * network re-added under the same id resurrected the lot, and editing
+ * networks grew the store monotonically. */
+describe("removing a network", () => {
+  const store = () => useAppStore.getState();
+  const gone = targetKey("libera", "#ctf-ops");
+  const kept = targetKey("oftc", "#tor");
+
+  beforeEach(() => {
+    resetStore();
+    seedStore(
+      [makeNetwork("libera"), makeNetwork("oftc")],
+      [makeChannel("libera", "#ctf-ops"), makeChannel("oftc", "#tor")],
+    );
+    for (const network of ["libera", "oftc"]) {
+      store().applyEvent({ type: "rawLine", network, line: "PING", outgoing: false });
+      store().applyEvent({
+        type: "channelsListed",
+        network,
+        channels: [],
+        truncated: false,
+      });
+    }
+    store().setReplyTo("libera", "#ctf-ops", "msg-1");
+    store().setReplyTo("oftc", "#tor", "msg-2");
+    store().rememberInput("libera", "#ctf-ops", "typed here");
+    store().rememberInput("oftc", "#tor", "typed there");
+    store().showTarget({ network: "libera", target: "#ctf-ops" });
+
+    store().applyEvent({ type: "networkRemoved", network: "libera" });
+  });
+
+  it("takes every map the network keyed with it", () => {
+    expect(store().rawLog["libera"]).toBeUndefined();
+    expect(store().channelList["libera"]).toBeUndefined();
+    expect(store().replyTo[gone]).toBeUndefined();
+    expect(store().inputHistory[gone]).toBeUndefined();
+    expect(store().recent).not.toContain(gone);
+  });
+
+  it("leaves the other networks' entries standing", () => {
+    expect(store().rawLog["oftc"]).toHaveLength(1);
+    expect(store().channelList["oftc"]).toBeTruthy();
+    expect(store().replyTo[kept]).toBe("msg-2");
+    expect(store().inputHistory[kept]).toEqual(["typed there"]);
+  });
+});
+
 /** The same rule as `consoleInput`, for the other thing a console pane draws.
  * See #315. */
 describe("where a pane is reading the protocol log", () => {

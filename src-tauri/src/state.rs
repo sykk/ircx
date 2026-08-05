@@ -246,26 +246,32 @@ impl App {
     {
         let sender = self.require(network)?;
         let (reply, answer) = oneshot::channel();
-        sender
-            .send(command(reply))
-            .await
-            .map_err(|_| self.not_connected(network))?;
-
-        match timeout(REPLY_TIMEOUT, answer).await {
-            Ok(Ok(value)) => Ok(value),
-            _ => Err(format!(
-                "{} stopped responding — reconnect it and try again",
-                self.network_name(network)
-            )),
+        // One deadline over the enqueue and the answer together. The inbox
+        // holds 64 commands, and a session that has stopped draining it —
+        // wedged behind the store mutex during an export, say — left the send
+        // itself blocking with no bound: the timeout started only after the
+        // enqueue, which was the part that hung.
+        let asked = async {
+            sender
+                .send(command(reply))
+                .await
+                .map_err(|_| self.not_connected(network))?;
+            answer.await.map_err(|_| self.stopped_responding(network))
+        };
+        match timeout(REPLY_TIMEOUT, asked).await {
+            Ok(outcome) => outcome,
+            Err(_) => Err(self.stopped_responding(network)),
         }
     }
 
     pub async fn tell(&self, network: &NetworkId, command: SessionCommand) -> Result<(), String> {
         let sender = self.require(network)?;
-        sender
-            .send(command)
-            .await
-            .map_err(|_| self.not_connected(network))
+        // Bounded for the reason `ask` is: the enqueue is the part that hangs.
+        match timeout(REPLY_TIMEOUT, sender.send(command)).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(_)) => Err(self.not_connected(network)),
+            Err(_) => Err(self.stopped_responding(network)),
+        }
     }
 
     /// For commands whose whole effect is on the server: with no session there
@@ -274,9 +280,21 @@ impl App {
         let Some(sender) = self.sender(network) else {
             return;
         };
-        if sender.send(command).await.is_err() {
-            warn!(network, "a session ended before it could be told");
+        match timeout(REPLY_TIMEOUT, sender.send(command)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => warn!(network, "a session ended before it could be told"),
+            Err(_) => warn!(
+                network,
+                "a session stopped taking commands before it could be told"
+            ),
         }
+    }
+
+    fn stopped_responding(&self, network: &NetworkId) -> String {
+        format!(
+            "{} stopped responding — reconnect it and try again",
+            self.network_name(network)
+        )
     }
 
     /// Every installed plugin, with what it asks for beside what it was given.
@@ -340,8 +358,16 @@ impl App {
             let changed = SessionCommand::PluginChanged {
                 plugin: plugin.to_owned(),
             };
-            if sender.send(changed).await.is_err() {
-                warn!(%plugin, "a network stopped before it could be told the plugin changed");
+            // Bounded so one wedged network cannot hold the news back from
+            // every network after it in the map.
+            match timeout(REPLY_TIMEOUT, sender.send(changed)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => {
+                    warn!(%plugin, "a network stopped before it could be told the plugin changed");
+                }
+                Err(_) => {
+                    warn!(%plugin, "a network was too busy to be told the plugin changed");
+                }
             }
         }
     }

@@ -863,7 +863,20 @@ impl SessionState {
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(params),
             RPL_AWAY => self.on_away_reply(params),
-            ERR_NICKNAMEINUSE => self.on_nick_in_use(params, message),
+            ERR_NICKNAMEINUSE => self.on_nick_refused(params, message, "is taken"),
+            // As final as 433 while registering: without the same fallback the
+            // session sat at `Registering` forever, no alternate tried and no
+            // failure declared. Registered, each describes a failed rename and
+            // falls through to the numeric's own sentence.
+            ERR_ERRONEUSNICKNAME if !self.registered => {
+                self.on_nick_refused(params, message, "was not accepted")
+            }
+            ERR_NICKCOLLISION if !self.registered => {
+                self.on_nick_refused(params, message, "collided with another server")
+            }
+            ERR_UNAVAILRESOURCE if !self.registered => {
+                self.on_nick_refused(params, message, "is briefly held")
+            }
             RPL_LOGGEDIN => {
                 let account = params.get(1).cloned().unwrap_or_default();
                 self.account = Some(account.clone());
@@ -1393,14 +1406,17 @@ impl SessionState {
         );
     }
 
-    fn on_nick_in_use(&mut self, params: &[String], message: &Message) {
+    /// A NICK the server would not take, while registering: `what` is the
+    /// refusal in words — taken, held, collided — and the answer to each is
+    /// the next candidate.
+    fn on_nick_refused(&mut self, params: &[String], message: &Message, what: &str) {
         let taken = params.first().cloned().unwrap_or_default();
         let name = self.network_name().to_string();
 
         if self.registered {
             self.notice(
                 Severity::Warning,
-                format!("Nickname `{taken}` is taken on {name}"),
+                format!("Nickname `{taken}` {what} on {name}"),
                 &message.raw,
             );
             return;
@@ -1410,7 +1426,7 @@ impl SessionState {
             Some(next) => {
                 self.notice(
                     Severity::Warning,
-                    format!("Nickname `{taken}` is taken on {name} — trying `{next}`"),
+                    format!("Nickname `{taken}` {what} on {name} — trying `{next}`"),
                     &message.raw,
                 );
                 self.nick = next.clone();

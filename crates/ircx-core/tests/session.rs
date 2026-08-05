@@ -714,6 +714,49 @@ fn a_nickname_collision_reads_as_a_sentence_and_falls_back() {
     ));
 }
 
+/// 437 is what services enforcement and netsplit delays answer a NICK with,
+/// and 432/436 are the other two refusals registration can earn. Only 433
+/// had a fallback: any of these three left the session sitting at
+/// `Registering` forever — no alternate tried, no failure declared.
+#[test]
+fn a_held_nickname_falls_back_the_way_a_taken_one_does() {
+    let mut config = config();
+    config.nick = "sable".into();
+    config.alt_nicks = vec!["sable-".into()];
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :");
+    session.sent();
+
+    session.feed(":irc.libera.chat 437 * sable :Nick/channel is temporarily unavailable");
+    assert_eq!(
+        session.notices(),
+        vec![(
+            Severity::Warning,
+            "Nickname `sable` is briefly held on Libera — trying `sable-`"
+        )]
+    );
+    assert_eq!(session.sent(), vec!["NICK sable-"]);
+
+    session.feed(":irc.libera.chat 432 * sable- :Erroneous nickname");
+    assert_eq!(
+        session.sent(),
+        vec!["NICK sable_"],
+        "an invalid candidate moves on rather than stalling"
+    );
+}
+
+/// Registered, the same numerics describe a failed rename: nothing should
+/// start walking the fallback list out from under the nick that works.
+#[test]
+fn a_refused_rename_does_not_walk_the_fallback_list() {
+    let mut session = registered("");
+    session.sent();
+    session.feed(":irc.libera.chat 437 sykk newnick :Nick/channel is temporarily unavailable");
+
+    assert!(session.sent().is_empty(), "no NICK is sent back");
+}
+
 #[test]
 fn the_raw_line_is_kept_on_the_notice_it_produced() {
     let mut session = registered("");

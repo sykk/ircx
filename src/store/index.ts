@@ -456,13 +456,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const timeline = s.timelines[key] ?? EMPTY_TIMELINE;
       const known = new Set(timeline.messages.map((m) => m.id));
       const fresh = older.filter((m) => !known.has(m.id));
+      // Paging backwards stops at the cap (#331) — the same figure appends
+      // hold the other end to. Only the scroll handler's own diligence
+      // enforced it before, and the handler had none: holding scroll-up grew
+      // the window without bound, and every later live message paid for its
+      // size. The newest of the page is what fits, so the window stays
+      // contiguous; a page that had to be cut ends the paging.
+      const room = Math.max(0, TIMELINE_CAP - timeline.messages.length);
+      const kept = fresh.slice(Math.max(0, fresh.length - room));
       return {
         timelines: {
           ...s.timelines,
           [key]: {
             ...timeline,
-            messages: [...fresh, ...timeline.messages],
-            hasMore,
+            messages: [...kept, ...timeline.messages],
+            hasMore: kept.length < fresh.length ? false : hasMore,
             loadingOlder: false,
           },
         },

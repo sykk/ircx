@@ -9,7 +9,7 @@ import {
   seedStore,
 } from "@/components/shell/fixtures";
 import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Member } from "@/types";
-import { useAppStore } from "./index";
+import { TIMELINE_CAP, useAppStore } from "./index";
 import { targetKey } from "./keys";
 import { ratioOf } from "./layout";
 import type { StoredLayout } from "./types";
@@ -91,6 +91,44 @@ describe("the echo of a message you sent", () => {
     });
 
     expect(timeline()?.hasMore).toBe(false);
+  });
+});
+
+describe("paging backwards", () => {
+  /** #331 states the invariant — paging backwards stops at TIMELINE_CAP —
+   * but only the auto-fill effect honoured it; the scroll handler paged
+   * without a cap and the store took whatever it was handed. Holding
+   * scroll-up against a deep archive grew the window without bound, and
+   * every later live message paid O(window) for it. */
+  it("stops at the cap the appends hold the other end to", () => {
+    const seed = Array.from({ length: TIMELINE_CAP - 2 }, (_, i) =>
+      makeMessage({ id: `m-${i}` }),
+    );
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true },
+      },
+    }));
+
+    const page = Array.from({ length: 5 }, (_, i) => makeMessage({ id: `old-${i}` }));
+    useAppStore.getState().prependHistory(KEY, page, true);
+
+    const held = timeline()!;
+    expect(held.messages).toHaveLength(TIMELINE_CAP);
+    // The newest of the page is what fits, keeping the window contiguous.
+    expect(held.messages[0]!.id).toBe("old-3");
+    expect(held.messages[1]!.id).toBe("old-4");
+    expect(held.hasMore).toBe(false);
+    expect(held.loadingOlder).toBe(false);
+  });
+
+  it("keeps paging while there is room", () => {
+    useAppStore
+      .getState()
+      .prependHistory(KEY, [makeMessage({ id: "old" })], true);
+
+    expect(timeline()!.hasMore).toBe(true);
   });
 });
 

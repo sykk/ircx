@@ -234,20 +234,56 @@ describe("showing a target", () => {
     expect(targets()).toEqual(["#ctf-ops", "#linux"]);
   });
 
-  it("counts as reading it wherever it was already open", () => {
-    const [first] = twoPanes();
+  function markUnread(key: string, from: string) {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: [], unreadFrom: "m-7", hasMore: true, loadingOlder: false },
+        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false },
       },
     }));
+  }
+
+  /** The seam is what the reader switched here to see: it survives the
+   * switch and holds while they read. Clearing it on arrival made it
+   * unreachable in a single-pane window — every path to a conversation went
+   * through the clear. */
+  it("keeps the seam of the conversation being switched to", () => {
+    const [first] = twoPanes();
+    markUnread(KEY, "m-7");
 
     store().showTarget({ network: "libera", target: "#ctf-ops" });
 
     expect(store().activeViewId).toBe(first);
-    expect(store().timelines[KEY]!.unreadFrom).toBeNull();
+    expect(store().timelines[KEY]!.unreadFrom).toBe("m-7");
     expect(store().recent[0]).toBe(KEY);
+  });
+
+  it("clears the seam of a conversation left off the screen", () => {
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    markUnread(KEY, "m-7");
+    store().setActive({ network: "libera", target: "#hackint" });
+
+    expect(store().timelines[KEY]!.unreadFrom).toBeNull();
+  });
+
+  it("holds the seam while another pane still shows the conversation", () => {
+    // Both panes on #ctf-ops, then the focused one moves away.
+    store().setActive({ network: "libera", target: "#ctf-ops" });
+    store().splitActiveView("row");
+    markUnread(KEY, "m-7");
+    store().setActive({ network: "libera", target: "#hackint" });
+
+    expect(store().timelines[KEY]!.unreadFrom).toBe("m-7");
+  });
+
+  it("clears the seam when closing the focused pane takes it off the screen", () => {
+    const [, second] = twoPanes();
+    const hackint = targetKey("libera", "#hackint");
+    markUnread(hackint, "m-7");
+
+    store().closeView(second);
+
+    expect(store().timelines[hackint]!.unreadFrom).toBeNull();
   });
 
   it("opens the first pane when there are none at all", () => {

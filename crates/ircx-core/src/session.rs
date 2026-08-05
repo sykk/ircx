@@ -13,6 +13,7 @@ use ircx_store::OpenTarget;
 use tracing::debug;
 
 use crate::caps::Caps;
+use crate::casemap::CaseMapping;
 use crate::history;
 use crate::isupport::ISupport;
 use crate::numeric::{self, *};
@@ -1094,13 +1095,13 @@ impl SessionState {
         let previous = self.isupport.casemapping;
         self.isupport.apply(tokens);
         if previous != self.isupport.casemapping {
-            self.rekey();
+            self.rekey(previous);
         }
     }
 
     /// Keys are folded names, so a late `CASEMAPPING` invalidates every one of
     /// them.
-    fn rekey(&mut self) {
+    fn rekey(&mut self, previous: CaseMapping) {
         let channels = std::mem::take(&mut self.channels);
         self.channels = channels
             .into_values()
@@ -1111,6 +1112,32 @@ impl SessionState {
             .into_values()
             .map(|query| (self.fold(&query.nick), query))
             .collect();
+        // `archived` and `gap_fills` key on the same folded names — `restore`
+        // seeds them under the default fold before any 005 exists — but hold
+        // no original name to re-fold. The conversations supply it: every
+        // watermark belongs to one, and its value carries the name as spelt.
+        // Left under the old keys, a restored conversation's watermark was
+        // never found again — backfill saw no `since`, asked LATEST, and the
+        // gap-versus-first-sight distinction (#223) collapsed to first sight.
+        let names: Vec<String> = self
+            .channels
+            .values()
+            .map(|channel| channel.name.clone())
+            .chain(self.queries.values().map(|query| query.nick.clone()))
+            .collect();
+        for name in names {
+            let old = previous.fold(&name);
+            let new = self.fold(&name);
+            if old == new {
+                continue;
+            }
+            if let Some(newest) = self.archived.remove(&old) {
+                self.archived.insert(new.clone(), newest);
+            }
+            if let Some(pages) = self.gap_fills.remove(&old) {
+                self.gap_fills.insert(new, pages);
+            }
+        }
     }
 
     /// Like the other channel replies below it, this one only updates a channel

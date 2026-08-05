@@ -3341,6 +3341,24 @@ mod backfill_on_join {
         );
     }
 
+    /// The watermark is seeded in `restore` under the default rfc1459 fold,
+    /// before any 005 exists. A server that then advertises ascii — ergo
+    /// does — refolds the conversation keys, and a name with `[]` in it
+    /// changes key. Left behind under the old one, the watermark was never
+    /// found again: the join asked LATEST instead of AFTER, and the
+    /// gap-versus-first-sight distinction quietly collapsed.
+    #[test]
+    fn a_late_casemapping_keeps_the_watermark_findable() {
+        let mut session = registered_holding("#chan[]", "2026-07-31T09:15:04.000Z");
+        session.feed(":irc.libera.chat 005 sykk CASEMAPPING=ascii :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #chan[]");
+
+        assert_eq!(
+            asked(&session),
+            ["CHATHISTORY AFTER #chan[] timestamp=2026-07-31T09:15:04.000Z 200"]
+        );
+    }
+
     /// A rejoin inside one session has a gap too: the client heard the channel
     /// before it left, so what it says while away was missed.
     #[test]

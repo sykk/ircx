@@ -254,6 +254,12 @@ function ComposerFor({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // While an IME composition is open, every key belongs to it: the Enter
+    // that commits a candidate must not send the half-composed line, and
+    // Tab and the arrows are the IME's to navigate its candidate list with.
+    if (e.nativeEvent.isComposing) {
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void send();

@@ -210,6 +210,33 @@ copies the moment Enter is pressed and its raw log records the queue rather than
 the socket, so neither is a clock. A dozen lines of socket code joined to the
 same channel is what `docs/end-to-end-run-4.md` timed everything from.
 
+## Measure startup
+
+`startup.mjs` times exec to each of the four marks in the *Startup* section of
+`docs/measurements.md`, over profiles it seeds: empty, an archive, networks that
+dial. `quickserver.mjs` is what they dial — registration answered immediately,
+so the figure is ircx's rather than a server's.
+
+```bash
+node .claude/skills/run-ircx/startup.mjs --messages 100000 --networks 3 --runs 3
+```
+
+It drives the **real compositor**, not `Xvfb`: the marks are read off
+`WAYLAND_DEBUG` and a frame commit is not something an X server reports, so a
+window appears on the operator's screen once per run. `--seed-only` builds one
+of the profiles and stops, for `window.mjs --profile <dir> --release` to open
+somewhere less intrusive.
+
+**Seeding an archive by hand is where this goes wrong quietly.** Three columns
+in `messages` hold JSON rather than what their names suggest — `kind` is a
+quoted camelCase string, `delivery` is internally tagged, `tags` is an array —
+and `open_targets.kind` must be lowercase `channel` or the conversation reopens
+as a query. Rows that get any of it wrong insert perfectly well and count
+towards the file size, then fail to deserialise: the archive looks populated,
+the timeline comes up empty, and nothing says so. The first version of this
+harness measured exactly that. **Check a seeded profile with a screenshot before
+believing a number taken on it.**
+
 ## Run (human path)
 
 ```bash

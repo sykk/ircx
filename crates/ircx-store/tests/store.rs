@@ -572,6 +572,97 @@ fn prune_honours_the_target_override() {
     assert_eq!(store.prune().unwrap(), 0);
 }
 
+/// IRC compares targets without case and rows written before #190 hold
+/// whichever casing arrived, so `load_history` matches without case — but the
+/// destructive and bulk paths matched exactly. Deleting "#chan" left rows
+/// archived as "#Chan" standing, and the display then showed the very rows
+/// the user had just watched being deleted; a retention window and a
+/// keep-nothing rule missed them the same way.
+mod a_target_is_one_conversation_whatever_its_casing {
+    use super::*;
+
+    #[test]
+    fn deleting_it_takes_the_other_casings_with_it() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "hello")])
+            .unwrap();
+
+        store.delete_target("libera", "#chan").unwrap();
+
+        assert!(store
+            .load_history(&history("#chan", None, 10))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn a_retention_window_reaches_rows_archived_under_another_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", ANCIENT, "old")])
+            .unwrap();
+        store
+            .set_retention("libera", Some("#chan"), Some(30))
+            .unwrap();
+
+        assert_eq!(store.prune().unwrap(), 1);
+    }
+
+    #[test]
+    fn keep_nothing_suppresses_whichever_casing_the_wire_uses() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .set_retention("libera", Some("#chan"), Some(0))
+            .unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "hello")])
+            .unwrap();
+
+        assert!(store
+            .load_history(&history("#chan", None, 10))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn a_search_filtered_to_it_sees_every_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message(
+                "a",
+                "#Chan",
+                "2026-01-01T00:00:00Z",
+                "findable words",
+            )])
+            .unwrap();
+
+        let hits = store
+            .search(&SearchRequest {
+                query: "findable".into(),
+                network: None,
+                target: Some("#chan".into()),
+                limit: 10,
+            })
+            .unwrap();
+
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn an_export_of_it_carries_every_casing() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .append_messages(&[message("a", "#Chan", "2026-01-01T00:00:00Z", "kept words")])
+            .unwrap();
+
+        let mut out = Vec::new();
+        store.export_target("libera", "#chan", &mut out).unwrap();
+
+        assert!(String::from_utf8(out).unwrap().contains("kept words"));
+    }
+}
+
 #[test]
 fn a_network_without_retention_keeps_everything() {
     let store = Store::open_in_memory().unwrap();
@@ -1874,6 +1965,41 @@ mod a_replay_of_our_own_message {
             .into_iter()
             .map(|message| message.text)
             .collect()
+    }
+
+    /// Say the same thing twice, lose the connection after the second copy
+    /// reaches the socket, and the backfill's replay of the first copy used
+    /// to abort the whole batch: ADOPT matched the second, still-unclaimed
+    /// twin, the msgid's unique index refused the update, and because
+    /// `append_messages` is one transaction every message in the backfill
+    /// rolled back with it — which the caller answers by logging and losing
+    /// the lot.
+    #[test]
+    fn a_replay_of_a_claimed_twin_cannot_take_the_batch_down() {
+        let store = Store::open_in_memory().unwrap();
+        let first = ours("local-1", &about_now(), "ok");
+        sent(&store, &first);
+        store
+            .append_messages(&[replayed("srv-1", &about_now(), "ok")])
+            .unwrap();
+
+        // The second copy went out and its echo never came back.
+        let second = ours("local-2", &about_now(), "ok");
+        sent(&store, &second);
+
+        let batch = [
+            replayed("srv-1", &about_now(), "ok"),
+            message("srv-2", "#ircx", &about_now(), "the rest of the backfill"),
+        ];
+        store
+            .append_messages(&batch)
+            .expect("a twin the archive already claimed is skipped, not fatal");
+
+        assert!(
+            texts(&store).contains(&"the rest of the backfill".to_string()),
+            "the rest of the batch survives: {:?}",
+            texts(&store)
+        );
     }
 
     #[test]

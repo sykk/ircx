@@ -170,6 +170,20 @@ describe("Composer sending", () => {
     expect(box.value).toBe("one");
   });
 
+  /** The Enter that commits an IME candidate arrives with `isComposing` set,
+   * and sending on it would post the half-composed line. The composer leaves
+   * every composing key to the IME — Tab and the arrows are its candidate
+   * list's, too. */
+  it("leaves Enter to an open IME composition", async () => {
+    const box = await mount();
+    type(box, "にほ");
+    const event = press(box, "Enter", { isComposing: true });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(ipcMock.submitInput).not.toHaveBeenCalled();
+    expect(box.value).toBe("にほ");
+  });
+
   it("ignores Enter on an empty box", async () => {
     const box = await mount();
     press(box, "Enter");

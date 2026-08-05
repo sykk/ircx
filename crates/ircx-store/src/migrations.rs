@@ -15,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     WRITTEN_AT,
     SUBSTRING_INDEX,
     CLIENT_CERTIFICATE,
+    TIMELINE_NOCASE,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -192,6 +193,17 @@ const CLIENT_CERTIFICATE: &str = r#"
 ALTER TABLE networks ADD COLUMN client_certificate TEXT;
 "#;
 
+/// The timeline queries match `target` without case (`load_history` says why),
+/// which the BINARY-collated index could not serve: SQLite used it for the
+/// network alone, then scanned that network's every row and sorted them in a
+/// temp B-tree — per history page, per backfill anchor, per replayed self
+/// message. Declaring the collation on the column brings the seek back.
+const TIMELINE_NOCASE: &str = r#"
+DROP INDEX idx_messages_timeline;
+CREATE INDEX idx_messages_timeline
+    ON messages (network, target COLLATE NOCASE, timestamp DESC);
+"#;
+
 /// Which plugin produced a message, by its id. Null for everything the client
 /// or the server said, which is every row written before this.
 const VIA: &str = r#"
@@ -312,6 +324,31 @@ END;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The caseless target match has to be a seek. With the BINARY-collated
+    /// index it degraded to scanning the whole network's rows and sorting
+    /// them, on every history page — asserted on the plan, because the query
+    /// answers correctly either way and nothing else would catch the slide.
+    #[test]
+    fn the_timeline_index_serves_the_caseless_match() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).unwrap();
+
+        let plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN
+                 SELECT id FROM messages
+                  WHERE network = 'n' AND target = '#c' COLLATE NOCASE
+                  ORDER BY timestamp DESC LIMIT 50",
+                [],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(
+            plan.contains("idx_messages_timeline") && plan.contains("target=?"),
+            "the match should seek the index, not scan the network: {plan}"
+        );
+    }
 
     #[test]
     fn applies_once_and_is_idempotent_on_reopen() {

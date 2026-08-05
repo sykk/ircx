@@ -13,6 +13,7 @@ use ircx_store::OpenTarget;
 use tracing::debug;
 
 use crate::caps::Caps;
+use crate::casemap::CaseMapping;
 use crate::history;
 use crate::isupport::ISupport;
 use crate::numeric::{self, *};
@@ -863,7 +864,20 @@ impl SessionState {
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(params),
             RPL_AWAY => self.on_away_reply(params),
-            ERR_NICKNAMEINUSE => self.on_nick_in_use(params, message),
+            ERR_NICKNAMEINUSE => self.on_nick_refused(params, message, "is taken"),
+            // As final as 433 while registering: without the same fallback the
+            // session sat at `Registering` forever, no alternate tried and no
+            // failure declared. Registered, each describes a failed rename and
+            // falls through to the numeric's own sentence.
+            ERR_ERRONEUSNICKNAME if !self.registered => {
+                self.on_nick_refused(params, message, "was not accepted")
+            }
+            ERR_NICKCOLLISION if !self.registered => {
+                self.on_nick_refused(params, message, "collided with another server")
+            }
+            ERR_UNAVAILRESOURCE if !self.registered => {
+                self.on_nick_refused(params, message, "is briefly held")
+            }
             RPL_LOGGEDIN => {
                 let account = params.get(1).cloned().unwrap_or_default();
                 self.account = Some(account.clone());
@@ -1094,13 +1108,13 @@ impl SessionState {
         let previous = self.isupport.casemapping;
         self.isupport.apply(tokens);
         if previous != self.isupport.casemapping {
-            self.rekey();
+            self.rekey(previous);
         }
     }
 
     /// Keys are folded names, so a late `CASEMAPPING` invalidates every one of
     /// them.
-    fn rekey(&mut self) {
+    fn rekey(&mut self, previous: CaseMapping) {
         let channels = std::mem::take(&mut self.channels);
         self.channels = channels
             .into_values()
@@ -1111,6 +1125,32 @@ impl SessionState {
             .into_values()
             .map(|query| (self.fold(&query.nick), query))
             .collect();
+        // `archived` and `gap_fills` key on the same folded names — `restore`
+        // seeds them under the default fold before any 005 exists — but hold
+        // no original name to re-fold. The conversations supply it: every
+        // watermark belongs to one, and its value carries the name as spelt.
+        // Left under the old keys, a restored conversation's watermark was
+        // never found again — backfill saw no `since`, asked LATEST, and the
+        // gap-versus-first-sight distinction (#223) collapsed to first sight.
+        let names: Vec<String> = self
+            .channels
+            .values()
+            .map(|channel| channel.name.clone())
+            .chain(self.queries.values().map(|query| query.nick.clone()))
+            .collect();
+        for name in names {
+            let old = previous.fold(&name);
+            let new = self.fold(&name);
+            if old == new {
+                continue;
+            }
+            if let Some(newest) = self.archived.remove(&old) {
+                self.archived.insert(new.clone(), newest);
+            }
+            if let Some(pages) = self.gap_fills.remove(&old) {
+                self.gap_fills.insert(new, pages);
+            }
+        }
     }
 
     /// Like the other channel replies below it, this one only updates a channel
@@ -1393,14 +1433,17 @@ impl SessionState {
         );
     }
 
-    fn on_nick_in_use(&mut self, params: &[String], message: &Message) {
+    /// A NICK the server would not take, while registering: `what` is the
+    /// refusal in words — taken, held, collided — and the answer to each is
+    /// the next candidate.
+    fn on_nick_refused(&mut self, params: &[String], message: &Message, what: &str) {
         let taken = params.first().cloned().unwrap_or_default();
         let name = self.network_name().to_string();
 
         if self.registered {
             self.notice(
                 Severity::Warning,
-                format!("Nickname `{taken}` is taken on {name}"),
+                format!("Nickname `{taken}` {what} on {name}"),
                 &message.raw,
             );
             return;
@@ -1410,7 +1453,7 @@ impl SessionState {
             Some(next) => {
                 self.notice(
                     Severity::Warning,
-                    format!("Nickname `{taken}` is taken on {name} — trying `{next}`"),
+                    format!("Nickname `{taken}` {what} on {name} — trying `{next}`"),
                     &message.raw,
                 );
                 self.nick = next.clone();
@@ -1507,6 +1550,15 @@ impl SessionState {
         let Some(raw_target) = message.param(0) else {
             return;
         };
+        // A STATUSMSG target is the channel, spoken to a slice of it: `@#chan`
+        // reaches the ops of `#chan`. Filed under the channel — classified by
+        // first character it read as a nick, so every ops broadcast opened a
+        // query on whoever sent it, and `Remember` kept the query across
+        // restarts.
+        let raw_target = self
+            .isupport
+            .statusmsg_channel(raw_target)
+            .unwrap_or(raw_target);
         let Some(body) = message.param(1) else { return };
         let sender = self.sender_of(message);
 
@@ -1653,6 +1705,12 @@ impl SessionState {
         let Some(raw_target) = message.param(0) else {
             return;
         };
+        // As in `handle_privmsg`: `@#chan` is the channel, not a query with
+        // whoever typed into it.
+        let raw_target = self
+            .isupport
+            .statusmsg_channel(raw_target)
+            .unwrap_or(raw_target);
         let target = if self.isupport.is_channel(raw_target) {
             raw_target.to_string()
         } else {
@@ -2419,6 +2477,12 @@ impl SessionState {
         self.abandon_unwritten();
         self.ping = None;
         self.lag_ms = None;
+        // A spent exchange left here would swallow the next connection's
+        // `AUTHENTICATE +`: the go-ahead reads as the end of an empty
+        // challenge, fails the old exchange's verify, and aborts — a network
+        // blip became a network that never authenticates again.
+        self.scram = None;
+        self.challenge.clear();
         self.sasl = match self.config.sasl {
             Some(_) => SaslStatus::InProgress,
             None => SaslStatus::NotConfigured,

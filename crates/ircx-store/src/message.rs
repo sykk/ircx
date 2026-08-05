@@ -43,6 +43,11 @@ const INSERT: &str = "INSERT OR IGNORE INTO messages (
 /// the timeline on startup would be a stranger thing than the doubling. The
 /// tags are taken, because the `msgid` among them is what a reply or a reaction
 /// names, and a message that cannot be answered is not fixed.
+///
+/// A msgid the archive already holds adopts nothing: the same words said
+/// twice leave a second unclaimed copy, and a replay of the *claimed* one
+/// would otherwise hand its msgid to the twin — which the unique index
+/// refuses, taking the caller's whole transaction with it.
 const ADOPT: &str = "UPDATE messages
         SET server_msgid = ?1, tags = ?6, raw = ?7
      WHERE id = (
@@ -52,6 +57,9 @@ const ADOPT: &str = "UPDATE messages
            AND ABS(strftime('%s', written_at) - strftime('%s', ?5)) <= 3600
          ORDER BY id
          LIMIT 1
+     )
+     AND NOT EXISTS (
+        SELECT 1 FROM messages WHERE network = ?2 AND server_msgid = ?1
      )";
 
 /// Whether this message is a replay of one already archived. Repeated identical
@@ -122,10 +130,16 @@ const CONFIRM: &str = "UPDATE messages
                 written_at,
                 CASE WHEN ?9 THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END
             )
-     WHERE network = ?1 AND message_id = ?2";
+     WHERE network = ?1 AND message_id = ?2
+       AND NOT EXISTS (
+        SELECT 1 FROM messages
+         WHERE network = ?1 AND server_msgid = ?3 AND message_id != ?2
+     )";
 
 /// Matching no row means the message was never archived, which is nothing the
-/// caller can act on.
+/// caller can act on. A msgid already on some other row means a replay claimed
+/// the wrong twin first; refusing the update is the honest answer the unique
+/// index would otherwise give as an error.
 pub(crate) fn confirm(conn: &Connection, message: &ChatMessage) -> Result<(), StoreError> {
     conn.execute(
         CONFIRM,

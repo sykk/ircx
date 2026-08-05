@@ -714,6 +714,49 @@ fn a_nickname_collision_reads_as_a_sentence_and_falls_back() {
     ));
 }
 
+/// 437 is what services enforcement and netsplit delays answer a NICK with,
+/// and 432/436 are the other two refusals registration can earn. Only 433
+/// had a fallback: any of these three left the session sitting at
+/// `Registering` forever — no alternate tried, no failure declared.
+#[test]
+fn a_held_nickname_falls_back_the_way_a_taken_one_does() {
+    let mut config = config();
+    config.nick = "sable".into();
+    config.alt_nicks = vec!["sable-".into()];
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :");
+    session.sent();
+
+    session.feed(":irc.libera.chat 437 * sable :Nick/channel is temporarily unavailable");
+    assert_eq!(
+        session.notices(),
+        vec![(
+            Severity::Warning,
+            "Nickname `sable` is briefly held on Libera — trying `sable-`"
+        )]
+    );
+    assert_eq!(session.sent(), vec!["NICK sable-"]);
+
+    session.feed(":irc.libera.chat 432 * sable- :Erroneous nickname");
+    assert_eq!(
+        session.sent(),
+        vec!["NICK sable_"],
+        "an invalid candidate moves on rather than stalling"
+    );
+}
+
+/// Registered, the same numerics describe a failed rename: nothing should
+/// start walking the fallback list out from under the nick that works.
+#[test]
+fn a_refused_rename_does_not_walk_the_fallback_list() {
+    let mut session = registered("");
+    session.sent();
+    session.feed(":irc.libera.chat 437 sykk newnick :Nick/channel is temporarily unavailable");
+
+    assert!(session.sent().is_empty(), "no NICK is sent back");
+}
+
 #[test]
 fn the_raw_line_is_kept_on_the_notice_it_produced() {
     let mut session = registered("");
@@ -943,6 +986,45 @@ fn a_private_message_opens_a_query_and_counts_as_unread() {
     let actions = session.state.mark_read("SABLE");
     session.apply(actions);
     assert_eq!(session.state.queries()[0].unread, 0);
+}
+
+/// Libera advertises `STATUSMSG=@+`, and a common ops tool is `NOTICE
+/// @#chan`. Classified by first character the target read as a nick, so
+/// every such broadcast opened a query on the op who sent it — one per op,
+/// persisted across restarts by `Remember` — instead of landing in the
+/// channel it was about.
+#[test]
+fn a_statusmsg_broadcast_lands_in_its_channel_rather_than_a_query() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat 005 sykk STATUSMSG=@+ :are supported by this server");
+    session.feed(":oper!o@h NOTICE @#ops :heads up, ops");
+
+    let messages = session.messages();
+    let landed = messages.last().expect("the notice landed");
+    assert_eq!(landed.target, "#ops");
+    assert_eq!(landed.text, "heads up, ops");
+    assert!(
+        !session
+            .events
+            .iter()
+            .any(|event| matches!(event, IrcxEvent::QueryUpdated { .. })),
+        "no query opens on the op who happened to send it"
+    );
+}
+
+/// The typing indicator takes the same route: `TAGMSG @#chan` is typing in
+/// the channel, not in a query.
+#[test]
+fn a_statusmsg_tagmsg_types_into_its_channel() {
+    let mut session = registered("message-tags");
+    session.feed(":irc.libera.chat 005 sykk STATUSMSG=@+ :are supported by this server");
+    session.feed("@+typing=active :oper!o@h TAGMSG @#ops");
+
+    let typing = session.events.iter().find_map(|event| match event {
+        IrcxEvent::TypingChanged { target, .. } => Some(target.clone()),
+        _ => None,
+    });
+    assert_eq!(typing.as_deref(), Some("#ops"));
 }
 
 #[test]
@@ -2823,6 +2905,47 @@ mod scram_over_a_session {
         );
     }
 
+    /// A reconnect starts the exchange over. The spent exchange used to
+    /// survive the disconnect — only an abort ever cleared it — so the next
+    /// connection's `AUTHENTICATE +` was read as the end of an empty
+    /// challenge, verified against the old exchange, and answered with
+    /// `AUTHENTICATE *`: every network blip on a SCRAM network became a
+    /// permanently failed connection blaming the server's address.
+    #[test]
+    fn a_reconnect_starts_a_fresh_exchange() {
+        let mut session = authenticating();
+        session.feed("AUTHENTICATE +");
+        let first = session.sent();
+        let nonce = nonce_from(&first[0]);
+        let combined = format!("{nonce}{SERVER_PART}");
+        let server_first = format!("r={combined},s={SALT},i=4096");
+        session.feed(&format!("AUTHENTICATE {}", STANDARD.encode(&server_first)));
+        session.sent();
+        let auth = format!("n=user,r={nonce},{server_first},c=biws,r={combined}");
+        let signature = server_signature("pencil", SALT, 4096, &auth);
+        session.feed(&format!(
+            "AUTHENTICATE {}",
+            STANDARD.encode(format!("v={signature}"))
+        ));
+        session.feed(":irc.libera.chat 903 sykk :SASL authentication successful");
+        session.sent();
+
+        session.state.on_disconnected("the connection ended");
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN,EXTERNAL,SCRAM-SHA-512 message-tags");
+        session.feed(":irc.libera.chat CAP * ACK :sasl");
+        session.sent();
+
+        session.feed("AUTHENTICATE +");
+        let reopened = session.sent();
+        assert_eq!(reopened.len(), 1, "one line answers the go-ahead");
+        let client_first = payload(&reopened[0]);
+        assert!(
+            client_first.starts_with("n,,n=user,r="),
+            "the go-ahead opens a fresh exchange rather than closing a stale one: {client_first}"
+        );
+    }
+
     /// A mechanism the server never offered is not an authentication failure:
     /// the client says so and carries on unauthenticated, per the degradation
     /// rule. Pinned because it is quiet — `ergo` advertises SHA-256, a user
@@ -3338,6 +3461,24 @@ mod backfill_on_join {
         assert_eq!(
             asked(&session),
             ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:15:04.123Z 200"]
+        );
+    }
+
+    /// The watermark is seeded in `restore` under the default rfc1459 fold,
+    /// before any 005 exists. A server that then advertises ascii — ergo
+    /// does — refolds the conversation keys, and a name with `[]` in it
+    /// changes key. Left behind under the old one, the watermark was never
+    /// found again: the join asked LATEST instead of AFTER, and the
+    /// gap-versus-first-sight distinction quietly collapsed.
+    #[test]
+    fn a_late_casemapping_keeps_the_watermark_findable() {
+        let mut session = registered_holding("#chan[]", "2026-07-31T09:15:04.000Z");
+        session.feed(":irc.libera.chat 005 sykk CASEMAPPING=ascii :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #chan[]");
+
+        assert_eq!(
+            asked(&session),
+            ["CHATHISTORY AFTER #chan[] timestamp=2026-07-31T09:15:04.000Z 200"]
         );
     }
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -315,6 +315,7 @@ async fn run(
     let mut session = SessionState::new(config);
     let mut backoff = Backoff::new(BackoffPolicy::default());
     let context = Context {
+        waiting: Arc::new(Waiting::default()),
         network: session.network_id().clone(),
         store,
         events,
@@ -555,6 +556,48 @@ struct Context {
     own_inbox: mpsc::WeakSender<SessionCommand>,
     /// Messages that have arrived and not yet been written down. See `persist`.
     pending: Mutex<Vec<ChatMessage>>,
+    /// Messages an annotator has not caught up with, and which conversations
+    /// already have a worker on them. See `annotate`. #406.
+    waiting: Arc<Waiting>,
+}
+
+/// How late a note may be and still be worth writing. A note about a message
+/// that scrolled away two minutes ago is not an annotation, it is clutter, and
+/// waiting to write it is what let the queue grow without limit. #406.
+const ANNOTATE_PATIENCE: Duration = Duration::from_secs(10);
+
+/// A backstop on the memory rather than on the lateness: ten seconds of a
+/// flood is thousands of messages, and they are held as clones until their
+/// turn.
+const ANNOTATE_WAITING: usize = 128;
+
+/// What is queued for the annotators, per conversation.
+///
+/// Arrivals are kept apart rather than merged into one pile, because the shim
+/// calls the plugin's handler once per message in the batch it is given: two
+/// hundred messages in one call is two hundred times the work under one
+/// deadline, which kills a plugin that was merely slow. Merging was tried and
+/// is why this is a queue.
+#[derive(Default)]
+struct Waiting {
+    inner: Mutex<WaitingInner>,
+}
+
+#[derive(Default)]
+struct WaitingInner {
+    arrivals: HashMap<TargetName, VecDeque<(Instant, Vec<ArrivedMessage>)>>,
+    /// Conversations with a worker already draining them. Held under the same
+    /// lock as `arrivals` so standing down and arriving cannot cross.
+    draining: HashSet<TargetName>,
+    /// Messages whose notes were given up on, per conversation, so the reader
+    /// is told once rather than per message.
+    missed: HashMap<TargetName, usize>,
+}
+
+impl Waiting {
+    fn lock(&self) -> std::sync::MutexGuard<'_, WaitingInner> {
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 impl Context {
@@ -687,76 +730,149 @@ impl Context {
     /// annotator must delay its own note and nothing else. A conversation no
     /// installed plugin annotates costs one map lookup, because `annotators`
     /// answers from the library without starting a runtime.
+    ///
+    /// One worker per conversation, and what arrives while it is busy waits for
+    /// it rather than queueing a call of its own. Before #406 a live channel
+    /// made one call per message — `append` emits one `MessagesAppended` per
+    /// line — so an annotator slower than the channel fell behind by the
+    /// difference, for every message, without limit: measured at 200ms of lag
+    /// per message and twenty seconds behind after ten seconds of talking. The
+    /// lag now settles at about one call, whatever the channel is doing, and
+    /// the plugin sees the messages it missed in the batch it is handed, which
+    /// is what `AnnotateRequest` carrying a `Vec` was always for.
     fn annotate(&self, target: TargetName, messages: Vec<ArrivedMessage>) {
         if messages.is_empty() {
             return;
         }
+        if self.plugins.is_none() {
+            return;
+        }
+        let mut waiting = self.waiting.lock();
+        let queue = waiting.arrivals.entry(target.clone()).or_default();
+        queue.push_back((Instant::now(), messages));
+        let mut dropped = 0;
+        while queue.len() > ANNOTATE_WAITING {
+            dropped += queue.pop_front().map_or(0, |(_, messages)| messages.len());
+        }
+        if dropped > 0 {
+            *waiting.missed.entry(target.clone()).or_default() += dropped;
+        }
+        if !waiting.draining.insert(target.clone()) {
+            // A worker is already on this conversation and will take the rest.
+            return;
+        }
+        drop(waiting);
+        self.drain_annotations(target);
+    }
+
+    /// Runs every annotator over whatever has piled up, until nothing has.
+    fn drain_annotations(&self, target: TargetName) {
         let Some(runtime) = self.plugins.clone() else {
             return;
         };
         let strikes = Arc::clone(&self.strikes);
-        let annotators: Vec<_> = runtime
-            .annotators(&target)
-            .into_iter()
-            .filter(|annotator| out(&strikes, Hook::Annotate, &annotator.plugin) < HOOK_STRIKES)
-            .collect();
-        if annotators.is_empty() {
-            return;
-        }
-
         let events = self.events.clone();
         let network = self.network.clone();
         let store = Arc::clone(&self.store);
         let own_inbox = self.own_inbox.clone();
+        let waiting_for = Arc::clone(&self.waiting);
         tokio::spawn(async move {
-            for annotator in annotators {
-                let request = AnnotateRequest {
-                    target: target.clone(),
-                    messages: messages.clone(),
-                };
-                let running = Arc::clone(&runtime);
-                let plugin = annotator.plugin.clone();
-                let ran =
-                    tokio::task::spawn_blocking(move || running.annotate(&annotator, request))
-                        .await;
-
-                let reply = match ran {
-                    Ok(Ok(reply)) => reply,
-                    Ok(Err(failure)) => {
-                        if strike(&strikes, Hook::Annotate, &plugin, Some(&failure.failure)) {
-                            let why = failure.failure.to_string();
-                            report_stopped(&own_inbox, Hook::Annotate, &plugin, Some(why)).await;
-                        }
-                        continue;
-                    }
-                    Err(_) => {
-                        if strike(&strikes, Hook::Annotate, &plugin, None) {
-                            report_stopped(&own_inbox, Hook::Annotate, &plugin, None).await;
-                        }
-                        continue;
-                    }
-                };
-                strike_cleared(&strikes, Hook::Annotate, &plugin);
-
-                for note in reply.notes {
-                    // Written before it is sent, for the reason a reaction is:
-                    // the archive is the only place a note outside the open
-                    // window survives, and a conversation reopened tomorrow
-                    // reads it back rather than running the annotator again.
-                    if let Err(error) =
-                        store.set_annotation(&network, &note.message, &plugin, &note.text)
-                    {
-                        warn!(%error, "could not write an annotation to the archive");
-                    }
-                    let event = IrcxEvent::MessageAnnotated {
-                        network: network.clone(),
-                        target: target.clone(),
-                        message: note.message,
-                        plugin: plugin.clone(),
-                        text: note.text,
+            loop {
+                let messages = loop {
+                    let mut waiting = waiting_for.lock();
+                    let Some(queue) = waiting.arrivals.get_mut(&target) else {
+                        // Nothing left. Standing down inside the same lock the
+                        // next arrival takes is what stops one slipping between
+                        // the check and the release with nobody to run it.
+                        waiting.draining.remove(&target);
+                        break None;
                     };
-                    if events.send(event).await.is_err() {
-                        return;
+                    let Some((arrived, messages)) = queue.pop_front() else {
+                        waiting.arrivals.remove(&target);
+                        waiting.draining.remove(&target);
+                        break None;
+                    };
+                    if arrived.elapsed() > ANNOTATE_PATIENCE {
+                        *waiting.missed.entry(target.clone()).or_default() += messages.len();
+                        continue;
+                    }
+                    break Some(messages);
+                };
+                let Some(messages) = messages else {
+                    let missed = {
+                        let mut waiting = waiting_for.lock();
+                        waiting.missed.remove(&target).unwrap_or(0)
+                    };
+                    if missed > 0 {
+                        warn!(
+                            %target,
+                            missed,
+                            "an annotator fell far enough behind that notes were given up on"
+                        );
+                    }
+                    return;
+                };
+
+                // Read each round rather than once: a plugin struck out while
+                // this was working stops being asked.
+                let annotators: Vec<_> = runtime
+                    .annotators(&target)
+                    .into_iter()
+                    .filter(|annotator| {
+                        out(&strikes, Hook::Annotate, &annotator.plugin) < HOOK_STRIKES
+                    })
+                    .collect();
+
+                for annotator in annotators {
+                    let request = AnnotateRequest {
+                        target: target.clone(),
+                        messages: messages.clone(),
+                    };
+                    let running = Arc::clone(&runtime);
+                    let plugin = annotator.plugin.clone();
+                    let ran =
+                        tokio::task::spawn_blocking(move || running.annotate(&annotator, request))
+                            .await;
+
+                    let reply = match ran {
+                        Ok(Ok(reply)) => reply,
+                        Ok(Err(failure)) => {
+                            if strike(&strikes, Hook::Annotate, &plugin, Some(&failure.failure)) {
+                                let why = failure.failure.to_string();
+                                report_stopped(&own_inbox, Hook::Annotate, &plugin, Some(why))
+                                    .await;
+                            }
+                            continue;
+                        }
+                        Err(_) => {
+                            if strike(&strikes, Hook::Annotate, &plugin, None) {
+                                report_stopped(&own_inbox, Hook::Annotate, &plugin, None).await;
+                            }
+                            continue;
+                        }
+                    };
+                    strike_cleared(&strikes, Hook::Annotate, &plugin);
+
+                    for note in reply.notes {
+                        // Written before it is sent, for the reason a reaction is:
+                        // the archive is the only place a note outside the open
+                        // window survives, and a conversation reopened tomorrow
+                        // reads it back rather than running the annotator again.
+                        if let Err(error) =
+                            store.set_annotation(&network, &note.message, &plugin, &note.text)
+                        {
+                            warn!(%error, "could not write an annotation to the archive");
+                        }
+                        let event = IrcxEvent::MessageAnnotated {
+                            network: network.clone(),
+                            target: target.clone(),
+                            message: note.message,
+                            plugin: plugin.clone(),
+                            text: note.text,
+                        };
+                        if events.send(event).await.is_err() {
+                            return;
+                        }
                     }
                 }
             }
@@ -1102,6 +1218,7 @@ mod tests {
             strikes: Arc::new(strikes),
             own_inbox: inbox.downgrade(),
             pending: Mutex::default(),
+            waiting: Arc::new(Waiting::default()),
         }
     }
 

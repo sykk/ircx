@@ -945,6 +945,45 @@ fn a_private_message_opens_a_query_and_counts_as_unread() {
     assert_eq!(session.state.queries()[0].unread, 0);
 }
 
+/// Libera advertises `STATUSMSG=@+`, and a common ops tool is `NOTICE
+/// @#chan`. Classified by first character the target read as a nick, so
+/// every such broadcast opened a query on the op who sent it — one per op,
+/// persisted across restarts by `Remember` — instead of landing in the
+/// channel it was about.
+#[test]
+fn a_statusmsg_broadcast_lands_in_its_channel_rather_than_a_query() {
+    let mut session = registered("");
+    session.feed(":irc.libera.chat 005 sykk STATUSMSG=@+ :are supported by this server");
+    session.feed(":oper!o@h NOTICE @#ops :heads up, ops");
+
+    let messages = session.messages();
+    let landed = messages.last().expect("the notice landed");
+    assert_eq!(landed.target, "#ops");
+    assert_eq!(landed.text, "heads up, ops");
+    assert!(
+        !session
+            .events
+            .iter()
+            .any(|event| matches!(event, IrcxEvent::QueryUpdated { .. })),
+        "no query opens on the op who happened to send it"
+    );
+}
+
+/// The typing indicator takes the same route: `TAGMSG @#chan` is typing in
+/// the channel, not in a query.
+#[test]
+fn a_statusmsg_tagmsg_types_into_its_channel() {
+    let mut session = registered("message-tags");
+    session.feed(":irc.libera.chat 005 sykk STATUSMSG=@+ :are supported by this server");
+    session.feed("@+typing=active :oper!o@h TAGMSG @#ops");
+
+    let typing = session.events.iter().find_map(|event| match event {
+        IrcxEvent::TypingChanged { target, .. } => Some(target.clone()),
+        _ => None,
+    });
+    assert_eq!(typing.as_deref(), Some("#ops"));
+}
+
 #[test]
 fn a_ctcp_action_becomes_an_action_and_urls_become_attachments() {
     let mut session = registered("");

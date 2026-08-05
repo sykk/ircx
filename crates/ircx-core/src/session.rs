@@ -1507,6 +1507,15 @@ impl SessionState {
         let Some(raw_target) = message.param(0) else {
             return;
         };
+        // A STATUSMSG target is the channel, spoken to a slice of it: `@#chan`
+        // reaches the ops of `#chan`. Filed under the channel — classified by
+        // first character it read as a nick, so every ops broadcast opened a
+        // query on whoever sent it, and `Remember` kept the query across
+        // restarts.
+        let raw_target = self
+            .isupport
+            .statusmsg_channel(raw_target)
+            .unwrap_or(raw_target);
         let Some(body) = message.param(1) else { return };
         let sender = self.sender_of(message);
 
@@ -1653,6 +1662,12 @@ impl SessionState {
         let Some(raw_target) = message.param(0) else {
             return;
         };
+        // As in `handle_privmsg`: `@#chan` is the channel, not a query with
+        // whoever typed into it.
+        let raw_target = self
+            .isupport
+            .statusmsg_channel(raw_target)
+            .unwrap_or(raw_target);
         let target = if self.isupport.is_channel(raw_target) {
             raw_target.to_string()
         } else {

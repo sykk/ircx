@@ -94,6 +94,35 @@ describe("the echo of a message you sent", () => {
   });
 });
 
+/** The raw log had the shape #321 fixed for rosters: a `/list` delivers tens
+ * of thousands of `rawLine` events in one batch, and each copied the whole
+ * capped log on its way in. Coalesced now, and `reduce` stays the one to
+ * trust — this asserts the fast path agrees with it, cap included, across an
+ * interleaved event that forces a mid-batch flush. */
+describe("the raw log over one batch", () => {
+  const store = () => useAppStore.getState();
+
+  function line(network: string, n: number): IrcxEvent {
+    return { type: "rawLine", network, line: `PING ${n}`, outgoing: n % 2 === 0 };
+  }
+
+  it("lands the same log as the same events applied one at a time", () => {
+    const batch: IrcxEvent[] = [];
+    for (let n = 0; n < 2_100; n++) batch.push(line("libera", n));
+    batch.push({ type: "lagChanged", network: "libera", lagMs: 12 });
+    for (let n = 0; n < 5; n++) batch.push(line("oftc", n));
+
+    for (const event of batch) store().applyEvent(event);
+    const oneAtATime = store().rawLog;
+
+    resetStore();
+    store().applyEvents(batch);
+
+    expect(store().rawLog).toEqual(oneAtATime);
+    expect(store().rawLog["libera"]).toHaveLength(2_000);
+  });
+});
+
 describe("a reaction", () => {
   function reaction(nick: string, emoji: string, active: boolean) {
     return {

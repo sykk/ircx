@@ -561,37 +561,44 @@ struct Context {
     waiting: Arc<Waiting>,
 }
 
-/// How late a note may be and still be worth writing. A note about a message
+/// How late a hook may run and still be worth running. A note about a message
 /// that scrolled away two minutes ago is not an annotation, it is clutter, and
-/// waiting to write it is what let the queue grow without limit. #406.
-const ANNOTATE_PATIENCE: Duration = Duration::from_secs(10);
+/// a badge that goes loud for it is worse — waiting to do either is what let
+/// the queue grow without limit. #406, #408.
+const HOOK_PATIENCE: Duration = Duration::from_secs(10);
 
 /// A backstop on the memory rather than on the lateness: ten seconds of a
 /// flood is thousands of messages, and they are held as clones until their
 /// turn.
-const ANNOTATE_WAITING: usize = 128;
+const HOOK_WAITING: usize = 128;
 
-/// What is queued for the annotators, per conversation.
+/// What is queued for a hook, per conversation.
 ///
 /// Arrivals are kept apart rather than merged into one pile, because the shim
 /// calls the plugin's handler once per message in the batch it is given: two
 /// hundred messages in one call is two hundred times the work under one
 /// deadline, which kills a plugin that was merely slow. Merging was tried and
 /// is why this is a queue.
+///
+/// Keyed by hook as well as conversation, because the annotator and the
+/// notification rule are different plugins doing different work at different
+/// rates — one falling behind is no reason to hold the other up.
 #[derive(Default)]
 struct Waiting {
     inner: Mutex<WaitingInner>,
 }
 
+type Queue = (Hook, TargetName);
+
 #[derive(Default)]
 struct WaitingInner {
-    arrivals: HashMap<TargetName, VecDeque<(Instant, Vec<ArrivedMessage>)>>,
-    /// Conversations with a worker already draining them. Held under the same
-    /// lock as `arrivals` so standing down and arriving cannot cross.
-    draining: HashSet<TargetName>,
-    /// Messages whose notes were given up on, per conversation, so the reader
-    /// is told once rather than per message.
-    missed: HashMap<TargetName, usize>,
+    arrivals: HashMap<Queue, VecDeque<(Instant, Vec<ArrivedMessage>)>>,
+    /// Queues with a worker already draining them. Held under the same lock as
+    /// `arrivals` so standing down and arriving cannot cross.
+    draining: HashSet<Queue>,
+    /// Messages a hook was never run for, so the log says how many rather than
+    /// saying it per message.
+    missed: HashMap<Queue, usize>,
 }
 
 impl Waiting {
@@ -747,22 +754,80 @@ impl Context {
         if self.plugins.is_none() {
             return;
         }
+        if self.queue(Hook::Annotate, &target, messages) {
+            self.drain_annotations(target);
+        }
+    }
+
+    /// Puts an arrival in a hook's queue, and says whether the caller has to
+    /// start a worker for it.
+    ///
+    /// `false` means one is already running and will take this too, which is
+    /// the whole of the backpressure: a conversation has one worker per hook
+    /// however fast it is talking.
+    fn queue(&self, hook: Hook, target: &TargetName, messages: Vec<ArrivedMessage>) -> bool {
+        let key = (hook, target.clone());
         let mut waiting = self.waiting.lock();
-        let queue = waiting.arrivals.entry(target.clone()).or_default();
+        let queue = waiting.arrivals.entry(key.clone()).or_default();
         queue.push_back((Instant::now(), messages));
         let mut dropped = 0;
-        while queue.len() > ANNOTATE_WAITING {
+        while queue.len() > HOOK_WAITING {
             dropped += queue.pop_front().map_or(0, |(_, messages)| messages.len());
         }
         if dropped > 0 {
-            *waiting.missed.entry(target.clone()).or_default() += dropped;
+            *waiting.missed.entry(key.clone()).or_default() += dropped;
         }
-        if !waiting.draining.insert(target.clone()) {
-            // A worker is already on this conversation and will take the rest.
-            return;
+        waiting.draining.insert(key)
+    }
+
+    /// The next arrival for a hook, or `None` once there is nothing left —
+    /// which is also when the worker stands down.
+    ///
+    /// Anything that has waited longer than `HOOK_PATIENCE` is passed over and
+    /// counted rather than run late.
+    fn next_arrival(
+        waiting: &Arc<Waiting>,
+        hook: Hook,
+        target: &TargetName,
+    ) -> Option<Vec<ArrivedMessage>> {
+        let key = (hook, target.clone());
+        loop {
+            let mut held = waiting.lock();
+            let Some(queue) = held.arrivals.get_mut(&key) else {
+                // Standing down inside the same lock the next arrival takes is
+                // what stops one slipping between the check and the release
+                // with nobody to run it.
+                held.draining.remove(&key);
+                return None;
+            };
+            let Some((arrived, messages)) = queue.pop_front() else {
+                held.arrivals.remove(&key);
+                held.draining.remove(&key);
+                return None;
+            };
+            if arrived.elapsed() > HOOK_PATIENCE {
+                *held.missed.entry(key.clone()).or_default() += messages.len();
+                continue;
+            }
+            return Some(messages);
         }
-        drop(waiting);
-        self.drain_annotations(target);
+    }
+
+    /// What a hook never got to, said once at the end of a drain rather than
+    /// per message.
+    fn report_missed(waiting: &Arc<Waiting>, hook: Hook, target: &TargetName) {
+        let missed = {
+            let mut held = waiting.lock();
+            held.missed.remove(&(hook, target.clone())).unwrap_or(0)
+        };
+        if missed > 0 {
+            warn!(
+                %target,
+                hook = hook.doing(),
+                missed,
+                "a plugin fell far enough behind that messages were passed over"
+            );
+        }
     }
 
     /// Runs every annotator over whatever has piled up, until nothing has.
@@ -778,38 +843,9 @@ impl Context {
         let waiting_for = Arc::clone(&self.waiting);
         tokio::spawn(async move {
             loop {
-                let messages = loop {
-                    let mut waiting = waiting_for.lock();
-                    let Some(queue) = waiting.arrivals.get_mut(&target) else {
-                        // Nothing left. Standing down inside the same lock the
-                        // next arrival takes is what stops one slipping between
-                        // the check and the release with nobody to run it.
-                        waiting.draining.remove(&target);
-                        break None;
-                    };
-                    let Some((arrived, messages)) = queue.pop_front() else {
-                        waiting.arrivals.remove(&target);
-                        waiting.draining.remove(&target);
-                        break None;
-                    };
-                    if arrived.elapsed() > ANNOTATE_PATIENCE {
-                        *waiting.missed.entry(target.clone()).or_default() += messages.len();
-                        continue;
-                    }
-                    break Some(messages);
-                };
-                let Some(messages) = messages else {
-                    let missed = {
-                        let mut waiting = waiting_for.lock();
-                        waiting.missed.remove(&target).unwrap_or(0)
-                    };
-                    if missed > 0 {
-                        warn!(
-                            %target,
-                            missed,
-                            "an annotator fell far enough behind that notes were given up on"
-                        );
-                    }
+                let Some(messages) = Self::next_arrival(&waiting_for, Hook::Annotate, &target)
+                else {
+                    Self::report_missed(&waiting_for, Hook::Annotate, &target);
                     return;
                 };
 
@@ -886,85 +922,106 @@ impl Context {
     /// badge going loud a moment later is the cost of not making a
     /// conversation wait on a plugin.
     fn notify(&self, target: TargetName, messages: Vec<ArrivedMessage>) {
+        if messages.is_empty() || self.plugins.is_none() {
+            return;
+        }
+        if self.queue(Hook::Notify, &target, messages) {
+            self.drain_notifications(target);
+        }
+    }
+
+    /// Runs every rule over whatever has piled up, until nothing has. The
+    /// annotator's twin, and bounded the same way and for the same reason: a
+    /// badge that goes loud for a message from four minutes ago is not a
+    /// notification. #408.
+    fn drain_notifications(&self, target: TargetName) {
         let Some(runtime) = self.plugins.clone() else {
             return;
         };
         let strikes = Arc::clone(&self.strikes);
-        let rules: Vec<_> = runtime
-            .notifiers(&target)
-            .into_iter()
-            .filter(|rule| out(&strikes, Hook::Notify, &rule.plugin) < HOOK_STRIKES)
-            .collect();
-        if rules.is_empty() {
-            return;
-        }
-
         let events = self.events.clone();
         let network = self.network.clone();
         let store = Arc::clone(&self.store);
         let own_inbox = self.own_inbox.clone();
+        let waiting_for = Arc::clone(&self.waiting);
         tokio::spawn(async move {
-            // Two rules raising the same message is one raise. Kept here rather
-            // than in the session, because a message arrives in one batch and
-            // no later batch can hold it again.
-            let mut already: HashSet<String> = HashSet::new();
-            for rule in rules {
-                let request = NotifyRequest {
-                    target: target.clone(),
-                    messages: messages.clone(),
+            loop {
+                let Some(messages) = Self::next_arrival(&waiting_for, Hook::Notify, &target) else {
+                    Self::report_missed(&waiting_for, Hook::Notify, &target);
+                    return;
                 };
-                let running = Arc::clone(&runtime);
-                let plugin = rule.plugin.clone();
-                let ran = tokio::task::spawn_blocking(move || running.notify(&rule, request)).await;
 
-                let reply = match ran {
-                    Ok(Ok(reply)) => reply,
-                    Ok(Err(failure)) => {
-                        if strike(&strikes, Hook::Notify, &plugin, Some(&failure.failure)) {
-                            let why = failure.failure.to_string();
-                            report_stopped(&own_inbox, Hook::Notify, &plugin, Some(why)).await;
-                        }
-                        continue;
-                    }
-                    Err(_) => {
-                        if strike(&strikes, Hook::Notify, &plugin, None) {
-                            report_stopped(&own_inbox, Hook::Notify, &plugin, None).await;
-                        }
-                        continue;
-                    }
-                };
-                strike_cleared(&strikes, Hook::Notify, &plugin);
+                // Read each round rather than once: a rule struck out while this
+                // was working stops being asked.
+                let rules: Vec<_> = runtime
+                    .notifiers(&target)
+                    .into_iter()
+                    .filter(|rule| out(&strikes, Hook::Notify, &rule.plugin) < HOOK_STRIKES)
+                    .collect();
 
-                for message in reply.raised {
-                    // Written before it is sent, as a note is: the archive is
-                    // where a raise outside the open window survives, so a
-                    // conversation reopened tomorrow still shows what was worth
-                    // reading in it.
-                    if let Err(error) = store.set_raised(&network, &message, &plugin) {
-                        warn!(%error, "could not write a raised message to the archive");
-                    }
-                    let first = already.insert(message.clone());
-                    let event = IrcxEvent::MessageRaised {
-                        network: network.clone(),
+                // Two rules raising the same message is one raise. Kept here rather
+                // than in the session, because a message arrives in one batch and
+                // no later batch can hold it again.
+                let mut already: HashSet<String> = HashSet::new();
+                for rule in rules {
+                    let request = NotifyRequest {
                         target: target.clone(),
-                        message,
-                        plugin: plugin.clone(),
+                        messages: messages.clone(),
                     };
-                    if events.send(event).await.is_err() {
-                        return;
-                    }
-                    // The count lives in the session, so the badge is raised by
-                    // asking for it rather than by a second party keeping its
-                    // own tally.
-                    if first {
-                        let Some(inbox) = own_inbox.upgrade() else {
-                            return;
-                        };
-                        let raised = SessionCommand::Raised {
+                    let running = Arc::clone(&runtime);
+                    let plugin = rule.plugin.clone();
+                    let ran =
+                        tokio::task::spawn_blocking(move || running.notify(&rule, request)).await;
+
+                    let reply = match ran {
+                        Ok(Ok(reply)) => reply,
+                        Ok(Err(failure)) => {
+                            if strike(&strikes, Hook::Notify, &plugin, Some(&failure.failure)) {
+                                let why = failure.failure.to_string();
+                                report_stopped(&own_inbox, Hook::Notify, &plugin, Some(why)).await;
+                            }
+                            continue;
+                        }
+                        Err(_) => {
+                            if strike(&strikes, Hook::Notify, &plugin, None) {
+                                report_stopped(&own_inbox, Hook::Notify, &plugin, None).await;
+                            }
+                            continue;
+                        }
+                    };
+                    strike_cleared(&strikes, Hook::Notify, &plugin);
+
+                    for message in reply.raised {
+                        // Written before it is sent, as a note is: the archive is
+                        // where a raise outside the open window survives, so a
+                        // conversation reopened tomorrow still shows what was worth
+                        // reading in it.
+                        if let Err(error) = store.set_raised(&network, &message, &plugin) {
+                            warn!(%error, "could not write a raised message to the archive");
+                        }
+                        let first = already.insert(message.clone());
+                        let event = IrcxEvent::MessageRaised {
+                            network: network.clone(),
                             target: target.clone(),
+                            message,
+                            plugin: plugin.clone(),
                         };
-                        if inbox.send(raised).await.is_err() {
+                        if events.send(event).await.is_err() {
                             return;
+                        }
+                        // The count lives in the session, so the badge is raised by
+                        // asking for it rather than by a second party keeping its
+                        // own tally.
+                        if first {
+                            let Some(inbox) = own_inbox.upgrade() else {
+                                return;
+                            };
+                            let raised = SessionCommand::Raised {
+                                target: target.clone(),
+                            };
+                            if inbox.send(raised).await.is_err() {
+                                return;
+                            }
                         }
                     }
                 }

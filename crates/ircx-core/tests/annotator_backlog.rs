@@ -318,3 +318,112 @@ async fn a_slow_annotator_against_a_channel_that_keeps_talking() {
         println!("  the last was {last:?} behind its own");
     }
 }
+
+/// A notification rule doing the same thing to the same channel, because it is
+/// the same shape: `Action::Notify` is pushed per message too, and `notify`
+/// spawned per call exactly as `annotate` did. #408.
+const SLOWER_RULE: &str = r#"
+ircx.notify((message) => {
+  const until = Date.now() + 300;
+  let churn = 0;
+  while (Date.now() < until) churn += 1;
+  return churn > 0 && message.text.includes("line");
+});
+"#;
+
+fn install_rule(root: &Path) -> Arc<PluginRuntime> {
+    let runtime = PluginRuntime::open(
+        root.join("library"),
+        PluginLimits::default(),
+        network_for_plugins(tokio::runtime::Handle::current()),
+    )
+    .map(Arc::new)
+    .expect("a plugin runtime");
+
+    let requests = Grants {
+        permissions: [Permission::RaiseNotifications, Permission::AccessChannels]
+            .into_iter()
+            .collect(),
+        channels: vec![CHANNEL.into()],
+        hosts: Vec::new(),
+    };
+    let manifest = Manifest {
+        id: "shouty".into(),
+        name: "Shouty".into(),
+        version: "1.0.0".into(),
+        description: "Decides slowly".into(),
+        entry: "main.js".into(),
+        annotates: false,
+        notifies: true,
+        commands: Vec::<CommandSpec>::new(),
+        requests: requests.clone(),
+    };
+    let source = root.join("shouty-source");
+    std::fs::create_dir_all(&source).expect("a source directory");
+    std::fs::write(
+        source.join("plugin.json"),
+        serde_json::to_vec(&manifest).expect("a manifest serialises"),
+    )
+    .expect("write the manifest");
+    std::fs::write(source.join("main.js"), SLOWER_RULE).expect("write the code");
+    runtime.install(&source).expect("install");
+    runtime.set_grants("shouty", requests).expect("grant");
+    runtime
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "measures a notification rule against a channel that keeps talking"]
+async fn a_slow_rule_against_a_channel_that_keeps_talking() {
+    let room = tempfile::tempdir().expect("a temp directory");
+    let runtime = install_rule(room.path());
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(steady_server(listener));
+
+    let store = Arc::new(Store::open_in_memory().expect("store"));
+    let (tx, mut rx) = mpsc::channel(8192);
+    let handle = spawn_network_with_plugins(config(port), store, tx, Some(runtime));
+
+    let started = Instant::now();
+    let mut arrival: HashMap<String, Duration> = HashMap::new();
+    let mut lags: Vec<(usize, Duration)> = Vec::new();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(40);
+    while let Ok(Some(event)) = tokio::time::timeout_at(deadline, rx.recv()).await {
+        match event {
+            IrcxEvent::MessagesAppended { messages, .. } => {
+                for message in messages {
+                    arrival.insert(message.id.clone(), started.elapsed());
+                }
+            }
+            IrcxEvent::MessageRaised { message, .. } => {
+                if let Some(came) = arrival.get(&message) {
+                    let lag = started.elapsed().saturating_sub(*came);
+                    lags.push((lags.len() + 1, lag));
+                }
+                if lags.len() >= STEADY_MESSAGES {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    handle.shutdown(Some("probe done".into())).await;
+
+    println!();
+    println!("  a message every 100ms, a rule taking 300ms");
+    println!("  raises            {}", lags.len());
+    println!("  {:>10}  {:>12}", "message", "lag");
+    for (index, lag) in &lags {
+        if index % 20 == 0 || *index == 1 {
+            println!("  {index:>10}  {lag:>12?}");
+        }
+    }
+    if let (Some((_, first)), Some((_, last))) = (lags.first(), lags.last()) {
+        println!();
+        println!("  the first raise was {first:?} behind its message");
+        println!("  the last was {last:?} behind its own");
+    }
+}

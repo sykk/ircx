@@ -2419,6 +2419,12 @@ impl SessionState {
         self.abandon_unwritten();
         self.ping = None;
         self.lag_ms = None;
+        // A spent exchange left here would swallow the next connection's
+        // `AUTHENTICATE +`: the go-ahead reads as the end of an empty
+        // challenge, fails the old exchange's verify, and aborts — a network
+        // blip became a network that never authenticates again.
+        self.scram = None;
+        self.challenge.clear();
         self.sasl = match self.config.sasl {
             Some(_) => SaslStatus::InProgress,
             None => SaslStatus::NotConfigured,

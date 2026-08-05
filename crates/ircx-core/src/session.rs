@@ -775,10 +775,18 @@ impl SessionState {
             true => String::new(),
             false => format!(" — {reason}"),
         };
-        format!(
-            "{} rejected{who}{said}. Check the account name and password in this network's settings.",
-            self.network_name()
-        )
+        // EXTERNAL has no password to be wrong, and the thing that is wrong is
+        // not in this network's settings at all: the certificate is fine, the
+        // account simply does not claim it. #401 — and the same complaint #373
+        // made about the sentence sent before one was ever sent.
+        let fix = match self.config.sasl.as_ref().map(|sasl| sasl.mechanism) {
+            Some(SaslMechanism::External) => {
+                "Register this certificate's fingerprint with the account — on the network, \
+                 not here."
+            }
+            _ => "Check the account name and password in this network's settings.",
+        };
+        format!("{} rejected{who}{said}. {fix}", self.network_name())
     }
 
     /// What an exchange the *server* could not hold up its end of says.

@@ -36,23 +36,59 @@ What that leaves:
 
 - **`ECDSA-NIST256P-CHALLENGE`**, which ircx does not implement.
 
-**`EXTERNAL` is not a gap in the walking, it is a gap in the client** (#373).
-This entry used to read "needs a client certificate and a TLS listener", as
-though a run with both would settle it. A run with both would fail:
-`crates/ircx-net/src/tls.rs` builds *both* configurations with
-`with_no_client_auth`, `NetworkConfig` carries no certificate, key or
-fingerprint, and nothing anywhere reads a `.pem`. EXTERNAL authenticates with
-the credentials of the layer underneath, and this client has none to offer.
+**`EXTERNAL` was a gap in the client rather than in the walking** (#373), and
+#401 closed it. The entry that stood here said a run with a certificate and a
+TLS listener would only fail, because `tls.rs` built both configurations with
+`with_no_client_auth` and nothing anywhere read a `.pem`. That was true until
+2026-08-04.
 
-It was in the picker regardless, labelled `EXTERNAL — client certificate`, and
-what it bought was a connection that succeeded, a login that did not, and advice
-naming a password field that has nothing to do with it. It is out of the picker
-now, and `start_sasl` refuses it before `AUTHENTICATE` goes out for anyone whose
-stored network already names it. The variant stays in the IPC type so such a
-network still loads.
+**It is now the only SASL mechanism whose success path a test can re-run.**
+PLAIN's and SCRAM's needed a real account on a real network and are recorded
+below as walked by the owner; certfp needs neither, because a server matching a
+fingerprint builds no chain to an authority — a self-signed certificate made in
+half a minute is as good as any other. `crates/ircx-core/tests/external_ergo.rs`
+is the script, and the notes at the top of it are the setup in full.
 
-Nothing here was walked against a server, and it did not need to be — the two
-lines of `tls.rs` settle it, and a walk could only have confirmed a `904`.
+Run on 2026-08-04 against `ergo` 2.19 on `127.0.0.1:6698`, with an account
+holding one fingerprint:
+
+```text
+>> AUTHENTICATE EXTERNAL
+<< AUTHENTICATE +
+>> AUTHENTICATE +
+<< 900 * * certwalk :You are now logged in as certwalk
+<< 903 * :Authentication successful
+<< 001 certwalk :Welcome to the ErgoTest IRC Network
+   status: Connected
+```
+
+**With a certificate no account claims**, generated the same way and never
+registered — the control, without which the run above would look the same as a
+server that checked nothing:
+
+```text
+>> AUTHENTICATE EXTERNAL
+<< 904 * :SASL authentication failed: Invalid account credentials
+   sasl:   Failed
+   status: Failed          ← and no 001: registration is abandoned
+```
+
+**With no certificate set at all**, nothing is sent: the client refuses it
+first, and registration carries on unauthenticated to `001`. That asymmetry is
+deliberate and predates this — a server's refusal is fatal, a refusal to ask is
+not.
+
+**What the run found**, which no unit test had: the sentence after a `904` said
+*"Check the account name and password in this network's settings."* to a user
+logging in with a certificate. That is the exact complaint #373 made about the
+message sent *before* one could be presented, still true of the one that comes
+back, and reachable only once EXTERNAL could get that far. It now reads
+*"Register this certificate's fingerprint with the account — on the network, not
+here."*, which is both the right field and the right machine.
+
+Not covered: a certificate that expires mid-session, and a network that revokes
+a fingerprint while a client holds a connection made with it. Both are the
+server's answer rather than the client's, and neither has been provoked.
 
 **Both SCRAM hashes are walked**, and this section is not where that is written
 down: see **SCRAM** below, which covers SHA-256 against `ergo`, SHA-512 against

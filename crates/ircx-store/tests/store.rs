@@ -1876,6 +1876,41 @@ mod a_replay_of_our_own_message {
             .collect()
     }
 
+    /// Say the same thing twice, lose the connection after the second copy
+    /// reaches the socket, and the backfill's replay of the first copy used
+    /// to abort the whole batch: ADOPT matched the second, still-unclaimed
+    /// twin, the msgid's unique index refused the update, and because
+    /// `append_messages` is one transaction every message in the backfill
+    /// rolled back with it — which the caller answers by logging and losing
+    /// the lot.
+    #[test]
+    fn a_replay_of_a_claimed_twin_cannot_take_the_batch_down() {
+        let store = Store::open_in_memory().unwrap();
+        let first = ours("local-1", &about_now(), "ok");
+        sent(&store, &first);
+        store
+            .append_messages(&[replayed("srv-1", &about_now(), "ok")])
+            .unwrap();
+
+        // The second copy went out and its echo never came back.
+        let second = ours("local-2", &about_now(), "ok");
+        sent(&store, &second);
+
+        let batch = [
+            replayed("srv-1", &about_now(), "ok"),
+            message("srv-2", "#ircx", &about_now(), "the rest of the backfill"),
+        ];
+        store
+            .append_messages(&batch)
+            .expect("a twin the archive already claimed is skipped, not fatal");
+
+        assert!(
+            texts(&store).contains(&"the rest of the backfill".to_string()),
+            "the rest of the batch survives: {:?}",
+            texts(&store)
+        );
+    }
+
     #[test]
     fn claims_the_copy_already_drawn_instead_of_doubling_it() {
         let store = Store::open_in_memory().unwrap();

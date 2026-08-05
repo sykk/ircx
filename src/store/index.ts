@@ -238,6 +238,24 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         timelines.clear();
       };
 
+      // The raw log is the shape #321 fixed for rosters, unfixed until every
+      // line of a `/list` went through `reduce` one at a time: each copied a
+      // log of up to 2,000 entries, tens of millions of element copies in one
+      // batch. Held as the batch's new lines and joined to the log once.
+      const rawLines = new Map<string, string[]>();
+
+      const flushRawLines = () => {
+        if (rawLines.size === 0) return;
+        const rawLog = { ...next.rawLog };
+        for (const [network, lines] of rawLines) {
+          const joined = [...(rawLog[network] ?? []), ...lines];
+          rawLog[network] =
+            joined.length > RAW_LOG_CAP ? joined.slice(-RAW_LOG_CAP) : joined;
+        }
+        next = { ...next, rawLog };
+        rawLines.clear();
+      };
+
       for (const event of events) {
         const roster = rosterFor(event, next, rosters);
         if (roster !== undefined) {
@@ -246,6 +264,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         }
         if (event.type === "messagesAppended") {
           holdMessages(event, next, timelines);
+          continue;
+        }
+        if (event.type === "rawLine") {
+          const line = `${event.outgoing ? ">>" : "<<"} ${event.line}`;
+          const held = rawLines.get(event.network);
+          if (held) held.push(line);
+          else rawLines.set(event.network, [line]);
           continue;
         }
         // `networkRemoved` is the only reducer other than the roster three that
@@ -258,6 +283,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // is not an append lands after the held messages do.
         if (event.type === "networkRemoved") flushRosters();
         flushTimelines();
+        flushRawLines();
 
         // Each event reduces against what the ones before it left, so a batch
         // reads the same as the same events applied one at a time.
@@ -266,6 +292,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       }
       flushRosters();
       flushTimelines();
+      flushRawLines();
       return next === s ? {} : next;
     }),
 

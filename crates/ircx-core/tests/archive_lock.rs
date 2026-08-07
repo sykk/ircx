@@ -31,6 +31,11 @@
 //! the same export costs the answer 0.68s. So this measures whether a command
 //! delays a `PONG`, not how long it blocked the connection task.
 //!
+//! `a_search_typed_during_an_export` asks the other half, which the flood guard
+//! hides here and which nothing had timed: what the same lock costs the person
+//! at the keyboard. A search has no bucket in front of it, so a stall of any
+//! size lands whole on whoever typed it.
+//!
 //! ```text
 //! TMPDIR=/some/path/on/a/disk \
 //!   cargo test --release -p ircx-core --test archive_lock -- --ignored --nocapture
@@ -51,7 +56,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ircx_core::{spawn_network, SessionConfig};
-use ircx_ipc::{ChatMessage, Delivery, EncryptionState, MessageKind, MessageSource, Sender};
+use ircx_ipc::{
+    ChatMessage, Delivery, EncryptionState, MessageKind, MessageSource, SearchRequest, Sender,
+};
 use ircx_store::Store;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
@@ -114,6 +121,22 @@ fn archived(index: usize) -> ChatMessage {
         annotations: Vec::new(),
         raised_by: Vec::new(),
     }
+}
+
+/// An archive with enough in it that reading all of it takes long enough to
+/// measure something against.
+fn fill(store: &Store) {
+    let filling = Instant::now();
+    for chunk in 0..(ARCHIVED / 1_000) {
+        let messages: Vec<ChatMessage> = (0..1_000).map(|i| archived(chunk * 1_000 + i)).collect();
+        store.append_messages(&messages).expect("fill the archive");
+    }
+    println!();
+    println!(
+        "  archived {ARCHIVED} messages in {:?}, {} on disk",
+        filling.elapsed(),
+        store.archive_size().expect("a size").bytes
+    );
 }
 
 /// The round trip of one `PING`, which is the number a server's timeout is set
@@ -221,17 +244,7 @@ async fn a_ping_answered_while_the_archive_is_being_exported() {
     let room = tempfile::tempdir().expect("a temp directory");
     let store = Arc::new(Store::open(&room.path().join("ircx.sqlite3")).expect("an archive"));
 
-    let filling = Instant::now();
-    for chunk in 0..(ARCHIVED / 1_000) {
-        let messages: Vec<ChatMessage> = (0..1_000).map(|i| archived(chunk * 1_000 + i)).collect();
-        store.append_messages(&messages).expect("fill the archive");
-    }
-    println!();
-    println!(
-        "  archived {ARCHIVED} messages in {:?}, {} on disk",
-        filling.elapsed(),
-        store.archive_size().expect("a size").bytes
-    );
+    fill(&store);
 
     let quiet = round_trip(Arc::clone(&store), Meanwhile::Nothing).await;
     println!("  pong with nothing else running   {quiet:?}");
@@ -249,4 +262,128 @@ async fn a_ping_answered_while_the_archive_is_being_exported() {
         exporting.saturating_sub(quiet),
         deleting.saturating_sub(quiet)
     );
+}
+
+/// A term that appears in exactly one archived line, so what the clock shows is
+/// the wait rather than the search. Every seeded line ends in its own index.
+fn rare(index: usize) -> SearchRequest {
+    SearchRequest {
+        query: format!("{index}"),
+        network: None,
+        target: None,
+        limit: 50,
+    }
+}
+
+/// A term every archived line has, which is the other end of the range: FTS
+/// matches all `ARCHIVED` of them and the `ORDER BY` sorts the lot before the
+/// `LIMIT` takes 50.
+fn common() -> SearchRequest {
+    SearchRequest {
+        query: "something".into(),
+        network: None,
+        target: None,
+        limit: 50,
+    }
+}
+
+/// The middle of three, so one slow run cannot carry the figure.
+fn median(mut taken: Vec<Duration>) -> Duration {
+    taken.sort();
+    taken[taken.len() / 2]
+}
+
+fn timed(store: &Store, req: &SearchRequest) -> (Duration, usize) {
+    let began = Instant::now();
+    let hits = store.search(req).expect("the search runs");
+    (began.elapsed(), hits.len())
+}
+
+/// What somebody who types a search while their archive is exporting waits for.
+///
+/// The probe above measures the same lock against a connection, where a 500ms
+/// flood guard absorbs anything shorter than itself. Nothing absorbs this one:
+/// `Store::search` takes the same mutex `export_everything` is holding, and it
+/// cannot start until the export has walked every row and put the guard down.
+///
+/// So the number to read is not what the search costs. It is how much of the
+/// export the search had left to wait out, which is why the export's own
+/// duration and the moment the search was issued are both printed.
+#[test]
+#[ignore = "writes a large archive to a temp file and times a search against it"]
+fn a_search_typed_during_an_export() {
+    let room = tempfile::tempdir().expect("a temp directory");
+    let store = Arc::new(Store::open(&room.path().join("ircx.sqlite3")).expect("an archive"));
+    fill(&store);
+
+    // What each search costs with nobody else holding the archive, which is what
+    // the contended figures have to be read against.
+    let (_, hits) = timed(&store, &rare(ARCHIVED - 1));
+    let quiet_rare = median(
+        (0..3)
+            .map(|_| timed(&store, &rare(ARCHIVED - 1)).0)
+            .collect(),
+    );
+    let (_, all) = timed(&store, &common());
+    let quiet_common = median((0..3).map(|_| timed(&store, &common()).0).collect());
+    println!("  a search nothing is competing with");
+    println!("    one hit of {ARCHIVED}     {quiet_rare:?} ({hits} found)");
+    println!("    a term every line has  {quiet_common:?} ({all} found, capped at 50)");
+
+    // Long enough that the export has certainly taken the mutex, short enough
+    // that it is still holding it. Both are checked below rather than assumed:
+    // a run where the export finished first measures nothing and says so.
+    const INTO: Duration = Duration::from_millis(50);
+
+    let exporting = {
+        let store = Arc::clone(&store);
+        std::thread::spawn(move || {
+            let began = Instant::now();
+            store
+                .export_everything(&mut std::io::sink())
+                .expect("the export runs");
+            began.elapsed()
+        })
+    };
+
+    std::thread::sleep(INTO);
+    let issued = Instant::now();
+    let (waited, found) = timed(&store, &rare(ARCHIVED - 1));
+    let export = exporting.join().expect("the export thread");
+
+    println!();
+    println!("  the export took                {export:?}");
+    println!("  a search issued {INTO:?} into it  {waited:?} ({found} found)");
+    if issued.elapsed() < export {
+        println!("    it was still exporting when the search was issued");
+        println!(
+            "    the search waited out {:?} of export and then cost {quiet_rare:?} of its own",
+            waited.saturating_sub(quiet_rare)
+        );
+    } else {
+        // `io::sink()` makes the export as fast as the machine can read the
+        // archive, so a fast enough disk can finish inside INTO and leave
+        // nothing to contend with.
+        println!("    the export had already finished — this run measured nothing");
+    }
+
+    // Last, because it empties the archive everything above was measured
+    // against. It is the other button on the same sheet and the slower one, so
+    // it is the worst wait the sheet can hand somebody.
+    let deleting = {
+        let store = Arc::clone(&store);
+        std::thread::spawn(move || {
+            let began = Instant::now();
+            store.delete_everything().expect("the delete runs");
+            began.elapsed()
+        })
+    };
+
+    std::thread::sleep(INTO);
+    let (waited, _) = timed(&store, &rare(ARCHIVED - 1));
+    let delete = deleting.join().expect("the delete thread");
+
+    println!();
+    println!("  the delete took                {delete:?}");
+    println!("  a search issued {INTO:?} into it  {waited:?} (0 found, the archive is empty)");
 }

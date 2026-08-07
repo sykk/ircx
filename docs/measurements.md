@@ -632,8 +632,49 @@ during a debug delete is 1,657 ms there against 1,877 ms here.
 
 **Covers:** one network's connection task against its own archive, with the
 commands run from the same process. **Excludes:** any stall under 500 ms, for
-the reason above; a second network writing at the same time; and the search
-query the same mutex also serialises, which no figure here has timed.
+the reason above, and a second network writing at the same time. The search the
+same mutex serialises is the section below.
+
+## What an archive command costs a search
+
+**Measured 2026-08-07.** `a_search_typed_during_an_export` in
+`crates/ircx-core/tests/archive_lock.rs`, added because the section above kept
+listing this as untimed. Same archive as that probe — 60,000 messages, 27 MB,
+release profile, `TMPDIR` on btrfs — and no connection in it at all: a thread
+runs the archive command, and 50 ms later the main thread calls `Store::search`
+and times it. Medians of three.
+
+| | quiet | during an export | during a delete |
+|---|---|---|---|
+| `Store::search`, one hit of 60,000 | 0.11 ms | 216.2 ms | 700.0 ms |
+| the archive command itself | | 265.5 ms | 749.3 ms |
+
+**A search waits out the whole rest of the command.** Issued 50 ms into a
+265.5 ms export it takes 216.2 ms, and 50 ms into a 749.3 ms delete it takes
+700.0 ms. Both are the command's own duration less the 50 ms head start, to
+within a millisecond across three runs each. `Store` is one `Connection` behind
+a `Mutex` and `export_everything` holds the guard across every row, so a search
+cannot begin until the last one is written.
+
+**Nothing absorbs it.** The section above measures the same lock against a
+connection, where a 500 ms flood guard swallows any stall shorter than itself —
+which is why the export reads as free there. A person typing a search has no
+bucket in front of them, so the delay lands whole: 216 ms is 1,900 times what
+the search costs on a quiet archive, and 700 ms is 6,300 times.
+
+**60,000 messages is the modest end.** The export is linear in the archive and
+the delete worse than linear: at 240,000 they are 1.09 s and 3.45 s, so a search
+typed then waits about that long. Run 11 walked a 100,021-message export at
+563 ms in the assembled app, which is the size a search would wait behind there.
+
+**What the search itself costs, for scale:** 0.11 ms for a term matching one
+row, 14.8 ms for a term every row has, where FTS matches all 60,000 and the
+`ORDER BY` sorts them before the `LIMIT` takes 50.
+
+**Covers:** `Store::search` against `export_everything` and `delete_everything`
+in one process. **Excludes:** the IPC hop and the frontend either side of it,
+which add whatever they add on top; and a search typed while a *write* holds the
+lock, which since #412 is the writer thread rather than the connection task.
 
 ## Not measured
 

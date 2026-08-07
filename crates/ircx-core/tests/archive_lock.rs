@@ -1,15 +1,16 @@
 //! What a long archive operation costs a live connection.
 //!
-//! `Store` is one `Connection` behind a `Mutex`, shared by every network's
-//! archive writer thread and by every command the window can run — search,
-//! export, delete. Since #410 the connection task hands its writes to the
-//! writer rather than taking that mutex itself, so what this measures now is
-//! what the handover left behind.
+//! `Store`'s writer is one `Connection` behind a `Mutex`, shared by every
+//! network's archive writer thread and by the delete the window can run. Since
+//! #410 the connection task hands its writes to the writer rather than taking
+//! that mutex itself, so what this measures is what the handover left behind.
 //!
 //! So the question is not whether SQLite can do two things at once. It is
-//! whether a `PING` is answered while somebody is exporting their archive. WAL
-//! does not help: the contention is the Rust mutex, and one connection
-//! serialises everything anyway.
+//! whether a `PING` is answered while somebody is emptying their archive. WAL
+//! did not help while there was one connection: the contention was the Rust
+//! mutex, and one connection serialises everything regardless. Since #437 the
+//! exports read on connections of their own, so the writer this probe contends
+//! with is held by the delete and no longer by the export.
 //!
 //! The measurement is the round trip of a `PING` the scripted server sends,
 //! taken against a quiet archive and then while `export_everything` and
@@ -349,6 +350,7 @@ fn a_search_typed_during_an_export() {
     std::thread::sleep(INTO);
     let issued = Instant::now();
     let (waited, found) = timed(&store, &rare(ARCHIVED - 1));
+    let worst_export = worst_until(&store, &exporting);
     let export = exporting.join().expect("the export thread");
 
     println!();
@@ -366,6 +368,10 @@ fn a_search_typed_during_an_export() {
         // nothing to contend with.
         println!("    the export had already finished — this run measured nothing");
     }
+    println!(
+        "    worst of {} searches across the rest of it  {:?}",
+        worst_export.0, worst_export.1
+    );
 
     // Last, because it empties the archive everything above was measured
     // against. It is the other button on the same sheet and the slower one, so
@@ -381,9 +387,35 @@ fn a_search_typed_during_an_export() {
 
     std::thread::sleep(INTO);
     let (waited, _) = timed(&store, &rare(ARCHIVED - 1));
+    let worst_delete = worst_until(&store, &deleting);
     let delete = deleting.join().expect("the delete thread");
 
     println!();
     println!("  the delete took                {delete:?}");
     println!("  a search issued {INTO:?} into it  {waited:?} (0 found, the archive is empty)");
+    println!(
+        "    worst of {} searches across the rest of it  {:?}",
+        worst_delete.0, worst_delete.1
+    );
+}
+
+/// The slowest search of as many as fit in what is left of the archive command,
+/// and how many that was.
+///
+/// One search 50ms in answers what somebody typing at that moment waits for,
+/// and it can only ever sample one moment. `delete_everything` is a `DELETE`
+/// and then a `VACUUM`, and the two do not block a reader the same way: at
+/// `ARCHIVED` the `DELETE` is 645ms and the `VACUUM` 80ms, so a search issued
+/// 50ms in is nowhere near the part that takes SQLite's exclusive lock. This
+/// keeps asking until the command is done, so the `VACUUM` is inside the window
+/// rather than beyond it.
+fn worst_until<T>(store: &Store, running: &std::thread::JoinHandle<T>) -> (usize, Duration) {
+    let mut worst = Duration::ZERO;
+    let mut asked = 0;
+    while !running.is_finished() {
+        let (took, _) = timed(store, &rare(ARCHIVED - 1));
+        worst = worst.max(took);
+        asked += 1;
+    }
+    (asked, worst)
 }

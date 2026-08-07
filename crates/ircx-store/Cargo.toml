@@ -15,3 +15,6 @@ keyring = { version = "3", features = ["linux-native", "apple-native", "windows-
 
 [dev-dependencies]
 time.workspace = true
+# `two_connections.rs` needs an archive on disk. An in-memory one has a single
+# connection, so it cannot reach what that file is about.
+tempfile = "3"

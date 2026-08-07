@@ -635,6 +635,41 @@ commands run from the same process. **Excludes:** any stall under 500 ms, for
 the reason above; a second network writing at the same time; and the search
 query the same mutex also serialises, which no figure here has timed.
 
+### What an export costs in memory
+
+**Measured 2026-08-07**, in the assembled release app on `Xvfb`, walked in
+`docs/end-to-end-run-11.md`. The section above times the export from inside the
+process; this one asks the question run 5 left open, which is whether it renders
+the archive before writing it.
+
+100,021 messages, 56 MB archive, three networks connected. Three runs of `Export
+everything` from the sheet, destination and archive both on btrfs. The
+destination's size and the app's `VmRSS` sampled every 57 ms.
+
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| bytes written | 54,127,733 | 54,128,252 | 54,128,252 |
+| `File::create` to the last byte | 570 ms | 563 ms | 504 ms |
+| RSS the export added | 824 kB | 88 kB | 72 kB |
+
+**52 MB leaves through under a megabyte**, and the file grows about 6.9 MB a
+sample in a straight line, at roughly 96 MB/s. `export_everything` walks a
+`rusqlite` row iterator into a `BufWriter` and never holds more than a line, and
+these are the numbers that say so from outside.
+
+**The excursion is smaller than the app's idle drift.** RSS wandered between
+160,788 kB and 171,000 kB across the 693 samples before the first export, with
+nothing happening. Do not read the difference between the three runs above as
+anything: 824 kB against 72 kB is well inside a 10 MB wander.
+
+The per-conversation scope is the same shape — `export_target` over 33,335
+messages wrote 18,039,768 bytes in 230–290 ms with no measurable rise at all.
+
+**Covers:** the click, the save dialog, `export_archive`, `export_everything`
+and the `BufWriter`, to the last byte on a real filesystem, on the release
+profile. **Excludes:** the operator answering the dialog; a colder file than one
+the machine has just written; a slower destination; and any archive past 56 MB.
+
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.

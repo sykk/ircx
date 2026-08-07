@@ -2346,6 +2346,34 @@ What is still unwatched is a disk that genuinely fills. The pipe reaches the
 same code and the same `io::ErrorKind` handling, so what is untested is only
 whether `StorageFull` arrives where it is expected to.
 
+**An export large enough to stream is walked**, on 2026-08-07, which is what run
+5 asked for and what every walk before it had missed: 3.3 KB and 35 KB both fit
+in memory whichever way the code is written, so neither could tell a stream from
+a buffer. `docs/end-to-end-run-11.md`.
+
+100,021 messages and 56 MB on the release app, three networks connected, on the
+profile `startup.mjs` seeds. `Export everything` wrote 54,127,733 bytes —
+100,021 lines, all valid JSON through `jq`, none out of order, all three
+networks and all six targets present. `Export #measure` wrote 33,335, every one
+of them that channel on that network.
+
+**It streams, and the measurement is what says so** rather than the comment on
+`export_archive`. Sampling the destination's size and `VmRSS` every 57 ms across
+three runs: 52 MB left through 824 kB, 88 kB and 72 kB of resident memory, at
+about 96 MB/s, with the file growing 6.9 MB a sample in a straight line. The
+same app's RSS wanders 10 MB while sitting idle, so the export is below the
+noise it would have to rise above to be buffering.
+
+Nothing was found. The count on the sheet is the count in the file at five
+figures as it was at two, the success sentence still replaces its predecessor
+rather than stacking, and afterwards the networks are up, the lag reads 0 ms and
+the composer sends.
+
+What that leaves: **what the lock costs a search.** `export_everything` holds
+`Store`'s mutex for the whole 563 ms, and `docs/measurements.md` lists the search
+the same mutex serialises as excluded from every figure it has. Typing a search
+inside that window is a walk nobody has managed.
+
 ## Recalling a sent line in the composer
 
 Up and Down step back through what was already sent in a conversation. Where the

@@ -15,6 +15,10 @@ keyring = { version = "3", features = ["linux-native", "apple-native", "windows-
 
 [dev-dependencies]
 time.workspace = true
+# `cold_archive.rs` drops the page cache with `posix_fadvise` and checks the
+# drop with `mincore`. Neither has a std equivalent, and the crate is already
+# in the tree several times over.
+libc = "0.2"
 # `two_connections.rs` needs an archive on disk. An in-memory one has a single
 # connection, so it cannot reach what that file is about.
 tempfile = "3"

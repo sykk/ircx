@@ -29,9 +29,57 @@ const NETWORK_COLUMNS: &str = "id, name, host, port, tls, tls_verify, nick, alt_
 /// A network-wide retention rule is stored as a target override with no target.
 const DEFAULT_TARGET: &str = "";
 
+/// One SQLite database, reached by more than one connection so that reading it
+/// and changing it are not the same queue.
+///
+/// Until #435 there was one `Connection` behind one `Mutex`, and everything
+/// took it: the archive writer, the archive sheet's two buttons, and the search
+/// somebody types. A search issued during an export waited out the whole export
+/// — 216 ms of a 265 ms one, and 700 ms of a 749 ms delete — because
+/// `export_everything` holds the guard across every row. WAL was already on and
+/// bought nothing, since the contention was the Rust mutex rather than SQLite.
+///
+/// Three roles, by how long each holds a connection:
+///
+/// - `write` is every mutation. One at a time is what SQLite wants anyway.
+/// - `read` is every bounded read: a search, a page of history, the network
+///   list. Each is a `LIMIT` or a single row, so they cost each other nothing
+///   measurable by sharing one connection, and they no longer queue behind a
+///   write.
+/// - a read that walks the whole archive — the two exports — opens a connection
+///   of its own and drops it, because two of those *would* cost each other.
+///
+/// What that leaves is `VACUUM`, which takes SQLite's own exclusive lock and
+/// blocks readers whatever connection they are on. It is the short end of a
+/// delete: at 60,000 messages the `DELETE` is 645 ms and the `VACUUM` 80 ms.
 pub struct Store {
-    conn: Mutex<Connection>,
+    write: Mutex<Connection>,
+    /// `None` for an in-memory archive. `Connection::open_in_memory` gives each
+    /// connection a database of its own, so a second one here would be a second
+    /// empty archive rather than another way into this one.
+    read: Option<Mutex<Connection>>,
+    /// Where to open a connection for a read that walks everything. `None` for
+    /// the same reason as `read`.
+    path: Option<std::path::PathBuf>,
     credentials: Box<dyn CredentialStore>,
+}
+
+/// A connection for a read that walks everything: its own where the archive is
+/// a file, the shared reader where it is in memory.
+enum Walking<'a> {
+    Own(Connection),
+    Shared(MutexGuard<'a, Connection>),
+}
+
+impl std::ops::Deref for Walking<'_> {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        match self {
+            Self::Own(conn) => conn,
+            Self::Shared(conn) => conn,
+        }
+    }
 }
 
 /// What the archive weighs, for a screen that would otherwise ask somebody to
@@ -68,15 +116,24 @@ impl OpenTarget {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self, StoreError> {
-        let conn = Connection::open(path).map_err(|source| StoreError::Open {
+        let opened = |source| StoreError::Open {
             path: path.to_path_buf(),
             source,
-        })?;
-        Self::init(conn, Box::new(OsKeyring))
+        };
+        let conn = Connection::open(path).map_err(opened)?;
+        let mut store = Self::init(conn, Box::new(OsKeyring))?;
+        // After `init`, so the reader opens onto a schema the migrations have
+        // already finished with.
+        let read = Self::prepared(Connection::open(path).map_err(opened)?)?;
+        store.read = Some(Mutex::new(read));
+        store.path = Some(path.to_path_buf());
+        Ok(store)
     }
 
     /// Ephemeral in every respect: passwords go to a process-local map instead
     /// of the OS keyring, so tests never write to the developer's login store.
+    ///
+    /// One connection, for the reason on `Store::read`.
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory().map_err(|source| StoreError::Open {
             path: ":memory:".into(),
@@ -85,32 +142,65 @@ impl Store {
         Self::init(conn, Box::new(MemoryCredentials::default()))
     }
 
-    fn init(
-        mut conn: Connection,
-        credentials: Box<dyn CredentialStore>,
-    ) -> Result<Self, StoreError> {
+    /// What every connection to the archive is set up with. `journal_mode` is
+    /// written into the file and read back by the next connection; the other two
+    /// belong to the connection and have to be said again on each.
+    fn prepared(conn: Connection) -> Result<Connection, StoreError> {
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA foreign_keys = ON;",
         )?;
+        Ok(conn)
+    }
+
+    fn init(conn: Connection, credentials: Box<dyn CredentialStore>) -> Result<Self, StoreError> {
+        let mut conn = Self::prepared(conn)?;
         migrations::migrate(&mut conn)?;
         Ok(Self {
-            conn: Mutex::new(conn),
+            write: Mutex::new(conn),
+            read: None,
+            path: None,
             credentials,
         })
     }
 
     /// A panic elsewhere leaves the connection usable: rusqlite rolls an open
     /// transaction back when its guard drops, so the poison flag is noise here.
-    fn conn(&self) -> MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap_or_else(PoisonError::into_inner)
+    fn writing(&self) -> MutexGuard<'_, Connection> {
+        self.write.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// A read short enough that sharing one connection with the other short
+    /// reads costs nothing. Falls back to the writer for an in-memory archive,
+    /// which has only the one.
+    fn reading(&self) -> MutexGuard<'_, Connection> {
+        match &self.read {
+            Some(read) => read.lock().unwrap_or_else(PoisonError::into_inner),
+            None => self.writing(),
+        }
+    }
+
+    /// A read that walks the whole archive, on a connection nothing else is
+    /// waiting for. Two exports at once would otherwise be each other's
+    /// problem, which is the fault #435 describes moved rather than fixed.
+    ///
+    /// A connection that cannot be opened is not worth failing an export over,
+    /// so the shared reader is the fallback and the export still runs.
+    fn walking(&self) -> Walking<'_> {
+        match self.path.as_deref().map(Connection::open) {
+            Some(Ok(conn)) => match Self::prepared(conn) {
+                Ok(conn) => Walking::Own(conn),
+                Err(_) => Walking::Shared(self.reading()),
+            },
+            _ => Walking::Shared(self.reading()),
+        }
     }
 
     /// Messages already in the archive are skipped, so replaying history over
     /// an existing timeline is a no-op rather than a second copy.
     pub fn append_messages(&self, messages: &[ChatMessage]) -> Result<(), StoreError> {
-        let mut conn = self.conn();
+        let mut conn = self.writing();
         let tx = conn.transaction()?;
         // A conversation set to keep nothing is not written and then swept: a
         // window of zero is somebody saying they do not want the record, and
@@ -140,7 +230,7 @@ impl Store {
     /// delivery state, the server's msgid and time, the tags it arrived with.
     /// Silently does nothing when the message is not in the archive.
     pub fn update_message(&self, message: &ChatMessage) -> Result<(), StoreError> {
-        message::confirm(&self.conn(), message)
+        message::confirm(&self.writing(), message)
     }
 
     /// When this conversation was last heard from, which is where a server-side
@@ -159,7 +249,7 @@ impl Store {
         network: &str,
         target: &str,
     ) -> Result<Option<String>, StoreError> {
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(
             "SELECT timestamp FROM messages
              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
@@ -193,7 +283,7 @@ impl Store {
             columns = message::COLUMNS,
         );
 
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![req.network, req.target, req.before, req.limit])?;
         let mut page = Vec::new();
@@ -222,7 +312,7 @@ impl Store {
         emoji: &str,
         active: bool,
     ) -> Result<(), StoreError> {
-        message::set_reaction(&self.conn(), network, msgid, nick, emoji, active)
+        message::set_reaction(&self.writing(), network, msgid, nick, emoji, active)
     }
 
     /// Records what a plugin said about a message, replacing what that plugin
@@ -235,14 +325,14 @@ impl Store {
         plugin: &str,
         text: &str,
     ) -> Result<(), StoreError> {
-        message::set_annotation(&self.conn(), network, msgid, plugin, text)
+        message::set_annotation(&self.writing(), network, msgid, plugin, text)
     }
 
     /// Records that a rule thought this message worth interrupting the user
     /// for. Recording it twice is recording it once, and there is nothing to
     /// record for a message a rule passed over: a rule raises and cannot lower.
     pub fn set_raised(&self, network: &str, msgid: &str, plugin: &str) -> Result<(), StoreError> {
-        message::set_raised(&self.conn(), network, msgid, plugin)
+        message::set_raised(&self.writing(), network, msgid, plugin)
     }
 
     /// The configured upload provider, or `None` when there is not one — which
@@ -252,7 +342,7 @@ impl Store {
     /// a value that only travels one way cannot be leaked by a screen that
     /// shows what is stored.
     pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(
             "SELECT endpoint, method, auth_header, s3_region, s3_access_key_id
              FROM upload_provider WHERE only = 0",
@@ -292,7 +382,7 @@ impl Store {
         if let Some(token) = provider.token.as_deref().filter(|t| !t.is_empty()) {
             self.credentials.set(credentials::UPLOAD_PROVIDER, token)?;
         }
-        self.conn().execute(
+        self.writing().execute(
             "INSERT INTO upload_provider
                  (only, endpoint, method, auth_header, s3_region, s3_access_key_id)
              VALUES (0, ?1, ?2, ?3, ?4, ?5)
@@ -316,7 +406,7 @@ impl Store {
     /// Forgets the provider and its token together. Leaving the token behind
     /// would keep a credential for something the user said they no longer use.
     pub fn remove_upload_provider(&self) -> Result<(), StoreError> {
-        self.conn().execute("DELETE FROM upload_provider", [])?;
+        self.writing().execute("DELETE FROM upload_provider", [])?;
         self.credentials.delete(credentials::UPLOAD_PROVIDER)
     }
 
@@ -373,7 +463,7 @@ impl Store {
             columns = message::COLUMNS,
         );
 
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(&sql).map_err(search_error)?;
         let mut rows = stmt
             .query(params![query, req.network, req.target, req.limit])
@@ -420,7 +510,7 @@ impl Store {
             columns = message::COLUMNS,
         );
 
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(&sql)?;
         let mut bound: Vec<&dyn rusqlite::ToSql> = vec![&req.network, &req.target, &req.limit];
         let escaped: Vec<String> = terms.iter().map(|term| like_literal(term)).collect();
@@ -443,7 +533,7 @@ impl Store {
     }
 
     pub fn list_networks(&self) -> Result<Vec<NetworkConfig>, StoreError> {
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn.prepare(&format!(
             "SELECT {NETWORK_COLUMNS} FROM networks ORDER BY name"
         ))?;
@@ -462,7 +552,7 @@ impl Store {
         let id = match &config.id {
             Some(id) => id.clone(),
             None => self
-                .conn()
+                .writing()
                 .query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))?,
         };
 
@@ -482,7 +572,7 @@ impl Store {
             .transpose()?;
         let account = config.sasl.as_ref().map(|sasl| sasl.account.clone());
 
-        self.conn().execute(
+        self.writing().execute(
             &format!(
                 "INSERT INTO networks ({NETWORK_COLUMNS})
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
@@ -544,7 +634,7 @@ impl Store {
     /// the third door and it did not.
     pub fn remove_network(&self, id: &NetworkId) -> Result<(), StoreError> {
         self.credentials.delete(id)?;
-        let mut conn = self.conn();
+        let mut conn = self.writing();
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM networks WHERE id = ?1", params![id])?;
         tx.execute("DELETE FROM open_targets WHERE network = ?1", params![id])?;
@@ -560,7 +650,7 @@ impl Store {
     /// Records a conversation as open, so the next launch comes back to it.
     /// Idempotent: joining a channel again is not a second row.
     pub fn remember_target(&self, network: &str, target: &OpenTarget) -> Result<(), StoreError> {
-        self.conn().execute(
+        self.writing().execute(
             "INSERT INTO open_targets (network, target, kind) VALUES (?1, ?2, ?3)
              ON CONFLICT (network, target) DO UPDATE SET kind = excluded.kind",
             params![network, target.name(), target.kind()],
@@ -571,7 +661,7 @@ impl Store {
     /// Drops a conversation from the set the next launch reopens. The messages
     /// stay; `delete_target` is how an archive is thrown away.
     pub fn forget_target(&self, network: &str, target: &str) -> Result<(), StoreError> {
-        self.conn().execute(
+        self.writing().execute(
             "DELETE FROM open_targets WHERE network = ?1 AND target = ?2",
             params![network, target],
         )?;
@@ -579,7 +669,7 @@ impl Store {
     }
 
     pub fn open_targets(&self, network: &str) -> Result<Vec<OpenTarget>, StoreError> {
-        let conn = self.conn();
+        let conn = self.reading();
         let mut stmt = conn
             .prepare("SELECT target, kind FROM open_targets WHERE network = ?1 ORDER BY target")?;
         let mut rows = stmt.query(params![network])?;
@@ -601,7 +691,7 @@ impl Store {
 
     pub fn get_draft(&self, network: &str, target: &str) -> Result<Option<String>, StoreError> {
         let draft = self
-            .conn()
+            .reading()
             .query_row(
                 "SELECT text FROM drafts WHERE network = ?1 AND target = ?2",
                 params![network, target],
@@ -620,14 +710,14 @@ impl Store {
     /// happens when there is no draft, and anything already under the new name
     /// wins — it is the more recent of the two.
     pub fn move_draft(&self, network: &str, from: &str, to: &str) -> Result<(), StoreError> {
-        self.conn().execute(
+        self.writing().execute(
             "UPDATE OR IGNORE drafts SET target = ?3
              WHERE network = ?1 AND target = ?2",
             params![network, from, to],
         )?;
         // An ignored update leaves the old row behind, which is a draft for a
         // name that is now somebody else's.
-        self.conn().execute(
+        self.writing().execute(
             "DELETE FROM drafts WHERE network = ?1 AND target = ?2",
             params![network, from],
         )?;
@@ -635,7 +725,7 @@ impl Store {
     }
 
     pub fn set_draft(&self, network: &str, target: &str, text: &str) -> Result<(), StoreError> {
-        let conn = self.conn();
+        let conn = self.writing();
         if text.is_empty() {
             conn.execute(
                 "DELETE FROM drafts WHERE network = ?1 AND target = ?2",
@@ -659,7 +749,7 @@ impl Store {
         target: Option<&str>,
         days: Option<u32>,
     ) -> Result<(), StoreError> {
-        self.conn().execute(
+        self.writing().execute(
             "INSERT INTO retention (network, target, days) VALUES (?1, ?2, ?3)
              ON CONFLICT (network, target) DO UPDATE SET days = excluded.days",
             params![network, target.unwrap_or(DEFAULT_TARGET), days],
@@ -678,7 +768,7 @@ impl Store {
         network: &str,
         target: Option<&str>,
     ) -> Result<Option<Option<u32>>, StoreError> {
-        self.conn()
+        self.reading()
             .query_row(
                 "SELECT days FROM retention WHERE network = ?1 AND target = ?2",
                 params![network, target.unwrap_or(DEFAULT_TARGET)],
@@ -705,7 +795,7 @@ impl Store {
                      'now',
                      '-' || (CASE WHEN t.network IS NOT NULL THEN t.days ELSE n.days END) || ' days'
                  )";
-        let mut conn = self.conn();
+        let mut conn = self.writing();
         let tx = conn.transaction()?;
         take_what_messages_owned(
             &tx,
@@ -736,7 +826,7 @@ impl Store {
             columns = message::COLUMNS,
         );
 
-        let conn = self.conn();
+        let conn = self.walking();
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![network, target])?;
         while let Some(row) = rows.next()? {
@@ -756,7 +846,7 @@ impl Store {
     /// full-text table are most of what an archive weighs, and a number that
     /// left them out would be wrong in the direction that matters.
     pub fn archive_size(&self) -> Result<ArchiveSize, StoreError> {
-        let conn = self.conn();
+        let conn = self.reading();
         let messages: u64 =
             conn.query_row("SELECT count(*) FROM messages", [], |row| row.get(0))?;
         let pages: u64 = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
@@ -775,7 +865,7 @@ impl Store {
              ORDER BY m.timestamp, m.id",
             columns = message::COLUMNS,
         );
-        let conn = self.conn();
+        let conn = self.walking();
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
@@ -794,7 +884,7 @@ impl Store {
     /// this is the archive rather than the account, and somebody clearing what
     /// was said is not asking to be logged out.
     pub fn delete_everything(&self) -> Result<(), StoreError> {
-        let mut conn = self.conn();
+        let mut conn = self.writing();
         let tx = conn.transaction()?;
         // Messages first: the FTS triggers hang off that table, and the rest
         // are rows keyed by a msgid that will no longer name anything.
@@ -812,7 +902,7 @@ impl Store {
     }
 
     pub fn delete_target(&self, network: &str, target: &str) -> Result<(), StoreError> {
-        let mut conn = self.conn();
+        let mut conn = self.writing();
         let tx = conn.transaction()?;
         take_what_messages_owned(
             &tx,
@@ -1033,7 +1123,7 @@ mod tests {
             })
             .unwrap();
 
-        let conn = store.conn();
+        let conn = store.writing();
         let mut stmt = conn.prepare("SELECT * FROM networks").unwrap();
         let columns = stmt.column_count();
         let mut rows = stmt.query([]).unwrap();

@@ -247,9 +247,29 @@ costs.
 
 | | |
 |---|---|
-| `Store::open`, fresh database | 2.7 ms |
-| `Store::open`, 3,006-message archive | 0.37 ms |
 | On-disk size, 3,006 rows | 1.9 MiB |
+
+### What opening one costs
+
+**Re-measured 2026-08-07**, because #437 gave `Store::open` a second connection
+to open. Release profile, `TMPDIR` on btrfs, medians of five, both columns taken
+on the same machine in the same sitting.
+
+| `Store::open` | before #437 | after |
+|---|---|---|
+| a fresh database, migrations and all | 7.19 ms | 7.69 ms |
+| a 3,006-message archive | 0.34 ms | 0.52 ms |
+
+The second connection is 0.5 ms of a first launch and 0.18 ms of every one
+after. Against a first frame at 716 ms it is not something a person can be
+waiting for, and the *Startup* table above did not move.
+
+> The row that stood here said **2.7 ms** and **0.37 ms** and carried no date or
+> method. The before column above is 2.7× the first of those on this machine
+> today, so something moved under it long before this change — the second FTS5
+> index (#378) is the obvious candidate and nothing measured it. Do not read the
+> old figure as a regression this caused; read it as a number that outlived what
+> it measured, which is what this file exists to prevent.
 
 ### What the second search index costs
 
@@ -580,6 +600,15 @@ filed claiming that floor was `ARCHIVE_BATCH` being written inline on the
 connection task; moving every write off that task left it exactly where it
 stands in both columns above.
 
+> **#437 moved one number in this table and none of the conclusions.**
+> Re-measured on 2026-08-07 with reads on their own connections, the three
+> `PONG`s still read 501.2, 501.5 and 500.9 ms and the delete still takes about
+> 800 ms. The export in this probe now takes 289–349 ms rather than 268.6 ms,
+> and the reason is the fix working: the burst it was started alongside is
+> archived *during* it now instead of after it, so the two share the disk. The
+> export measured on its own is unchanged at 266.2 ms — see *What an archive
+> command costs a search*.
+
 **That floor is also this probe's blind spot.** The command starts as the burst
 does, so a stall that ends inside the interval the `PONG` spends waiting anyway
 is absorbed by it and reads as free. That is the export in the
@@ -646,26 +675,43 @@ and times it. Medians of three.
 
 | | quiet | during an export | during a delete |
 |---|---|---|---|
-| `Store::search`, one hit of 60,000 | 0.11 ms | 216.2 ms | 700.0 ms |
-| the archive command itself | | 265.5 ms | 749.3 ms |
+| `Store::search`, before #437 | 0.11 ms | 216.2 ms | 700.0 ms |
+| `Store::search`, after | 0.12 ms | 0.31 ms | 0.36 ms |
+| the archive command itself, before | | 265.5 ms | 749.3 ms |
+| the archive command itself, after | | 266.2 ms | 754.8 ms |
 
-**A search waits out the whole rest of the command.** Issued 50 ms into a
-265.5 ms export it takes 216.2 ms, and 50 ms into a 749.3 ms delete it takes
-700.0 ms. Both are the command's own duration less the 50 ms head start, to
-within a millisecond across three runs each. `Store` is one `Connection` behind
-a `Mutex` and `export_everything` holds the guard across every row, so a search
-cannot begin until the last one is written.
+**It used to wait out the whole rest of the command.** Issued 50 ms into a
+265.5 ms export it took 216.2 ms, and 50 ms into a 749.3 ms delete it took
+700.0 ms — the command's own duration less the 50 ms head start, to within a
+millisecond across three runs each. `Store` was one `Connection` behind a
+`Mutex` and `export_everything` holds the guard across every row, so a search
+could not begin until the last one was written.
 
-**Nothing absorbs it.** The section above measures the same lock against a
+**Nothing absorbed it.** The section above measures the same lock against a
 connection, where a 500 ms flood guard swallows any stall shorter than itself —
 which is why the export reads as free there. A person typing a search has no
-bucket in front of them, so the delay lands whole: 216 ms is 1,900 times what
-the search costs on a quiet archive, and 700 ms is 6,300 times.
+bucket in front of them, so the delay landed whole: 216 ms was 1,900 times what
+the search costs on a quiet archive, and 700 ms was 6,300 times.
 
-**60,000 messages is the modest end.** The export is linear in the archive and
-the delete worse than linear: at 240,000 they are 1.09 s and 3.45 s, so a search
-typed then waits about that long. Run 11 walked a 100,021-message export at
-563 ms in the assembled app, which is the size a search would wait behind there.
+**#437 gave reads their own connections** and both figures fall to what a search
+costs against a quiet archive. What the commands themselves cost is unchanged —
+265.5 to 266.2 ms, 749.3 to 754.8 ms — which is the part worth checking: the
+reader is beside them rather than taken from them.
+
+**One search 50 ms in samples one moment**, and for a delete that is the wrong
+moment. `delete_everything` is a `DELETE` and then a `VACUUM`, and only the
+`VACUUM` takes SQLite's own exclusive lock, which no arrangement of connections
+avoids. At 60,000 the `DELETE` is 645 ms and the `VACUUM` 80 ms, so a search
+issued at 50 ms is nowhere near it. Asking without pause across the whole of
+both commands instead — 2,241 searches during an export, 6,594 during a delete —
+the slowest single answer is **0.95 ms** and **0.59 ms**. The `VACUUM` is in
+there and it is not worth a figure. Those runs are not where the durations above
+come from: an export hammered by 2,241 searches takes 330 ms rather than 266 ms.
+
+**60,000 messages was the modest end of the fault.** The export is linear in the
+archive and the delete worse than linear: at 240,000 they are 1.09 s and 3.45 s,
+and a search typed then waited about that long. Run 11 walked a
+100,021-message export at 563 ms in the assembled app.
 
 **What the search itself costs, for scale:** 0.11 ms for a term matching one
 row, 14.8 ms for a term every row has, where FTS matches all 60,000 and the
@@ -673,8 +719,9 @@ row, 14.8 ms for a term every row has, where FTS matches all 60,000 and the
 
 **Covers:** `Store::search` against `export_everything` and `delete_everything`
 in one process. **Excludes:** the IPC hop and the frontend either side of it,
-which add whatever they add on top; and a search typed while a *write* holds the
-lock, which since #412 is the writer thread rather than the connection task.
+which add whatever they add on top; two exports at once, which now have a
+connection each; and a search against a write longer than `append_messages`,
+which nothing in the client issues.
 
 ### What an export costs in memory
 

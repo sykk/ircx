@@ -10,3 +10,7 @@ dist/
 # Agent worktrees created by Claude Code.
 .claude/worktrees/
 
+
+# Claude Code writes this as you approve things, and it is personal to the
+# machine rather than to the project.
+.claude/settings.local.json

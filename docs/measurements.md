@@ -755,8 +755,92 @@ messages wrote 18,039,768 bytes in 230–290 ms with no measurable rise at all.
 
 **Covers:** the click, the save dialog, `export_archive`, `export_everything`
 and the `BufWriter`, to the last byte on a real filesystem, on the release
-profile. **Excludes:** the operator answering the dialog; a colder file than one
-the machine has just written; a slower destination; and any archive past 56 MB.
+profile. **Excludes:** the operator answering the dialog; a slower destination;
+and a colder file than one the machine has just written, along with any archive
+past 56 MB — both of which the section below measures.
+
+### What an export costs against a cold archive
+
+**Measured 2026-08-07.** `an_export_of_an_archive_nobody_has_read_yet` in
+`crates/ircx-store/tests/cold_archive.rs`. Every export figure above was taken
+seconds after the archive was seeded, so the file was entirely in the kernel's
+page cache. Run 11 said as much and listed *"an archive that does not fit in the
+page cache"* among what it had not reached.
+
+The same export runs twice a round: once against a cached file, then again with
+`posix_fadvise(POSIX_FADV_DONTNEED)` over the database and its write-ahead log.
+`mincore` counts resident pages either side of the drop, so a run where the
+cache did not come off — a `TMPDIR` on tmpfs, which *is* the page cache — says
+so rather than reporting two warm numbers as a result. The destination is a
+counting sink instead of a file, which leaves the read as the only difference
+between the two rows.
+
+**"Does not fit in the page cache" is answered by taking the cache away rather
+than by overflowing it**, and for this operation those are the same question.
+The largest archive here is 447 MiB against 28 GB of memory, so none of them
+could overflow anything. `export_everything` is one forward scan that reads
+every page once and returns to none, so an archive genuinely larger than memory
+has nothing to evict that it was going to want again — every page is cold when
+it is reached, which is the state the eviction produces.
+
+Release profile, `TMPDIR` on btrfs, NVMe. Each sitting is a median of three
+rounds; the ranges below are across five sittings at 100,000 and two at each of
+the other sizes.
+
+| | 100,000 | 500,000 | 1,000,000 |
+|---|---|---|---|
+| archive on disk | 44.7 MiB | 222.5 MiB | 446.8 MiB |
+| bytes exported | 48,877,780 | 245,277,780 | 490,777,780 |
+| warm | 431–438 ms | 2.28–2.31 s | 4.56–4.65 s |
+| cold | 668–723 ms | 3.10–3.16 s | 6.21–6.51 s |
+| **cold ÷ warm** | **1.53–1.66×** | **1.36–1.37×** | **1.36–1.40×** |
+| faulted back in | 34.2 MiB | 197.8 MiB | 397.1 MiB |
+| at | 126–154 MB/s | 242–252 MB/s | 224–254 MB/s |
+
+**A cold archive costs the export between 1.4× and 1.7×, and the multiple does
+not worsen with size — it improves.** Across a tenfold range both rows stay
+linear in the archive, 4.3–4.7 µs a message warm and 6.2–7.2 µs cold. So *"a
+year of real channels"* is the same shape as a month of them rather than a
+cliff: an export that takes half a second against a file the machine has just
+written takes about three quarters of one against a file it has not touched
+since boot.
+
+**Warm is the stable row and cold is the one that moves.** 431–438 ms across
+five sittings at 100,000 against 668–723 ms, which is where the whole spread in
+that column's multiple comes from. Do not read 1.53 and 1.66 as two results.
+
+**It is 1.5× rather than tenfold because the export reads sequentially.**
+Nothing indexes `(timestamp, id)`, so the plan for `export_everything` is `SCAN
+m` and a temp b-tree for the `ORDER BY` — a full table scan the kernel reads
+ahead of, not a seek a row. The faults land at 126–254 MB/s, which is readahead
+working rather than a disk's random figure, and the smallest archive is the one
+that gets least out of it: 34 MiB is not long enough a run to reach the rate the
+other two settle at, which is why its multiple is the highest of the three.
+
+**The export reads less than the archive holds.** After a warm export the
+resident pages are 8,751 of 13,885 at 100,000 and 101,647 of 126,622 at a
+million, because the scan never touches either full-text index. What is left out
+is 37% of the file at the first size and 20% at the last — smaller than the
+third those indexes come to against real prose (*What the second search index
+costs*, above), and smaller the larger this archive gets, because every seeded
+line is the same sentence and repetition is what an index does not pay twice
+for. The first round of each run is the exception and reads the file whole,
+because the fill had just written all of it.
+
+**What it does to the figure above.** Run 11's 0.5–0.6 s for 100,021 messages is
+a warm number; multiply by about 1.6 for an archive nobody has read since the
+machine booted. Do not read 431 ms against that walk's 563 ms — this is a bare
+`Store` writing to a sink, and that is the assembled app with three connections
+live putting 54 MB on btrfs. The ratio transfers; the absolute does not.
+
+**Covers:** `export_everything` on the connection `walking()` opens, over a
+database and write-ahead log the kernel is holding none of, at three sizes.
+**Excludes:** the write side, which the sink takes out; a slower disk than an
+NVMe; and a fragmented or aged file, since all three were written in one pass
+minutes before they were read. The seeded line is one sentence with its index
+appended, which comes to 468 bytes a message on disk against the 560 of the
+profile run 11 walked — lighter per row, and lighter again in the full-text
+indexes, though the scan does not read those.
 
 ## Not measured
 

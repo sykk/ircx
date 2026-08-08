@@ -1920,6 +1920,7 @@ version = "0.1.0"
 dependencies = [
  "ircx-ipc",
  "keyring",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

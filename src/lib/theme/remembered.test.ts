@@ -7,13 +7,22 @@ const harbour = {
   id: "harbour",
   manifest: JSON.stringify({ name: "Harbour", author: "a walk", version: "1.0.0", appearance: "light" }),
   stylesheet: ":root { --surface-base: #ffffff; }",
+  uiStylesheet: "",
 };
 
 afterEach(() => localStorage.removeItem(KEY));
 
 describe("the installed theme a window opens on", () => {
-  it("comes back as the two files it went in as", () => {
+  it("comes back as the files it went in as", () => {
     rememberInstalled(harbour);
+    expect(rememberedInstalled()).toEqual(harbour);
+  });
+
+  it("fills in an empty ui.css when an older record has none", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ id: "harbour", manifest: harbour.manifest, stylesheet: harbour.stylesheet }),
+    );
     expect(rememberedInstalled()).toEqual(harbour);
   });
 

@@ -14,6 +14,7 @@
 mod archive;
 mod caps;
 mod casemap;
+mod client;
 mod dispatch;
 mod history;
 mod isupport;
@@ -28,6 +29,7 @@ mod text;
 
 pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;
+pub use client::version_reply;
 pub use isupport::ISupport;
 pub use plugins::{
     chosen_grants, describe_permissions, describe_plugin, network_for_plugins, run_plugin, spoken,

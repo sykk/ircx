@@ -89,7 +89,8 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
       <RosterHandle roster={ref} width={dragged} />
       <aside
         ref={ref}
-          aria-label={`${channel.name} members`}
+        aria-label={`${channel.name} members`}
+        data-ui="members"
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.stopPropagation();

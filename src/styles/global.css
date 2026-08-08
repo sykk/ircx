@@ -13,7 +13,7 @@ body,
 body {
   background: var(--surface-base);
   color: var(--text-primary);
-  font-family: var(--font-ui);
+  font-family: var(--font-ui), "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: var(--font-smoothing);
@@ -47,4 +47,15 @@ body {
 :focus-visible {
   outline: var(--focus-ring-width) solid var(--accent);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* The composer draws its own focus glow on the pill; the global ring reads as a
+ * sharp blue box on the textarea inside it. */
+[data-ui="composer"] textarea:focus,
+[data-ui="composer"] textarea:focus-visible {
+  outline: none;
+}
+
+[data-ui="composer"] .composer-field:focus-within {
+  box-shadow: 0 0 12px 2px var(--accent-muted);
 }

@@ -44,10 +44,15 @@ export function rememberedInstalled(): ThemeSource | null {
   try {
     const parsed: unknown = JSON.parse(held);
     if (parsed === null || typeof parsed !== "object") return null;
-    const { id, manifest, stylesheet } = parsed as Record<string, unknown>;
+    const { id, manifest, stylesheet, uiStylesheet } = parsed as Record<string, unknown>;
     if (typeof id !== "string" || id === "") return null;
     if (typeof manifest !== "string" || typeof stylesheet !== "string") return null;
-    return { id, manifest, stylesheet };
+    return {
+      id,
+      manifest,
+      stylesheet,
+      uiStylesheet: typeof uiStylesheet === "string" ? uiStylesheet : "",
+    };
   } catch {
     return null;
   }

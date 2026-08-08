@@ -2,9 +2,13 @@ import type { ThemeSource } from "@/types";
 import { parseManifest, parseStylesheet } from "./parse";
 import { REQUIRED_TOKENS } from "./tokens";
 import type { Theme, ThemeLoad } from "./types";
+import { uiStylesheetProblem } from "./ui-css";
 
 import darkManifest from "@/styles/themes/ircx-dark/theme.json?raw";
 import darkStylesheet from "@/styles/themes/ircx-dark/theme.css?raw";
+import glassManifest from "@/styles/themes/ircx-glass/theme.json?raw";
+import glassStylesheet from "@/styles/themes/ircx-glass/theme.css?raw";
+import glassUi from "@/styles/themes/ircx-glass/ui.css?raw";
 import lightManifest from "@/styles/themes/ircx-light/theme.json?raw";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
@@ -18,8 +22,14 @@ export { REQUIRED_TOKENS };
 export const FALLBACK_THEME_ID = "ircx-dark";
 
 export const BUILT_IN_SOURCES: readonly ThemeSource[] = [
-  { id: FALLBACK_THEME_ID, manifest: darkManifest, stylesheet: darkStylesheet },
-  { id: "ircx-light", manifest: lightManifest, stylesheet: lightStylesheet },
+  { id: FALLBACK_THEME_ID, manifest: darkManifest, stylesheet: darkStylesheet, uiStylesheet: "" },
+  { id: "ircx-light", manifest: lightManifest, stylesheet: lightStylesheet, uiStylesheet: "" },
+  {
+    id: "ircx-glass",
+    manifest: glassManifest,
+    stylesheet: glassStylesheet,
+    uiStylesheet: glassUi,
+  },
 ];
 
 const BUILT_IN_IDS = new Set(BUILT_IN_SOURCES.map((source) => source.id));
@@ -49,8 +59,19 @@ export function loadTheme(source: ThemeSource): ThemeLoad {
     );
   }
 
+  const uiProblem = uiStylesheetProblem(source.uiStylesheet ?? "");
+  if (uiProblem) problems.push(uiProblem);
+
   if (!manifest || problems.length > 0) return { ok: false, id: source.id, problems };
-  return { ok: true, theme: { id: source.id, manifest, tokens } };
+  return {
+    ok: true,
+    theme: {
+      id: source.id,
+      manifest,
+      tokens,
+      uiStylesheet: source.uiStylesheet?.trim() ?? "",
+    },
+  };
 }
 
 export interface BrokenTheme {

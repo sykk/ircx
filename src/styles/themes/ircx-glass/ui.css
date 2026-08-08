@@ -1,0 +1,268 @@
+/* Glass — morphic blobs behind smoked panels. Blobs live on html/shell pseudo-
+ * elements so backdrop-filter on translucent panels can blur them through. */
+
+@keyframes ircx-glass-blob-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(16vw, -14vh) scale(1.08);
+  }
+  45% {
+    transform: translate(22vw, 4vh) scale(0.94);
+  }
+  70% {
+    transform: translate(6vw, 12vh) scale(1.06);
+  }
+  90% {
+    transform: translate(-10vw, -6vh) scale(0.98);
+  }
+}
+
+@keyframes ircx-glass-blob-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(-14vw, 12vh) scale(1.1);
+  }
+  50% {
+    transform: translate(-20vw, -6vh) scale(0.92);
+  }
+  75% {
+    transform: translate(-8vw, -16vh) scale(1.04);
+  }
+}
+
+@keyframes ircx-glass-blob-3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  30% {
+    transform: translate(-16vw, 10vh) scale(1.12) rotate(6deg);
+  }
+  55% {
+    transform: translate(-8vw, -14vh) scale(0.88) rotate(-4deg);
+  }
+  80% {
+    transform: translate(12vw, -8vh) scale(1.05) rotate(3deg);
+  }
+}
+
+@keyframes ircx-glass-blob-4 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  35% {
+    transform: translate(12vw, -12vh) scale(1.08);
+  }
+  60% {
+    transform: translate(-10vw, 8vh) scale(0.9);
+  }
+  85% {
+    transform: translate(6vw, 16vh) scale(1.03);
+  }
+}
+
+/* ---- Base field — transparent so the desktop shows through the window ---- */
+
+[data-theme="ircx-glass"] html,
+[data-theme="ircx-glass"] body {
+  background: transparent !important;
+}
+
+[data-theme="ircx-glass"] #root,
+[data-theme="ircx-glass"] [data-ui="shell"] {
+  background: rgb(8 11 15 / 0.48) !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Drifting blobs (fixed, behind the UI) ---- */
+
+[data-theme="ircx-glass"]::before,
+[data-theme="ircx-glass"]::after,
+[data-theme="ircx-glass"] [data-ui="shell"]::before,
+[data-theme="ircx-glass"] [data-ui="shell"]::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+/* Green — lower / left, kept off-centre */
+[data-theme="ircx-glass"]::before {
+  width: min(52vmin, 440px);
+  height: min(52vmin, 440px);
+  left: -18vmin;
+  bottom: -22vmin;
+  background: rgb(50 230 77 / 0.14);
+  filter: blur(88px);
+  animation: ircx-glass-blob-1 32s ease-in-out infinite;
+}
+
+/* Purple — upper / right */
+[data-theme="ircx-glass"]::after {
+  width: min(48vmin, 400px);
+  height: min(48vmin, 400px);
+  right: -16vmin;
+  top: -18vmin;
+  background: rgb(155 92 255 / 0.11);
+  filter: blur(92px);
+  animation: ircx-glass-blob-2 38s ease-in-out infinite;
+}
+
+/* Secondary green — lower edge only */
+[data-theme="ircx-glass"] [data-ui="shell"]::before {
+  width: min(36vmin, 300px);
+  height: min(36vmin, 300px);
+  left: 8vw;
+  bottom: -8vh;
+  background: rgb(40 200 100 / 0.08);
+  filter: blur(80px);
+  animation: ircx-glass-blob-3 28s ease-in-out infinite;
+}
+
+/* Secondary purple — right edge */
+[data-theme="ircx-glass"] [data-ui="shell"]::after {
+  width: min(32vmin, 280px);
+  height: min(32vmin, 280px);
+  right: 4vw;
+  bottom: -6vh;
+  background: rgb(120 70 220 / 0.09);
+  filter: blur(84px);
+  animation: ircx-glass-blob-4 34s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="ircx-glass"]::before,
+  [data-theme="ircx-glass"]::after,
+  [data-theme="ircx-glass"] [data-ui="shell"]::before,
+  [data-theme="ircx-glass"] [data-ui="shell"]::after {
+    animation: none;
+  }
+}
+
+/* ---- Shared glass surface recipe ---- */
+
+[data-theme="ircx-glass"] [data-ui="titlebar"],
+[data-theme="ircx-glass"] [data-ui="sidebar"],
+[data-theme="ircx-glass"] [data-ui="statusbar"],
+[data-theme="ircx-glass"] [data-ui="members"],
+[data-theme="ircx-glass"] [data-ui="main"],
+[data-theme="ircx-glass"] [data-ui="pane"] > div > header {
+  backdrop-filter: blur(24px) saturate(145%) brightness(1.06);
+  -webkit-backdrop-filter: blur(24px) saturate(145%) brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 -1px 0 rgb(0 0 0 / 0.12);
+}
+
+/* ---- Smoked glass panels ---- */
+
+[data-theme="ircx-glass"] [data-ui="titlebar"],
+[data-theme="ircx-glass"] [data-ui="sidebar"],
+[data-theme="ircx-glass"] [data-ui="statusbar"],
+[data-theme="ircx-glass"] [data-ui="members"] {
+  background: rgb(10 14 20 / 0.26) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="titlebar"] {
+  border-bottom-color: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="sidebar"] {
+  border-right-color: color-mix(in srgb, var(--accent) 16%, transparent) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="statusbar"] {
+  border-top-color: color-mix(in srgb, rgb(155 92 255) 20%, transparent) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="members"] {
+  border-left-color: color-mix(in srgb, rgb(155 92 255) 18%, transparent) !important;
+}
+
+/* Chat stays darker but still glass — blobs and desktop show at the edges. */
+[data-theme="ircx-glass"] [data-ui="main"] {
+  background: rgb(6 8 12 / 0.52) !important;
+  backdrop-filter: blur(18px) saturate(125%) brightness(0.98);
+  -webkit-backdrop-filter: blur(18px) saturate(125%) brightness(0.98);
+}
+
+[data-theme="ircx-glass"] [data-ui="pane"] {
+  background: transparent;
+}
+
+[data-theme="ircx-glass"] [data-ui="pane"] > div > header {
+  background: rgb(8 10 14 / 0.32) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="timeline"] {
+  background: transparent;
+}
+
+/* ---- Sidebar selection & hover ---- */
+
+[data-theme="ircx-glass"] [data-ui="sidebar"] .group:has([aria-selected="true"]) {
+  background: rgb(155 92 255 / 0.14) !important;
+  box-shadow:
+    inset 0 0 0 1px rgb(155 92 255 / 0.28),
+    0 0 20px -6px rgb(155 92 255 / 0.2);
+}
+
+[data-theme="ircx-glass"] [data-ui="sidebar"] .group:hover:not(:has([aria-selected="true"])) {
+  background: rgb(255 255 255 / 0.06) !important;
+}
+
+[data-theme="ircx-glass"] [data-ui="titlebar"] .font-semibold {
+  color: var(--accent);
+}
+
+/* ---- Composer glass + green focus glow ---- */
+
+[data-theme="ircx-glass"] [data-ui="composer"] .composer-field {
+  background: rgb(12 18 26 / 0.3) !important;
+  backdrop-filter: blur(22px) saturate(150%) brightness(1.08);
+  -webkit-backdrop-filter: blur(22px) saturate(150%) brightness(1.08);
+  border-color: rgb(50 230 77 / 0.35);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 4px 28px -10px rgb(0 0 0 / 0.5);
+  transition:
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+[data-theme="ircx-glass"] [data-ui="composer"] .composer-field:focus-within {
+  border-color: rgb(50 230 77 / 0.55);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 4px 28px -10px rgb(0 0 0 / 0.5),
+    0 0 18px 2px rgb(50 230 77 / 0.16);
+}
+
+/* ---- Command palette ---- */
+
+[data-theme="ircx-glass"] [data-ui="palette"] {
+  background: rgb(12 16 24 / 0.45) !important;
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border-color: color-mix(in srgb, rgb(155 92 255) 28%, var(--border-default));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    var(--shadow-overlay);
+}
+
+/* ---- Focus: green tint instead of a heavy ring ---- */
+
+[data-theme="ircx-glass"] :focus-visible {
+  outline-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}

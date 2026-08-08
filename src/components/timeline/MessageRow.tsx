@@ -62,6 +62,7 @@ export function MessageRow({
     <div
       data-msgid={message.id}
       data-highlight={highlight || undefined}
+      data-ui="message-row"
       className="group text-[13px]"
       style={{
         paddingBlock: "var(--timeline-row-pad-y)",

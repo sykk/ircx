@@ -11,12 +11,13 @@ export interface ThemeManifest {
 }
 
 /** A theme that passed validation. `tokens` maps `--surface-base` to its
- * value; nothing else in the stylesheet is read, so a theme cannot restyle a
- * component or reach outside the token contract. */
+ * value; `uiStylesheet` holds optional rules from ui.css for animations and
+ * layout tweaks scoped with `[data-theme]` and `[data-ui]`. */
 export interface Theme {
   id: string;
   manifest: ThemeManifest;
   tokens: Record<string, string>;
+  uiStylesheet: string;
 }
 
 export type ThemeLoad =

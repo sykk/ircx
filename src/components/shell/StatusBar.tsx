@@ -33,6 +33,7 @@ export function StatusBar() {
   return (
     <footer
       aria-label="Connection status"
+      data-ui="statusbar"
       className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 text-[11px] text-[var(--text-secondary)]"
     >
       {network ? (

@@ -1,0 +1,64 @@
+/* Optional ui.css — animations and layout tweaks for the Cyberpunk example.
+ *
+ * Scope rules with [data-theme="<folder-name>"] and target regions with
+ * [data-ui="…"]. Hooks shipped in ircx:
+ *
+ *   shell, titlebar, sidebar, main, statusbar, pane, timeline, composer,
+ *   message-row, typing, members, palette
+ *
+ * Copy this folder to <app data>/themes/cyberpunk/ and pick it in Appearance.
+ */
+
+@keyframes ircx-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ircx-typing-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes ircx-palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-theme="cyberpunk"] [data-ui="message-row"] {
+  animation: ircx-fade-in 0.18s ease-out;
+}
+
+[data-theme="cyberpunk"] [data-ui="typing"]:not(:empty) {
+  animation: ircx-typing-pulse 1.4s ease-in-out infinite;
+  color: var(--accent);
+}
+
+[data-theme="cyberpunk"] [data-ui="palette"] {
+  animation: ircx-palette-in 0.15s ease-out;
+}
+
+[data-theme="cyberpunk"] [data-ui="composer"]:focus-within {
+  box-shadow: 0 0 0 1px var(--accent-muted);
+  transition: box-shadow 0.15s ease-out;
+}
+
+[data-theme="cyberpunk"] [data-ui="titlebar"] {
+  border-bottom-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+}

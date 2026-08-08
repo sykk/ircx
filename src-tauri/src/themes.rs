@@ -1,5 +1,5 @@
-//! Reads the themes directory. The backend does not parse either file: it
-//! hands both to the frontend, which owns the token contract and so owns
+//! Reads the themes directory. The backend does not parse any file: it hands
+//! theme.json, theme.css and optional ui.css to the frontend, which owns
 //! validation.
 
 use std::path::{Path, PathBuf};
@@ -39,6 +39,7 @@ pub fn read(directory: &Path) -> Result<Vec<ThemeSource>, String> {
         themes.push(ThemeSource {
             manifest: std::fs::read_to_string(entry.path().join("theme.json")).unwrap_or_default(),
             stylesheet: std::fs::read_to_string(entry.path().join("theme.css")).unwrap_or_default(),
+            ui_stylesheet: std::fs::read_to_string(entry.path().join("ui.css")).unwrap_or_default(),
             id,
         });
     }
@@ -99,7 +100,7 @@ fn fingerprint(directory: &Path) -> Vec<(String, u64, Option<std::time::SystemTi
         let Some(id) = theme_id(&entry.path()) else {
             continue;
         };
-        for file in ["theme.json", "theme.css"] {
+        for file in ["theme.json", "theme.css", "ui.css"] {
             let Ok(meta) = std::fs::metadata(entry.path().join(file)) else {
                 continue;
             };

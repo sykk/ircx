@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { ChatMessage, CommandOutcome } from "@/types";
+import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAnnounce } from "@/hooks/useAnnounce";
@@ -76,6 +77,11 @@ function ComposerFor({
   const caretRef = useRef<number | null>(null);
   const draftRef = useRef("");
   const typingSentAt = useRef(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiAnchor = useRef<HTMLButtonElement>(null);
+  /** Where the next picked emoji goes while the picker stays open. The textarea
+   * loses focus on each click, so its selection cannot be trusted between picks. */
+  const emojiCaretRef = useRef<number | null>(null);
 
   // A line being looked at is not a draft. While one is in the box the draft
   // stays what was typed before it, so stepping back through the history and
@@ -167,6 +173,33 @@ function ComposerFor({
       typingSentAt.current = now;
       void ipc.setTyping(network, target, true);
     }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    setValue((current) => {
+      const start = emojiCaretRef.current ?? current.length;
+      const next = current.slice(0, start) + emoji + current.slice(start);
+      const caret = start + emoji.length;
+      emojiCaretRef.current = caret;
+      caretRef.current = caret;
+      return next;
+    });
+    completionRef.current = null;
+    recall.reset();
+    const now = Date.now();
+    if (now - typingSentAt.current >= TYPING_INTERVAL_MS) {
+      typingSentAt.current = now;
+      void ipc.setTyping(network, target, true);
+    }
+  };
+
+  const toggleEmojiPicker = () => {
+    setEmojiOpen((open) => {
+      if (open) return false;
+      const el = textareaRef.current;
+      emojiCaretRef.current = el?.selectionStart ?? value.length;
+      return true;
+    });
   };
 
   /** Draw the reason and give the line back, but only into an empty box: the
@@ -306,7 +339,7 @@ function ComposerFor({
   const hints = matchCommands(value);
 
   return (
-    <div className="relative px-3 pb-2">
+    <div className="relative px-3 pb-2" data-ui="composer">
       {hints && <CommandHint commands={hints} />}
 
       {replying && (
@@ -336,7 +369,7 @@ function ComposerFor({
       </div>
 
       <div
-        className="flex items-end gap-2 rounded-[var(--radius-lg)] border px-3 py-2"
+        className="composer-field flex items-end gap-2 rounded-[var(--radius-lg)] border px-3 py-2 transition-[box-shadow]"
         style={{ background: "var(--surface-raised)", borderColor: "var(--border-default)" }}
       >
         <textarea
@@ -351,6 +384,28 @@ function ComposerFor({
           className="selectable flex-1 resize-none bg-transparent text-[13px] leading-[1.5] outline-none"
           style={{ color: "var(--text-primary)" }}
         />
+        <span
+          className="relative shrink-0 pb-0.5"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setEmojiOpen(false);
+          }}
+        >
+          <button
+            ref={emojiAnchor}
+            type="button"
+            aria-expanded={emojiOpen}
+            aria-label="Insert emoji"
+            onClick={toggleEmojiPicker}
+            className="rounded-[var(--radius-sm)] px-1 py-0.5 text-[16px] leading-none hover:bg-[var(--surface-hover)]"
+          >
+            <span aria-hidden="true">😀</span>
+          </button>
+          {emojiOpen && (
+            <span className="absolute bottom-full right-0 z-10 mb-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]">
+              <EmojiPicker onPick={insertEmoji} />
+            </span>
+          )}
+        </span>
         <button
           type="button"
           onClick={() => void send()}

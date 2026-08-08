@@ -186,9 +186,16 @@ export function SidebarNetworks() {
     try {
       await ipc.closeTarget(at.network, at.target);
     } catch (reason) {
-      // `close_target` answers `Ok` even with no session, so a rejection here is
-      // the bridge rather than the conversation.
       console.warn("ircx could not close", at.target, reason);
+    }
+  }
+
+  /** Drops the network from the sidebar and disconnects it when it is running. */
+  async function removeNetwork(network: Network) {
+    try {
+      await ipc.removeNetwork(network.id);
+    } catch (reason) {
+      console.warn("ircx could not remove", network.name, reason);
     }
   }
 
@@ -251,6 +258,12 @@ export function SidebarNetworks() {
             onRawLog={() => openConsole(row.network.id, true)}
             onSettings={() => openSetup(row.network.id)}
           />
+          <CloseButton
+            label={`Remove ${row.network.name}`}
+            tabbable={tabbable}
+            visible={selected}
+            onClose={() => void removeNetwork(row.network)}
+          />
         </div>
       );
     }
@@ -264,7 +277,7 @@ export function SidebarNetworks() {
       <div
         key={row.id}
         className={clsx(
-          "group flex items-center",
+          "group relative flex items-center",
           selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",
         )}
         onContextMenu={(event) => {
@@ -281,10 +294,19 @@ export function SidebarNetworks() {
           onActivate={() => activate(row)}
           registerButton={registerButton}
         />
+        <CloseButton
+          label={
+            row.kind === "channel"
+              ? `Leave and close ${row.channel.name}`
+              : `Close ${row.query.nick}`
+          }
+          tabbable={tabbable}
+          visible={selected}
+          onClose={() => void closeConversation(conversation)}
+        />
         <ConversationMenu
           label={row.kind === "channel" ? row.channel.name : row.query.nick}
           leaves={row.kind === "channel"}
-          tabbable={tabbable}
           open={menuFor === row.id}
           onOpenChange={(open) => setMenuFor(open ? row.id : null)}
           onClose={() => void closeConversation(conversation)}
@@ -296,6 +318,7 @@ export function SidebarNetworks() {
   return (
     <nav
       aria-label="Networks"
+      data-ui="sidebar"
       className="flex h-full min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
     >
       <div className="flex items-center pt-3 pr-1.5">
@@ -573,18 +596,47 @@ function NetworkMenu({
 }
 
 /**
- * What can be done to one conversation. Only closing, for now, which is what
- * #121 found missing: `close_target` was reachable from nowhere, so a channel
- * joined once stayed in the sidebar and came back on the next launch.
- *
- * Hidden until the row is hovered or holds focus, like the network row's menu
- * and for the reason #80 gave — a sidebar at rest is the flat list #28 asked
- * for, and an action nobody can find is not an action.
+ * Closes a conversation or removes a network. Shown on hover and when the row
+ * is selected, like the network row's overflow menu.
+ */
+function CloseButton({
+  label,
+  tabbable,
+  visible,
+  onClose,
+}: {
+  label: string;
+  tabbable: boolean;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      tabIndex={tabbable ? 0 : -1}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+      className={clsx(
+        "mr-1.5 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
+        visible ? "block" : "hidden group-hover:block group-focus-within:block",
+      )}
+    >
+      <Icon name="close" size={12} />
+    </button>
+  );
+}
+
+/**
+ * What can be done to one conversation beyond the ×. Only closing, for now.
+ * Reached from a right-click; the × is the direct route #121 asked for.
  */
 function ConversationMenu({
   label,
   leaves,
-  tabbable,
   open,
   onOpenChange,
   onClose,
@@ -593,21 +645,25 @@ function ConversationMenu({
   /** A channel is parted when it closes, which everyone in it sees. A query is
    * closed privately, so the two do not read the same. */
   leaves: boolean;
-  tabbable: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onClose: () => void;
 }) {
-  const button = useRef<HTMLButtonElement>(null);
+  if (!open) return null;
+
+  const choose = () => {
+    onOpenChange(false);
+    onClose();
+  };
 
   return (
     <div
-      className="relative"
+      role="menu"
+      aria-label={`${label} actions`}
+      className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
       onKeyDown={(event) => {
-        if (!open) return;
         if (event.key === "Escape") {
           onOpenChange(false);
-          button.current?.focus();
         } else {
           return;
         }
@@ -615,35 +671,7 @@ function ConversationMenu({
         event.stopPropagation();
       }}
     >
-      <button
-        ref={button}
-        type="button"
-        aria-label={`${label} actions`}
-        title={`${label} actions`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        tabIndex={tabbable ? 0 : -1}
-        onClick={() => onOpenChange(!open)}
-        className={clsx(
-          "mr-1.5 rounded-[var(--radius-sm)] p-1",
-          open
-            ? "text-[var(--accent)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-          open ? "block" : "hidden group-hover:block group-focus-within:block",
-        )}
-      >
-        <OverflowIcon size={12} />
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          aria-label={`${label} actions`}
-          className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
-        >
-          <MenuItem onClick={onClose}>{leaves ? "Leave and close" : "Close"}</MenuItem>
-        </div>
-      )}
+      <MenuItem onClick={choose}>{leaves ? "Leave and close" : "Close"}</MenuItem>
     </div>
   );
 }

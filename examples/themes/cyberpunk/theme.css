@@ -1,0 +1,150 @@
+/* Palette sampled from the mockup in docs/mockup.png. */
+
+:root {
+  /* Surfaces, darkest to lightest. */
+  --surface-base: #0a0d12;
+  --surface-sidebar: #0d1117;
+  --surface-raised: #12161d;
+  --surface-overlay: #171c24;
+  --surface-hover: #1a1f28;
+  --surface-active: #1f2733;
+
+  --border-subtle: #1a1f27;
+  --border-default: #232a34;
+  --border-strong: #313a46;
+
+  --text-primary: #d4dae3;
+  --text-secondary: #9aa4b0;
+  --text-muted: #6e7781;
+  --text-faint: #4d555f;
+  --text-inverse: #0a0d12;
+
+  --accent: #00ffd5;
+  --accent-hover: #5cffea;
+  --accent-muted: #00ffd533;
+
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+
+  /* Connection and security indicators in the status bar. */
+  --state-connected: #3fb950;
+  --state-connecting: #d29922;
+  --state-disconnected: #6e7781;
+  --state-error: #f85149;
+
+  --badge-bg: #21262d;
+  --badge-text: #9aa4b0;
+  --badge-highlight-bg: #1f6feb;
+  --badge-highlight-text: #ffffff;
+
+  --divider-unread: #f85149;
+  --mention-bg: #1f6feb1a;
+
+  /* Deterministic nickname colours, hashed from the nick so a person keeps the
+   * same one everywhere.
+   *
+   * Warm hues are reserved for security and connection state. An
+   * unconstrained palette collides with them: the previous values put a nick
+   * on --danger at 4deg and on --success at 125deg, so a nickname could render
+   * in the colour that means "connection error". See
+   * readability/READABILITY.md, finding 1.
+   *
+   * Hues are spread evenly across 186-335deg, which keeps every entry more
+   * than 20deg from --danger, --warning and --success in both themes. Each is
+   * then solved for the lightness clearing 4.7:1 against the worst surface it
+   * can land on. tokens.test.ts asserts both constraints, for this theme and
+   * for every other one shipped.
+   *
+   * Colour is reinforcement, never a carrier. The nickname string is the
+   * identifier and is written out in full; turning these off costs speed and
+   * nothing else, which is also why ten is enough. */
+  --nick-1: #319eaa;
+  --nick-2: #4598c9;
+  --nick-3: #6b90d4;
+  --nick-4: #8389db;
+  --nick-5: #9584db;
+  --nick-6: #a97cd9;
+  --nick-7: #be72d6;
+  --nick-8: #d366cf;
+  --nick-9: #d46cb4;
+  --nick-10: #d56f99;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* How far a disabled control fades. One fraction for every disabled control,
+   * so two of them cannot drift apart again.
+   *
+   * The value solves for 2.5:1 between --accent faded over the surface it sits
+   * on and that same surface. Below that the control reads as absent rather
+   * than as present and unavailable, which is what the previous 0.4 did on the
+   * light theme. Fading toward black loses contrast more slowly than fading
+   * toward white, so the light theme carries a higher fraction for the same
+   * result. tokens.test.ts asserts the floor. */
+  --disabled-opacity: 0.55;
+
+  /* A message still queued for the socket. It has to hold --text-primary above
+   * the AA body floor over the surfaces a row is drawn on, which is a stricter
+   * job than --disabled-opacity's: a disabled control is exempt from AA on
+   * purpose, and this is prose the reader is meant to read. #334 is why it has
+   * to be legible at all — the state used to last an echo round trip and now
+   * lasts as long as the rate limiter holds the line. */
+  --pending-opacity: 0.55;
+
+  /* How tightly the timeline packs. readability/READABILITY.md study 05 asks
+   * for three of these — compact for log reading, comfortable for being in the
+   * conversation, read for nine hours of backlog — and a density is these
+   * three numbers and nothing else, which is what makes it a theme rather than
+   * a fork. The values below are comfortable.
+   *
+   * They live here rather than on the element that reads them because an
+   * inline style beats any stylesheet: declared in the component, a theme
+   * redefining them on :root was silently ignored. */
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 14px;
+  --timeline-body-leading: 1.7;
+
+  /* The horizontal ladder: a spine at the rail, then the one content column
+   * that every block header and every line of prose begins at, running to a
+   * bounded measure. Every row reads these, so the columns hold whatever a row
+   * turns out to contain.
+   *
+   * There is no clock column. It used to open the ladder and cost 120px before
+   * the first word of the conversation, while standing empty on every row that
+   * did not change the minute; the time is in the block header now. */
+  --timeline-rail-pad: 16px;
+  --timeline-spine-width: 2px;
+  --timeline-spine-gap: 28px;
+  --timeline-rule-gap: 20px;
+  --timeline-measure: 595px;
+  /* Reserved for the reply and react controls, which appear with the pointer.
+     They used to sit over the far end of the measure to avoid taking room; a
+     long line then ran underneath them and could not be clicked. */
+  --timeline-actions-col: 60px;
+  --timeline-actions-gap: 16px;
+
+  /* A reply quote's connector. Solid because a reply_to is a fact the sender
+   * declared over the protocol, and at study 19's "declared" weight — the
+   * heaviest of the three grades, the only one a human named. */
+  --timeline-quote-width: 2px;
+
+  /* The focus ring is an accessibility affordance before it is a style: a
+   * theme that wants a thicker one has to be able to say so. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Track width, and the transparent inset that thins the thumb inside it. */
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
+
+  /* Behind the palette and other modal overlays. */
+  --scrim: rgb(2 4 8 / 0.66);
+
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+
+  /* Thinning the strokes is what light text on a dark surface wants, and the
+   * opposite of what dark text on a light one wants. */
+  --font-smoothing: antialiased;
+}

@@ -734,3 +734,29 @@ describe("what a reader is told about the queue", () => {
     expect(said()).toBe("");
   });
 });
+
+describe("Composer emoji", () => {
+  it("inserts a picked emoji at the caret", async () => {
+    const box = await mount();
+    type(box, "hello ");
+    box.setSelectionRange(6, 6);
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert emoji" }));
+    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "fire" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fire" }));
+
+    expect(box.value).toBe("hello 🔥");
+    expect(box.selectionStart).toBe(8);
+  });
+
+  it("inserts multiple picks in click order", async () => {
+    const box = await mount();
+    fireEvent.click(screen.getByRole("button", { name: "Insert emoji" }));
+    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "eggplant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Eggplant" }));
+    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "droplets" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sweat Droplets" }));
+
+    expect(box.value).toBe("🍆💦");
+  });
+});

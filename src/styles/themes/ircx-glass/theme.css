@@ -1,0 +1,85 @@
+/* Smoked glass over a near-black field. Green and purple live in the accents and
+ * in ui.css — the liquid ambience, backdrop blur, and panel tints. */
+
+:root {
+  --surface-base: #080b0f;
+  --surface-sidebar: #0a1018;
+  --surface-raised: #0c1219;
+  --surface-overlay: #101820;
+  --surface-hover: #141c26;
+  --surface-active: #1a2430;
+
+  --border-subtle: #141c22;
+  --border-default: #1c2630;
+  --border-strong: #283440;
+
+  --text-primary: #dce3ea;
+  --text-secondary: #9aa8b6;
+  --text-muted: #6b7885;
+  --text-faint: #4a5560;
+  --text-inverse: #080b0f;
+
+  --accent: #32e64d;
+  --accent-hover: #5aff72;
+  --accent-muted: #32e64d28;
+
+  --success: #2ecc71;
+  --warning: #d29922;
+  --danger: #f85149;
+
+  --state-connected: #32e64d;
+  --state-connecting: #d29922;
+  --state-disconnected: #6b7885;
+  --state-error: #f85149;
+
+  --badge-bg: #141c26;
+  --badge-text: #9aa8b6;
+  --badge-highlight-bg: #9b5cff;
+  --badge-highlight-text: #f4efff;
+
+  --divider-unread: #f85149;
+  --mention-bg: #9b5cff1a;
+
+  /* Teal and violet within the cool nick band (186–335deg). */
+  --nick-1: #2ccbdd;
+  --nick-2: #ae86f3;
+  --nick-3: #2cb9dd;
+  --nick-4: #b986f3;
+  --nick-5: #2ca8dd;
+  --nick-6: #c490f4;
+  --nick-7: #2c96dd;
+  --nick-8: #d268f3;
+  --nick-9: #2da8e8;
+  --nick-10: #d97ef5;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --disabled-opacity: 0.55;
+  --pending-opacity: 0.55;
+
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 14px;
+  --timeline-body-leading: 1.7;
+
+  --timeline-rail-pad: 16px;
+  --timeline-spine-width: 2px;
+  --timeline-spine-gap: 28px;
+  --timeline-rule-gap: 20px;
+  --timeline-measure: 595px;
+  --timeline-actions-col: 60px;
+  --timeline-actions-gap: 16px;
+  --timeline-quote-width: 2px;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
+
+  --scrim: rgb(4 6 10 / 0.72);
+  --shadow-overlay: 0 20px 56px -16px rgb(0 0 0 / 0.75);
+
+  --font-smoothing: antialiased;
+}

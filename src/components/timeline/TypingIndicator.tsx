@@ -23,6 +23,7 @@ export function TypingIndicator({ network, target }: { network: string; target: 
 
   return (
     <div
+      data-ui="typing"
       className="h-[18px] px-4 text-[11px] leading-[18px]"
       style={{ color: "var(--text-muted)" }}
       aria-live="polite"

@@ -935,6 +935,7 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
     session.submit("#ircx", "/invite sable");
     session.submit("#ircx", "/invite sable #ircx-dev");
     session.submit("#ircx", "/me waves");
+    session.submit("#ircx", "/ctcp sable version");
     session.submit("#ircx", "/msg sable in private");
     session.submit("#ircx", "/nick sykk2");
     session.submit("#ircx", "/away back later");
@@ -950,6 +951,7 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
             "INVITE sable #ircx",
             "INVITE sable #ircx-dev",
             "PRIVMSG #ircx :\u{1}ACTION waves\u{1}",
+            "PRIVMSG sable :\u{1}VERSION\u{1}",
             "PRIVMSG sable :in private",
             "NICK sykk2",
             "AWAY :back later",
@@ -1039,6 +1041,72 @@ fn a_ctcp_action_becomes_an_action_and_urls_become_attachments() {
     assert_eq!(messages[0].text, "reads https://example.invalid/a.png");
     assert_eq!(messages[0].attachments.len(), 1);
     assert!(messages[0].attachments[0].preview.is_none());
+}
+
+#[test]
+fn ctcp_version_is_answered_with_the_client_string() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable PRIVMSG sykk :\u{1}VERSION\u{1}");
+
+    let reply = session
+        .sent_starting("PRIVMSG sable :")
+        .into_iter()
+        .next()
+        .expect("a CTCP VERSION reply");
+    assert!(reply.contains("\u{1}VERSION ircx "));
+    assert!(reply.contains(env!("CARGO_PKG_VERSION")));
+    assert!(reply.ends_with('\u{1}'));
+
+    let messages = session.messages();
+    assert_eq!(messages[0].kind, MessageKind::Server);
+    assert!(messages[0].text.contains("CTCP VERSION"));
+}
+
+#[test]
+fn a_ctcp_version_reply_is_shown_and_not_answered_again() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable NOTICE sykk :\u{1}VERSION mIRC 7.68\u{1}");
+
+    assert!(session.sent().is_empty(), "a reply is not a query");
+    let messages = session.messages();
+    assert_eq!(messages.len(), 1);
+    assert!(messages[0].text.contains("mIRC 7.68"));
+}
+
+#[test]
+fn ctcp_ping_is_answered_on_the_same_command() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable PRIVMSG sykk :\u{1}PING token\u{1}");
+
+    assert_eq!(
+        session.sent(),
+        vec![format!("PRIVMSG sable :\u{1}PING token\u{1}")]
+    );
+}
+
+#[test]
+fn ctcp_command_sends_a_wrapped_query() {
+    let mut session = registered("");
+    let outcome = session.submit("#ircx", "/ctcp sable version");
+    assert!(matches!(outcome, CommandOutcome::Handled));
+    assert_eq!(
+        session.sent(),
+        vec![format!("PRIVMSG sable :\u{1}VERSION\u{1}")]
+    );
+}
+
+#[test]
+fn ctcp_in_a_query_tab_uses_the_person_being_spoken_with() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable PRIVMSG sykk :hello");
+    session.sent();
+
+    let outcome = session.submit("sable", "/ctcp version");
+    assert!(matches!(outcome, CommandOutcome::Handled));
+    assert_eq!(
+        session.sent(),
+        vec![format!("PRIVMSG sable :\u{1}VERSION\u{1}")]
+    );
 }
 
 #[test]

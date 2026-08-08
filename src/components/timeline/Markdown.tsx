@@ -141,6 +141,7 @@ function Link({ url }: { url: string }) {
     <>
       <button
         type="button"
+        data-link-url={url}
         aria-label={leavingLabel(url)}
         title={url}
         onClick={() => {

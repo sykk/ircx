@@ -60,7 +60,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const columns = narrow ? "1fr" : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)`;
 
   return (
-    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--surface-base)]">
+    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-[var(--surface-base)]" data-ui="shell">
       <TitleBar
         onToggleSidebar={narrow ? () => setSidebarOverlay((open) => !open) : undefined}
       />
@@ -84,7 +84,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 
         {!narrow && <SidebarHandle />}
 
-        <main className="min-w-0 overflow-hidden">{children}</main>
+        <main className="min-w-0 overflow-hidden" data-ui="main">{children}</main>
       </div>
 
       <StatusBar />

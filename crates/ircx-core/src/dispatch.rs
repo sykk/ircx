@@ -15,6 +15,7 @@ const HELP: &str = "\
 /query <nick> [text]      open a tab for one person
 /me <action>              speak in the third person
 /notice <target> <text>   send a notice
+/ctcp <nick> <cmd> [args] send a CTCP query
 /react <msgid> <value>    react to a message
 /unreact <msgid> <value>  take that reaction back
 /nick <nick>              change your nickname
@@ -209,6 +210,7 @@ impl SessionState {
             "part" | "leave" => self.cmd_part(target, args),
             "msg" => self.cmd_msg(args, MessageKind::Privmsg),
             "notice" => self.cmd_msg(args, MessageKind::Notice),
+            "ctcp" => self.cmd_ctcp(target, args),
             "react" => self.cmd_react(target, args, true),
             "unreact" => self.cmd_react(target, args, false),
             "me" => self.cmd_me(target, args, reply_to),
@@ -298,6 +300,66 @@ impl SessionState {
         }
         for message in self.say(target, text, kind, None) {
             self.append(message);
+        }
+        CommandOutcome::Handled
+    }
+
+    /// `/ctcp sable version` sends `\x01VERSION\x01` in a private message. In a
+    /// query tab, `/ctcp version` uses the person being spoken with.
+    fn cmd_ctcp(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let args = args.trim();
+        if args.is_empty() {
+            return CommandOutcome::Rejected(
+                "`/ctcp <nick> <command> [args]` needs a nick and a command".into(),
+            );
+        }
+
+        let (nick, command, parameter) = {
+            let mut words = args.splitn(3, ' ');
+            let first = words.next().unwrap_or("").trim();
+            let second = words.next();
+            let third = words.next().unwrap_or("").trim();
+
+            match second {
+                Some(command) => (
+                    first.to_string(),
+                    command.trim().to_string(),
+                    third.to_string(),
+                ),
+                None if target != SERVER_TARGET && !self.isupport.is_channel(target) => {
+                    (target.to_string(), first.to_string(), String::new())
+                }
+                None => {
+                    return CommandOutcome::Rejected(
+                        "`/ctcp <nick> <command> [args]` needs a nick and a command".into(),
+                    );
+                }
+            }
+        };
+
+        if nick.is_empty() || command.is_empty() {
+            return CommandOutcome::Rejected(
+                "`/ctcp <nick> <command> [args]` needs a nick and a command".into(),
+            );
+        }
+        if command.contains('\0') || parameter.contains('\0') {
+            return CommandOutcome::Rejected("CTCP cannot carry a null byte".into());
+        }
+
+        if !self.isupport.is_channel(&nick) {
+            self.touch_query(&nick, None);
+        }
+
+        let body = text::ctcp_wrap(&command.to_ascii_uppercase(), parameter.trim());
+        match MessageBuilder::new("PRIVMSG").param(&nick).param(body).build() {
+            Ok(message) => {
+                self.send_line(message.to_line());
+            }
+            Err(_) => {
+                return CommandOutcome::Rejected(format!(
+                    "`{nick}` is not a target ircx can send to"
+                ));
+            }
         }
         CommandOutcome::Handled
     }
@@ -582,7 +644,7 @@ impl SessionState {
 /// the routing in `plugins.rs` looks here first. Every name in the match in
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
-    "join", "j", "part", "leave", "msg", "notice", "react", "unreact", "me", "query", "nick",
+    "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query", "nick",
     "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "close",
     "help",
 ];

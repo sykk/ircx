@@ -29,6 +29,7 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
   return (
     <header
       data-tauri-drag-region
+      data-ui="titlebar"
       className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-sidebar)] pr-1 pl-2"
     >
       {onToggleSidebar && (

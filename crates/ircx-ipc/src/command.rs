@@ -318,8 +318,8 @@ pub struct InstalledPlugin {
 }
 
 /// One theme directory, read but not understood: the backend does not parse
-/// either file. Validation is the frontend's, because it is the frontend that
-/// knows which custom properties the UI reads.
+/// any of its files. Validation is the frontend's, because it is the frontend
+/// that knows which custom properties the UI reads and what ui.css may contain.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -330,6 +330,10 @@ pub struct ThemeSource {
     pub manifest: String,
     /// Contents of `theme.css`.
     pub stylesheet: String,
+    /// Contents of `ui.css`, when present. Optional rules, animations and
+    /// layout tweaks scoped with `[data-theme]` and `[data-ui]`.
+    #[serde(default)]
+    pub ui_stylesheet: String,
 }
 
 /// What one conversation is worth, and what the whole archive weighs.

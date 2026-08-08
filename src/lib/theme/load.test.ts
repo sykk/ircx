@@ -16,6 +16,7 @@ function complete(overrides: Partial<ThemeSource> = {}): ThemeSource {
     id: "nord",
     manifest: MANIFEST,
     stylesheet: `:root {\n${tokens}\n}`,
+    uiStylesheet: "",
     ...overrides,
   };
 }
@@ -90,18 +91,51 @@ describe("loadTheme", () => {
       expect.stringContaining('"appearance": "grey"'),
     ]);
   });
+
+  it("refuses ui.css that would fetch something", () => {
+    const load = loadTheme(complete({ uiStylesheet: "@import url(x.css);" }));
+    expect(load.ok ? [] : load.problems).toEqual([expect.stringContaining("ui.css uses @import")]);
+  });
+
+  it("keeps ui.css on a loaded theme", () => {
+    const css = "[data-ui='timeline'] { opacity: 1; }";
+    const load = loadTheme(complete({ uiStylesheet: css }));
+    expect(load.ok && load.theme.uiStylesheet).toBe(css);
+  });
+});
+
+describe("the cyberpunk example theme", () => {
+  it("loads with its ui.css", async () => {
+    const [{ readFileSync }, { join }] = await Promise.all([
+      import("node:fs"),
+      import("node:path"),
+    ]);
+    const root = join(import.meta.dirname, "../../../examples/themes/cyberpunk");
+    const source: ThemeSource = {
+      id: "cyberpunk",
+      manifest: readFileSync(join(root, "theme.json"), "utf8"),
+      stylesheet: readFileSync(join(root, "theme.css"), "utf8"),
+      uiStylesheet: readFileSync(join(root, "ui.css"), "utf8"),
+    };
+    const load = loadTheme(source);
+    expect(load.ok && load.theme.uiStylesheet).toContain("@keyframes");
+  });
 });
 
 describe("catalogue", () => {
-  it("is the two built-ins when nothing is installed", () => {
-    expect(catalogue().themes.map((theme) => theme.id)).toEqual(["ircx-dark", "ircx-light"]);
+  it("is the built-ins when nothing is installed", () => {
+    expect(catalogue().themes.map((theme) => theme.id)).toEqual([
+      "ircx-dark",
+      "ircx-light",
+      "ircx-glass",
+    ]);
     expect(catalogue().broken).toEqual([]);
   });
 
   it("keeps a broken theme listed with its reasons", () => {
     const { themes, broken } = catalogue([complete({ manifest: "{" })]);
 
-    expect(themes.map((theme) => theme.id)).toEqual(["ircx-dark", "ircx-light"]);
+    expect(themes.map((theme) => theme.id)).toEqual(["ircx-dark", "ircx-light", "ircx-glass"]);
     expect(broken).toEqual([{ id: "nord", problems: [expect.stringContaining("not valid JSON")] }]);
   });
 

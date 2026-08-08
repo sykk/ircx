@@ -14,6 +14,15 @@ pub fn ctcp(text: &str) -> Option<(&str, &str)> {
     })
 }
 
+/** Wraps a CTCP query or reply for the trailing parameter of PRIVMSG or NOTICE. */
+pub fn ctcp_wrap(command: &str, args: &str) -> String {
+    if args.is_empty() {
+        format!("\u{1}{command}\u{1}")
+    } else {
+        format!("\u{1}{command} {args}\u{1}")
+    }
+}
+
 pub fn attachments(text: &str) -> Vec<Attachment> {
     let mut found = Vec::new();
     let bytes = text.as_bytes();
@@ -171,6 +180,12 @@ mod tests {
         assert_eq!(ctcp("\u{1}ACTION waves\u{1}"), Some(("ACTION", "waves")));
         assert_eq!(ctcp("\u{1}VERSION\u{1}"), Some(("VERSION", "")));
         assert_eq!(ctcp("plain text"), None);
+    }
+
+    #[test]
+    fn ctcp_wraps_a_command_and_its_args() {
+        assert_eq!(ctcp_wrap("VERSION", ""), "\u{1}VERSION\u{1}");
+        assert_eq!(ctcp_wrap("PING", "token"), "\u{1}PING token\u{1}");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 import { DEFAULT_DENSITY, densityTokens, type DensityId } from "./density";
 import type { Overrides } from "./overrides";
 import type { Theme } from "./types";
+import { applyUiStylesheet } from "./ui-css";
 
 /** Mirrors src/components/shell/viewState.ts: a preference the backend has no
  * reason to know about lives next to the other window state. */
@@ -60,6 +61,7 @@ function paint(): void {
 
   root.style.colorScheme = theme?.manifest.appearance ?? "dark";
   root.dataset.theme = theme?.id ?? "ircx-dark";
+  applyUiStylesheet(theme?.uiStylesheet ?? "");
 }
 
 export function storedThemeId(): string | null {

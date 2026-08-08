@@ -9,9 +9,9 @@ use ircx_core::{
 };
 use ircx_ipc::{
     AppSnapshot, ConnectionStatus, InstalledPlugin, IrcxEvent, Network, NetworkConfig, NetworkId,
-    PluginGrants, SaslStatus, Severity,
+    PluginGrants, SaslStatus, Severity, TargetName,
 };
-use ircx_store::{Store, StoreError};
+use ircx_store::{OpenTarget, Store, StoreError};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tracing::warn;
@@ -23,6 +23,13 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Ceiling on how long closing the app waits for QUIT to reach the servers.
 const SHUTDOWN_GRACE: Duration = Duration::from_millis(1_500);
 const DEFAULT_QUIT: &str = "ircx";
+
+fn looks_like_channel(target: &str) -> bool {
+    target
+        .chars()
+        .next()
+        .is_some_and(|first| matches!(first, '#' | '&' | '+' | '!'))
+}
 
 pub struct App {
     store: Arc<Store>,
@@ -272,6 +279,53 @@ impl App {
             Ok(Err(_)) => Err(self.not_connected(network)),
             Err(_) => Err(self.stopped_responding(network)),
         }
+    }
+
+    /// Parts a channel or closes a query on the server when connected; when
+    /// disconnected, drops it from persistence and tells the UI anyway.
+    pub async fn close_target(
+        &self,
+        network: &NetworkId,
+        target: &TargetName,
+    ) -> Result<(), String> {
+        if self.sender(network).is_some() {
+            self.tell_if_connected(
+                network,
+                SessionCommand::CloseTarget {
+                    target: target.clone(),
+                },
+            )
+            .await;
+            return Ok(());
+        }
+
+        let is_channel = self
+            .store
+            .open_targets(network)
+            .map_err(describe)?
+            .into_iter()
+            .find(|open| open.name() == target)
+            .is_some_and(|open| matches!(open, OpenTarget::Channel(_)))
+            || looks_like_channel(target);
+
+        self.store
+            .forget_target(network, target)
+            .map_err(describe)?;
+
+        if is_channel {
+            self.publish(IrcxEvent::ChannelRemoved {
+                network: network.clone(),
+                name: target.clone(),
+            })
+            .await;
+        } else {
+            self.publish(IrcxEvent::QueryRemoved {
+                network: network.clone(),
+                nick: target.clone(),
+            })
+            .await;
+        }
+        Ok(())
     }
 
     /// For commands whose whole effect is on the server: with no session there
@@ -633,6 +687,44 @@ mod tests {
 
         assert!(app.store().list_networks().unwrap().is_empty());
         assert!(app.snapshot().await.unwrap().networks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn closing_a_channel_while_disconnected_forgets_it_and_reports_it() {
+        let (events, mut inbox) = mpsc::channel(16);
+        let app = App::new(store(), events, None);
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        app.store()
+            .remember_target(&id, &OpenTarget::Channel("#ircx".into()))
+            .unwrap();
+
+        app.close_target(&id, &"#ircx".into()).await.unwrap();
+
+        assert!(app.store().open_targets(&id).unwrap().is_empty());
+        assert!(matches!(
+            inbox.recv().await,
+            Some(IrcxEvent::ChannelRemoved { network, name })
+            if network == id && name == "#ircx"
+        ));
+    }
+
+    #[tokio::test]
+    async fn closing_a_query_while_disconnected_forgets_it_and_reports_it() {
+        let (events, mut inbox) = mpsc::channel(16);
+        let app = App::new(store(), events, None);
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        app.store()
+            .remember_target(&id, &OpenTarget::Query("sable".into()))
+            .unwrap();
+
+        app.close_target(&id, &"sable".into()).await.unwrap();
+
+        assert!(app.store().open_targets(&id).unwrap().is_empty());
+        assert!(matches!(
+            inbox.recv().await,
+            Some(IrcxEvent::QueryRemoved { network, nick })
+            if network == id && nick == "sable"
+        ));
     }
 
     /// Installing is not consenting: the plugin arrives with what it asked for

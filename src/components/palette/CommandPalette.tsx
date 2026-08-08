@@ -256,6 +256,7 @@ function Palette() {
       <div
         ref={dialog}
         role="dialog"
+        data-ui="palette"
         aria-modal="true"
         aria-label="Command palette"
         tabIndex={-1}

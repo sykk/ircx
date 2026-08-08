@@ -1220,6 +1220,15 @@ export function serverMsgid(message: ChatMessage): string | null {
   return message.tags.find(([name]) => name === "msgid")?.[1] ?? null;
 }
 
+/** Walk every open timeline for a message the UI already drew. */
+export function findMessageById(id: string): ChatMessage | undefined {
+  for (const timeline of Object.values(useAppStore.getState().timelines)) {
+    const found = timeline.messages.find((message) => message.id === id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** Adding a reaction someone already holds changes nothing, and taking back one
  * they never sent changes nothing either — a server can deliver either line
  * twice, and the sender's own copy is followed by its echo. */

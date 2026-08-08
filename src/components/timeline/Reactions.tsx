@@ -1,14 +1,8 @@
 import { useRef, useState } from "react";
 import clsx from "clsx";
 import type { Reaction } from "@/types";
+import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { Tooltip } from "@/components/common/Tooltip";
-
-/**
- * What the picker offers. A short list on purpose: the `+draft/react` value is
- * free text on the wire, so `/react <msgid> <value>` reaches anything not here,
- * and a grid of a thousand glyphs is chrome the mockup does not draw.
- */
-const OFFERED = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀", "🔥", "✅"];
 
 /** More names than this and the tooltip runs off the window, so the rest of
  * them stay a count. */
@@ -174,28 +168,15 @@ export function RowControls({
             </button>
 
             {open && (
-              <span
-                role="group"
-                aria-label="React with"
-                className="absolute bottom-full left-0 z-10 mb-1 flex w-max gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
-              >
-                {OFFERED.map((emoji, index) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    // The picker opens under the keyboard as well as the pointer,
-                    // so the first choice takes focus and Tab walks the rest.
-                    autoFocus={index === 0}
-                    onClick={() => {
-                      onPick(emoji);
-                      setOpen(false);
-                      anchor.current?.focus();
-                    }}
-                    className="rounded-[var(--radius-sm)] px-1.5 py-1 text-[15px] leading-none hover:bg-[var(--surface-hover)]"
-                  >
-                    {emoji}
-                  </button>
-                ))}
+              <span className="absolute bottom-full left-0 z-10 mb-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]">
+                <EmojiPicker
+                  compact
+                  onPick={(emoji) => {
+                    onPick(emoji);
+                    setOpen(false);
+                    anchor.current?.focus();
+                  }}
+                />
               </span>
             )}
           </>

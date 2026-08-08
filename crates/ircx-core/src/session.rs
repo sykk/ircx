@@ -14,6 +14,7 @@ use tracing::debug;
 
 use crate::caps::Caps;
 use crate::casemap::CaseMapping;
+use crate::client;
 use crate::history;
 use crate::isupport::ISupport;
 use crate::numeric::{self, *};
@@ -1574,10 +1575,7 @@ impl SessionState {
 
         let (kind, text) = match text::ctcp(body) {
             Some(("ACTION", action)) => (MessageKind::Action, action.to_string()),
-            Some((request, _)) => {
-                let text = format!("{} asked for CTCP {request}", sender.nick);
-                (MessageKind::Server, text)
-            }
+            Some((request, args)) => self.handle_incoming_ctcp(&sender, command, request, args),
             None if command == "NOTICE" => (MessageKind::Notice, body.to_string()),
             None => (MessageKind::Privmsg, body.to_string()),
         };
@@ -2557,6 +2555,63 @@ impl SessionState {
                 self.send_line(line);
             }
             None => debug!(command, "refused to send a malformed command"),
+        }
+    }
+
+    /// Handles CTCP other than ACTION. Replies on the same command the query
+    /// arrived on — PRIVMSG queries expect PRIVMSG answers on many clients.
+    fn handle_incoming_ctcp(
+        &mut self,
+        sender: &Sender,
+        command: &str,
+        request: &str,
+        args: &str,
+    ) -> (MessageKind, String) {
+        let args = args.trim();
+
+        if request.eq_ignore_ascii_case("VERSION") {
+            if args.is_empty() {
+                if !sender.is_self {
+                    self.reply_ctcp(&sender.nick, command, &client::ctcp_version_body());
+                }
+                return (
+                    MessageKind::Server,
+                    format!("{} asked for CTCP VERSION", sender.nick),
+                );
+            }
+            return (
+                MessageKind::Server,
+                format!("{} CTCP VERSION: {args}", sender.nick),
+            );
+        }
+
+        if request.eq_ignore_ascii_case("PING") {
+            if !sender.is_self {
+                self.reply_ctcp(&sender.nick, command, &text::ctcp_wrap("PING", args));
+            }
+            let text = if args.is_empty() {
+                format!("{} CTCP PING", sender.nick)
+            } else {
+                format!("{} CTCP PING: {args}", sender.nick)
+            };
+            return (MessageKind::Server, text);
+        }
+
+        (
+            MessageKind::Server,
+            format!("{} asked for CTCP {request}", sender.nick),
+        )
+    }
+
+    /// CTCP replies travel on the same command the query arrived on.
+    fn reply_ctcp(&mut self, nick: &str, command: &str, body: &str) {
+        match MessageBuilder::new(command).param(nick).param(body).build() {
+            Ok(message) => {
+                self.send_line(message.to_line());
+            }
+            Err(error) => {
+                debug!(%nick, %command, %body, %error, "refused to send a CTCP reply");
+            }
         }
     }
 

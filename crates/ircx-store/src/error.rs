@@ -92,8 +92,14 @@ mod tests {
     /// still a sentence once the number is off the end.
     #[test]
     fn an_unnamed_kind_keeps_what_the_system_said() {
-        // ENOTTY, which Rust has no `ErrorKind` for and renders with an errno.
-        let said = in_words(&Error::from_raw_os_error(25));
-        assert_eq!(said, "Inappropriate ioctl for device");
+        // The raw code is platform-specific; what matters is that `in_words`
+        // strips the errno suffix and leaves the OS message intact.
+        let error = Error::from_raw_os_error(25);
+        let mut expected = error.to_string();
+        if let Some(at) = expected.find(" (os error ") {
+            expected.truncate(at);
+        }
+        let said = in_words(&error);
+        assert_eq!(said, expected);
     }
 }

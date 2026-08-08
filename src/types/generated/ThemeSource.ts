@@ -2,8 +2,8 @@
 
 /**
  * One theme directory, read but not understood: the backend does not parse
- * either file. Validation is the frontend's, because it is the frontend that
- * knows which custom properties the UI reads.
+ * any of its files. Validation is the frontend's, because it is the frontend
+ * that knows which custom properties the UI reads and what ui.css may contain.
  */
 export type ThemeSource = { 
 /**
@@ -17,4 +17,9 @@ manifest: string,
 /**
  * Contents of `theme.css`.
  */
-stylesheet: string, };
+stylesheet: string, 
+/**
+ * Contents of `ui.css`, when present. Optional rules, animations and
+ * layout tweaks scoped with `[data-theme]` and `[data-ui]`.
+ */
+uiStylesheet: string, };

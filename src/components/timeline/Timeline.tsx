@@ -275,7 +275,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-ui="timeline">
       <div className="min-h-0 flex-1">
         <div
           ref={scrollRef}

@@ -21,6 +21,7 @@ const harbour = {
     appearance: "light",
   }),
   stylesheet: lightStylesheet,
+  uiStylesheet: "",
 };
 
 const surface = () => document.documentElement.style.getPropertyValue("--surface-base");

@@ -38,6 +38,7 @@ export const COMMANDS: SlashCommand[] = [
   { name: "msg", args: "<target> <message>", summary: "Send without opening a tab" },
   { name: "me", args: "<action>", summary: "Send an action" },
   { name: "notice", args: "<target> <message>", summary: "Send a notice" },
+  { name: "ctcp", args: "<nick> <command> [args]", summary: "Send a CTCP query" },
   { name: "react", args: "<msgid> <value>", summary: "React to a message" },
   { name: "unreact", args: "<msgid> <value>", summary: "Take a reaction back" },
   { name: "nick", args: "<nick>", summary: "Change your nickname" },

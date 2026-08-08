@@ -110,9 +110,7 @@ pub async fn close_target(
     network: NetworkId,
     target: TargetName,
 ) -> Result<(), String> {
-    app.tell_if_connected(&network, SessionCommand::CloseTarget { target })
-        .await;
-    Ok(())
+    app.close_target(&network, &target).await
 }
 
 #[tauri::command]
@@ -370,7 +368,15 @@ fn write_export(store: &Store, scope: &ArchiveScope, path: &str) -> Result<u64, 
 
 /// Which file would not take the export, and why.
 fn unwritable(path: &str, error: &std::io::Error) -> String {
-    format!("{path} could not be written: {}", in_words(error))
+    // Windows answers `File::create` on a directory with `PermissionDenied`
+    // rather than `IsADirectory`. The path is what the user picked, so name
+    // what it is instead of sending them looking for a permission they lack.
+    let reason = if std::path::Path::new(path).is_dir() {
+        in_words(&std::io::Error::from(std::io::ErrorKind::IsADirectory))
+    } else {
+        in_words(error)
+    };
+    format!("{path} could not be written: {reason}")
 }
 
 /// The same, once the file is open and part of the export may be in it.

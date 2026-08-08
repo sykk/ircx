@@ -9,12 +9,15 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:build": "NO_STRIP=1 tauri build",
+    "tauri:dev": "scripts\\dev-windows.cmd dev",
+    "tauri:build:win": "scripts\\dev-windows.cmd build",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bindings": "cargo test -p ircx-ipc"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "@tanstack/react-virtual": "^3.13.6",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.7.2",

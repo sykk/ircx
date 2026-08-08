@@ -18,6 +18,42 @@ local SQLite history.
 Requires Rust 1.85+, Node 24+, and the Tauri system dependencies for your
 platform ([Tauri prerequisites](https://tauri.app/start/prerequisites/)).
 
+### Windows
+
+1. Install [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+   with the **Desktop development with C++** workload (MSVC linker + Windows SDK).
+2. Install the [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+   if it is not already present (Windows 11 usually includes it).
+3. From the project root:
+
+```sh
+npm install
+npm run tauri:dev
+```
+
+`npm run tauri:dev` bootstraps the MSVC environment automatically. If you prefer
+to run `npm run tauri dev` yourself, open a **Developer Command Prompt for VS
+2022** first so `link.exe` and `msvcrt.lib` are both on the path.
+
+If you see `LNK1104: cannot open file 'msvcrt.lib'`, the shell picked up a
+partial Visual Studio install (linker only, no SDK libs). Use `npm run
+tauri:dev`, or repair VS by adding **Desktop development with C++** and the
+**Windows 11 SDK** in Visual Studio Installer.
+
+### Custom themes
+
+Themes are folders of CSS. Copy `examples/themes/cyberpunk/` into
+`%APPDATA%\chat.ircx.app\themes\` and pick it in Appearance.
+
+- `theme.css` — colours and spacing (CSS variables on `:root`)
+- `ui.css` *(optional)* — animations and effects via `[data-theme]` and
+  `[data-ui="…"]` hooks
+
+See [examples/themes/README.md](examples/themes/README.md) for the full list of
+UI hooks and rules.
+
+### Linux / macOS
+
 ```sh
 npm install
 npm run tauri dev

@@ -2,6 +2,7 @@ import { applyDensity, applyOverrides, applyTheme } from "./apply";
 import { DEFAULT_DENSITY, storeDensity, storedDensity } from "./density";
 import { catalogue } from "./load";
 import type { Theme } from "./types";
+import { UI_STYLE_ID, clearUiStylesheet } from "./ui-css";
 
 function builtIn(id: string): Theme {
   const theme = catalogue().themes.find((candidate) => candidate.id === id);
@@ -15,6 +16,7 @@ describe("applyTheme", () => {
   afterEach(() => {
     root.removeAttribute("style");
     root.removeAttribute("data-theme");
+    clearUiStylesheet();
   });
 
   it("writes the theme's tokens and its appearance", () => {
@@ -30,12 +32,14 @@ describe("applyTheme", () => {
       id: "sparse",
       manifest: { name: "Sparse", author: "a", version: "1.0.0", appearance: "dark" },
       tokens: { "--surface-base": "#010203" },
+      uiStylesheet: "",
     });
     applyTheme(builtIn("ircx-light"));
     applyTheme({
       id: "sparser",
       manifest: { name: "Sparser", author: "a", version: "1.0.0", appearance: "dark" },
       tokens: { "--surface-base": "#040506" },
+      uiStylesheet: "",
     });
 
     expect(root.style.getPropertyValue("--text-primary")).toBe("");
@@ -51,6 +55,17 @@ describe("applyTheme", () => {
     expect(root.style.getPropertyValue("--surface-base")).toBe("");
     expect(root.style.colorScheme).toBe("dark");
     expect(root.dataset.theme).toBe("ircx-dark");
+  });
+
+  it("injects ui.css from the theme", () => {
+    applyTheme({
+      id: "animated",
+      manifest: { name: "Animated", author: "a", version: "1.0.0", appearance: "dark" },
+      tokens: { "--surface-base": "#010203" },
+      uiStylesheet: "[data-ui='timeline'] { opacity: 0.95; }",
+    });
+
+    expect(document.getElementById(UI_STYLE_ID)?.textContent).toContain("[data-ui='timeline']");
   });
 });
 
@@ -68,6 +83,7 @@ describe("applyDensity", () => {
     id: "dense",
     manifest: { name: "Dense", author: "a", version: "1.0.0", appearance: "dark" },
     tokens: { "--surface-base": "#010203", "--timeline-block-gap": "11px" },
+    uiStylesheet: "",
   };
 
   afterEach(() => {
@@ -129,6 +145,7 @@ describe("applyOverrides", () => {
     id: "dense",
     manifest: { name: "Dense", author: "a", version: "1.0.0", appearance: "dark" },
     tokens: { "--surface-base": "#010203", "--timeline-block-gap": "11px" },
+    uiStylesheet: "",
   };
 
   afterEach(() => {

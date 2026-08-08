@@ -45,6 +45,7 @@ export function ChatPane({ view }: { view: ViewId | null }) {
     <section
       ref={ref}
       data-view={view ?? undefined}
+      data-ui="pane"
       aria-label={`${name} pane`}
       onPointerDownCapture={focus}
       onFocusCapture={focus}

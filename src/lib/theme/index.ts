@@ -13,6 +13,7 @@ export type { BrokenTheme, Catalogue } from "./load";
 export { sanitiseOverrides, storeOverrides, storedOverrides } from "./overrides";
 export type { Overrides } from "./overrides";
 export { parseManifest, parseStylesheet, tokenProblem } from "./parse";
+export { applyUiStylesheet, clearUiStylesheet, uiStylesheetProblem } from "./ui-css";
 export { applyOpeningTheme, selectDensity, selectTheme, startThemes } from "./session";
 export { TOKEN_CATALOGUE, TOKEN_GROUPS } from "./tokens";
 export type { TokenKind, TokenSpec } from "./tokens";

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET, type Network } from "@/types";
 import { SidebarNetworks } from "../SidebarNetworks";
@@ -21,11 +22,16 @@ vi.mock("@/lib/ipc", () => ({
     closeTarget: vi.fn().mockResolvedValue(undefined),
     connectNetwork: vi.fn().mockResolvedValue(undefined),
     disconnectNetwork: vi.fn().mockResolvedValue(undefined),
+    removeNetwork: vi.fn().mockResolvedValue(undefined),
   },
   onIrcxEvent: vi.fn(),
 }));
 
-beforeEach(resetStore);
+beforeEach(() => {
+  resetStore();
+  vi.mocked(ipc.closeTarget).mockClear();
+  vi.mocked(ipc.removeNetwork).mockClear();
+});
 
 /** The row's ⋮, which is where collapse, the protocol log and the saved
  * settings live. Returns it so a test can assert where focus went. */
@@ -348,17 +354,31 @@ describe("closing a conversation", () => {
     render(<SidebarNetworks />);
   }
 
-  it("offers the action on a channel and on a query", () => {
+  it("offers close on a channel and on a query from the ×", () => {
     seedOne();
 
-    fireEvent.click(screen.getByRole("button", { name: "#ctf-ops actions" }));
-    // A channel is parted when it closes, which everyone in it sees. A query is
-    // closed privately, and the wording says which is which.
-    expect(screen.getByRole("menuitem", { name: "Leave and close" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Leave and close #ctf-ops" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close sable" })).toBeTruthy();
+  });
 
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    fireEvent.click(screen.getByRole("button", { name: "sable actions" }));
-    expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
+  it("closes a channel from its ×", async () => {
+    seedOne();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Leave and close #ctf-ops" }));
+    });
+
+    expect(ipc.closeTarget).toHaveBeenCalledWith("libera", "#ctf-ops");
+  });
+
+  it("closes a query from its ×", async () => {
+    seedOne();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Close sable" }));
+    });
+
+    expect(ipc.closeTarget).toHaveBeenCalledWith("libera", "sable");
   });
 
   it("opens the same menu on a right-click", () => {
@@ -372,7 +392,7 @@ describe("closing a conversation", () => {
 
   it("puts the menu away once a conversation is closed", async () => {
     seedOne();
-    fireEvent.click(screen.getByRole("button", { name: "sable actions" }));
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "sable" }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Close" }));
@@ -434,6 +454,17 @@ describe("starting and stopping a network", () => {
     seedWith({ state: "connected" });
     fireEvent.click(screen.getByRole("menuitem", { name: "Disconnect" }));
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("removes a network from its ×", async () => {
+    seedStore([makeNetwork("libera", { name: "Libera.Chat" })]);
+    render(<SidebarNetworks />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Remove Libera.Chat" }));
+    });
+
+    expect(ipc.removeNetwork).toHaveBeenCalledWith("libera");
   });
 });
 

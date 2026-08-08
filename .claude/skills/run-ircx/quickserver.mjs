@@ -10,6 +10,40 @@
 import { createServer } from "node:net";
 
 const port = Number(process.argv.includes("--port") ? process.argv[process.argv.indexOf("--port") + 1] : 6699);
+/** Messages a second into every channel joined, for measuring a client left
+ * open rather than one starting up. Off unless asked for. */
+const TRAFFIC = Number(
+  process.argv.includes("--traffic") ? process.argv[process.argv.indexOf("--traffic") + 1] : 0,
+);
+/** Minutes of traffic before the channel goes quiet, the connection staying up.
+ * Zero keeps talking for the life of the run. */
+const QUIET_AFTER = Number(
+  process.argv.includes("--quiet-after") ? process.argv[process.argv.indexOf("--quiet-after") + 1] : 0,
+);
+
+/* One timer a channel, cleared when the socket goes, so a client that quits
+ * does not leave the server talking to nothing for the rest of a soak. */
+function talk(send, channel, socket) {
+  const nicks = ["talker", "wanderer", "quietone", "regular"];
+  let n = 0;
+  const every = Math.max(1, Math.round(1000 / TRAFFIC));
+  const timer = setInterval(() => {
+    send(`:${nicks[n % nicks.length]}!u@h PRIVMSG ${channel} :line ${n} of a channel nobody is reading`);
+    n++;
+  }, every);
+  socket.once("close", () => clearInterval(timer));
+  /* Goes quiet without dropping the connection, which is the whole point: a
+   * client that keeps climbing under load and gives nothing back when the
+   * channel falls silent is holding the memory. One that returns to its floor
+   * was only ever failing to collect while it was busy, and those two look the
+   * same on a rising graph. */
+  if (QUIET_AFTER > 0) {
+    setTimeout(() => {
+      clearInterval(timer);
+      process.stdout.write(`ok quiet after ${n} messages\n`);
+    }, QUIET_AFTER * 60_000);
+  }
+}
 
 const server = createServer((socket) => {
   let nick = "*";
@@ -53,6 +87,7 @@ const server = createServer((socket) => {
           if (process.argv.includes("--say")) {
             send(`:talker!u@h PRIVMSG ${channel} :a line the app archived itself`);
           }
+          if (TRAFFIC > 0) talk(send, channel, socket);
           break;
         }
         case "PING":

@@ -10,6 +10,7 @@ import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { ArchiveSheet } from "@/components/archive/ArchiveSheet";
 import { UploadSheet } from "@/components/uploads/UploadSheet";
 import { AppShell } from "@/components/shell/AppShell";
+import { WindowFrame } from "@/components/shell/WindowFrame";
 import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
@@ -80,6 +81,10 @@ export function App() {
       <ArchiveSheet />
       <DropToUpload />
       <ChannelList />
+
+      {/* Last, so the four pixels at the window's edge outrank whatever sheet
+          is over the rest of it: a window stays resizable while it is busy. */}
+      <WindowFrame />
     </>
   );
 }

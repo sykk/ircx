@@ -81,6 +81,7 @@ beforeEach(() => {
     activeViewId: null,
     layout: null,
     rosterHidden: {},
+    rosterWidth: null,
     rawAnchor: {},
   });
   useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
@@ -678,5 +679,88 @@ describe("a composer whose line the server refused", () => {
 
     expect(store().composerError[view] ?? null).toBe(null);
     expect(screen.queryByText(/Cannot send to channel/)).toBeNull();
+  });
+});
+
+describe("resizing the member list", () => {
+  /** jsdom lays nothing out, so the column reports whatever it is told to. This
+   * is what the drag starts from: the width the pointer is over. */
+  function roster(at: number): HTMLElement {
+    const column = screen.getByRole("complementary", { name: "#ctf-ops members" });
+    vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
+      x: 1000 - at,
+      y: 0,
+      left: 1000 - at,
+      top: 0,
+      right: 1000,
+      bottom: 800,
+      width: at,
+      height: 800,
+      toJSON: () => ({}),
+    });
+    return column;
+  }
+
+  function handle(): HTMLElement {
+    const divider = screen.getByRole("separator", { name: "Member list width" });
+    divider.setPointerCapture = () => {};
+    divider.releasePointerCapture = () => {};
+    return divider;
+  }
+
+  function drag(from: number, to: number) {
+    const divider = handle();
+    fireEvent.pointerDown(divider, { pointerId: 1, clientX: from });
+    fireEvent.pointerMove(divider, { pointerId: 1, clientX: to });
+    fireEvent.pointerUp(divider, { pointerId: 1 });
+  }
+
+  it("takes the width from the pointer and draws the column there", async () => {
+    render(<PaneTree />);
+    await settle();
+    const column = roster(160);
+
+    // Leftwards is wider: the handle is on the column's near edge.
+    drag(840, 780);
+
+    expect(useAppStore.getState().rosterWidth).toBe(220);
+    expect(column.style.width).toBe("220px");
+  });
+
+  it("holds the drag to the range whatever the pointer does", async () => {
+    render(<PaneTree />);
+    await settle();
+    roster(160);
+
+    drag(840, 300);
+    expect(useAppStore.getState().rosterWidth).toBe(400);
+
+    // The same drag, back past the other end. Measured from where the pointer
+    // went down rather than from the last move, so a pointer that ran off the
+    // range comes back on the pixel it left it.
+    drag(840, 1200);
+    expect(useAppStore.getState().rosterWidth).toBe(128);
+  });
+
+  it("moves it from the keyboard", async () => {
+    render(<PaneTree />);
+    await settle();
+    roster(160);
+
+    fireEvent.keyDown(handle(), { key: "ArrowLeft" });
+    expect(useAppStore.getState().rosterWidth).toBe(176);
+  });
+
+  it("gives the column back to its names when nothing has dragged it", async () => {
+    render(<PaneTree />);
+    await settle();
+
+    // jsdom drops the `clamp()` the automatic width is written as, so an empty
+    // `style.width` is the assertion that no pixel width was set — see
+    // `ContextPanel.test.tsx`, which asserts what that clamp says.
+    expect(useAppStore.getState().rosterWidth).toBeNull();
+    expect(
+      screen.getByRole("complementary", { name: "#ctf-ops members" }).style.width,
+    ).toBe("");
   });
 });

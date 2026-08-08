@@ -25,6 +25,7 @@ describe("saving", () => {
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 320,
+      rosterWidth: null,
       collapsedNetworks: ["libera"],
       layout: split,
     });
@@ -37,6 +38,7 @@ describe("loading", () => {
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 240,
+      rosterWidth: null,
       collapsedNetworks: [],
       layout: null,
     });
@@ -50,6 +52,7 @@ describe("loading", () => {
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 240,
+      rosterWidth: null,
       collapsedNetworks: [],
       layout: null,
     });

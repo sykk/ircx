@@ -131,6 +131,8 @@ export interface AppActions {
   dropPlugin: (plugin: string) => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
+  /** Null gives the column back to the names in it. */
+  setRosterWidth: (px: number | null) => void;
 
   setThemeCatalogue: (catalogue: Catalogue) => void;
   setThemeId: (id: string) => void;
@@ -175,6 +177,7 @@ const initialState: AppState = {
   pluginsUnavailable: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
+  rosterWidth: null,
   themes: [],
   brokenThemes: [],
   themeId: FALLBACK_THEME_ID,
@@ -593,6 +596,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     })),
 
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
+
+  // The floor is the 8rem the column already refused to go under: a group
+  // heading is drawn whatever the nicks are, and it sits in a row of fixed
+  // height, so narrower means a heading wrapping into the member below it.
+  // Rounded, unlike the sidebar's, because that one is given a `clientX` and
+  // this one a measured box: `getBoundingClientRect` answers in fractions of a
+  // pixel, and `aria-valuenow` is read out as it stands.
+  setRosterWidth: (px) =>
+    set({ rosterWidth: px === null ? null : Math.round(Math.min(400, Math.max(128, px))) }),
 
   setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
   setThemeId: (id) => set({ themeId: id }),

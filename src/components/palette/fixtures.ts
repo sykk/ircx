@@ -126,6 +126,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     density: "comfortable",
     overrides: {},
     sidebarWidth: 240,
+    rosterWidth: null,
     rawLog: {},
     channelList: {},
     channelsOpen: null,

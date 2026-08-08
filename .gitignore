@@ -10,8 +10,3 @@ dist/
 # Agent worktrees created by Claude Code.
 .claude/worktrees/
 
-docs/
-readability/
-.claude/skills/run-ircx/
-CLAUDE.md
-ircclient.md

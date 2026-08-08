@@ -689,6 +689,25 @@ mod tests {
         assert!(app.snapshot().await.unwrap().networks.is_empty());
     }
 
+    /// The removal, whatever came before it. `save_network` publishes a
+    /// `NetworkUpdated` of its own, so the closing is not the first thing on
+    /// the channel and reading one event reads that one instead.
+    async fn removal(inbox: &mut mpsc::Receiver<IrcxEvent>) -> IrcxEvent {
+        let waiting = async {
+            loop {
+                match inbox.recv().await.expect("the channel is still open") {
+                    event @ (IrcxEvent::ChannelRemoved { .. } | IrcxEvent::QueryRemoved { .. }) => {
+                        return event
+                    }
+                    _ => continue,
+                }
+            }
+        };
+        timeout(Duration::from_secs(5), waiting)
+            .await
+            .expect("a removal is published")
+    }
+
     #[tokio::test]
     async fn closing_a_channel_while_disconnected_forgets_it_and_reports_it() {
         let (events, mut inbox) = mpsc::channel(16);
@@ -702,8 +721,8 @@ mod tests {
 
         assert!(app.store().open_targets(&id).unwrap().is_empty());
         assert!(matches!(
-            inbox.recv().await,
-            Some(IrcxEvent::ChannelRemoved { network, name })
+            removal(&mut inbox).await,
+            IrcxEvent::ChannelRemoved { network, name }
             if network == id && name == "#ircx"
         ));
     }
@@ -721,8 +740,8 @@ mod tests {
 
         assert!(app.store().open_targets(&id).unwrap().is_empty());
         assert!(matches!(
-            inbox.recv().await,
-            Some(IrcxEvent::QueryRemoved { network, nick })
+            removal(&mut inbox).await,
+            IrcxEvent::QueryRemoved { network, nick }
             if network == id && nick == "sable"
         ));
     }

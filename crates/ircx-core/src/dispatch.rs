@@ -351,7 +351,11 @@ impl SessionState {
         }
 
         let body = text::ctcp_wrap(&command.to_ascii_uppercase(), parameter.trim());
-        match MessageBuilder::new("PRIVMSG").param(&nick).param(body).build() {
+        match MessageBuilder::new("PRIVMSG")
+            .param(&nick)
+            .param(body)
+            .build()
+        {
             Ok(message) => {
                 self.send_line(message.to_line());
             }
@@ -644,9 +648,9 @@ impl SessionState {
 /// the routing in `plugins.rs` looks here first. Every name in the match in
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
-    "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query", "nick",
-    "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote", "close",
-    "help",
+    "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
+    "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote",
+    "close", "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

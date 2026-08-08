@@ -14,3 +14,5 @@ docs/
 readability/
 .github/workflows/
 .claude/skills/run-ircx/
+CLAUDE.md
+ircclient.md

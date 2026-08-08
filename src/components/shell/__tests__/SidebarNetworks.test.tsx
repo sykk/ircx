@@ -64,39 +64,51 @@ describe("SidebarNetworks", () => {
     expect(screen.getByRole("treeitem", { name: "#linux" })).toBeTruthy();
   });
 
-  it("gathers every network's queries into one section at the bottom", () => {
+  /* Two networks can both host a NickServ. Gathered into one section those two
+   * rows read the same; inside their own network's panel neither is ambiguous. */
+  it("puts each network's queries in that network's panel", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);
 
-    const queries = screen.getByRole("tree", { name: "Queries" });
-    expect(
-      within(queries)
-        .getAllByRole("treeitem")
-        .map((row) => row.textContent),
-    ).toEqual(["phrack2", "guest", "nyx"]);
+    const libera = within(screen.getByRole("group", { name: "Libera.Chat" }));
+    expect(libera.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+    expect(libera.queryByRole("treeitem", { name: "guest" })).toBeNull();
 
-    const networks = screen.getByRole("tree", { name: "Networks and channels" });
-    expect(within(networks).queryByRole("treeitem", { name: "phrack" })).toBeNull();
+    expect(screen.queryByRole("tree", { name: "Queries" })).toBeNull();
+    expect(
+      within(screen.getByRole("group", { name: "OFTC" })).getByRole("treeitem", {
+        name: "guest",
+      }),
+    ).toBeTruthy();
   });
 
-  it("draws no queries section when nobody has an open conversation", () => {
-    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+  it("draws a network's channels before its queries", () => {
+    seedStore(
+      [makeNetwork("libera", { name: "Libera.Chat" })],
+      [makeChannel("libera", "#hackint"), makeChannel("libera", "#ctf-ops")],
+      [makeQuery("libera", "sable"), makeQuery("libera", "phrack")],
+    );
     render(<SidebarNetworks />);
-    expect(screen.queryByRole("tree", { name: "Queries" })).toBeNull();
+
+    expect(
+      within(screen.getByRole("group", { name: "Libera.Chat" }))
+        .getAllByRole("treeitem")
+        .map((row) => row.textContent),
+    ).toEqual(["#ctf-ops", "#hackint", "phrack", "sable"]);
   });
 
   it("keeps the network order the store gives it", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);
 
-    const groups = within(screen.getByRole("tree", { name: "Networks and channels" }))
+    const groups = within(screen.getByRole("tree", { name: "Networks and conversations" }))
       .getAllByRole("treeitem")
       .filter((row) => row.getAttribute("aria-level") === "1")
       .map((row) => row.textContent);
     expect(groups).toEqual(["Libera.Chat", "OFTC", "Rizon"]);
   });
 
-  it("collapsing hides the group's channels and surfaces their unread total", () => {
+  it("collapsing hides the panel's conversations and surfaces their unread total", () => {
     seedStore(
       [makeNetwork("libera", { name: "Libera.Chat" })],
       [
@@ -111,17 +123,19 @@ describe("SidebarNetworks", () => {
     expect(group.getAttribute("aria-expanded")).toBe("true");
 
     openRowMenu("Libera.Chat");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Hide channels" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide conversations" }));
 
     expect(group.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
-    expect(within(group).getByText("7")).toBeTruthy();
-    // Queries have their own section, so collapsing a network leaves them be.
-    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+    // The queries are on the network too, so they go with its channels and
+    // their unread counts toward the one badge left on the row.
+    expect(screen.queryByRole("treeitem", { name: "phrack" })).toBeNull();
+    expect(within(group).getByText("9")).toBeTruthy();
 
     openRowMenu("Libera.Chat");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Show channels" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show conversations" }));
     expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
   });
 
   // #80: the owner could not find the console, the raw log, or the saved
@@ -296,6 +310,22 @@ describe("SidebarNetworks", () => {
       act(() => channel.focus());
 
       fireEvent.keyDown(channel, { key: "ArrowLeft" });
+      expect(document.activeElement).toBe(
+        screen.getByRole("treeitem", { name: /^Libera\.Chat,/ }),
+      );
+    });
+
+    it("left arrow on a query returns to its network row, past the channels", () => {
+      seedStore(
+        [makeNetwork("libera", { name: "Libera.Chat" })],
+        [makeChannel("libera", "#ctf-ops")],
+        [makeQuery("libera", "phrack")],
+      );
+      render(<SidebarNetworks />);
+      const query = screen.getByRole("treeitem", { name: "phrack" });
+      act(() => query.focus());
+
+      fireEvent.keyDown(query, { key: "ArrowLeft" });
       expect(document.activeElement).toBe(
         screen.getByRole("treeitem", { name: /^Libera\.Chat,/ }),
       );

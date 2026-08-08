@@ -201,6 +201,13 @@ pub struct UploadProvider {
     /// always `None` when read back. Carries the secret access key when `s3`
     /// is set — it is the provider's one secret either way.
     pub token: Option<String>,
+    /// Whether one is saved, which is the only thing about `token` that can be
+    /// read back. Answered on the way out and ignored on the way in, so the
+    /// sheet can say "saved" when something is rather than guessing it from
+    /// the provider existing.
+    #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
+    pub token_saved: bool,
     /// Set for S3-compatible storage, which signs the request rather than
     /// carrying a token in a header. `None` is a provider that takes a plain
     /// `PUT` or `POST`, which is self-hosted storage and most temporary hosts.

@@ -340,7 +340,9 @@ impl Store {
     ///
     /// The token is never read back, for the reason the SASL password is not:
     /// a value that only travels one way cannot be leaked by a screen that
-    /// shows what is stored.
+    /// shows what is stored. Whether there is one is read back, because a
+    /// screen that cannot ask that has to guess, and a provider saved without
+    /// its secret is a provider that fails at the upload.
     pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
         let conn = self.reading();
         let mut stmt = conn.prepare(
@@ -360,6 +362,7 @@ impl Store {
             method: serde_json::from_str(&row.get::<_, String>(1)?)?,
             auth_header: row.get(2)?,
             token: None,
+            token_saved: self.upload_token()?.is_some(),
             s3: region
                 .zip(access_key_id)
                 .map(|(region, access_key_id)| S3Credentials {

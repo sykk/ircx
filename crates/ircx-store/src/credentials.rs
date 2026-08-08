@@ -22,17 +22,7 @@ pub(crate) struct OsKeyring;
 
 impl OsKeyring {
     fn entry(key: &str) -> Result<keyring::Entry, StoreError> {
-        keyring::Entry::new(SERVICE, key).map_err(|source| StoreError::Keyring {
-            network: key.to_owned(),
-            source,
-        })
-    }
-
-    fn wrap(key: &str, source: keyring::Error) -> StoreError {
-        StoreError::Keyring {
-            network: key.to_owned(),
-            source,
-        }
+        keyring::Entry::new(SERVICE, key).map_err(StoreError::Keyring)
     }
 }
 
@@ -41,20 +31,20 @@ impl CredentialStore for OsKeyring {
         match Self::entry(key)?.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(source) => Err(Self::wrap(key, source)),
+            Err(source) => Err(StoreError::Keyring(source)),
         }
     }
 
     fn set(&self, key: &str, password: &str) -> Result<(), StoreError> {
         Self::entry(key)?
             .set_password(password)
-            .map_err(|source| Self::wrap(key, source))
+            .map_err(StoreError::Keyring)
     }
 
     fn delete(&self, key: &str) -> Result<(), StoreError> {
         match Self::entry(key)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(source) => Err(Self::wrap(key, source)),
+            Err(source) => Err(StoreError::Keyring(source)),
         }
     }
 }

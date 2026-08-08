@@ -67,6 +67,7 @@ describe("the upload provider sheet", () => {
       method: "PUT",
       authHeader: "Authorization",
       token: null,
+      tokenSaved: true,
     });
     open();
 
@@ -118,6 +119,40 @@ describe("the upload provider sheet", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("Remove the provider instead");
     expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+  });
+
+  /** It used to say "saved" whenever a provider was saved, which is a different
+   * question — and the reason a provider with no secret at all read as one that
+   * had one until the first upload failed. */
+  it("does not claim a secret is saved when none is", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://files.example.com/{name}",
+      method: "PUT",
+      authHeader: "Authorization",
+      token: null,
+      tokenSaved: false,
+    });
+    open();
+
+    await screen.findByLabelText("Address");
+    expect(screen.queryByText(/Saved in your system keyring/)).toBeNull();
+  });
+
+  /** The two kinds share one keyring slot and nothing else: a bearer token
+   * cannot sign a request. */
+  it("says a saved secret of the other kind will not do", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://files.example.com/{name}",
+      method: "PUT",
+      authHeader: "Authorization",
+      token: null,
+      tokenSaved: true,
+    });
+    open();
+
+    fireEvent.change(await screen.findByLabelText("Kind"), { target: { value: "s3" } });
+
+    expect(screen.getByText(/for the other kind of provider/)).toBeTruthy();
   });
 
   it("shows why a save was refused and stays open", async () => {

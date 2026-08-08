@@ -1480,6 +1480,7 @@ mod upload_provider {
             method: UploadMethod::Put,
             auth_header: Some("Authorization".into()),
             token: Some("Bearer sekrit".into()),
+            token_saved: false,
             s3: None,
         }
     }
@@ -1555,10 +1556,28 @@ mod upload_provider {
         assert_eq!(read.method, UploadMethod::Put);
         assert_eq!(read.auth_header.as_deref(), Some("Authorization"));
         assert_eq!(read.token, None, "a token only ever travels one way");
+        assert!(read.token_saved, "but whether there is one comes back");
         assert_eq!(
             store.upload_token().unwrap().as_deref(),
             Some("Bearer sekrit")
         );
+    }
+
+    /// The screen that says "saved in your system keyring" has to be able to
+    /// tell. Guessing it from the provider existing is what let a provider be
+    /// saved without the secret it needs.
+    #[test]
+    fn a_provider_saved_without_a_secret_says_so() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                token: None,
+                ..provider()
+            })
+            .unwrap();
+
+        let read = store.upload_provider().unwrap().expect("a provider");
+        assert!(!read.token_saved);
     }
 
     #[test]

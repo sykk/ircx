@@ -268,3 +268,23 @@ async fn an_overlong_reply_is_refused() {
 async fn a_local_provider_is_allowed_by_default() {
     assert!(UploadPolicy::default().allow_local_addresses);
 }
+
+/// A host that frames its reply, which is most of them and is the whole of what
+/// a form host's reply is for. Before this the framing came back as the answer
+/// — `24\r\nhttps://…\r\n0` — which is not a link, so the client fell back to
+/// the address it had posted to and put the API endpoint in the conversation.
+/// Found against litterbox.
+#[tokio::test]
+async fn a_chunked_reply_is_the_link_rather_than_its_framing() {
+    let (base, _seen) = serve(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\
+         24\r\nhttps://litter.catbox.moe/4hlzia.png\r\n0\r\n\r\n",
+    )
+    .await;
+
+    let answer = upload(&format!("{base}/api"), b"x", &policy())
+        .await
+        .expect("the host accepted it");
+
+    assert_eq!(answer.body, "https://litter.catbox.moe/4hlzia.png");
+}

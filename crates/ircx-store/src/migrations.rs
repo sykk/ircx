@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     SUBSTRING_INDEX,
     CLIENT_CERTIFICATE,
     TIMELINE_NOCASE,
+    UPLOAD_FORM,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -248,6 +249,14 @@ CREATE TABLE upload_provider (
 const UPLOAD_S3: &str = r#"
 ALTER TABLE upload_provider ADD COLUMN s3_region TEXT;
 ALTER TABLE upload_provider ADD COLUMN s3_access_key_id TEXT;
+"#;
+
+/// A host that takes the file as a form upload rather than as the request
+/// body, which is what the hosts asking for no account take. The field the file
+/// goes in and whatever else the host wants told, as the JSON `FormUpload`
+/// serialises to; null is a provider that sends the file as the body.
+const UPLOAD_FORM: &str = r#"
+ALTER TABLE upload_provider ADD COLUMN form TEXT;
 "#;
 
 /// When a message of ours reached the socket, on this machine's clock. The

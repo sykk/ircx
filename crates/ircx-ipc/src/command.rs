@@ -212,6 +212,29 @@ pub struct UploadProvider {
     /// carrying a token in a header. `None` is a provider that takes a plain
     /// `PUT` or `POST`, which is self-hosted storage and most temporary hosts.
     pub s3: Option<S3Credentials>,
+    /// Set for a host that takes the file as a form upload rather than as the
+    /// request body. It settles the shape of the request the way `s3` does, so
+    /// a provider carrying one is a `POST` whatever `method` says.
+    pub form: Option<FormUpload>,
+}
+
+/// A file sent as `multipart/form-data`, which is what the hosts that ask for
+/// no account take.
+///
+/// The alternative — the file as the whole request body — is what storage and
+/// self-hosted boxes take, and between them they cover what is worth
+/// configuring. A host wanting the bytes inside a JSON document would be a
+/// third shape and is not one of them.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct FormUpload {
+    /// The field the file goes in: `fileToUpload` for catbox and litterbox,
+    /// `file` for the 0x0.st family.
+    pub file_field: String,
+    /// Everything else the host wants told, in the order it was given. catbox
+    /// needs `reqtype=fileupload`, and litterbox takes a `time` beside it.
+    pub fields: Vec<(String, String)>,
 }
 
 /// What an upload produced: the address, and whether anybody else can open it.

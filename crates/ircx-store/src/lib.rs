@@ -362,7 +362,7 @@ impl Store {
     pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
         let conn = self.reading();
         let mut stmt = conn.prepare(
-            "SELECT endpoint, method, auth_header, s3_region, s3_access_key_id
+            "SELECT endpoint, method, auth_header, s3_region, s3_access_key_id, form
              FROM upload_provider WHERE only = 0",
         )?;
         let mut rows = stmt.query([])?;
@@ -373,6 +373,7 @@ impl Store {
         // region nobody chose.
         let region: Option<String> = row.get(3)?;
         let access_key_id: Option<String> = row.get(4)?;
+        let form: Option<String> = row.get(5)?;
         Ok(Some(UploadProvider {
             endpoint: row.get(0)?,
             method: serde_json::from_str(&row.get::<_, String>(1)?)?,
@@ -385,6 +386,7 @@ impl Store {
                     region,
                     access_key_id,
                 }),
+            form: form.map(|form| serde_json::from_str(&form)).transpose()?,
         }))
     }
 
@@ -403,20 +405,22 @@ impl Store {
         }
         self.writing().execute(
             "INSERT INTO upload_provider
-                 (only, endpoint, method, auth_header, s3_region, s3_access_key_id)
-             VALUES (0, ?1, ?2, ?3, ?4, ?5)
+                 (only, endpoint, method, auth_header, s3_region, s3_access_key_id, form)
+             VALUES (0, ?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (only) DO UPDATE SET
                  endpoint = excluded.endpoint,
                  method = excluded.method,
                  auth_header = excluded.auth_header,
                  s3_region = excluded.s3_region,
-                 s3_access_key_id = excluded.s3_access_key_id",
+                 s3_access_key_id = excluded.s3_access_key_id,
+                 form = excluded.form",
             params![
                 provider.endpoint,
                 to_json(&provider.method)?,
                 provider.auth_header,
                 provider.s3.as_ref().map(|s3| &s3.region),
                 provider.s3.as_ref().map(|s3| &s3.access_key_id),
+                provider.form.as_ref().map(to_json).transpose()?,
             ],
         )?;
         Ok(())

@@ -250,17 +250,27 @@ async fn send(target: Target, body: &[u8], policy: &UploadPolicy) -> Result<Uplo
     }
 
     buffer.drain(..head.consumed);
-    while buffer.len() <= policy.max_reply_bytes {
-        if !fill(&mut stream, &mut buffer).await.map_err(io)? {
-            break;
+    // A host that frames its reply gets it read the way a fetch reads one.
+    // Without this the framing arrives as the answer, and a host whose reply is
+    // the link — which is the whole of what a form host's reply is for — hands
+    // back `24\r\nhttps://…\r\n0`. Found against litterbox.
+    let buffer = match head.chunked {
+        true => read_chunked(&mut stream, buffer, &target, policy.max_reply_bytes).await?,
+        false => {
+            while buffer.len() <= policy.max_reply_bytes {
+                if !fill(&mut stream, &mut buffer).await.map_err(io)? {
+                    break;
+                }
+            }
+            if buffer.len() > policy.max_reply_bytes {
+                return Err(HttpError::TooLarge {
+                    url: target.url(),
+                    max: policy.max_reply_bytes,
+                });
+            }
+            buffer
         }
-    }
-    if buffer.len() > policy.max_reply_bytes {
-        return Err(HttpError::TooLarge {
-            url: target.url(),
-            max: policy.max_reply_bytes,
-        });
-    }
+    };
 
     Ok(Uploaded {
         status: head.status,

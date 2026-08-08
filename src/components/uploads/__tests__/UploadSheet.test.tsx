@@ -55,6 +55,7 @@ describe("the upload provider sheet", () => {
         authHeader: "Authorization",
         token: "Bearer sekrit",
         s3: null,
+        form: null,
       }),
     );
   });
@@ -209,6 +210,7 @@ describe("an S3-compatible provider", () => {
         authHeader: null,
         token: "wJalrXUtnFEMI",
         s3: { region: "eu-west-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
+        form: null,
       }),
     );
   });
@@ -237,6 +239,81 @@ describe("an S3-compatible provider", () => {
     expect(screen.getByLabelText("Access key id")).toHaveProperty(
       "value",
       "AKIAIOSFODNN7EXAMPLE",
+    );
+  });
+});
+
+/** The shape the hosts that ask for no account take: the file in a named field
+ * beside whatever else they want told. */
+describe("a form host", () => {
+  it("saves the file field and the fields the host wants", async () => {
+    open();
+    fireEvent.change(await screen.findByLabelText("Address"), {
+      target: { value: "https://litterbox.catbox.moe/resources/internals/api.php" },
+    });
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "form" } });
+    fireEvent.change(screen.getByLabelText("File field"), {
+      target: { value: "fileToUpload" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Other fields/), {
+      target: { value: "reqtype=fileupload, time=1h" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(ipcMock.saveUploadProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // The field names are part of the request, so a form is a POST
+          // whatever else was chosen.
+          method: "POST",
+          form: {
+            fileField: "fileToUpload",
+            fields: [
+              ["reqtype", "fileupload"],
+              ["time", "1h"],
+            ],
+          },
+        }),
+      ),
+    );
+  });
+
+  /** A host that names no field cannot be told where to put the file, and the
+   * refusal belongs where the empty field is. */
+  it("will not save a form upload with no field for the file", async () => {
+    open();
+    fireEvent.change(await screen.findByLabelText("Address"), {
+      target: { value: "https://example.com/upload" },
+    });
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "form" } });
+    fireEvent.change(screen.getByLabelText("File field"), { target: { value: "  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+  });
+
+  it("comes back as a form provider when one is stored", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://litterbox.catbox.moe/resources/internals/api.php",
+      method: "POST",
+      authHeader: null,
+      token: null,
+      s3: null,
+      form: {
+        fileField: "fileToUpload",
+        fields: [
+          ["reqtype", "fileupload"],
+          ["time", "1h"],
+        ],
+      },
+    });
+    open();
+
+    expect(await screen.findByLabelText("File field")).toHaveProperty("value", "fileToUpload");
+    expect(screen.getByLabelText(/^Other fields/)).toHaveProperty(
+      "value",
+      "reqtype=fileupload, time=1h",
     );
   });
 });

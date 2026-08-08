@@ -10,6 +10,9 @@ const summary = vi.fn();
 const setRetention = vi.fn();
 const deleteArchive = vi.fn();
 const exportArchive = vi.fn();
+/** This sheet is one of the two that says something when a thing went right,
+ * and the only way that reaches a screen reader is the side channel. */
+const announce = vi.fn();
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
   ...(await importOriginal<typeof Ipc>()),
@@ -18,6 +21,7 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
     setRetention: (...args: unknown[]) => setRetention(...args),
     deleteArchive: (...args: unknown[]) => deleteArchive(...args),
     exportArchive: (...args: unknown[]) => exportArchive(...args),
+    announce: (...args: unknown[]) => announce(...args),
   },
 }));
 
@@ -39,6 +43,7 @@ beforeEach(() => {
   setRetention.mockReset().mockResolvedValue(undefined);
   deleteArchive.mockReset().mockResolvedValue(undefined);
   exportArchive.mockReset().mockResolvedValue(120n);
+  announce.mockReset().mockResolvedValue(undefined);
   save.mockReset().mockResolvedValue(null);
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
@@ -230,5 +235,41 @@ describe("the archive sheet", () => {
 
     await screen.findByText(/Written to \/tmp\/second.jsonl/);
     expect(screen.queryByText(/read-only/)).toBeNull();
+  });
+
+  /**
+   * The sheet routed its `role="alert"` through `useAnnounce` and left its
+   * `role="status"` on the markup alone, so every way of failing spoke and
+   * nothing that worked did. In this window that is silence rather than a
+   * quieter announcement: WebKitGTK reports nothing for text the page rewrites,
+   * which is what the status paragraph is.
+   */
+  it("says an export worked, rather than only drawing that it did", async () => {
+    save.mockResolvedValue("/tmp/export.jsonl");
+    render(<ArchiveSheet />);
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Export everything"));
+
+    await screen.findByText(/Written to \/tmp\/export.jsonl/);
+    await waitFor(() =>
+      expect(announce).toHaveBeenCalledWith("Written to /tmp/export.jsonl — 120 B."),
+    );
+  });
+
+  /** The one on this sheet that cannot be undone, and the one it most matters
+   * to have heard. */
+  it("says the archive was deleted", async () => {
+    render(<ArchiveSheet />);
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Delete everything"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByText("Delete"));
+
+    await waitFor(() =>
+      expect(announce).toHaveBeenCalledWith(
+        "The whole archive deleted. There is no undo, and there was none.",
+      ),
+    );
   });
 });

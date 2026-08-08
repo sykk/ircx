@@ -56,6 +56,13 @@ function Sheet() {
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   const [said, setSaid] = useState<string | null>(null);
+  // The `role="status"` below is text the page rewrites, which is the case
+  // WebKitGTK reports nothing at all for — see `useAnnounce`. Only the alert
+  // beside it was routed through the side channel, so an export that worked, a
+  // retention that saved and an archive that was deleted all said nothing,
+  // while every way of failing spoke. `succeeded` and `failed` clear each
+  // other, so only ever one of these two has anything to say.
+  useAnnounce(said);
 
   const dialog = useRef<HTMLDivElement>(null);
   useDialogFocus(dialog);

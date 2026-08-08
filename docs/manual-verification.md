@@ -2981,6 +2981,52 @@ Seen on the bus from the assembled app, a refused command in `#a11y`:
 Which is the same sentence the screenshot shows in the composer, now leaving by
 both routes.
 
+### The other kind of live region
+
+**2026-08-07.** The section above says what it did precisely: every
+`role="alert"`. A `role="status"` is the other half of the same problem and was
+never inside that scope. The client has two of them.
+
+`Composer.tsx` routes its queue status through `useAnnounce`, and those are the
+very sentences the bus capture above is of — *Messages waiting to send*, *All
+sent*. `ArchiveSheet.tsx` did not route its own. It called `useAnnounce(error)`
+beside its `role="alert"` and left the `role="status"` next to it on the markup
+alone, so **every way of failing spoke and nothing that worked did**:
+
+- `Written to …/export-everything.jsonl — 52 MB.`
+- the retention sentence, after a change to how long messages are kept
+- `The whole archive deleted. There is no undo, and there was none.`
+
+In this window that is silence rather than a quieter announcement, for the
+reason traced to source above: WebKitGTK reports nothing at all for text the
+page rewrites, and the status paragraph is a `<p>` whose `textContent` changes.
+The markup states an intent the engine does not carry out, which is why the side
+channel exists at all.
+
+`useAnnounce(said)` is the whole fix. `succeeded` and `failed` clear one
+another, so only ever one of the pair has anything to say and there is no double
+announcement to avoid. Two tests in `ArchiveSheet.test.tsx` hold it: the export
+that worked, and the delete that cannot be undone — which is the sentence on
+this sheet it most matters to have heard.
+
+**Read from source and covered by test rather than heard.** It is the same call
+on the same hook that the composer's status makes, and that one is measured on
+the bus above, so what is unmeasured here is the wiring rather than the
+mechanism.
+
+**It is also a layer below the question run 11 left open.** That run asked
+whether the sheet's `role="status"` sentence had ever been heard. For this sheet
+the answer was that no announcement was being sent to hear.
+
+**The rest of the non-alert regions, so the count is closed.** Beyond the two
+statuses there are two more live regions in the client and both are silent on
+purpose. `TypingIndicator.tsx` carries the `aria-live` the section above already
+argues should stay drawn only. `RawLog.tsx` carries a `role="log"` on the raw
+protocol scroller, which is every line off the wire — the same argument and
+harder: a reader who wants that pane is reading it, and announcing it would talk
+over everything else in the window. Neither is an oversight, and with the
+archive sheet routed there are no live regions left that are quiet by accident.
+
 ## Focus in a modal
 
 **2026-08-04**, #399. Nine dialogs declare `role="dialog" aria-modal="true"`,

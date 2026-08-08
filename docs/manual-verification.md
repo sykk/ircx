@@ -758,6 +758,51 @@ drag at all before this; `click` calls `el.click()` and moves no pointer.
   narrow input behaving like one — it reads in full at an even split — and is
   not the fixed-width fault #114 was.
 
+## Dragging the member list, and dragging the window
+
+Two edges that could not be taken hold of. They ship together and only one of
+them was walked.
+
+**The member list, dragged on 2026-08-08** in Chrome through `driver.mjs`, the
+same instrument and for the same reason as the split divider above: real pointer
+events against a browser that lays the page out. Seeded, on `#ircx`, at the
+1200×720 the driver opens at. The column measured **157.39px** before the drag —
+the automatic width, which is `#ircx`'s longest nick plus the gutter — and
+**267px** after a 110px drag leftwards, `aria-valuenow` reading `267` with it.
+Exactly the 110 the pointer moved, less the rounding the store does on the way
+in, so the width follows the pointer rather than trailing it; the timeline
+reflowed into what was left. Dragged, reloaded and read back: the column came up
+at 267 again, so it is the stored width the second run draws rather than the
+names.
+
+Not walked, and each is a real gap:
+
+- **Whether the 4px handle can be hit.** #368 is the precedent — the pane
+  divider could be hit but not where it was drawn, because a `w-1` box had its
+  rule on the leading edge. This handle draws no rule at all, so there is no
+  line to aim a pixel short of, but nobody has run `dragxy` across it to say
+  what it catches. The drag above went through a selector, which lands dead
+  centre and therefore cannot answer the question.
+- **What it does to a pane already too narrow for both.** The roster hides below
+  440px of pane and the handle hides with it, so the case should not arise. That
+  is a reading of the classes, not a measurement.
+
+**The window's own edges are unverified, and the harness cannot verify them.**
+The window is `decorations: false`, so until now its only sizes were the one it
+opened at and maximised; `WindowFrame` draws eight grips that call
+`startResizeDragging`. On GTK that asks the window manager to take over the
+resize — and `window.mjs` runs against `Xvfb` with no window manager on it, the
+same absence this file already records for focus events. A run there would
+photograph a window that does not move and prove nothing about the grips.
+
+What wants doing on a real desktop, once: drag each of the four edges and each
+of the four corners, confirm the top edge resizes rather than dragging the
+window by the title bar underneath it, and confirm the bottom edge does not take
+the status bar's controls with it. The permission it needs —
+`core:window:allow-start-resize-dragging`, now in `capabilities/default.json` —
+is checked at the call rather than at build time, so a grip that does nothing at
+all is the shape that particular failure takes.
+
 ## Plugins
 
 The failure modes are covered by `crates/ircx-plugin/tests/failure_modes.rs`,

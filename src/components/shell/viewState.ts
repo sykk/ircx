@@ -4,6 +4,9 @@ const STORAGE_KEY = "ircx.shell.view";
 
 export interface ViewState {
   sidebarWidth: number;
+  /** Null until somebody drags the member list's edge; it sizes itself to its
+   * longest name until then. */
+  rosterWidth: number | null;
   collapsedNetworks: string[];
   /** How the panes divided the window, or null before anything was opened. */
   layout: StoredLayout | null;
@@ -20,6 +23,10 @@ export function loadViewState(): ViewState | null {
 
   return {
     sidebarWidth,
+    // Read on its own for the same reason the layout is: an entry written
+    // before the roster could be dragged carries no width, and that is not a
+    // reason to throw away the sidebar stored beside it.
+    rosterWidth: typeof parsed.rosterWidth === "number" ? parsed.rosterWidth : null,
     collapsedNetworks: collapsedNetworks.filter((id) => typeof id === "string"),
     // Read on its own so an entry written before there was a layout, or one
     // holding a layout that cannot be trusted, still yields the sidebar.

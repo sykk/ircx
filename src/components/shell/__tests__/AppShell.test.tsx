@@ -75,6 +75,7 @@ describe("AppShell", () => {
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 256,
+      rosterWidth: null,
       collapsedNetworks: ["libera"],
       layout: null,
     });
@@ -122,13 +123,26 @@ describe("AppShell", () => {
   it("restores persisted view state on mount", () => {
     localStorage.setItem(
       "ircx.shell.view",
-      JSON.stringify({ sidebarWidth: 320, collapsedNetworks: ["libera"] }),
+      JSON.stringify({ sidebarWidth: 320, rosterWidth: 288, collapsedNetworks: ["libera"] }),
     );
     seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
     render(<AppShell />);
 
     expect(useAppStore.getState().sidebarWidth).toBe(320);
+    expect(useAppStore.getState().rosterWidth).toBe(288);
     expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
+  });
+
+  /** The entries a shipped build already wrote have no roster width in them,
+   * and reading one must not hand the column a width nobody chose. */
+  it("leaves the member list sizing itself when nothing was stored for it", () => {
+    localStorage.setItem(
+      "ircx.shell.view",
+      JSON.stringify({ sidebarWidth: 320, collapsedNetworks: [] }),
+    );
+    render(<AppShell />);
+
+    expect(useAppStore.getState().rosterWidth).toBeNull();
   });
 
   it("ignores a corrupt stored view state", () => {

@@ -190,6 +190,11 @@ export interface AppState {
   pluginsUnavailable: string | null;
   collapsedNetworks: Record<string, boolean>;
   sidebarWidth: number;
+  /** What somebody dragged the member list to, or null while it is still
+   * sizing itself to the longest name in it. One width for every roster: a
+   * pane's id is minted afresh each run, so a width held per pane would not
+   * survive the restart the layout itself does. */
+  rosterWidth: number | null;
   /** Most recent first. Ranks palette results and drives Alt+Left/Right.
    * Recency is a property of the person, not of a pane. */
   recent: TargetKey[];

@@ -7,7 +7,7 @@ use ircx_ipc::{
     PluginPermissionInfo, Query, SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
     UploadedFile,
 };
-use ircx_store::{in_words, StoreError};
+use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
 
 use crate::state::{describe, App};
@@ -333,25 +333,37 @@ pub async fn export_archive(
     scope: ArchiveScope,
     path: String,
 ) -> Result<u64, String> {
+    write_export(app.store(), &scope, &path)
+}
+
+/// The export without the Tauri state around it, so a test can aim it at a
+/// destination that refuses the write. The sentences below are chosen by
+/// `io::ErrorKind`, and a kind built by hand only ever proves the wording —
+/// not that the kernel raises that kind here.
+fn write_export(store: &Store, scope: &ArchiveScope, path: &str) -> Result<u64, String> {
     // Streamed rather than rendered into memory first: "Everything" on an old
     // archive is the whole archive.
-    let file = std::fs::File::create(&path).map_err(|error| unwritable(&path, &error))?;
+    let file = std::fs::File::create(path).map_err(|error| unwritable(path, &error))?;
     let mut out = std::io::BufWriter::new(file);
-    let store = app.store();
-    match &scope {
+    match scope {
         ArchiveScope::Conversation { network, target } => store
             .export_target(network, target, &mut out)
-            .map_err(|error| gave_up(&path, error))?,
+            .map_err(|error| gave_up(path, error))?,
         ArchiveScope::Everything => store
             .export_everything(&mut out)
-            .map_err(|error| gave_up(&path, error))?,
+            .map_err(|error| gave_up(path, error))?,
     }
+    // An export short enough to fit in the buffer has not written anything yet,
+    // so this is where its one write happens and where it fails. A longer one
+    // empties the buffer as it goes and fails above instead. The two paths
+    // report through different code and have to say the same thing; the
+    // `a_full_disk_*` tests below hold them to it.
     let file = out
         .into_inner()
-        .map_err(|error| unwritable(&path, error.error()))?;
+        .map_err(|error| unwritable(path, error.error()))?;
     file.metadata()
         .map(|meta| meta.len())
-        .map_err(|error| unwritable(&path, &error))
+        .map_err(|error| unwritable(path, &error))
 }
 
 /// Which file would not take the export, and why.
@@ -386,7 +398,12 @@ pub async fn delete_archive(app: State<'_, App>, scope: ArchiveScope) -> Result<
 mod tests {
     use std::io::{Error, ErrorKind};
 
-    use super::{gave_up, unwritable, StoreError};
+    use ircx_ipc::{
+        ArchiveScope, ChatMessage, Delivery, EncryptionState, MessageKind, MessageSource, Sender,
+    };
+    use ircx_store::Store;
+
+    use super::{gave_up, unwritable, write_export, StoreError};
 
     #[test]
     fn a_refused_folder_says_what_to_do_about_it() {
@@ -427,5 +444,133 @@ mod tests {
         );
         assert!(!said.contains("/tmp/x.jsonl"), "said {said}");
         assert!(said.contains("newer version of ircx"), "said {said}");
+    }
+
+    /// `BufWriter::new`'s capacity, which decides which of the two error paths
+    /// a refused export takes. Not a guarantee std makes, so the two tests
+    /// below check where they land rather than assuming it.
+    const BUFFER: usize = 8 * 1024;
+
+    fn archived(index: usize) -> ChatMessage {
+        ChatMessage {
+            id: format!("old-{index}"),
+            network: "scripted".into(),
+            target: "#measure".into(),
+            kind: MessageKind::Privmsg,
+            sender: Sender {
+                nick: "talker".into(),
+                user: None,
+                host: None,
+                account: None,
+                is_self: false,
+            },
+            timestamp: format!("2026-01-01T00:00:{:02}Z", index % 60),
+            timestamp_is_local: false,
+            text: format!("something said a while ago, number {index}"),
+            tags: Vec::new(),
+            reply_to: None,
+            batch: None,
+            delivery: Delivery::Delivered,
+            attachments: Vec::new(),
+            encryption: EncryptionState::Plaintext,
+            raw: String::new(),
+            source: MessageSource::Live,
+            via: None,
+            id_is_local: false,
+            reactions: Vec::new(),
+            annotations: Vec::new(),
+            raised_by: Vec::new(),
+        }
+    }
+
+    fn stocked(messages: usize) -> Store {
+        let store = Store::open_in_memory().expect("an archive");
+        let held: Vec<ChatMessage> = (0..messages).map(archived).collect();
+        store.append_messages(&held).expect("fill the archive");
+        store
+    }
+
+    /// How much this archive exports to, which is what says whether the
+    /// `BufWriter` empties while the export runs or only at the end of it.
+    fn exported(store: &Store) -> usize {
+        let mut out = Vec::new();
+        store.export_everything(&mut out).expect("the export runs");
+        out.len()
+    }
+
+    /// **A disk that is full raises `ENOSPC`, and nothing had ever checked that
+    /// it arrives as `StorageFull`.** `docs/manual-verification.md` walked a
+    /// destination that refuses the write with a `mkfifo` and got `BrokenPipe`,
+    /// and said what that left: *"what is untested is only whether
+    /// `StorageFull` arrives where it is expected to."* Every other test here
+    /// builds the kind by hand and so can only prove the wording.
+    ///
+    /// `/dev/full` answers every write with `ENOSPC`. This is the export short
+    /// enough that all of it is still in the buffer when the file is closed, so
+    /// the first write of the run is also the last and it fails at
+    /// `into_inner`.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_full_disk_refusing_the_last_write_says_the_disk_is_full() {
+        let store = stocked(1);
+        assert!(exported(&store) < BUFFER, "this export empties the buffer");
+
+        let said = write_export(&store, &ArchiveScope::Everything, "/dev/full")
+            .expect_err("a full disk cannot take the export");
+        assert_eq!(said, "/dev/full could not be written: the disk is full");
+    }
+
+    /// The other half of the same fault, which is the one a real disk filling
+    /// mid-export takes: the buffer empties while `export_everything` is still
+    /// walking rows, so the error comes back through `gave_up` rather than
+    /// `into_inner`. Both have to say the same thing.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_full_disk_refusing_a_write_partway_says_the_same_thing() {
+        let store = stocked(200);
+        assert!(exported(&store) > BUFFER, "this export fits in the buffer");
+
+        let said = write_export(&store, &ArchiveScope::Everything, "/dev/full")
+            .expect_err("a full disk cannot take the export");
+        assert_eq!(said, "/dev/full could not be written: the disk is full");
+    }
+
+    /// A disk that genuinely fills, which `/dev/full` is not: that refuses
+    /// every byte, where a real one takes what fits and stops. What the two
+    /// cannot both answer is what the failure leaves behind.
+    ///
+    /// `IRCX_SMALL_DISK` is a directory on a filesystem smaller than the export
+    /// — a tmpfs in a user namespace needs no privileges:
+    ///
+    /// ```text
+    /// unshare --user --map-root-user --mount sh -c '
+    ///   mkdir -p /tmp/smallfs && mount -t tmpfs -o size=8M tmpfs /tmp/smallfs
+    ///   IRCX_SMALL_DISK=/tmp/smallfs cargo test -p ircx --lib -- \
+    ///     --ignored --nocapture a_disk_that_fills'
+    /// ```
+    #[test]
+    #[ignore = "needs IRCX_SMALL_DISK on a filesystem smaller than the export"]
+    #[cfg(target_os = "linux")]
+    fn a_disk_that_fills_partway_through_an_export() {
+        let room = std::env::var("IRCX_SMALL_DISK").expect("IRCX_SMALL_DISK names a small disk");
+        let path = format!("{room}/export-everything.jsonl");
+        let store = stocked(50_000);
+        let wanted = exported(&store);
+
+        let said = write_export(&store, &ArchiveScope::Everything, &path)
+            .expect_err("the disk is too small to take the export");
+
+        let left = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+        println!();
+        println!("  the export wanted {wanted} bytes");
+        println!("  it said: {said}");
+        println!("  it left {left} bytes at {path}");
+
+        assert_eq!(
+            said,
+            format!("{path} could not be written: the disk is full")
+        );
+        assert!(left > 0, "nothing was written before it stopped");
+        assert!(left < wanted as u64, "the whole export fitted after all");
     }
 }

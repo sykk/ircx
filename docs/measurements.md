@@ -220,6 +220,68 @@ KiB of compressed assets over the same interval. **The difference between the
 two columns is what this measures**, both taken minutes apart in one process on
 one display, and that is the figure to quote.
 
+### What a long session costs
+
+**Measured 2026-08-07**, `.claude/skills/run-ircx/soak.mjs`. Every figure above
+is sampled 45 seconds after `exec`. This one runs for ninety minutes, which is
+what the *Not measured* list below used to ask for.
+
+The release app at `9003463` on `Xvfb`, one channel taking 20 messages a second
+from `quickserver.mjs`, `smaps_rollup` over the whole process tree every 30
+seconds. **72,000 messages across the first 60 minutes, then the channel falls
+silent with the connection still up** for the last 30. The store keeps
+`TIMELINE_CAP` — 10,000 — a conversation, so from minute 8 onward every message
+that arrives evicts one.
+
+| PSS | whole | `ircx` | `WebKitWebProcess` |
+|---|---|---|---|
+| the cap full, minute 8 | 331.5 MiB | 74.0 | 237.9 |
+| the peak, minute 59 | **412.5 MiB** | 74.2 | 318.3 |
+| quiet, minutes 64–90 | **342.2 MiB** | 73.6 | 248.6 |
+
+**It climbs past a full cap, and gives it back the moment the channel goes
+quiet.** Between minute 9 and minute 59 the tree grew 77.4 MiB — +1.53 MiB a
+minute, with the cap long full and nothing net being added to the timeline.
+70.7 MiB of that came back inside a single 30-second sample when the traffic
+stopped.
+
+**Then it does nothing for 25 minutes.** 341.8 to 344.0 MiB across 52 samples,
+a slope of ±0.000 MiB/min. That is the reading the run exists to get, and the
+reason the channel is made to fall silent rather than talk for the whole ninety:
+a line still climbing under load is a client that is not collecting while it is
+busy, a line still climbing after the load stops is a client that is holding the
+memory, and on a rising graph the two are the same picture. **This one is the
+first, so there is no leak here**, and 342 MiB is the figure to quote for a
+client left open.
+
+**The Rust side does not move.** 72.2 to 74.2 MiB across all 180 samples and all
+72,000 messages, and the file-backed mapping sat at 181 MiB throughout. Every
+megabyte that moved was WebKit's, and anonymous memory tracked
+`WebKitWebProcess` one for one: 99 MiB at the first sample, 246 at the peak, 179
+quiet. No single mapping ever stepped by 25 MiB, so the harness never had a jump
+worth dumping `smaps` either side of.
+
+**It corroborates the backlog figure above at three times the size, loosely.**
+The cap full is 331.5 MiB against the 221.6 MiB that section measures for an
+empty window — 11.2 KiB a message over 10,000, where that section got 13.1 KiB
+over 3,007. Same order from a different build on a different day, which is all
+two runs a week apart can say to each other. Do not read the difference between
+them as anything.
+
+**Covers:** `smaps_rollup` for `ircx` and both WebKit processes, found by
+walking `/proc` from the harness's own child rather than by name, on the release
+profile — `npm run tauri build -- --no-bundle` — on `Xvfb`. The full series is
+`docs/soak/90-minutes.csv`.
+
+**Excludes:** several conversations each at the cap, which is a larger total
+than one; a real GPU, since `Xvfb` renders in software, the same caveat the
+section above carries; a week, or anything longer than ninety minutes; and the
+residual. That last is worth naming: 342.2 MiB quiet against 331.5 MiB when the
+cap first filled is +10.7 MiB after 62,000 further messages. Nothing accumulates
+during the 25 minutes of quiet that were watched, but whether it accumulates
+across successive busy periods needs a second plateau after more traffic, and
+this run has one.
+
 ### The row this replaces measured something else
 
 It read:
@@ -850,8 +912,10 @@ indexes, though the scan does not read those.
   ircx on screen. The later frame that puts the messages there is not
   distinguishable from the compositor's side, so what a person waits for to
   read a restored channel is still unmeasured.
-- Memory over a long session. A rendered backlog is measured above; what a
-  client left open for days does is not.
+- **A client left open for days.** Ninety minutes of it is measured above and
+  the plateau there is flat for the last twenty-five, so what is unmeasured is
+  a week rather than a long evening. Nor is a client with several conversations
+  at the cap instead of one.
 - A netsplit against a real server, end to end, **as a figure**. Both halves are
   measured separately — the frontend stages in jsdom, everything below them
   against a local `ergo` — and neither has WebKit in it. A burst has since been

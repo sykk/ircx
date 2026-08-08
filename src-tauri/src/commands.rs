@@ -360,7 +360,9 @@ fn write_export(store: &Store, scope: &ArchiveScope, path: &str) -> Result<u64, 
     // `a_full_disk_*` tests below hold them to it.
     let file = out
         .into_inner()
-        .map_err(|error| unwritable(path, error.error()))?;
+        .map_err(|error| stopped(path, error.error()))?;
+    // Everything is written by the time this runs, so a failure to stat is not
+    // an export that stopped and must not be described as one.
     file.metadata()
         .map(|meta| meta.len())
         .map_err(|error| unwritable(path, &error))
@@ -371,13 +373,38 @@ fn unwritable(path: &str, error: &std::io::Error) -> String {
     format!("{path} could not be written: {}", in_words(error))
 }
 
+/// The same, once the file is open and part of the export may be in it.
+///
+/// "Could not be written" over a file holding a third of the archive sends
+/// somebody looking for nothing, while it takes up the room they need to try
+/// again — which on a full disk is the room the export itself just used. So a
+/// destination with bytes in it is described as what it is.
+///
+/// Nothing here removes the file. JSON Lines truncates cleanly, so what arrived
+/// is readable to the last newline, and on a disk with no room it may be the
+/// only part of the archive that got out. Deleting it would also put a second
+/// thing that can fail inside the handling of the first.
+///
+/// **Decided by how far the export got, not by what is on disk.** A file that
+/// already existed and was refused has bytes in it too, and they are somebody
+/// else's rather than this export's — so only the failures after `File::create`
+/// come through here.
+fn stopped(path: &str, error: &std::io::Error) -> String {
+    match std::fs::metadata(path).map(|meta| meta.len()) {
+        Ok(bytes) if bytes > 0 => {
+            format!("{path} was left part-written: {}", in_words(error))
+        }
+        _ => unwritable(path, error),
+    }
+}
+
 /// An export that stops partway stopped for one of two reasons, and only one of
 /// them is about the file. The store raises `Io` without knowing which file it
 /// was handed a writer for, so the path is put back here; anything else is the
 /// archive failing and has nothing to do with where it was going.
 fn gave_up(path: &str, error: StoreError) -> String {
     match error {
-        StoreError::Io(io) => unwritable(path, &io),
+        StoreError::Io(io) => stopped(path, &io),
         archive => describe(archive),
     }
 }
@@ -403,7 +430,7 @@ mod tests {
     };
     use ircx_store::Store;
 
-    use super::{gave_up, unwritable, write_export, StoreError};
+    use super::{gave_up, stopped, unwritable, write_export, StoreError};
 
     #[test]
     fn a_refused_folder_says_what_to_do_about_it() {
@@ -568,9 +595,74 @@ mod tests {
 
         assert_eq!(
             said,
-            format!("{path} could not be written: the disk is full")
+            format!("{path} was left part-written: the disk is full")
         );
         assert!(left > 0, "nothing was written before it stopped");
         assert!(left < wanted as u64, "the whole export fitted after all");
+    }
+
+    /// The sentence above needs a disk that fills to reach it, and this reaches
+    /// the same branch without one: a destination that already holds bytes when
+    /// the export gives up.
+    #[test]
+    fn a_destination_holding_part_of_the_export_says_so() {
+        let room = tempfile::tempdir().expect("a temp directory");
+        let half = room.path().join("export-everything.jsonl");
+        std::fs::write(&half, b"{\"id\":\"the part that got there\"}\n").expect("a partial export");
+
+        let said = stopped(
+            half.to_str().expect("a path"),
+            &Error::from(ErrorKind::StorageFull),
+        );
+
+        assert_eq!(
+            said,
+            format!("{} was left part-written: the disk is full", half.display())
+        );
+    }
+
+    /// Nothing arrived, so there is nothing to go and look at. An empty file is
+    /// the `mkfifo` walk's case — the pipe exists and holds nothing — and a
+    /// missing one is a destination that was never opened.
+    #[test]
+    fn a_destination_holding_nothing_says_it_could_not_be_written() {
+        let room = tempfile::tempdir().expect("a temp directory");
+        let empty = room.path().join("export-everything.jsonl");
+        std::fs::write(&empty, b"").expect("an empty file");
+        let missing = room.path().join("never-opened.jsonl");
+
+        for path in [&empty, &missing] {
+            let said = stopped(
+                path.to_str().expect("a path"),
+                &Error::from(ErrorKind::StorageFull),
+            );
+            assert_eq!(
+                said,
+                format!("{} could not be written: the disk is full", path.display())
+            );
+        }
+    }
+
+    /// **The frame is decided by how far the export got, not by what is on
+    /// disk.** A folder has a size, and so does a file that already existed and
+    /// was refused — in both the bytes are somebody else's. Deciding by the
+    /// destination alone would report this one as part-written and send the
+    /// reader looking for an export inside their own directory.
+    #[test]
+    fn a_refused_destination_that_already_had_bytes_is_not_part_written() {
+        let room = tempfile::tempdir().expect("a temp directory");
+
+        let said = write_export(
+            &stocked(1),
+            &ArchiveScope::Everything,
+            room.path().to_str().expect("a path"),
+        )
+        .expect_err("a folder cannot take the export");
+
+        assert!(
+            said.ends_with("that is a folder, not a file"),
+            "said {said}"
+        );
+        assert!(!said.contains("part-written"), "said {said}");
     }
 }

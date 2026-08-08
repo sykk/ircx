@@ -2372,24 +2372,51 @@ export of 50,000 messages wanting 24,427,780 bytes:
 
 ```text
 the export wanted 24427780 bytes
-it said: /tmp/smallfs/export-everything.jsonl could not be written: the disk is full
+it said: /tmp/smallfs/export-everything.jsonl was left part-written: the disk is full
 it left 8388608 bytes at /tmp/smallfs/export-everything.jsonl
 ```
 
-**No defect in the sentence**, which is the first time one of these walks has
-found none — the wording, the named file and the absent errno all hold at the
-one `ErrorKind` nobody had ever raised here.
+**The `ErrorKind` and the named file were right, and the frame around them was
+wrong.** *"Could not be written"* is what the export said over a file with a
+third of the archive in it. It was the one part of the sentence no earlier walk
+could have caught: a `mkfifo` leaves nothing behind and a refused folder is
+never opened, so until a disk actually filled, every failure this project had
+seen really had written nothing.
 
-**One thing to decide rather than a defect.** The failure leaves the partial
-file where it was aimed, and on a disk that had no room it is now the reason
-there is none: `df` reads 100% with 0 bytes free, and the client wrote every one
-of them. Nothing removes it and nothing says it is there — the sentence names
-the file, which is #360, but names it as the export's destination rather than as
-something now sitting on a full disk. Retrying to the same name is safe, since
+So there are two sentences now, chosen by whether anything reached the file:
+
+```text
+…/export-everything.jsonl could not be written: the disk is full
+…/export-everything.jsonl was left part-written: the disk is full
+```
+
+**The file stays.** JSON Lines truncates cleanly, so what arrived is readable to
+the last newline, and on a disk with no room it may be the only part of the
+archive that got out. Deleting it would also put a second thing that can fail
+inside the handling of the first.
+
+**No byte count in the sentence, deliberately.** `formatBytes` is TypeScript and
+this string is built in Rust, so a size here means a second formatter that can
+drift from the one the success sentence uses. The file manager already shows
+what the file weighs.
+
+**Which frame is chosen by how far the export got, not by what is on disk.** A
+folder has a size, and so does a file that already existed and was refused; in
+both the bytes are somebody else's, and reporting them as a part-written export
+sends the reader looking for one inside their own directory.
+`a_refused_destination_that_already_had_bytes_is_not_part_written` is that
+mistake held off, and it does fail when the rule is inverted.
+
+**Two things the run leaves.** On a disk with no room the partial file is now
+the reason there is none — `df` reads 100% with 0 bytes free and the client
+wrote every one of them. Retrying to the same name is safe, because
 `File::create` truncates before it writes; retrying to a different one has less
-room than the first attempt had. Whether a half-written export is rubbish to
-clear up or the part of the archive that got out is a product question, and this
-walk does not answer it.
+room than the first attempt had. And that truncation cuts the other way: an
+export aimed at a **file that already exists** destroys it before it starts, so
+a failure leaves neither the export nor what was there before. GTK asks before
+replacing and the user answers, so the consent is real — but "I said replace, it
+failed, and now I have neither" is worth knowing about and is not what the
+Replace button appears to promise.
 
 **An export large enough to stream is walked**, on 2026-08-07, which is what run
 5 asked for and what every walk before it had missed: 3.3 KB and 35 KB both fit

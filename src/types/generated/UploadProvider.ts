@@ -29,6 +29,13 @@ authHeader: string | null,
  */
 token: string | null, 
 /**
+ * Whether one is saved, which is the only thing about `token` that can be
+ * read back. Answered on the way out and ignored on the way in, so the
+ * sheet can say "saved" when something is rather than guessing it from
+ * the provider existing.
+ */
+tokenSaved?: boolean, 
+/**
  * Set for S3-compatible storage, which signs the request rather than
  * carrying a token in a header. `None` is a provider that takes a plain
  * `PUT` or `POST`, which is self-hosted storage and most temporary hosts.

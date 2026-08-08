@@ -30,14 +30,21 @@ pub async fn get_upload_provider(app: State<'_, App>) -> Result<Option<UploadPro
     app.store().upload_provider().map_err(describe)
 }
 
+/// Saves it, or says why it would not work. A provider that needs a credential
+/// and has none is refused here rather than at the first upload, which is where
+/// it used to surface.
 #[tauri::command]
 pub async fn save_upload_provider(
     app: State<'_, App>,
     provider: UploadProvider,
 ) -> Result<(), String> {
-    app.store()
-        .save_upload_provider(&provider)
-        .map_err(describe)
+    let store = app.store();
+    let stored = store.upload_provider().map_err(describe)?;
+    if let Some(why) = crate::upload::refuse_save(&provider, crate::upload::saved(stored.as_ref()))
+    {
+        return Err(why);
+    }
+    store.save_upload_provider(&provider).map_err(describe)
 }
 
 #[tauri::command]

@@ -246,6 +246,72 @@ fn host_of(endpoint: &str) -> String {
         .to_owned()
 }
 
+/// Which credential a provider carries. The two share one keyring slot and
+/// nothing else: a bearer token cannot sign a request, and a secret access key
+/// is not a bearer token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Credential {
+    Header,
+    S3,
+}
+
+/// What this provider needs to send a file, or `None` for one that needs
+/// nothing — a self-hosted box behind a VPN.
+pub fn needs(provider: &UploadProvider) -> Option<Credential> {
+    match provider.s3.is_some() {
+        true => Some(Credential::S3),
+        false => provider
+            .auth_header
+            .as_deref()
+            .filter(|header| !header.is_empty())
+            .map(|_| Credential::Header),
+    }
+}
+
+/// What the saved secret is for, when there is one.
+pub fn saved(stored: Option<&UploadProvider>) -> Option<Credential> {
+    stored
+        .filter(|provider| provider.token_saved)
+        .and_then(needs)
+}
+
+/// Why this provider cannot be saved as it stands, or `None`.
+///
+/// The rule `policy` enforces at the moment of an upload, asked at the moment
+/// of the save — where the person who can fix it is looking at the field. It
+/// went unasked, and a provider saved without its secret then failed on the
+/// first file with nothing to point at but a settings sheet that had said the
+/// secret was saved.
+pub fn refuse_save(provider: &UploadProvider, saved: Option<Credential>) -> Option<String> {
+    let needs = needs(provider)?;
+    if provider.token.as_deref().is_some_and(|t| !t.is_empty()) {
+        return None;
+    }
+    if saved == Some(needs) {
+        return None;
+    }
+    // Past that, a saved secret is one for the other kind.
+    let header = provider.auth_header.as_deref().unwrap_or("Authorization");
+    Some(match (needs, saved.is_some()) {
+        (Credential::S3, true) => "The saved credential is a token for a header, which cannot \
+                                   sign a request. Type the secret access key this provider \
+                                   signs with."
+            .to_owned(),
+        (Credential::S3, false) => {
+            "A secret access key is needed: it is what signs the request, and none is saved."
+                .to_owned()
+        }
+        (Credential::Header, true) => format!(
+            "The saved credential is an S3 secret access key, which is not a bearer token. Type \
+             the token to send in the {header} header."
+        ),
+        (Credential::Header, false) => format!(
+            "A token is needed for the {header} header, and none is saved. Leave the header \
+             empty for a provider that takes files without one."
+        ),
+    })
+}
+
 fn policy(
     provider: &UploadProvider,
     name: &str,
@@ -510,6 +576,89 @@ mod tests {
         assert_eq!(content_type("a.jpeg"), "image/jpeg");
         assert_eq!(content_type("a.tar.gz"), "application/octet-stream");
         assert_eq!(content_type("noextension"), "application/octet-stream");
+    }
+
+    fn provider(auth_header: Option<&str>, s3: bool) -> UploadProvider {
+        UploadProvider {
+            endpoint: "https://files.example.com/{name}".into(),
+            method: UploadMethod::Put,
+            auth_header: auth_header.map(str::to_owned),
+            token: None,
+            token_saved: false,
+            s3: s3.then(|| S3Credentials {
+                region: "us-east-1".into(),
+                access_key_id: "AKIA".into(),
+            }),
+        }
+    }
+
+    fn typed(mut provider: UploadProvider, token: &str) -> UploadProvider {
+        provider.token = Some(token.to_owned());
+        provider
+    }
+
+    /// The one that shipped: the sheet asked for an access key id and never for
+    /// the secret, so this saved and failed on the first file.
+    #[test]
+    fn a_signer_without_a_secret_is_refused() {
+        let said = refuse_save(&provider(None, true), None).expect("refused");
+        assert!(said.contains("secret access key"), "{said}");
+    }
+
+    #[test]
+    fn a_header_without_a_token_is_refused() {
+        let said = refuse_save(&provider(Some("X-Token"), false), None).expect("refused");
+        assert!(said.contains("X-Token"), "{said}");
+    }
+
+    /// A secret typed now is the secret, whatever was saved before.
+    #[test]
+    fn a_secret_in_hand_is_enough() {
+        assert_eq!(refuse_save(&typed(provider(None, true), "sk"), None), None);
+        assert_eq!(
+            refuse_save(&typed(provider(Some("Authorization"), false), "t"), None),
+            None
+        );
+    }
+
+    /// The whole reason an empty field means "leave it alone": correcting the
+    /// endpoint must not cost a secret nobody can read back.
+    #[test]
+    fn a_saved_secret_of_the_same_kind_stands() {
+        assert_eq!(
+            refuse_save(&provider(None, true), Some(Credential::S3)),
+            None
+        );
+        assert_eq!(
+            refuse_save(
+                &provider(Some("Authorization"), false),
+                Some(Credential::Header)
+            ),
+            None
+        );
+    }
+
+    /// The two kinds share one keyring slot, so an empty field on a changed
+    /// kind would have signed a request with a bearer token.
+    #[test]
+    fn a_saved_secret_of_the_other_kind_does_not_carry_over() {
+        let said = refuse_save(&provider(None, true), Some(Credential::Header)).expect("refused");
+        assert!(said.contains("cannot sign"), "{said}");
+
+        let said = refuse_save(
+            &provider(Some("Authorization"), false),
+            Some(Credential::S3),
+        )
+        .expect("refused");
+        assert!(said.contains("not a bearer token"), "{said}");
+    }
+
+    /// A provider that needs no credential is a configuration, not an
+    /// oversight: a self-hosted box behind a VPN takes the file as it is.
+    #[test]
+    fn a_provider_that_needs_nothing_is_saved_as_it_stands() {
+        assert_eq!(refuse_save(&provider(None, false), None), None);
+        assert_eq!(refuse_save(&provider(Some(""), false), None), None);
     }
 }
 

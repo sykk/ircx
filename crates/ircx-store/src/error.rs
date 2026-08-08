@@ -25,14 +25,11 @@ pub enum StoreError {
     )]
     SchemaTooNew { found: u32, supported: u32 },
 
-    #[error(
-        "the system keyring is unavailable, so the password for {network} was not saved: {source}"
-    )]
-    Keyring {
-        network: String,
-        #[source]
-        source: keyring::Error,
-    },
+    /// What it was about is not in the sentence: the key is a generated network
+    /// id or the upload provider's slot name, and a reader recognises neither.
+    /// What they were doing when it failed is what names it.
+    #[error("the system keyring would not answer: {0}")]
+    Keyring(#[source] keyring::Error),
 
     #[error("could not write the export: {}", in_words(.0))]
     Io(#[from] std::io::Error),

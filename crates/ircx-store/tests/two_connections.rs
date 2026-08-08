@@ -53,8 +53,12 @@ fn message(id: &str, text: &str) -> ChatMessage {
     }
 }
 
+/// A real file, because that is what these tests are about — and no keyring,
+/// because it is not. Saving a network reaches the credential store even with
+/// no password to save, since it clears whatever was there before, and a runner
+/// with no Secret Service answers that with a D-Bus error.
 fn on_disk(room: &tempfile::TempDir) -> Store {
-    Store::open(&room.path().join("ircx.sqlite3")).expect("an archive on disk")
+    Store::open_without_keyring(&room.path().join("ircx.sqlite3")).expect("an archive on disk")
 }
 
 fn search_for(query: &str) -> SearchRequest {

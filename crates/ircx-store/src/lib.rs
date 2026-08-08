@@ -116,12 +116,28 @@ impl OpenTarget {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self, StoreError> {
+        Self::open_with(path, Box::new(OsKeyring))
+    }
+
+    /// An archive on disk whose credentials go to a process-local map instead
+    /// of the OS keyring.
+    ///
+    /// For tests that need a real file — two connections onto one, a cold page
+    /// cache — and have no business asking the machine for its keyring. A CI
+    /// runner has no Secret Service to ask, and saving a network reaches the
+    /// credential store whether or not the network has a password: it clears
+    /// whatever was there before.
+    pub fn open_without_keyring(path: &Path) -> Result<Self, StoreError> {
+        Self::open_with(path, Box::new(MemoryCredentials::default()))
+    }
+
+    fn open_with(path: &Path, credentials: Box<dyn CredentialStore>) -> Result<Self, StoreError> {
         let opened = |source| StoreError::Open {
             path: path.to_path_buf(),
             source,
         };
         let conn = Connection::open(path).map_err(opened)?;
-        let mut store = Self::init(conn, Box::new(OsKeyring))?;
+        let mut store = Self::init(conn, credentials)?;
         // After `init`, so the reader opens onto a schema the migrations have
         // already finished with.
         let read = Self::prepared(Connection::open(path).map_err(opened)?)?;
@@ -340,7 +356,9 @@ impl Store {
     ///
     /// The token is never read back, for the reason the SASL password is not:
     /// a value that only travels one way cannot be leaked by a screen that
-    /// shows what is stored.
+    /// shows what is stored. Whether there is one is read back, because a
+    /// screen that cannot ask that has to guess, and a provider saved without
+    /// its secret is a provider that fails at the upload.
     pub fn upload_provider(&self) -> Result<Option<UploadProvider>, StoreError> {
         let conn = self.reading();
         let mut stmt = conn.prepare(
@@ -360,6 +378,7 @@ impl Store {
             method: serde_json::from_str(&row.get::<_, String>(1)?)?,
             auth_header: row.get(2)?,
             token: None,
+            token_saved: self.upload_token()?.is_some(),
             s3: region
                 .zip(access_key_id)
                 .map(|(region, access_key_id)| S3Credentials {

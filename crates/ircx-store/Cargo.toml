@@ -11,7 +11,18 @@ thiserror.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-keyring = { version = "3", features = ["linux-native", "apple-native", "windows-native"] }
+# `linux-native` on its own is the kernel keyutils store, which a reboot wipes:
+# every SASL password and the upload provider's secret came back empty after
+# one, with the sheets still saying they were saved. The persistent pairing
+# keeps keyutils as the cache and puts the storage in the Secret Service, which
+# is where a desktop session's credentials live. `crypto-rust` encrypts the
+# DBus session without pulling in OpenSSL.
+keyring = { version = "3", features = [
+    "linux-native-sync-persistent",
+    "crypto-rust",
+    "apple-native",
+    "windows-native",
+] }
 
 [dev-dependencies]
 time.workspace = true

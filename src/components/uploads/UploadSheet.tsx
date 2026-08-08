@@ -26,6 +26,23 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: "s3", label: "S3-compatible, signed" },
 ];
 
+/** Which credential this provider carries, or `null` for one that needs none —
+ * a self-hosted box behind a VPN. The backend asks the same of what it is
+ * given and refuses to save a provider whose answer it cannot meet. */
+function needs(kind: Kind, authHeader: string): Kind | null {
+  if (kind === "s3") return "s3";
+  return authHeader.trim() === "" ? null : "header";
+}
+
+/** What the saved secret is for, when there is one. The two kinds share one
+ * keyring slot and nothing else, so a token saved for a header is not a secret
+ * a signer has. */
+function savedFor(provider: UploadProvider): Kind | null {
+  return provider.tokenSaved === true
+    ? needs(provider.s3 ? "s3" : "header", provider.authHeader ?? "")
+    : null;
+}
+
 /** What the form holds, which is not what is stored: the secret is write-only,
  * so the field starts empty and an empty field means "leave it alone". */
 interface Draft {
@@ -66,6 +83,8 @@ function Sheet() {
   const closeSheet = useAppStore((s) => s.toggleUpload);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [stored, setStored] = useState(false);
+  /** What the secret in the keyring is for, and so which draft it answers. */
+  const [saved, setSaved] = useState<Kind | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
@@ -79,6 +98,7 @@ function Sheet() {
       (provider) => {
         if (!live) return;
         setStored(provider !== null);
+        setSaved(provider === null ? null : savedFor(provider));
         setDraft(provider === null ? EMPTY : fromProvider(provider));
       },
       (reason: unknown) => {
@@ -234,16 +254,12 @@ function Sheet() {
               )}
 
               <TextField
-                optional
+                optional={needs(draft.kind, draft.authHeader) === null}
                 label={draft.kind === "s3" ? "Secret access key" : "Token"}
                 type="password"
                 value={draft.token}
                 onChange={(token) => setDraft({ ...draft, token })}
-                hint={
-                  stored
-                    ? "Saved in your system keyring. Leave empty to keep it."
-                    : "Stored in your operating system's keyring, never in the database."
-                }
+                hint={secretHint(needs(draft.kind, draft.authHeader), saved)}
               />
             </Group>
 
@@ -273,6 +289,21 @@ function Sheet() {
       </div>
     </div>
   );
+}
+
+/** What the field can honestly say about the keyring.
+ *
+ * It used to say "saved" whenever a provider was saved, which is a different
+ * question: a provider saved without its secret claimed to have one and then
+ * failed on the first file. */
+function secretHint(wanted: Kind | null, saved: Kind | null): string {
+  if (wanted !== null && wanted === saved) {
+    return "Saved in your system keyring. Leave empty to keep it.";
+  }
+  if (wanted !== null && saved !== null) {
+    return "The secret in your keyring is for the other kind of provider and cannot stand in for this one.";
+  }
+  return "Stored in your operating system's keyring, never in the database.";
 }
 
 function fromProvider(provider: UploadProvider): Draft {

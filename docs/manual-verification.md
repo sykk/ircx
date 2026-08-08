@@ -2342,9 +2342,54 @@ sentences the sheet keeps for those were written blind. Walked on 2026-08-02 —
   this one from `StoreError::Io` — and it **named no file at all**, because the
   store raises `Io` from a writer it was handed and never knew the path.
 
-What is still unwatched is a disk that genuinely fills. The pipe reaches the
-same code and the same `io::ErrorKind` handling, so what is untested is only
-whether `StorageFull` arrives where it is expected to.
+**A disk that genuinely fills is walked**, on 2026-08-07. The entry that stood
+here said the pipe reached the same code and the same `io::ErrorKind` handling,
+so what was untested was only whether `StorageFull` arrives where it is expected
+to. It does, and it no longer takes a human to find out: the sentence is chosen
+by `ErrorKind`, and every test that had ever checked it built the kind by hand.
+
+`/dev/full` answers every write with `ENOSPC`, needs no privileges and is on
+every Linux, so two ordinary tests in `src-tauri/src/commands.rs` now aim an
+export at it. Both of the two paths a refused export can take are covered,
+because they report through different code and had to be shown to agree: an
+export short enough to sit entirely in the `BufWriter` fails when the file is
+closed, through `into_inner`, and one long enough to empty the buffer while it
+runs fails inside `export_everything`, through `gave_up`. Both say **"the disk
+is full"** and both name the file.
+
+What `/dev/full` cannot show is what a failure leaves behind, because it refuses
+every byte where a real disk takes what fits. So a real one:
+
+```text
+unshare --user --map-root-user --mount sh -c '
+  mkdir -p /tmp/smallfs && mount -t tmpfs -o size=8M tmpfs /tmp/smallfs
+  IRCX_SMALL_DISK=/tmp/smallfs cargo test -p ircx --lib -- \
+    --ignored --nocapture a_disk_that_fills'
+```
+
+An 8 MiB tmpfs in a user namespace, which also needs no privileges, and an
+export of 50,000 messages wanting 24,427,780 bytes:
+
+```text
+the export wanted 24427780 bytes
+it said: /tmp/smallfs/export-everything.jsonl could not be written: the disk is full
+it left 8388608 bytes at /tmp/smallfs/export-everything.jsonl
+```
+
+**No defect in the sentence**, which is the first time one of these walks has
+found none — the wording, the named file and the absent errno all hold at the
+one `ErrorKind` nobody had ever raised here.
+
+**One thing to decide rather than a defect.** The failure leaves the partial
+file where it was aimed, and on a disk that had no room it is now the reason
+there is none: `df` reads 100% with 0 bytes free, and the client wrote every one
+of them. Nothing removes it and nothing says it is there — the sentence names
+the file, which is #360, but names it as the export's destination rather than as
+something now sitting on a full disk. Retrying to the same name is safe, since
+`File::create` truncates before it writes; retrying to a different one has less
+room than the first attempt had. Whether a half-written export is rubbish to
+clear up or the part of the archive that got out is a product question, and this
+walk does not answer it.
 
 **An export large enough to stream is walked**, on 2026-08-07, which is what run
 5 asked for and what every walk before it had missed: 3.3 KB and 35 KB both fit

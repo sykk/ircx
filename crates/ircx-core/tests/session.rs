@@ -951,7 +951,7 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
             "INVITE sable #ircx",
             "INVITE sable #ircx-dev",
             "PRIVMSG #ircx :\u{1}ACTION waves\u{1}",
-            "PRIVMSG sable :\u{1}VERSION\u{1}",
+            "PRIVMSG sable \u{1}VERSION\u{1}",
             "PRIVMSG sable :in private",
             "NICK sykk2",
             "AWAY :back later",
@@ -1084,6 +1084,11 @@ fn ctcp_ping_is_answered_on_the_same_command() {
     );
 }
 
+/// No `:` before the body, because it holds no space. The serialiser marks a
+/// trailing parameter only where the mark is needed to read the line back, and
+/// does the same for the one-word messages people type. `\u{1}ACTION waves\u{1}`
+/// in `slash_commands_reach_the_wire_as_the_protocol_spells_them` is the other
+/// side of that rule.
 #[test]
 fn ctcp_command_sends_a_wrapped_query() {
     let mut session = registered("");
@@ -1091,7 +1096,7 @@ fn ctcp_command_sends_a_wrapped_query() {
     assert!(matches!(outcome, CommandOutcome::Handled));
     assert_eq!(
         session.sent(),
-        vec![format!("PRIVMSG sable :\u{1}VERSION\u{1}")]
+        vec![format!("PRIVMSG sable \u{1}VERSION\u{1}")]
     );
 }
 
@@ -1105,7 +1110,7 @@ fn ctcp_in_a_query_tab_uses_the_person_being_spoken_with() {
     assert!(matches!(outcome, CommandOutcome::Handled));
     assert_eq!(
         session.sent(),
-        vec![format!("PRIVMSG sable :\u{1}VERSION\u{1}")]
+        vec![format!("PRIVMSG sable \u{1}VERSION\u{1}")]
     );
 }
 

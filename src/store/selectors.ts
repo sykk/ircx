@@ -152,21 +152,20 @@ export function selectQueriesFor(s: AppState, network: string): Query[] {
  * The conversation at the top of the sidebar, which is the one an empty window
  * opens.
  *
- * Reading order rather than arrival order: the channels of every network before
- * any query and both by name, which is how `SidebarNetworks` draws them. A
- * window that opens itself should land on the row the eye is already going to,
- * and an autojoin arrives in whatever order the server acknowledges it.
+ * Reading order rather than arrival order: one network's panel at a time, its
+ * channels before its queries and both by name, which is how `SidebarNetworks`
+ * draws them. A window that opens itself should land on the row the eye is
+ * already going to, and an autojoin arrives in whatever order the server
+ * acknowledges it.
  */
 export function selectFirstConversation(s: AppState): ActiveTarget | null {
   const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
 
   for (const network of s.networkOrder) {
-    const first = selectChannelsFor(s, network).sort((a, b) => byName(a.name, b.name))[0];
-    if (first) return { network, target: first.name };
-  }
-  for (const network of s.networkOrder) {
-    const first = selectQueriesFor(s, network).sort((a, b) => byName(a.nick, b.nick))[0];
-    if (first) return { network, target: first.nick };
+    const channel = selectChannelsFor(s, network).sort((a, b) => byName(a.name, b.name))[0];
+    if (channel) return { network, target: channel.name };
+    const query = selectQueriesFor(s, network).sort((a, b) => byName(a.nick, b.nick))[0];
+    if (query) return { network, target: query.nick };
   }
   return null;
 }

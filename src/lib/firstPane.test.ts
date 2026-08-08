@@ -116,4 +116,19 @@ describe("which conversation that is", () => {
     expect(activeTarget()).toEqual({ network: "libera", target: "phrack" });
     stop();
   });
+
+  /** Each network draws its own panel, so the top of the sidebar is the first
+   * network's first conversation — not the first channel anywhere. */
+  it("takes the first network's query over a later network's channel", () => {
+    seedStore(
+      [makeNetwork("libera"), makeNetwork("oftc")],
+      [makeChannel("oftc", "#linux")],
+      [makeQuery("libera", "phrack")],
+    );
+
+    const stop = openFirstConversation();
+
+    expect(activeTarget()).toEqual({ network: "libera", target: "phrack" });
+    stop();
+  });
 });

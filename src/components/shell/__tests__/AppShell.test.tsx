@@ -71,7 +71,7 @@ describe("AppShell", () => {
       key: "ArrowRight",
     });
     fireEvent.click(screen.getByRole("button", { name: "libera actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Hide channels" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide conversations" }));
 
     expect(loadViewState()).toEqual({
       sidebarWidth: 256,

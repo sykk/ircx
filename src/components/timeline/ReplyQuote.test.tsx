@@ -38,8 +38,10 @@ describe("ReplyQuote", () => {
     expect(button.textContent).toContain("here: heap.free(i) heap.free(i)");
   });
 
-  it("names the message it cannot show", () => {
+  it("says a message it cannot show is answered, without naming it by its id", () => {
     render(<ReplyQuote msgid="older-msgid" parent={undefined} onJump={vi.fn()} />);
-    expect(screen.getByText("in reply to older-msgid")).toBeTruthy();
+
+    expect(screen.getByText("in reply to an earlier message")).toBeTruthy();
+    expect(screen.queryByText(/older-msgid/)).toBe(null);
   });
 });

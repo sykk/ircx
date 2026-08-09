@@ -398,7 +398,7 @@ describe("Timeline", () => {
   it("shows a reply stub when the parent is outside the window", () => {
     seed([makeMessage({ id: "a", text: "answer", replyTo: "older-msgid" })]);
     render(<Timeline view={TEST_VIEW} />);
-    expect(screen.getByText("in reply to older-msgid")).toBeTruthy();
+    expect(screen.getByText("in reply to an earlier message")).toBeTruthy();
   });
 
   it("quotes the parent when it is loaded", () => {
@@ -1181,7 +1181,7 @@ describe("drawing a reply quote", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(quotes()).toHaveLength(2);
-    expect(screen.getByText("in reply to parent-other")).toBeTruthy();
+    expect(screen.getByText("in reply to an earlier message")).toBeTruthy();
   });
 
   /** A block is a minute, not a run of one person's lines. Two people
@@ -1202,7 +1202,8 @@ describe("drawing a reply quote", () => {
 
   /** A reply names its parent the way the server does. Our own lines keep the
    * local id they were drawn with, so quoting one means resolving its `msgid`
-   * tag — otherwise answering yourself quoted a base32 id at you. */
+   * tag — otherwise answering yourself quoted a message that was on the screen
+   * as one the window does not hold. */
   it("quotes a message we sent, named by the msgid its echo carried", () => {
     seed([
       makeMessage({
@@ -1217,7 +1218,7 @@ describe("drawing a reply quote", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(quotes()).toHaveLength(2);
-    expect(screen.queryByText("in reply to 789")).toBe(null);
+    expect(screen.queryByText("in reply to an earlier message")).toBe(null);
   });
 });
 

@@ -67,51 +67,48 @@ nothing is ever marked as being in a preset. This is the shape that keeps a
 theme a set of token values, which is the contract
 `overrides.ts` enforces and the reason widening `theme.json` was refused.
 
-All of it lives in a pane of the client's own layout, in
-`src/components/settings`. A sheet is a scrim over the only evidence these
-settings can be judged against, which is what ruled a sheet out; a second window
-answered that and cost a second webview, a copy of every setting crossing
-between them, and a page that could not see a conversation. A pane is the
-answer that keeps the evidence and pays none of it: `openSettings` splits it
-beside the pane in focus, so the Appearance page is judged against the reader's
-own channel, at their own density, in their own theme.
+All of it lives in a dialog over the conversation, in
+`src/components/settings`, and **the dialog has no scrim**. That is the whole
+of the design: what ruled a sheet out was never the overlay but the scrim,
+because every control on the Appearance page changes how a conversation reads
+and dimming the window behind dims the only evidence any of them can be judged
+against. `SettingsOverlay` is told apart from the client by its own border and
+shadow instead, and what it does not cover stays lit. It is modal all the same —
+`aria-modal`, the focus trap in `useDialogFocus` — because the pages behind
+cannot be worked while their own settings are being changed.
 
-It is a leaf of `layout` whose id is deliberately not in `views`
-(`AppState.settings`). Settings is not a conversation, and everything that walks
-the panes looking for one — the pane already showing a target, the panes a
-closed conversation takes with it, what `toStored` writes down — asks `views`
-and gets nothing back, which is the answer each of them wants. So it is not
-written down either: the tree survives a restart as the conversations its panes
-hold, and its split collapses the way a closed conversation's does. What it does
-take from the tree is the machinery — a split, a divider that moves, a close, a
-place in `viewOrder`.
+Two shapes were built before it and both are instructive. A second window kept
+the evidence and cost a second webview, a copy of every setting crossing
+between them, and a page that could not see a conversation. A pane of the
+layout kept it and charged the tree: a leaf that was not a conversation, a
+floor of its own for the divider beside it, and a second answer to "which pane
+is the reader in" for everything that asks. The dialog keeps the evidence and
+owes neither, so `AppState.settings` is a `SectionId | null` and nothing that
+walks the panes has to be told to pass over it.
 
-`chatPane` is the other half. The pane in focus is not always one holding a
-conversation now, and the sidebar's highlight, the status bar, the search scope
-and a dropped file all ask where the reader is; none of them stopped being true
-because settings took the focus, so they ask that instead of `activeViewId`. A
-channel picked while settings has the focus goes to the pane beside it, and so
-does a split.
+Escape and a click outside both close it, and both decline while a page has a
+request in flight — `SettingsBusy`, which `Done` is already disabled by:
+closing loses the answer. Escape from inside a field is not a close at all, on
+`isTextEntry`, because that is how a value being typed is abandoned and the
+token editor behind Custom… is nothing but fields.
 
 The sample channel stays. `previewChannel.ts`, drawn by `buildRows` and
-`renderRow` — the timeline's own — is what the page has to show on a first run,
-where there is no conversation to sit beside. It is the real render path because
-the components under it read the presentation out of the store, so a preview
-cannot show a layout the client would not, and it is scripted for what
-`groups.ts` makes of it: a run, an addressed pair, a declared topic and a
-message in no group, which are the four states a spine has.
+`renderRow` — the timeline's own — is what the page shows in the middle of the
+dialog while the reader's real channel reads around it, and the only evidence
+there is on a first run. It is the real render path because the components
+under it read the presentation out of the store, so a preview cannot show a
+layout the client would not, and it is scripted for what `groups.ts` makes of
+it: a run, an addressed pair, a declared topic and a message in no group, which
+are the four states a spine has.
 
-The sections are `sections.ts`. Networks are still the gap, though no longer for
-the reason they were — a pane runs inside the client's event bridge and could
-watch a connection; moving the onboarding flow into this window is its own
-change. A page with a request in flight still says so through `SettingsBusy`,
-and Done declines while one is: closing loses the answer.
+The sections are `sections.ts`. Networks are still the gap, though no longer
+for the reason they were — the dialog is inside the client's event bridge and
+could watch a connection; moving the onboarding flow into it is its own change.
 
-A settings pane needs more room than a conversation, which degrades gracefully
-and this does not — `MIN_SETTINGS_PX` in `PaneTree.tsx`, measured, with the
-method in `docs/measurements.md`. A page that lays out against the window rather
-than against its pane will clip inside one; the Appearance rail was found doing
-exactly that.
+A page that lays out against the window rather than against what holds it will
+clip; the Appearance rail was found doing exactly that, and asks its container
+rather than the viewport for the room to sit beside the preview. The dialog is
+sized so that it has it on the window this app opens at.
 
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the

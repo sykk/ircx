@@ -49,6 +49,16 @@ body {
   outline-offset: var(--focus-ring-offset);
 }
 
+/* A dialog's container is where focus lands, not something to operate:
+ * `useDialogFocus` puts it there so Escape is within reach, and every dialog is
+ * `tabindex="-1"` and so never a tab stop. It shows on whichever dialog has no
+ * field to autofocus — the settings one — where opening from the palette is a
+ * keystroke, which is all Chrome needs to call the container focus-visible and
+ * draw the ring round the whole box. */
+[role="dialog"]:focus-visible {
+  outline: none;
+}
+
 /* The composer draws its own focus glow on the pill; the global ring reads as a
  * sharp blue box on the textarea inside it. */
 [data-ui="composer"] textarea:focus,

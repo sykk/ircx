@@ -3,6 +3,7 @@ import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
+import { SettingsOverlay } from "@/components/settings";
 import { ChannelList } from "@/components/channels";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { AppShell } from "@/components/shell/AppShell";
@@ -78,6 +79,11 @@ export function App() {
         {startup === "onboarding" ? <Onboarding onDone={finish} /> : <PaneTree />}
       </AppShell>
 
+      {/* Before the palette and the search, which are reachable by chord while
+          it is open and share its stacking level — later in the tree paints on
+          top, and a palette drawn under the settings dialog is a palette
+          nobody can read. */}
+      <SettingsOverlay />
       <CommandPalette />
       <SearchOverlay />
       <NetworkSetup />

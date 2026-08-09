@@ -186,10 +186,10 @@ describe("CommandPalette", () => {
 
   // #80: "settings" is the word someone types when they want to change a saved
   // password, and it used to match nothing at all.
-  /** The word names the pane, and the exact match takes the top of the list. A
-   * network's own settings are a different thing under the same word, so they
+  /** The word names the dialog, and the exact match takes the top of the list.
+   * A network's own settings are a different thing under the same word, so they
    * stay in the list rather than being renamed out of the way. */
-  it("puts the settings pane first under the word settings", () => {
+  it("puts settings first under the word settings", () => {
     render(<CommandPalette />);
     type("settings");
 
@@ -309,19 +309,19 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
-  /** The three sheets these entries opened are sections of the settings pane
+  /** The three sheets these entries opened are sections of one settings dialog
    * now, so the entries name a section rather than a sheet. Each still answers
    * to the word somebody would type for it. */
   it.each([
     ["plugins", "plugins"],
     ["uploads", "uploads"],
     ["privacy", "privacy"],
-  ])("opens the settings pane on %s", (typed, section) => {
+  ])("opens settings on %s", (typed, section) => {
     render(<CommandPalette />);
     type(typed);
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(useAppStore.getState().settings?.section).toBe(section);
+    expect(useAppStore.getState().settings).toBe(section);
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 

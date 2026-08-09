@@ -2131,7 +2131,46 @@ what a test can say about it.
   alone, which `AppearancePage.test.tsx` asserts through the store and nobody
   has seen on screen.
 
-## The settings window
+## The settings dialog
+
+**Walked 2026-08-09 in the browser harness**, `driver.mjs --seeded` at
+1200x800, over `#ircx`:
+
+- **It opens over the conversation and nothing is dimmed.** There is no scrim
+  element; the panel is `--surface-overlay` against the client's base, and the
+  sidebar, the header, the status bar and both edges of the timeline stay
+  legible around a 1024x672 dialog at (88, 64).
+- **The Appearance rail sits beside its preview**, `414px 290px`, and stacks to
+  a single `624px` column when the window is taken to 1000 — the container
+  query answering the panel rather than the viewport, which is the defect #468
+  found.
+- **Escape closes it**, from focus where `useDialogFocus` leaves it.
+- **A theme chosen in it repaints the client behind it**, watched by switching
+  to ircx Light with the channel on screen. One store, so this is one write
+  rather than the cross-window message it used to be — but it is what the
+  missing scrim is for, and worth having seen.
+
+**Found by walking it:** focus lands on the dialog container so Escape is in
+reach, and opening from the palette is a keystroke — which is all Chrome needs
+to call that container `:focus-visible` and draw the global accent ring round
+the whole 1024px box. `[role="dialog"]:focus-visible` in `global.css` takes it
+off.
+
+**Still unseen:**
+
+- **The dialog in WebKitGTK.** Everything above is Chrome, and a shadow, a
+  rounded corner over a transparent window and that focus heuristic could each
+  differ there.
+- **Escape and a click outside during a request.** Both are declined while
+  `SettingsBusy` is set — the guard each of these pages had as a sheet — and
+  neither has been driven against a slow backend.
+
+### The second window this replaced
+
+Kept because the walks below are what the shape was chosen against, not because
+any of it is still on screen: `open_settings`, `SETTINGS_URL` and the
+localStorage hand-off went with the window in #468, and the pane that replaced
+it is gone too.
 
 A second Tauri window, opened by `open_settings`. Walked in the browser
 harness at `/?settings` — the layout, the preview, the preset, the accent

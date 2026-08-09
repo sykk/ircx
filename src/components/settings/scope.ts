@@ -3,7 +3,7 @@ import { useAppStore } from "@/store";
 import { selectActiveTarget } from "@/store/selectors";
 
 /**
- * The conversation the settings pane's pages are scoped to.
+ * The conversation the settings pages are scoped to.
  *
  * Privacy scopes retention, export and deletion by it, and Notifications
  * scopes muting the same way. Both are asked about "this conversation", and
@@ -11,8 +11,8 @@ import { selectActiveTarget } from "@/store/selectors";
  *
  * Read out of the store rather than handed over. As a second window these
  * pages had no conversations of their own and the client wrote the answer into
- * localStorage for them; a pane is in the window that has one, so it asks. It
- * follows the reader as they move between channels, which the snapshot could
+ * localStorage for them; a dialog is over the window that has one, so it asks.
+ * It follows the reader as they move between channels, which the snapshot could
  * not: the page names what it is scoped to, and now that stays true.
  */
 export interface SettingsScope {

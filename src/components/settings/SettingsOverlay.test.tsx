@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeChannel, makeNetwork, resetStore, seedStore } from "@/components/shell/fixtures";
 import { catalogue } from "@/lib/theme";
 import { useAppStore } from "@/store";
-import { SettingsPane } from "./SettingsPane";
+import { SettingsOverlay } from "./SettingsOverlay";
 
 vi.mock("@/lib/ipc", () => ({
   // Each page reaches for the backend the moment it is drawn. What comes back
@@ -44,42 +44,86 @@ afterEach(() => {
 
 function open(section?: "appearance" | "privacy") {
   store().openSettings(section);
-  render(<SettingsPane view={store().settings!.view} />);
+  render(<SettingsOverlay />);
 }
 
-describe("the settings pane", () => {
-  it("draws the section the pane was opened on", () => {
+/** What the dialog is drawn over, which is what a click outside it lands on. */
+const outside = () => screen.getByRole("dialog").parentElement!;
+
+describe("the settings dialog", () => {
+  it("draws nothing while settings is closed", () => {
+    render(<SettingsOverlay />);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("draws the section it was opened on", () => {
     open("privacy");
 
     expect(screen.getByRole("tab", { name: "Privacy" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Privacy", level: 2 })).toBeTruthy();
   });
 
-  /** The section is the pane's, not the component's: reopening the pane from
-   * the palette lands on a section, and a copy held in component state would
-   * be a second answer to which one. */
-  it("moves the pane itself when a section is chosen", () => {
+  /** The section is the store's, not the component's: reopening from the
+   * palette lands on a section, and a copy held in component state would be a
+   * second answer to which one. */
+  it("moves the store when a section is chosen", () => {
     open();
 
     fireEvent.click(screen.getByRole("tab", { name: "Uploads" }));
 
-    expect(store().settings?.section).toBe("uploads");
+    expect(store().settings).toBe("uploads");
     expect(screen.getByRole("heading", { name: "Uploads", level: 2 })).toBeTruthy();
   });
 
-  it("closes the pane when Done is pressed", () => {
+  it("closes when Done is pressed", () => {
     open();
 
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect(store().settings).toBeNull();
-    expect(store().viewOrder).toHaveLength(1);
   });
 
-  /** Privacy and Notifications are both asked about "this conversation". As a
-   * second window that had to be handed over; the pane is in the window that
-   * has one. */
-  it("scopes its pages to the conversation beside it", () => {
+  it("closes on Escape", () => {
+    open();
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    expect(store().settings).toBeNull();
+  });
+
+  /** Escape in a field abandons the value being typed. The token editor behind
+   * Custom… is nothing but fields, and losing the dialog from one of them
+   * would be a trap. */
+  it("stays open for an Escape inside a field", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Custom…" }));
+
+    fireEvent.keyDown(screen.getByLabelText("--accent"), { key: "Escape" });
+
+    expect(store().settings).toBe("appearance");
+  });
+
+  it("closes on a click outside it", () => {
+    open();
+
+    fireEvent.mouseDown(outside());
+
+    expect(store().settings).toBeNull();
+  });
+
+  it("stays open for a click inside it", () => {
+    open();
+
+    fireEvent.mouseDown(screen.getByRole("dialog"));
+
+    expect(store().settings).toBe("appearance");
+  });
+
+  /** Privacy and Notifications are both asked about "this conversation". The
+   * dialog is over the window that has one, so it reads it out of the store
+   * rather than being handed it. */
+  it("scopes its pages to the conversation behind it", () => {
     open("privacy");
 
     expect(screen.getByRole("button", { name: "Delete #ctf-ops" })).toBeTruthy();

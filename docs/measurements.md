@@ -1027,15 +1027,14 @@ appended, which comes to 468 bytes a message on disk against the 560 of the
 profile run 11 walked — lighter per row, and lighter again in the full-text
 indexes, though the scan does not read those.
 
-## The narrowest a settings pane can be
+## The narrowest a settings page can be
 
 **Measured 2026-08-09**, `.claude/skills/run-ircx/driver.mjs --seeded` in
-headless Chrome at the app's own 1200x800: open the settings pane beside
-`#ircx`, then move the viewport a few pixels at a time and read `clientWidth`
-and `scrollWidth` off the pane's scrolling panel. Where `scrollWidth` is the
-larger, the page is being asked to lay out in less room than it has, and the
-overflow is sideways — the one direction nothing in this app is meant to
-scroll.
+headless Chrome at the app's own 1200x800: open settings beside `#ircx`, then
+move the viewport a few pixels at a time and read `clientWidth` and
+`scrollWidth` off the scrolling panel. Where `scrollWidth` is the larger, the
+page is being asked to lay out in less room than it has, and the overflow is
+sideways — the one direction nothing in this app is meant to scroll.
 
 The five sections, at the width each one stops fitting in:
 
@@ -1047,22 +1046,30 @@ The five sections, at the width each one stops fitting in:
 | Uploads | 200px |
 | Privacy | 190px |
 
-**470px is the pane, and Notifications sets it.** The pane is its section list
-plus the panel: the list is a fixed 220px column, so the widest section's 250px
-puts the floor at 470. Confirmed either side — at 470 the panel is 250px and
-does not scroll, at 468 it is 248px and overflows by 2. That figure is
-`MIN_SETTINGS_PX` in `src/components/panes/PaneTree.tsx`, which is what stops a
-divider being dragged past it.
+**470px in total, and Notifications sets it.** That is the section list plus
+the panel: the list is a fixed 220px column, so the widest section's 250px puts
+the floor at 470. Confirmed either side — at 470 the panel is 250px and does not
+scroll, at 468 it is 248px and overflows by 2. It was `MIN_SETTINGS_PX`, the
+floor for a divider beside the settings pane, while settings was a pane.
 
 **The Appearance page's rail was measuring the wrong box.** Before this it
 asked for its 290px rail beside the preview from a *viewport* of 1024px, which
 in a window of 1200 is true while the pane holding it is 476 — the row of
 accent swatches ran off the edge, and the floor was 576 rather than 470. It is
-a container query now, so the page stacks against the pane it is in.
+a container query now, so the page stacks against whatever holds it.
 
-**Excludes:** height. A pane stacked above another is short rather than narrow,
-which is its own measurement and nobody has taken it — the same gap
-`MIN_PANE_PX` has.
+**The dialog is 1024x680**, or 92vw x 84vh where the window is smaller than
+that. 470 is what it must clear and it clears it four times over; what actually
+sets the width is the rail, which asks its container for 768px before it will
+sit beside the preview rather than stack under it. The panel is the container
+and the section list takes 220 of the dialog, so 1024 leaves it 804. Below a
+window of about 1113px the dialog is 92vw, the panel falls under 768, and the
+page stacks — which is the same page, taller.
+
+**Excludes:** height. Nobody has measured the shortest either the dialog or a
+pane can be — the gap `MIN_PANE_PX` has too. 680 and 84vh are chosen to leave
+the conversation showing above and below, not measured against a page that
+stops fitting.
 
 ## Not measured
 

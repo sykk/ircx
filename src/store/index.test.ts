@@ -11,7 +11,7 @@ import {
 import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Member } from "@/types";
 import { TIMELINE_CAP, useAppStore } from "./index";
 import { targetKey } from "./keys";
-import { ratioOf, toStored } from "./layout";
+import { ratioOf } from "./layout";
 import type { StoredLayout } from "./types";
 
 const KEY = targetKey("libera", "#ctf-ops");
@@ -1383,98 +1383,54 @@ describe("a batch of arriving messages", () => {
   });
 });
 
-describe("the settings pane", () => {
+describe("settings", () => {
   const store = () => useAppStore.getState();
-  const targets = () => store().viewOrder.map((id) => store().views[id]?.target ?? "settings");
 
   beforeEach(() => {
     resetStore();
-    seedStore(
-      [makeNetwork("libera")],
-      [makeChannel("libera", "#ctf-ops")],
-      [makeQuery("libera", "phrack")],
-    );
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
     store().showTarget({ network: "libera", target: "#ctf-ops" });
   });
 
-  /** Beside rather than over: every control on the Appearance page changes how
-   * a conversation reads, and the conversation is the evidence. */
-  it("opens beside the pane in focus and takes the focus", () => {
+  /** Over the layout rather than in it. The panes, which one has the focus and
+   * what the next run comes back to are none of settings' business, which is
+   * what a pane made them. */
+  it("opens on a section and leaves the panes alone", () => {
+    const layout = store().layout;
+    const focused = store().activeViewId;
+
     store().openSettings();
 
-    expect(targets()).toEqual(["#ctf-ops", "settings"]);
-    expect(store().activeViewId).toBe(store().settings?.view);
-    expect(store().settings?.section).toBe("appearance");
+    expect(store().settings).toBe("appearance");
+    expect(store().layout).toBe(layout);
+    expect(store().activeViewId).toBe(focused);
   });
 
   /** One window's worth of settings twice over is two answers to every question
-   * on them, so the second ask moves the pane that is already open. */
-  it("moves the open pane to a section rather than opening a second", () => {
-    store().openSettings();
-    const opened = store().settings?.view;
-    store().focusView(store().viewOrder[0]!);
+   * on them. */
+  it("moves to the section asked for rather than opening a second copy", () => {
+    store().openSettings("plugins");
 
     store().openSettings("privacy");
 
-    expect(targets()).toEqual(["#ctf-ops", "settings"]);
-    expect(store().settings).toEqual({ view: opened, section: "privacy" });
-    expect(store().activeViewId).toBe(opened);
+    expect(store().settings).toBe("privacy");
   });
 
-  it("closes like any other pane, and takes the record of itself with it", () => {
+  /** The title bar's button and the chord both ask for no section in
+   * particular, and neither means "back to the first one". */
+  it("stays where it is when reopened without a section", () => {
+    store().openSettings("plugins");
+
     store().openSettings();
 
-    store().closeView(store().settings!.view);
+    expect(store().settings).toBe("plugins");
+  });
 
-    expect(targets()).toEqual(["#ctf-ops"]);
+  it("closes", () => {
+    store().openSettings();
+
+    store().closeSettings();
+
     expect(store().settings).toBeNull();
-  });
-
-  /** `retarget` answers with nothing for a pane holding no conversation, so
-   * without this a channel picked in the sidebar did nothing at all while the
-   * settings pane had the focus. */
-  it("leaves a conversation picked while it is focused to the pane beside it", () => {
-    store().openSettings();
-
-    store().showTarget({ network: "libera", target: "phrack" });
-
-    expect(targets()).toEqual(["phrack", "settings"]);
-    expect(store().settings).not.toBeNull();
-  });
-
-  /** Splitting settings would open a second copy of it. The keystroke means the
-   * conversation the reader is on, which is the pane beside it. */
-  it("splits the conversation beside it rather than itself", () => {
-    store().openSettings();
-
-    store().splitActiveView("row");
-
-    expect(targets()).toEqual(["#ctf-ops", "#ctf-ops", "settings"]);
-  });
-
-  /** The tree survives a restart as the conversations its panes hold, and this
-   * is not one: the leaf goes and its split collapses the way a closed
-   * conversation's does. */
-  it("is not among the panes written down for the next run", () => {
-    store().openSettings();
-
-    expect(toStored(store().layout!, store().views)).toEqual({
-      type: "view",
-      network: "libera",
-      target: "#ctf-ops",
-      raw: false,
-    });
-  });
-
-  /** A window holding nothing else is reachable — the last conversation can be
-   * closed out from under it — and the pane it opens must not land on top of
-   * the settings the reader is still looking at. */
-  it("makes room for a conversation opened while it is the only pane", () => {
-    useAppStore.setState({ layout: null, viewOrder: [], activeViewId: null, views: {} });
-    store().openSettings();
-
-    store().showTarget({ network: "libera", target: "phrack" });
-
-    expect(targets()).toEqual(["settings", "phrack"]);
   });
 });

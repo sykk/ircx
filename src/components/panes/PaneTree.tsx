@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useAppStore } from "@/store";
 import { ratioOf, type SplitPath } from "@/store/layout";
-import type { Layout, ViewId } from "@/store/types";
+import type { Layout } from "@/store/types";
 import { ChatPane } from "./ChatPane";
 
 /** How far an arrow key moves a divider, as a share of the split. */
@@ -28,48 +28,19 @@ const KEY_STEP = 0.02;
  */
 const MIN_PANE_PX = 280;
 
-/**
- * The same floor for a side holding the settings pane.
- *
- * A conversation gets narrower gracefully — the roster drops out, the text
- * rewraps — and 280 is where that stops being true. The settings pane starts
- * 220px behind: its own section list is a fixed column, and what is left over
- * is what a page has to lay out in.
- *
- * 470 is measured, in `docs/measurements.md`. Notifications is the widest of
- * the five sections at 250px of content, and 470 is the pane width that leaves
- * it that much. Below it the page scrolls sideways, which is the one direction
- * nothing here is meant to.
- */
-const MIN_SETTINGS_PX = 470;
-
 export function PaneTree() {
   const layout = useAppStore((s) => s.layout);
   if (!layout) return <ChatPane view={null} />;
   return <PaneNode node={layout} path={[]} />;
 }
 
-/** Whether a subtree holds the settings pane, and so takes its floor rather
- * than a conversation's. Which side of a divider it is on decides how far that
- * divider travels — the two sides no longer have the same floor. */
-function holdsSettings(node: Layout, settings: ViewId | null): boolean {
-  if (settings === null) return false;
-  if (node.type === "view") return node.id === settings;
-  return holdsSettings(node.children[0], settings) || holdsSettings(node.children[1], settings);
-}
-
 /** `path` is the route from the root to this node: each step says which child
  * was taken. A split has no id, so this is how one is named. */
 function PaneNode({ node, path }: { node: Layout; path: SplitPath }) {
-  const settings = useAppStore((s) => s.settings?.view ?? null);
   if (node.type === "view") return <ChatPane view={node.id} />;
 
   const row = node.direction === "row";
   const ratio = ratioOf(node);
-  const floors: [number, number] = [
-    holdsSettings(node.children[0], settings) ? MIN_SETTINGS_PX : MIN_PANE_PX,
-    holdsSettings(node.children[1], settings) ? MIN_SETTINGS_PX : MIN_PANE_PX,
-  ];
 
   return (
     <div className={row ? "flex h-full min-h-0 min-w-0" : "flex h-full min-h-0 min-w-0 flex-col"}>
@@ -79,7 +50,7 @@ function PaneNode({ node, path }: { node: Layout; path: SplitPath }) {
         <PaneNode node={node.children[0]} path={[...path, 0]} />
       </div>
 
-      <Divider row={row} path={path} ratio={ratio} floors={floors} />
+      <Divider row={row} path={path} ratio={ratio} />
 
       <div className="min-h-0 min-w-0" style={{ flex: `${1 - ratio} 1 0` }}>
         <PaneNode node={node.children[1]} path={[...path, 1]} />
@@ -93,19 +64,7 @@ function PaneNode({ node, path }: { node: Layout; path: SplitPath }) {
  * it draws: a one-pixel target is not one anybody can hit, so the hit area is
  * padded and the pixel is drawn inside it.
  */
-function Divider({
-  row,
-  path,
-  ratio,
-  floors,
-}: {
-  row: boolean;
-  path: SplitPath;
-  ratio: number;
-  /** The narrowest each side may be dragged, in pixels. Two figures rather than
-   * one: a settings pane needs more room than a conversation. */
-  floors: [number, number];
-}) {
+function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: number }) {
   const setSplitRatio = useAppStore((s) => s.setSplitRatio);
   const [dragging, setDragging] = useState(false);
   const self = useRef<HTMLDivElement>(null);
@@ -122,23 +81,20 @@ function Divider({
   };
 
   /**
-   * The same share with neither side below its own floor, which the store's
+   * The same share with neither side below `MIN_PANE_PX`, which the store's
    * share floor cannot express.
    *
    * Halved rather than refused when the split is too small to give both sides
    * that much: an even split is the best the space allows, and a divider that
    * will not move at all reads as broken. That case starts around a 600px
-   * split, which is a window narrower than the app opens at — and sooner with
-   * settings on one side, which is the wider floor and the reason the two are
-   * clamped separately rather than symmetrically.
+   * split, which is a window narrower than the app opens at.
    */
   const held = (share: number): number => {
     if (!row) return share;
     const span = self.current?.parentElement?.getBoundingClientRect().width;
     if (!span) return share;
-    const first = Math.min(floors[0] / span, 0.5);
-    const second = Math.min(floors[1] / span, 0.5);
-    return Math.min(Math.max(share, first), 1 - second);
+    const floor = Math.min(MIN_PANE_PX / span, 0.5);
+    return Math.min(Math.max(share, floor), 1 - floor);
   };
 
   return (

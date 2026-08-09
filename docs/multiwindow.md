@@ -95,18 +95,13 @@ somebody's, including the one this opened, and the last pane cannot be closed â€
 so the empty window is the state before the first pane of a run and nothing
 returns to it.
 
-**Not every pane holds a conversation.** The settings pane is a leaf of the same
-tree whose id is deliberately absent from `views` â€” it splits, it takes a
-divider, it closes and it moves focus like any other, and everything that walks
-the panes looking for a conversation asks `views` and passes over it. It is not
-written down, for the reason the tree is written down at all: a pane is found
-again by what it holds, and this holds no conversation. It also needs more room
-than one, so a divider beside it stops sooner (`MIN_SETTINGS_PX`).
-
-That leaves "the pane in focus" and "the pane the reader is reading in" as two
-different questions. `chatPane` answers the second, and it is the one the
-sidebar's highlight, the status bar, the search scope, a dropped file, a channel
-picked in the sidebar and a split all wanted all along.
+**Every pane holds a conversation.** Settings was briefly a leaf of this tree
+that did not, and it is worth saying what that cost: a floor of its own for the
+divider beside it, `toStored` having to drop it, and "the pane in focus" and
+"the pane the reader is reading in" becoming two questions where the sidebar's
+highlight, the status bar, the search scope and a dropped file had only ever
+wanted one. It is a dialog over the layout now, and the tree is back to holding
+exactly the conversations it is written down as.
 
 What is not written down is where a pane was looking: the scroll position, the
 open inspector, and which pane had focus. The first pane in reading order takes

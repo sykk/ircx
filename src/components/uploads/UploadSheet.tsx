@@ -8,13 +8,19 @@ import {
 } from "@/components/onboarding/fields";
 import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import type { UploadMethod, UploadProvider } from "@/types";
+import type { UploadProvider } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
-const METHODS: { value: UploadMethod; label: string }[] = [
-  { value: "PUT", label: "PUT — the address names the file" },
-  { value: "POST", label: "POST — the provider names the file" },
+/** How the file is put in the request. The first two send it as the body, which
+ * is what storage and self-hosted boxes take; the third sends it in a field,
+ * which is what the hosts that ask for no account take. */
+type Shape = "put" | "post" | "form";
+
+const SHAPES: { value: Shape; label: string }[] = [
+  { value: "put", label: "PUT — the address names the file" },
+  { value: "post", label: "POST — the provider names the file" },
+  { value: "form", label: "POST a form — the host takes an upload form" },
 ];
 
 /** How the provider is convinced to accept the file. Two answers, and they
@@ -47,23 +53,45 @@ function savedFor(provider: UploadProvider): Kind | null {
  * so the field starts empty and an empty field means "leave it alone". */
 interface Draft {
   endpoint: string;
-  method: UploadMethod;
+  shape: Shape;
   kind: Kind;
   authHeader: string;
   region: string;
   accessKeyId: string;
   token: string;
+  fileField: string;
+  fields: string;
 }
 
 const EMPTY: Draft = {
   endpoint: "",
-  method: "PUT",
+  shape: "put",
   kind: "header",
   authHeader: "Authorization",
   region: "us-east-1",
   accessKeyId: "",
   token: "",
+  fileField: "fileToUpload",
+  fields: "",
 };
+
+/** `reqtype=fileupload, time=1h` as the host wants it, in the order it was
+ * typed. A pair with no `=` is a name the user has not finished typing, not a
+ * field with an empty value, so it waits rather than being sent. */
+function parseFields(text: string): [string, string][] {
+  return text
+    .split(",")
+    .map((pair) => pair.split("="))
+    .flatMap(([name, ...rest]) =>
+      name === undefined || name.trim() === "" || rest.length === 0
+        ? []
+        : [[name.trim(), rest.join("=").trim()] as [string, string]],
+    );
+}
+
+function showFields(fields: [string, string][]): string {
+  return fields.map(([name, value]) => `${name}=${value}`).join(", ");
+}
 
 /**
  * Where attachments go before their link is sent.
@@ -131,17 +159,27 @@ function Sheet() {
         setBusy(false);
         return;
       }
+      const asForm = !signing && draft.shape === "form";
+      if (asForm && draft.fileField.trim() === "") {
+        setError("A form upload needs the name of the field the file goes in.");
+        setBusy(false);
+        return;
+      }
       await ipc.saveUploadProvider({
         endpoint,
         // A signature covers the method, so a signed upload is a PUT and the
-        // choice does not apply to it.
-        method: signing ? "PUT" : draft.method,
+        // choice does not apply to it. A form is a POST for the same reason:
+        // the field names are part of the request.
+        method: signing || draft.shape === "put" ? "PUT" : "POST",
         authHeader: signing ? null : draft.authHeader.trim() || null,
         // Empty means the stored one stands, which is what lets the endpoint be
         // corrected without retyping a secret nobody can see.
         token: draft.token === "" ? null : draft.token,
         s3: signing
           ? { region: draft.region.trim() || "us-east-1", accessKeyId: draft.accessKeyId.trim() }
+          : null,
+        form: asForm
+          ? { fileField: draft.fileField.trim(), fields: parseFields(draft.fields) }
           : null,
       });
       closeSheet(false);
@@ -211,10 +249,29 @@ function Sheet() {
               {draft.kind === "header" && (
                 <SelectField
                   label="Method"
-                  value={draft.method}
-                  options={METHODS}
-                  onChange={(method) => setDraft({ ...draft, method })}
+                  value={draft.shape}
+                  options={SHAPES}
+                  onChange={(shape) => setDraft({ ...draft, shape })}
                 />
+              )}
+              {draft.kind === "header" && draft.shape === "form" && (
+                <>
+                  <TextField
+                    label="File field"
+                    value={draft.fileField}
+                    onChange={(fileField) => setDraft({ ...draft, fileField })}
+                    placeholder="fileToUpload"
+                    hint="The field the file goes in. `fileToUpload` for catbox and litterbox, `file` for the 0x0.st family."
+                  />
+                  <TextField
+                    optional
+                    label="Other fields"
+                    value={draft.fields}
+                    onChange={(fields) => setDraft({ ...draft, fields })}
+                    placeholder="reqtype=fileupload, time=1h"
+                    hint="Whatever else the host wants told, sent in the order you type them."
+                  />
+                </>
               )}
             </Group>
 
@@ -309,12 +366,14 @@ function secretHint(wanted: Kind | null, saved: Kind | null): string {
 function fromProvider(provider: UploadProvider): Draft {
   return {
     endpoint: provider.endpoint,
-    method: provider.method,
+    shape: provider.form ? "form" : provider.method === "PUT" ? "put" : "post",
     kind: provider.s3 ? "s3" : "header",
     authHeader: provider.authHeader ?? "",
     region: provider.s3?.region ?? EMPTY.region,
     accessKeyId: provider.s3?.accessKeyId ?? "",
     token: "",
+    fileField: provider.form?.fileField ?? EMPTY.fileField,
+    fields: showFields(provider.form?.fields ?? []),
   };
 }
 

@@ -1482,6 +1482,7 @@ mod upload_provider {
             token: Some("Bearer sekrit".into()),
             token_saved: false,
             s3: None,
+            form: None,
         }
     }
 
@@ -1511,6 +1512,45 @@ mod upload_provider {
         assert_eq!(
             store.upload_token().unwrap().as_deref(),
             Some("wJalrXUtnFEMI")
+        );
+    }
+
+    /// A form host is read back with the fields it was saved with, in order:
+    /// catbox will not take the file without `reqtype`, and the order is what
+    /// the user typed.
+    #[test]
+    fn a_form_provider_reads_back_its_fields() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                endpoint: "https://litterbox.catbox.moe/resources/internals/api.php".into(),
+                method: UploadMethod::Post,
+                auth_header: None,
+                token: None,
+                form: Some(ircx_ipc::FormUpload {
+                    file_field: "fileToUpload".into(),
+                    fields: vec![
+                        ("reqtype".into(), "fileupload".into()),
+                        ("time".into(), "1h".into()),
+                    ],
+                }),
+                ..provider()
+            })
+            .unwrap();
+
+        let form = store
+            .upload_provider()
+            .unwrap()
+            .expect("a provider")
+            .form
+            .expect("the form");
+        assert_eq!(form.file_field, "fileToUpload");
+        assert_eq!(
+            form.fields,
+            vec![
+                ("reqtype".to_owned(), "fileupload".to_owned()),
+                ("time".to_owned(), "1h".to_owned())
+            ]
         );
     }
 

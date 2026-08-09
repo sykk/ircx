@@ -8,7 +8,9 @@
 
 use std::path::Path;
 
-use ircx_ipc::{FileToUpload, S3Credentials, UploadMethod, UploadProvider, UploadedFile};
+use ircx_ipc::{
+    FileToUpload, FormUpload, S3Credentials, UploadMethod, UploadProvider, UploadedFile,
+};
 use ircx_net::http::{
     head, signing_target, upload, FetchPolicy, HttpError, UploadMethod as NetMethod, UploadPolicy,
 };
@@ -29,6 +31,14 @@ const MAX_BYTES: u64 = 25 * 1024 * 1024;
 /// Two people uploading `screenshot.png` must not overwrite each other, and a
 /// provider addressed by path has no other way to keep them apart.
 const PREFIX_BYTES: usize = 8;
+
+/// Random bytes naming the boundary between the parts of a form upload.
+///
+/// The boundary has to be a run the file does not contain, and sixteen random
+/// bytes is not a run anything contains by accident. Guessing it is not the
+/// threat — the file is the user's own — so this is about collision, not
+/// secrecy.
+const BOUNDARY_BYTES: usize = 16;
 
 /// What the provider is told the file is.
 ///
@@ -170,11 +180,26 @@ pub async fn send_file(app: &App, path: &str) -> Result<UploadedFile, String> {
 
     let mut random = [0u8; PREFIX_BYTES];
     getrandom(&mut random)?;
-    let url = endpoint_for(&provider.endpoint, &object_name(&name, &random));
+    let stored_as = object_name(&name, &random);
+    let url = endpoint_for(&provider.endpoint, &stored_as);
 
     let host = host_of(&provider.endpoint);
-    let policy = policy(&provider, &name, &url, &bytes, app)?;
-    let answer = upload(&url, &bytes, &policy)
+    let mut policy = policy(&provider, &name, &url, &bytes, app)?;
+    // A form host takes the file in a named field, so what goes on the wire is
+    // not what came off the disk, and the type names the boundary between the
+    // parts rather than the file.
+    let body = match provider.form.as_ref() {
+        Some(form) => {
+            let mut random = [0u8; BOUNDARY_BYTES];
+            getrandom(&mut random)?;
+            let boundary = sigv4::hex(&random);
+            policy.method = NetMethod::Post;
+            policy.content_type = format!("multipart/form-data; boundary={boundary}");
+            form_body(form, &stored_as, content_type(&name), &bytes, &boundary)
+        }
+        None => bytes,
+    };
+    let answer = upload(&url, &body, &policy)
         .await
         .map_err(|error| refusal(&name, &host, error))?;
 
@@ -246,6 +271,53 @@ fn host_of(endpoint: &str) -> String {
         .to_owned()
 }
 
+/// A `multipart/form-data` body: the fields the host wants told, then the file
+/// in the field it wants it in.
+///
+/// Nothing here is escaped, because nothing here can be: a quote or a line
+/// break inside a header would end the part early and let the rest be read as
+/// another one. They are dropped instead, by `field_safe`, which is the only
+/// answer that keeps the request a request.
+fn form_body(
+    form: &FormUpload,
+    filename: &str,
+    content_type: &str,
+    file: &[u8],
+    boundary: &str,
+) -> Vec<u8> {
+    let mut body = Vec::with_capacity(file.len() + 512);
+    for (name, value) in &form.fields {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n",
+                field_safe(name),
+                field_safe(value)
+            )
+            .as_bytes(),
+        );
+    }
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n\
+             Content-Type: {content_type}\r\n\r\n",
+            field_safe(&form.file_field),
+            field_safe(filename)
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(file);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    body
+}
+
+/// What is left of a field name or value once the characters that would end a
+/// header are gone.
+fn field_safe(text: &str) -> String {
+    text.chars()
+        .filter(|c| !matches!(c, '"' | '\r' | '\n' | '\0'))
+        .collect()
+}
+
 /// Which credential a provider carries. The two share one keyring slot and
 /// nothing else: a bearer token cannot sign a request, and a secret access key
 /// is not a bearer token.
@@ -283,6 +355,16 @@ pub fn saved(stored: Option<&UploadProvider>) -> Option<Credential> {
 /// first file with nothing to point at but a settings sheet that had said the
 /// secret was saved.
 pub fn refuse_save(provider: &UploadProvider, saved: Option<Credential>) -> Option<String> {
+    // The two shapes are exclusive. A signature covers the request the file is
+    // the body of; a form upload is not that request, so signing one would be a
+    // signature over something nobody sends.
+    if provider.s3.is_some() && provider.form.is_some() {
+        return Some(
+            "A signed provider sends the file as the request body, so it cannot also send it as \
+             a form. Choose one."
+                .to_owned(),
+        );
+    }
     let needs = needs(provider)?;
     if provider.token.as_deref().is_some_and(|t| !t.is_empty()) {
         return None;
@@ -589,6 +671,7 @@ mod tests {
                 region: "us-east-1".into(),
                 access_key_id: "AKIA".into(),
             }),
+            form: None,
         }
     }
 
@@ -659,6 +742,186 @@ mod tests {
     fn a_provider_that_needs_nothing_is_saved_as_it_stands() {
         assert_eq!(refuse_save(&provider(None, false), None), None);
         assert_eq!(refuse_save(&provider(Some(""), false), None), None);
+    }
+
+    fn litterbox() -> FormUpload {
+        FormUpload {
+            file_field: "fileToUpload".into(),
+            fields: vec![
+                ("reqtype".into(), "fileupload".into()),
+                ("time".into(), "1h".into()),
+            ],
+        }
+    }
+
+    fn sent(form: &FormUpload, filename: &str, file: &[u8]) -> String {
+        String::from_utf8_lossy(&form_body(form, filename, "image/png", file, "abcd1234"))
+            .into_owned()
+    }
+
+    /// What litterbox and catbox read: the fields they want told, then the file
+    /// in the field they want it in, each part opened by the boundary the
+    /// content type names.
+    #[test]
+    fn a_form_upload_carries_the_fields_the_host_wants() {
+        let body = sent(&litterbox(), "01-a.png", b"the bytes");
+
+        assert!(body.starts_with("--abcd1234\r\n"), "{body}");
+        assert!(
+            body.contains("Content-Disposition: form-data; name=\"reqtype\"\r\n\r\nfileupload"),
+            "{body}"
+        );
+        assert!(body.contains("name=\"time\"\r\n\r\n1h"), "{body}");
+        assert!(
+            body.contains(
+                "name=\"fileToUpload\"; filename=\"01-a.png\"\r\nContent-Type: image/png"
+            ),
+            "{body}"
+        );
+        assert!(body.contains("the bytes"), "{body}");
+        assert!(body.ends_with("\r\n--abcd1234--\r\n"), "{body}");
+    }
+
+    /// The fields are the user's own text going into headers. A quote or a line
+    /// break would end the part early and let the rest be read as another one.
+    #[test]
+    fn a_field_cannot_open_a_part_of_its_own() {
+        let form = FormUpload {
+            file_field: "file".into(),
+            fields: vec![(
+                "reqtype".into(),
+                "x\r\n--abcd1234\r\nContent-Disposition: form-data; name=\"sneak\"".into(),
+            )],
+        };
+
+        let body = sent(&form, "01-a.png", b"x");
+
+        // A delimiter only counts where a line ended before it, so what is left
+        // of the value sits inside its own part as text: two delimiters, the
+        // one opening the file part and the one closing the body.
+        assert_eq!(body.matches("\r\n--abcd1234").count(), 2, "{body}");
+        assert!(
+            !body.contains("\r\nContent-Disposition: form-data; name=\"sneak\""),
+            "{body}"
+        );
+    }
+
+    /// The file's own bytes are never escaped, so a file holding what looks like
+    /// the boundary would end its own part. Sixteen random bytes is what makes
+    /// that not happen rather than an escape nobody can write.
+    #[test]
+    fn the_file_goes_in_whole() {
+        let file: Vec<u8> = (0u8..=255).collect();
+        let body = form_body(
+            &litterbox(),
+            "01-a.bin",
+            "application/octet-stream",
+            &file,
+            "zz",
+        );
+
+        let start = body.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        assert!(
+            body[start..].starts_with(&file) || body.windows(file.len()).any(|w| w == file),
+            "the file is not in the body byte for byte"
+        );
+    }
+
+    /// A signature covers the request the file is the body of, and a form
+    /// upload is not that request.
+    #[test]
+    fn a_signed_form_upload_is_refused() {
+        let mut provider = provider(None, true);
+        provider.form = Some(litterbox());
+
+        let said = refuse_save(&provider, Some(Credential::S3)).expect("refused");
+        assert!(said.contains("cannot also send it as a form"), "{said}");
+    }
+}
+
+/// Against litterbox, because a form the client builds and a form a host
+/// accepts are different questions — and because this is the shape that exists
+/// for people who will not open an account.
+///
+/// Ignored by default so `cargo test --workspace` dials nothing. It uploads a
+/// few bytes that expire in an hour:
+///
+/// ```text
+/// cargo test -p ircx --lib litterbox -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+mod litterbox {
+    use super::*;
+    use ircx_net::http::upload;
+
+    const ENDPOINT: &str = "https://litterbox.catbox.moe/resources/internals/api.php";
+
+    fn provider() -> UploadProvider {
+        UploadProvider {
+            endpoint: ENDPOINT.into(),
+            // Ignored: a form provider is a POST whatever this says, and saying
+            // PUT here is the cover for that.
+            method: UploadMethod::Put,
+            auth_header: None,
+            token: None,
+            token_saved: false,
+            s3: None,
+            form: Some(FormUpload {
+                file_field: "fileToUpload".into(),
+                fields: vec![
+                    ("reqtype".into(), "fileupload".into()),
+                    ("time".into(), "1h".into()),
+                ],
+            }),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "uploads a file to litterbox.catbox.moe"]
+    async fn a_form_upload_reaches_a_real_host_and_comes_back_readable() {
+        let provider = provider();
+        let form = provider.form.clone().expect("a form");
+        let file = b"the bytes ircx put there".to_vec();
+        let name = object_name("walk.png", &[0xa1, 0xb2, 0xc3, 0xd4]);
+
+        let boundary = sigv4::hex(&[0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78]);
+        let body = form_body(&form, &name, content_type("walk.png"), &file, &boundary);
+        let policy = UploadPolicy {
+            method: NetMethod::Post,
+            content_type: format!("multipart/form-data; boundary={boundary}"),
+            headers: Vec::new(),
+            ..UploadPolicy::default()
+        };
+
+        let answer = upload(ENDPOINT, &body, &policy)
+            .await
+            .expect("the host takes the form");
+        println!("PASS  HTTP {}", answer.status);
+
+        // The reply is the address, which is what a POST host's reply is for.
+        let link = link_from(&answer.body, ENDPOINT);
+        assert!(link.starts_with("https://"), "{link}");
+        assert_ne!(link, ENDPOINT, "the host answered with an address");
+        println!("PASS  link {link}");
+
+        // The question the client asks before it puts a link in a channel.
+        assert_eq!(unreadable(&link).await, None, "the link would be sent");
+
+        // And the one the attachment line asks when somebody clicks fetch.
+        // filebin answers this with its own HTML, which is why that host was
+        // dropped and this test exists.
+        let read = ircx_net::http::fetch(
+            &link,
+            &FetchPolicy {
+                accept: "image/png, image/jpeg, image/gif, image/webp".to_owned(),
+                ..FetchPolicy::default()
+            },
+        )
+        .await
+        .expect("anybody can read it");
+        assert_eq!(read.body, file, "what came back is what went in");
+        assert_eq!(read.content_type.as_deref(), Some("image/png"));
+        println!("PASS  the preview would draw it");
     }
 }
 

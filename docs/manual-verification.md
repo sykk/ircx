@@ -1364,6 +1364,79 @@ and what survives the reboot. keyutils stays in front of it as the cache.
   promoted, so the passwords saved before this change are typed once more after
   the next reboot and persistent from then on.
 
+### A host that asks for no account
+
+**Walked** on 2026-08-08, against four public hosts, because the question was
+not which one to configure but whether this client could describe any of them.
+It could not, and the reason is the finding: ircx sends the file as the whole
+request body, which is what storage and self-hosted boxes take and what no
+public host takes. They want `multipart/form-data`.
+
+What each one did with the request ircx actually sends:
+
+| host | shape it takes | what happened |
+|---|---|---|
+| filebin.net | the body | uploads, `201`, and the link opens in a browser |
+| temp.sh | a form | landing page, download behind a button |
+| 0x0.st, transfer.sh, oshi.at, bashupload.com | a form, mostly | unreachable from here — no TCP, both stacks |
+| litter.catbox.moe | a form | `200`, and the reply is the link |
+
+**filebin was configured and walked in the window before it was dropped**, and
+it is worth writing down because the upload was never the problem. The file
+arrived, the client's `HEAD` came back `200`, the link went to the channel, and
+clicking `fetch` on the attachment line said:
+
+```text
+https://filebin.net/…/a7f3c1d90e5b2648-upload-test.png is text/html,
+not an image — open it in your browser
+```
+
+Which is true. filebin serves its own landing page to `User-Agent: ircx/…` and
+gives curl a `302` to the bytes. It is not content negotiation — the preview's
+own `Accept: image/png, image/jpeg, image/gif, image/webp` changes nothing — so
+there is no configuration that fixes it. A host that will not hand a
+non-browser the file cannot be previewed by a client, and the sentence the
+attachment line prints is the right one to print.
+
+**litterbox is the one that works**, and the loop is covered by an ignored test
+against the real service rather than by a mock:
+
+```text
+$ cargo test -p ircx --lib litterbox -- --ignored --nocapture
+PASS  HTTP 200
+PASS  link https://litter.catbox.moe/lqzxyq.png
+PASS  the preview would draw it
+```
+
+The last line asks the link the question the attachment line asks, with the
+preview's own `Accept`, and gets `image/png` back byte for byte. That is the
+difference between the two hosts, stated as a test that will notice if it
+changes.
+
+**The walk found a defect that no local server would have.** litterbox frames
+its reply, and `upload` read the body without asking whether it was chunked —
+unlike `fetch` beside it in the same file. So the link came back as
+
+```text
+24\r\nhttps://litter.catbox.moe/4hlzia.png\r\n0
+```
+
+which is not a URL, so `link_from` fell back to the request URL and the client
+would have posted **the API endpoint** into the conversation. Chunked replies
+are ordinary; every loopback test in `http_upload.rs` had sent a
+`Content-Length` and none had caught it. Fixed in `ircx-net`, with a loopback
+test that scripts the framing.
+
+**Not walked:**
+- **The drop itself.** `onFileDrop` needs a real drag onto the window and the
+  harness cannot synthesize one — `window.mjs` clicks coordinates and types, and
+  neither is a drag-and-drop from a file manager. Everything downstream of the
+  drop is covered; the drop event reaching the confirmation is not.
+- **catbox proper and the 0x0.st family.** The same shape as litterbox, and the
+  field names are in the sheet's hint, but only litterbox has been sent a file.
+- **A form host that wants a credential.** The two are orthogonal in the code
+  and nothing has exercised the combination.
+
 ## SCRAM
 
 **SCRAM-SHA-256 can be walked locally; SCRAM-SHA-512 needs Libera.** `ergo`

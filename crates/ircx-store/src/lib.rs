@@ -666,6 +666,9 @@ impl Store {
         // says. A window set for a network that is gone decides nothing and
         // reads as one somebody would have to find to change.
         tx.execute("DELETE FROM retention WHERE network = ?1", params![id])?;
+        // Mute is a setting too, and a conversation muted on a network that is
+        // gone is one nobody can find to unmute.
+        tx.execute("DELETE FROM muted WHERE network = ?1", params![id])?;
         tx.commit()?;
         Ok(())
     }
@@ -761,6 +764,79 @@ impl Store {
                 params![network, target, text],
             )?;
         }
+        Ok(())
+    }
+
+    /// Mutes a conversation, or the whole network when `target` is `None`.
+    ///
+    /// A row is the whole state, so unmuting deletes rather than writing a
+    /// false. Nothing else is stored against the key and a table of rows saying
+    /// "not muted" would be a second way to say what absence already says.
+    pub fn set_muted(
+        &self,
+        network: &str,
+        target: Option<&str>,
+        muted: bool,
+    ) -> Result<(), StoreError> {
+        let target = target.unwrap_or(DEFAULT_TARGET);
+        let conn = self.writing();
+        if muted {
+            conn.execute(
+                "INSERT OR IGNORE INTO muted (network, target) VALUES (?1, ?2)",
+                params![network, target],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM muted WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
+                params![network, target],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// What is muted on one network, as the targets themselves — an empty
+    /// string among them being the network itself. What a session holds, so it
+    /// can answer per message without going to disk.
+    pub fn muted_targets(&self, network: &str) -> Result<Vec<String>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare("SELECT target FROM muted WHERE network = ?1")?;
+        let targets = statement
+            .query_map(params![network], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(targets)
+    }
+
+    /// Everything muted, on every network, with the network named.
+    ///
+    /// The name travels with the id because the settings window has no network
+    /// list to look one up in — it runs no event bridge — and a page listing
+    /// hashes is a page nobody can act on. Ordered so the list does not move
+    /// under somebody halfway down it.
+    pub fn muted_conversations(&self) -> Result<Vec<(String, String, String)>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare(
+            "SELECT m.network, COALESCE(n.name, m.network), m.target
+             FROM muted m LEFT JOIN networks n ON n.id = m.network
+             ORDER BY COALESCE(n.name, m.network), m.target",
+        )?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Moves a mute to the nick a query was renamed to.
+    ///
+    /// A mute follows a rename the way a draft does. The alternative fails in
+    /// the direction that interrupts you: a bot muted for its build output
+    /// renames itself and starts being loud again, for a reason nobody watching
+    /// the sidebar could work out.
+    pub fn move_muted(&self, network: &str, from: &str, to: &str) -> Result<(), StoreError> {
+        self.writing().execute(
+            "UPDATE OR REPLACE muted SET target = ?3
+             WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
+            params![network, from, to],
+        )?;
         Ok(())
     }
 

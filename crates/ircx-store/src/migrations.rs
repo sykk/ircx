@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     TIMELINE_NOCASE,
     UPLOAD_FORM,
     HIGHLIGHT_WORDS,
+    MUTED,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -343,6 +344,20 @@ END;
 const HIGHLIGHT_WORDS: &str = r#"
 CREATE TABLE highlight_word (
     word TEXT PRIMARY KEY COLLATE NOCASE
+);
+"#;
+
+/// Conversations the reader does not want interrupting them.
+///
+/// Keyed the way `retention` is, and an empty target means the network itself
+/// rather than one conversation on it. A row is the whole of it: mute is a
+/// boolean, so present and absent are the two states and there is nothing to
+/// store beside the key.
+const MUTED: &str = r#"
+CREATE TABLE muted (
+    network TEXT NOT NULL,
+    target  TEXT NOT NULL,
+    PRIMARY KEY (network, target)
 );
 "#;
 

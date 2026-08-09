@@ -83,4 +83,5 @@ export const CTF_OPS: Channel = {
   memberCount: CTF_OPS_MEMBERS.length,
   unread: 0,
   highlights: 0,
+  muted: false,
 };

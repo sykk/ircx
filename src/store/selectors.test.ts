@@ -44,6 +44,7 @@ function channel(net: string, name: string): Channel {
     memberCount: 0,
     unread: 0,
     highlights: 0,
+    muted: false,
   };
 }
 

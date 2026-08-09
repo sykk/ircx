@@ -203,6 +203,8 @@ pub fn run() {
             commands::set_retention,
             commands::highlight_words,
             commands::set_highlight_words,
+            commands::muted_conversations,
+            commands::set_muted,
             commands::export_archive,
             commands::delete_archive,
             commands::announce,

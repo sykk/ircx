@@ -32,6 +32,8 @@
 //! set_retention(network, target, days)        -> ()
 //! highlight_words()                           -> Vec<String>
 //! set_highlight_words(words: Vec<String>)     -> ()
+//! muted_conversations()                       -> Vec<MutedConversation>
+//! set_muted(network, target, muted)           -> ()
 //! export_archive(scope, path)                 -> u64
 //! delete_archive(scope)                       -> ()
 //! ```

@@ -229,6 +229,31 @@ describe("SidebarNetworks", () => {
     expect(loud.className).toContain("bg-[var(--badge-highlight-bg)]");
   });
 
+  /** The row is where somebody asks why a channel never went loud. The settings
+   * window only knows the one conversation the client was on, so without this a
+   * mute made elsewhere reads as a broken channel. */
+  it("marks a muted conversation, and leaves the count beside it", () => {
+    seedStore(
+      [makeNetwork("libera")],
+      [
+        makeChannel("libera", "#loud", { unread: 3 }),
+        makeChannel("libera", "#quiet", { unread: 3, muted: true }),
+      ],
+      [makeQuery("libera", "buildbot", { unread: 1, muted: true })],
+    );
+    render(<SidebarNetworks />);
+
+    const quiet = screen.getByRole("treeitem", { name: "#quiet" });
+    expect(within(quiet).getByLabelText("Muted")).toBeTruthy();
+    expect(within(quiet).getByText("3")).toBeTruthy();
+
+    const loud = screen.getByRole("treeitem", { name: "#loud" });
+    expect(within(loud).queryByLabelText("Muted")).toBeNull();
+
+    const query = screen.getByRole("treeitem", { name: "buildbot" });
+    expect(within(query).getByLabelText("Muted")).toBeTruthy();
+  });
+
   it("marks keyed and secret channels as restricted, public ones not", () => {
     seedStore(
       [makeNetwork("libera")],

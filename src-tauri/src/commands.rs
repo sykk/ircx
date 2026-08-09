@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
-    FileToUpload, HistoryRequest, InstalledPlugin, Member, NetworkConfig, NetworkId, PluginGrants,
-    PluginPermissionInfo, Query, SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
-    UploadedFile,
+    FileToUpload, HistoryRequest, InstalledPlugin, Member, MutedConversation, NetworkConfig,
+    NetworkId, PluginGrants, PluginPermissionInfo, Query, SearchHit, SearchRequest, TargetName,
+    ThemeSource, UploadProvider, UploadedFile,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::{Emitter, Manager, State};
@@ -445,6 +445,31 @@ pub async fn highlight_words(app: State<'_, App>) -> Result<Vec<String>, String>
 #[tauri::command]
 pub async fn set_highlight_words(app: State<'_, App>, words: Vec<String>) -> Result<(), String> {
     app.set_highlight_words(words).await
+}
+
+/// Everything the reader has muted, with the network named.
+#[tauri::command]
+pub async fn muted_conversations(app: State<'_, App>) -> Result<Vec<MutedConversation>, String> {
+    let rows = app.store().muted_conversations().map_err(describe)?;
+    Ok(rows
+        .into_iter()
+        .map(|(network, network_name, target)| MutedConversation {
+            network,
+            network_name,
+            target,
+        })
+        .collect())
+}
+
+/// Mutes a conversation, or the whole network when `target` is `None`.
+#[tauri::command]
+pub async fn set_muted(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: Option<TargetName>,
+    muted: bool,
+) -> Result<(), String> {
+    app.set_muted(&network, target.as_ref(), muted).await
 }
 
 /// Writes the archive to `path` as JSON Lines and answers with how many bytes

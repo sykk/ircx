@@ -663,3 +663,71 @@ fn a_word_added_later_does_not_reach_back_over_the_badge() {
         "the second line counted and the first was left where it was"
     );
 }
+
+/// Mute keeps the badge quiet and leaves the count alone. A muted channel is
+/// still unread; not counting it at all would be ignoring it, which is a
+/// different act.
+#[test]
+fn a_muted_channel_counts_what_arrived_without_going_loud() {
+    let mut session = session();
+    session.set_muted(vec![CHANNEL.into()]);
+    let arrived = session.on_line(&format!(
+        ":sable!s@h PRIVMSG {CHANNEL} :{OWN_NICK}: are you there"
+    ));
+
+    assert_eq!(highlights(&arrived), Some(0), "the badge stayed quiet");
+    assert_eq!(unread(&arrived), Some(1), "the message is still unread");
+}
+
+/// Muting the network mutes the conversations on it, including ones opened
+/// afterwards.
+#[test]
+fn muting_the_network_mutes_a_channel_on_it() {
+    let mut session = session();
+    session.set_muted(vec![String::new()]);
+    let arrived = session.on_line(&format!(
+        ":sable!s@h PRIVMSG {CHANNEL} :{OWN_NICK}: are you there"
+    ));
+
+    assert_eq!(highlights(&arrived), Some(0));
+}
+
+/// What mute takes away is the interruption. The rule still ran, the archive
+/// still has the raise, and the message still says which plugin thought so —
+/// a conversation unmuted next week shows what was worth reading in it.
+#[test]
+fn a_muted_channel_still_records_what_a_rule_raised() {
+    let mut session = session();
+    session.set_muted(vec![CHANNEL.into()]);
+    let lines = [format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"
+    )];
+
+    assert_eq!(
+        asked(&mut session, &lines),
+        ["deploy failed on main"],
+        "the rule is asked in a muted conversation, because mute is not about the record"
+    );
+    // Nothing at all rather than a count of zero: the channel is not re-emitted,
+    // because the raise changed nothing about it. What it did change is in the
+    // archive and on the message, neither of which is the session's to say.
+    assert_eq!(
+        highlights(&session.raise(CHANNEL)),
+        None,
+        "the raise reached the archive without reaching the badge"
+    );
+}
+
+/// The count the sidebar draws its badge from, as `highlights` reads the loud
+/// one beside it.
+fn unread(actions: &[Action]) -> Option<u32> {
+    actions.iter().rev().find_map(|action| match action {
+        Action::Emit(event) => match event.as_ref() {
+            IrcxEvent::ChannelUpdated { channel } if channel.name == CHANNEL => {
+                Some(channel.unread)
+            }
+            _ => None,
+        },
+        _ => None,
+    })
+}

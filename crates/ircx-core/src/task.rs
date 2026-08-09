@@ -201,6 +201,12 @@ pub enum SessionCommand {
     HighlightWordsChanged {
         words: Vec<String>,
     },
+    /// The reader muted or unmuted something on this network. The whole list,
+    /// because a session holds the answer rather than asking per message, and
+    /// replacing it is one message where a diff would be two kinds.
+    MutedChanged {
+        muted: Vec<TargetName>,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -398,6 +404,17 @@ async fn drive(
     match context.store.highlight_words() {
         Ok(words) => session.set_highlight_words(words),
         Err(error) => warn!(%error, "could not read the words that raise a conversation"),
+    }
+    // Before the first message rather than after it. A mute that cannot be read
+    // leaves the conversation loud, which is the state it was in before anybody
+    // muted it.
+    match context.store.muted_targets(&context.network) {
+        // Nothing is drawn yet, so the actions this returns describe channels
+        // no window has heard of.
+        Ok(muted) => {
+            session.set_muted(muted);
+        }
+        Err(error) => warn!(%error, "could not read what is muted on this network"),
     }
     let remembered = match context.store.open_targets(&context.network) {
         Ok(targets) => targets,
@@ -610,6 +627,7 @@ async fn apply(
             session.set_highlight_words(words);
             Vec::new()
         }
+        SessionCommand::MutedChanged { muted } => session.set_muted(muted),
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -781,7 +799,10 @@ impl Context {
                             active,
                             ..
                         } => self.record_reaction(message, nick, emoji, *active).await,
-                        IrcxEvent::QueryRenamed { from, to, .. } => self.move_draft(from, to).await,
+                        IrcxEvent::QueryRenamed { from, to, .. } => {
+                            self.move_draft(from, to).await;
+                            self.move_muted(from, to).await;
+                        }
                         _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
@@ -1123,6 +1144,31 @@ impl Context {
         self.archive
             .move_draft(self.network.clone(), from.to_owned(), to.to_owned())
             .await;
+    }
+
+    /// Takes a mute to the nick a query was renamed to, and tells the session,
+    /// which is holding the old name and would go on being quiet about a
+    /// conversation nobody is in.
+    ///
+    /// A mute follows a rename the way a draft does. Leaving it behind fails in
+    /// the direction that interrupts you: a bot muted for its build output
+    /// renames itself and starts being loud again, for a reason nobody watching
+    /// the sidebar could work out.
+    async fn move_muted(&self, from: &str, to: &str) {
+        if let Err(error) = self.store.move_muted(&self.network, from, to) {
+            warn!(%error, "could not take a mute to the renamed query");
+            return;
+        }
+        let muted = match self.store.muted_targets(&self.network) {
+            Ok(muted) => muted,
+            Err(error) => {
+                warn!(%error, "could not re-read what is muted after a rename");
+                return;
+            }
+        };
+        if let Some(inbox) = self.own_inbox.upgrade() {
+            let _ = inbox.send(SessionCommand::MutedChanged { muted }).await;
+        }
     }
 
     /// The archive is the only place a reaction outside the open window

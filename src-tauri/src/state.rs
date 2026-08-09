@@ -430,6 +430,29 @@ impl App {
         Ok(())
     }
 
+    /// Writes a mute and hands the network its new list.
+    ///
+    /// One network rather than all of them, unlike the words: a mute names a
+    /// conversation on a network, and the others hold nothing that changed.
+    pub async fn set_muted(
+        &self,
+        network: &NetworkId,
+        target: Option<&TargetName>,
+        muted: bool,
+    ) -> Result<(), String> {
+        self.store
+            .set_muted(network, target.map(String::as_str), muted)
+            .map_err(describe)?;
+        let held = self.store.muted_targets(network).map_err(describe)?;
+        // Not `tell`, which reports a network that is not connected as an
+        // error: muting a conversation on a network you are not on is a setting
+        // somebody is allowed to change, and the session reads the list when it
+        // next starts.
+        self.tell_if_connected(network, SessionCommand::MutedChanged { muted: held })
+            .await;
+        Ok(())
+    }
+
     /// Tells every running network that this plugin's library entry changed, so
     /// a hook it dropped is asked again.
     ///

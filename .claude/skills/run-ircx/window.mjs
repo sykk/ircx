@@ -45,9 +45,11 @@ import { DatabaseSync } from "node:sqlite";
 
 const SKILL_DIR = fileURLToPath(new URL(".", import.meta.url));
 const ROOT = join(SKILL_DIR, "..", "..", "..");
-/* A fresh worktree rebuilds ~51G of dependencies, so SKILL.md has callers point
- * CARGO_TARGET_DIR at an existing checkout's target. The binary is then not
- * where ROOT would put it. */
+/* The default, which is this worktree's own. `CARGO_TARGET_DIR` is still
+ * honoured for anyone who has set one, but SKILL.md no longer tells callers to
+ * point it at another checkout — a shared target directory hands this script
+ * whichever checkout built last, and the binary it launches is then not the
+ * tree being walked. */
 const TARGET = process.env.CARGO_TARGET_DIR ?? join(ROOT, "target");
 
 const say = (line) => process.stdout.write(`${line}\n`);

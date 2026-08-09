@@ -44,6 +44,13 @@ ircx: http://localhost:5183/ is serving another checkout.
 run, which takes 14 seconds because the dependencies really are shared. A guard
 written for a stale dev server caught a stale binary instead.
 
+**Superseded on 2026-08-09.** The answer above treats the symptom. Sharing a
+target directory also hands `cargo test` another checkout's *test* binaries,
+which is the same fault with no guard in front of it, and the 51G it was buying
+back turned out to be an accumulated directory rather than a build — a fresh
+worktree costs 84 seconds and 7.1 GB. Each worktree builds into its own
+`target/` now, and SKILL.md says so.
+
 ## What refused
 
 A folder at `chmod 500`, which the chooser accepts and the write cannot use.

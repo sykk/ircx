@@ -160,6 +160,38 @@ the spike measured on its own at 793 KiB. The `network-requests` permission
 adds nothing to that: plugins fetch through `ircx-net`, which the binary
 already carried. None of it is touched at launch by a user with no plugins.
 
+### The desktop notification
+
+`tauri-plugin-notification` added **180,832 bytes, 176.6 KiB**: 12,050,112 to
+12,230,944. Measured as a back-to-back pair, the same way the preview fetch and
+the plugin runtime below were — one worktree, one tree, the two builds minutes
+apart, the only difference being the plugin in `src-tauri/Cargo.toml`, its
+`init()` and its `notification:default` capability.
+
+Seven crates: `tauri-plugin-notification` itself, `notify-rust` and the
+platform backends it picks between — `mac-notification-sys`,
+`tauri-winrt-notification` — and `rand` with `rand_chacha` and `rand_core`
+under them. All three platforms' backends are in the tree; only one is compiled
+into a given build.
+
+**It is a third of what the keyring cost** for one field on one form (#446,
+below), and it is the first dependency added since. The frontend half of the
+feature is free by comparison: the decision is `worthNotifying` in
+`src/lib/notifications.ts`, which is a hundred lines of TypeScript inside the
+bundle already being embedded.
+
+**Covers:** `cargo build --release -p ircx`, so the Rust side only — the rows
+under *Size* that include the frontend are `npm run tauri build` and are not
+comparable with this pair.
+
+The first attempt at the baseline measured nothing, and the reason is worth
+writing down: stripping the plugin from `Cargo.toml` while leaving
+`notification:default` in `capabilities/default.json` fails the capability
+check, and `cargo build … | tail` reports that as two lines of output rather
+than as a failure. `stat` then read the binary the *previous* build left in
+place and the pair came out identical. The figure above is from a run with the
+binary deleted first.
+
 ### Where the week to 2026-08-09 went
 
 **798,280 bytes, 779.6 KiB, over 88 merges.** Attributed by rebuilding at

@@ -2,11 +2,12 @@ import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-l
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
+import type * as Ipc from "@/lib/ipc";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { makeMessage } from "@/components/timeline/fixtures";
 import { Composer } from "./Composer";
 
-const { ipcMock } = vi.hoisted(() => ({
+const { ipcMock, chooseFiles } = vi.hoisted(() => ({
   ipcMock: {
     getDraft: vi.fn(),
     setDraft: vi.fn(),
@@ -16,9 +17,18 @@ const { ipcMock } = vi.hoisted(() => ({
     disconnectNetwork: vi.fn(),
     announce: vi.fn(),
   },
+  chooseFiles: vi.fn(),
 }));
 
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn() }));
+// The picker is the one thing here that opens a native window, so it is the one
+// thing replaced; `reasonOr` is the real one, because what it does with a
+// refusal is part of what these tests are checking.
+vi.mock("@/lib/ipc", async (importOriginal) => ({
+  ...(await importOriginal<typeof Ipc>()),
+  ipc: ipcMock,
+  onIrcxEvent: vi.fn(),
+  chooseFiles,
+}));
 
 const KEY = targetKey("libera", "#ctf-ops");
 
@@ -37,6 +47,7 @@ beforeEach(() => {
     timelines: {},
     replyTo: {},
     inputHistory: {},
+    uploadRequest: null,
     members: {
       [KEY]: ["sable", "sableton", "phrack", "nyx"].map((nick) => ({
         nick,
@@ -758,5 +769,49 @@ describe("Composer emoji", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sweat Droplets" }));
 
     expect(box.value).toBe("🍆💦");
+  });
+});
+
+/** The button picks; the confirmation mounted with the app asks. Nothing here
+ * reads a file or sends one. */
+describe("Composer attachments", () => {
+  it("leaves the picked files for the upload confirmation", async () => {
+    chooseFiles.mockResolvedValue(["/home/sable/photo.png", "/home/sable/notes.txt"]);
+    await mount();
+
+    fireEvent.click(screen.getByLabelText("Attach files"));
+
+    await waitFor(() =>
+      expect(useAppStore.getState().uploadRequest).toEqual([
+        "/home/sable/photo.png",
+        "/home/sable/notes.txt",
+      ]),
+    );
+    expect(chooseFiles).toHaveBeenCalledWith("Choose files to send to #ctf-ops");
+  });
+
+  it("asks for nothing when the picker is dismissed", async () => {
+    chooseFiles.mockResolvedValue(null);
+    await mount();
+
+    fireEvent.click(screen.getByLabelText("Attach files"));
+
+    await waitFor(() => expect(chooseFiles).toHaveBeenCalled());
+    expect(useAppStore.getState().uploadRequest).toBeNull();
+  });
+
+  /** A picker that will not open is the composer's refusal to report: it is
+   * where the button is, and no dialog got as far as being drawn. */
+  it("says why the picker would not open", async () => {
+    chooseFiles.mockRejectedValue("The file picker is not available.");
+    await mount();
+
+    fireEvent.click(screen.getByLabelText("Attach files"));
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "The file picker is not available.",
+    );
+    expect(useAppStore.getState().uploadRequest).toBeNull();
   });
 });

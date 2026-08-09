@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { KeyboardEvent } from "react";
 import type { ChatMessage, CommandOutcome } from "@/types";
 import { EmojiPicker } from "@/components/common/EmojiPicker";
-import { ipc } from "@/lib/ipc";
+import { Icon } from "@/components/common/Icon";
+import { chooseFiles, ipc, reasonOr } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useAppStore } from "@/store";
@@ -191,6 +192,24 @@ function ComposerFor({
       typingSentAt.current = now;
       void ipc.setTyping(network, target, true);
     }
+  };
+
+  /** Picked files go to the confirmation a drop gets, which is mounted with the
+   * app and reads the focused pane. Pressing this button focused this pane, so
+   * what was picked is offered to the conversation it was picked from.
+   *
+   * Files only: a folder is not something the upload can send, and the picker
+   * offers one or the other rather than both. */
+  const attach = async () => {
+    let picked: string[] | null;
+    try {
+      picked = await chooseFiles(`Choose files to send to ${target}`);
+    } catch (reason) {
+      setError(reasonOr(reason, "The file picker could not be opened."));
+      return;
+    }
+    if (picked === null) return;
+    useAppStore.getState().setUploadRequest(picked);
   };
 
   const toggleEmojiPicker = () => {
@@ -384,6 +403,17 @@ function ComposerFor({
           className="selectable flex-1 resize-none bg-transparent text-[13px] leading-[1.5] outline-none"
           style={{ color: "var(--text-primary)" }}
         />
+        <button
+          type="button"
+          onClick={() => void attach()}
+          aria-label="Attach files"
+          // Flex rather than the emoji button's line box: an inline SVG sits on
+          // the baseline and would hang the icon a descender below its
+          // neighbour.
+          className="mb-0.5 inline-flex shrink-0 items-center rounded-[var(--radius-sm)] px-1 py-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+        >
+          <Icon name="paperclip" size={16} />
+        </button>
         <span
           className="relative shrink-0 pb-0.5"
           onBlur={(event) => {

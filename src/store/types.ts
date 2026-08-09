@@ -177,6 +177,11 @@ export interface AppState {
   /** The upload provider sheet, which is one for the whole client rather than
    * one per network: it is storage, not a connection. */
   uploadOpen: boolean;
+  /** Paths the composer's attach button picked, waiting for the confirmation a
+   * drop gets. Here because the dialog that asks the question is mounted with
+   * the app rather than inside the pane whose button was pressed; `DropToUpload`
+   * clears this as it takes them. */
+  uploadRequest: string[] | null;
   archiveOpen: boolean;
   /** The network whose channel list is on screen, or null. Held rather than a
    * boolean because a list belongs to the network that answered it. */

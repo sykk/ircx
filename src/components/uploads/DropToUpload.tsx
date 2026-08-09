@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import { formatBytes } from "@/lib/bytes";
 import { ipc, onFileDrop, reasonOr } from "@/lib/ipc";
+import { useAppStore } from "@/store";
 import { useActiveTarget } from "@/store/selectors";
 import type { FileToUpload } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
@@ -31,6 +32,20 @@ export function DropToUpload() {
    * copied rather than sent. */
   const [dead, setDead] = useState<{ link: string; why: string } | null>(null);
 
+  // Described before the confirmation is drawn, so the size and the refusal are
+  // things the user reads rather than discovers on clicking. Both ways in ask
+  // the same question of the same files, so both arrive here.
+  const describe = useCallback((paths: string[]) => {
+    setError(null);
+    void ipc.describeUploads(paths).then(
+      (files) => setPending(files),
+      (reason: unknown) => {
+        setPending(paths.map(unreadable));
+        setError(reasonOr(reason, "The files could not be read."));
+      },
+    );
+  }, []);
+
   useEffect(() => {
     const stop = onFileDrop((event) => {
       if (event.kind === "over") {
@@ -38,21 +53,23 @@ export function DropToUpload() {
         return;
       }
       setHovering(false);
-      if (event.kind === "drop" && event.paths.length > 0) {
-        setError(null);
-        // Described before the confirmation is drawn, so the size and the
-        // refusal are things the user reads rather than discovers on clicking.
-        void ipc.describeUploads(event.paths).then(
-          (files) => setPending(files),
-          (reason: unknown) => {
-            setPending(event.paths.map(unreadable));
-            setError(reasonOr(reason, "The files could not be read."));
-          },
-        );
-      }
+      if (event.kind === "drop" && event.paths.length > 0) describe(event.paths);
     });
     return () => void stop.then((off) => off());
-  }, []);
+  }, [describe]);
+
+  // The other way in: the composer's attach button, which cannot draw this
+  // dialog itself. Subscribed to rather than read, because picking files is an
+  // event the way a drop is — and taken as it is read, so a request cannot sit
+  // in the store putting the dialog back.
+  useEffect(() => {
+    return useAppStore.subscribe((state) => {
+      const paths = state.uploadRequest;
+      if (paths === null) return;
+      useAppStore.getState().setUploadRequest(null);
+      describe(paths);
+    });
+  }, [describe]);
 
   // Read when a drop lands rather than on mount: the confirmation names where
   // the file is going, and the provider can have changed since the app started.

@@ -7,6 +7,9 @@ const PATHS = {
   sidebar: "M2.5 3h11v10h-11zM6.5 3v10",
   plus: "M8 3.75v8.5M3.75 8h8.5",
   external: "M12.5 9.5v3h-9v-9h3M9.5 3.5h3v3M12.5 3.5 7.5 8.5",
+  // The mark the timeline already puts in front of an attachment, so the button
+  // that makes one and the line it becomes carry the same glyph.
+  paperclip: "M11.5 6.5 6.75 11.25a2 2 0 0 1-2.83-2.83l5.4-5.4a3 3 0 0 1 4.24 4.24l-5.4 5.4",
 } as const;
 
 export type IconName = keyof typeof PATHS;

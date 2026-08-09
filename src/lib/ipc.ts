@@ -217,6 +217,15 @@ export async function chooseFile(
   return typeof picked === "string" ? picked : null;
 }
 
+/** The native file picker taking as many files as the user selects, or null if
+ * it was dismissed. Wrapped as `chooseFolder` is. Unfiltered, unlike
+ * `chooseFile`: an upload host takes whatever it is handed, so there is no
+ * extension worth hinting at. */
+export async function chooseFiles(title: string): Promise<string[] | null> {
+  const picked = await open({ directory: false, multiple: true, title });
+  return Array.isArray(picked) ? picked : null;
+}
+
 /** The native save dialog, or null if it was dismissed. Wrapped as
  * `chooseFolder` is. Rejects when the dialog could not be asked at all, which
  * callers report rather than fold into the dismissal — #167. */

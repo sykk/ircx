@@ -271,3 +271,30 @@ describe("an address that will not open", () => {
     );
   });
 });
+
+/** The composer's attach button cannot draw this dialog itself: it lives in a
+ * pane, and the confirmation is mounted with the app. It leaves the paths in
+ * the store, and this is what picks them up. */
+describe("files picked from the composer", () => {
+  it("asks the same question a drop asks", async () => {
+    render(<DropToUpload />);
+    act(() => useAppStore.getState().setUploadRequest(["/home/sable/photo.png"]));
+
+    expect(await screen.findByRole("dialog", { name: "Upload" })).toBeTruthy();
+    expect(screen.getByText("photo.png")).toBeTruthy();
+    expect(ipcMock.uploadFile).not.toHaveBeenCalled();
+  });
+
+  /** Taken rather than read: a request left in the store would put the dialog
+   * back the moment anything else made this component render. */
+  it("clears the request as it takes it", async () => {
+    render(<DropToUpload />);
+    act(() => useAppStore.getState().setUploadRequest(["/home/sable/photo.png"]));
+    await screen.findByRole("dialog", { name: "Upload" });
+
+    expect(useAppStore.getState().uploadRequest).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Upload" })).toBeNull();
+  });
+});

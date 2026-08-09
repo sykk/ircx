@@ -8,7 +8,7 @@ use ircx_ipc::{
     UploadedFile,
 };
 use ircx_store::{in_words, Store, StoreError};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::state::{describe, App};
 
@@ -30,6 +30,23 @@ pub const SETTINGS_LABEL: &str = "settings";
 /// project walks its layouts (`.claude/skills/run-ircx`). jsdom lays nothing
 /// out and cannot be asked.
 pub const SETTINGS_URL: &str = "index.html?settings";
+
+/// Told to a window that is already open, when the section it should show is
+/// not the one it is on.
+const SECTION_EVENT: &str = "ircx://settings-section";
+
+/// Whether a section name is one that can be written into a URL unescaped.
+///
+/// The names are `src/components/settings/sections.ts`'s own and this does not
+/// know them, which is deliberate — a second copy of that list here would be a
+/// list to forget to update. What it does instead is refuse anything that is
+/// not the shape of one, so nothing a caller invents can carry a `#`, a `&` or
+/// a path separator into the address the window is built at. A name that fails
+/// is dropped rather than refused: the window opening on its first section is
+/// a better answer than no window.
+fn is_section_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 32 && name.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+}
 
 #[tauri::command]
 pub async fn get_snapshot(app: State<'_, App>) -> Result<AppSnapshot, String> {
@@ -267,8 +284,16 @@ pub async fn certificate_fingerprint(path: String) -> Result<String, String> {
 ///
 /// Undecorated and transparent to match the main window, which draws its own
 /// title bar; `SettingsTitleBar` is the settings window's.
+///
+/// `section` is which page to land on, and the two ways of getting there are
+/// not interchangeable: a window being built is pointed at the section in its
+/// URL, and one already open is told to move by an event, there being no way
+/// to re-navigate a live webview that would not also throw away the state of
+/// whatever page it is on.
 #[tauri::command]
-pub async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_settings(app: tauri::AppHandle, section: Option<String>) -> Result<(), String> {
+    let section = section.filter(|name| is_section_name(name));
+
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         // Minimised and hidden are separate states and either one can be what
         // "already open" means, so both are undone before the focus. A failure
@@ -276,23 +301,26 @@ pub async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
         // and the focus below is what the person asked for.
         let _ = window.unminimize();
         let _ = window.show();
+        if let Some(name) = section {
+            let _ = window.emit(SECTION_EVENT, name);
+        }
         return window.set_focus().map_err(|reason| {
             format!("The settings window could not be brought forward. {reason}")
         });
     }
 
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        SETTINGS_LABEL,
-        tauri::WebviewUrl::App(SETTINGS_URL.into()),
-    )
-    .title("ircx Settings")
-    .inner_size(1180.0, 860.0)
-    .min_inner_size(880.0, 600.0)
-    .decorations(false)
-    .transparent(true)
-    .build()
-    .map_err(|reason| format!("The settings window could not be opened. {reason}"))?;
+    let url = match section {
+        Some(name) => format!("{SETTINGS_URL}={name}"),
+        None => SETTINGS_URL.to_owned(),
+    };
+    tauri::WebviewWindowBuilder::new(&app, SETTINGS_LABEL, tauri::WebviewUrl::App(url.into()))
+        .title("ircx Settings")
+        .inner_size(1180.0, 860.0)
+        .min_inner_size(880.0, 600.0)
+        .decorations(false)
+        .transparent(true)
+        .build()
+        .map_err(|reason| format!("The settings window could not be opened. {reason}"))?;
     Ok(())
 }
 

@@ -30,10 +30,7 @@ export type CandidateAction =
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
-  | { type: "plugins" }
-  | { type: "uploads" }
-  | { type: "archive" }
-  | { type: "settings" }
+  | { type: "settings"; section?: string }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** Carries what it will leave the setting at rather than reading the store
@@ -353,17 +350,17 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
   {
     label: "Plugins",
     detail: "Install a plugin, or change what one is allowed to do",
-    action: { type: "plugins" },
+    action: { type: "settings", section: "plugins" },
   },
   {
-    label: "Upload provider",
+    label: "Uploads",
     detail: "Where files go before their link is sent",
-    action: { type: "uploads" },
+    action: { type: "settings", section: "uploads" },
   },
   {
-    label: "Archive",
+    label: "Privacy",
     detail: "How long messages are kept, and how to export or delete them",
-    action: { type: "archive" },
+    action: { type: "settings", section: "privacy" },
   },
   {
     label: "Settings",

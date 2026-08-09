@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Group,
   PrimaryButton,
@@ -6,11 +6,10 @@ import {
   SelectField,
   TextField,
 } from "@/components/onboarding/fields";
+import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { ipc, reasonOr } from "@/lib/ipc";
-import { useAppStore } from "@/store";
 import type { UploadProvider } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 /** How the file is put in the request. The first two send it as the body, which
  * is what storage and self-hosted boxes take; the third sends it in a field,
@@ -102,23 +101,28 @@ function showFields(fields: [string, string][]): string {
  * links they made elsewhere — so this sheet can be left empty and removing the
  * provider is a button rather than a blank endpoint.
  */
-export function UploadSheet() {
-  const open = useAppStore((s) => s.uploadOpen);
-  return open ? <Sheet /> : null;
-}
-
-function Sheet() {
-  const closeSheet = useAppStore((s) => s.toggleUpload);
+export function UploadsPage({ onDone }: { onDone: () => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [stored, setStored] = useState(false);
   /** What the secret in the keyring is for, and so which draft it answers. */
   const [saved, setSaved] = useState<Kind | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyHere] = useState(false);
+  /* The window's Escape is caught on the document, above every page, so a
+     page cannot guard its own way out — it says it is busy instead. */
+  const report = useReportBusy();
+  const setBusy = useCallback(
+    (running: boolean) => {
+      setBusyHere(running);
+      report(running);
+    },
+    [report],
+  );
   const [error, setError] = useState<string | null>(null);
-  useAnnounce(error);
-
-  const dialog = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialog);
+  /** What just happened, kept until the next edit. As a sheet this page said
+   * it by closing; a page in a window that stays open has to say it in
+   * words. */
+  const [said, setSaid] = useState<string | null>(null);
+  useAnnounce(error ?? said);
 
   useEffect(() => {
     let live = true;
@@ -138,13 +142,14 @@ function Sheet() {
     };
   }, []);
 
-  /** Closing mid-request loses the answer, as it does in the plugin sheet. */
+  /** Closing mid-request loses the answer, as it does on the plugins page. */
   function close() {
-    if (!busy) closeSheet(false);
+    if (!busy) onDone();
   }
 
   async function save() {
     if (draft === null) return;
+    setSaid(null);
     const endpoint = draft.endpoint.trim();
     if (endpoint === "") {
       setError("An address is needed. Remove the provider instead to send no files.");
@@ -182,7 +187,12 @@ function Sheet() {
           ? { fileField: draft.fileField.trim(), fields: parseFields(draft.fields) }
           : null,
       });
-      closeSheet(false);
+      setStored(true);
+      /* The secret is written to the keyring by `save_network`'s counterpart
+       * and never read back, so what the field can honestly say about it
+       * changes here rather than on the next read. */
+      setSaved(needs(draft.kind, draft.token) === null ? saved : draft.kind);
+      setSaid("Saved.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be saved."));
       setBusy(false);
@@ -194,7 +204,10 @@ function Sheet() {
     setBusy(true);
     try {
       await ipc.removeUploadProvider();
-      closeSheet(false);
+      setStored(false);
+      setSaved(null);
+      setDraft(EMPTY);
+      setSaid("Removed. ircx will send no files until a provider is set.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be removed."));
       setBusy(false);
@@ -202,39 +215,23 @@ function Sheet() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onMouseDown={close}>
-      <div className="absolute inset-0 bg-[var(--scrim)]" />
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Upload provider"
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.stopPropagation();
-          close();
-        }}
-        className="relative flex max-h-[88vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] shadow-[var(--shadow-overlay)]"
-      >
-        {draft === null ? (
-          <div className="p-6">
-            {error === null ? (
-              <p className="text-[12px] text-[var(--text-muted)]">Reading the provider…</p>
-            ) : (
-              <p role="alert" className="text-[12px] text-[var(--danger)]">
-                {error}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4 p-6">
-            <h2 className="text-[15px] font-semibold">Upload provider</h2>
-            <p className="text-[12px] text-[var(--text-muted)]">
-              Files are sent here and the link goes to the conversation. Without a provider,
-              ircx sends no files — only links you already have.
+    <SettingsPage
+      title="Uploads"
+      blurb="Files are sent here and the link goes to the conversation. Without a provider, ircx sends no files — only links you already have."
+      onDone={close}
+    >
+      {draft === null ? (
+        <div>
+          {error === null ? (
+            <p className="text-[12px] text-[var(--text-muted)]">Reading the provider…</p>
+          ) : (
+            <p role="alert" className="text-[12px] text-[var(--danger)]">
+              {error}
             </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex max-w-[560px] flex-col gap-4">
 
             <Group title="Where files go">
               <TextField
@@ -326,13 +323,14 @@ function Sheet() {
               </p>
             )}
 
+            {said !== null && (
+              <p className="text-[12px] text-[var(--text-muted)]">{said}</p>
+            )}
+
             <div className="flex items-center gap-2">
               <PrimaryButton disabled={busy} onClick={() => void save()}>
                 Save
               </PrimaryButton>
-              <SecondaryButton disabled={busy} onClick={close}>
-                Cancel
-              </SecondaryButton>
               {stored && (
                 <span className="ml-auto">
                   <SecondaryButton disabled={busy} onClick={() => void remove()}>
@@ -340,11 +338,10 @@ function Sheet() {
                   </SecondaryButton>
                 </span>
               )}
-            </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </SettingsPage>
   );
 }
 

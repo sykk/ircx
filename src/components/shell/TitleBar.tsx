@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IconButton } from "@/components/common/IconButton";
-import { insideTauri, ipc } from "@/lib/ipc";
+import { insideTauri } from "@/lib/ipc";
+import { openSettingsWindow } from "@/lib/settingsWindow";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useAppStore } from "@/store";
 import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connection";
@@ -75,7 +76,7 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
           icon="settings"
           label="Settings"
           onClick={() =>
-            void ipc.openSettings().catch((reason: unknown) => {
+            void openSettingsWindow().catch((reason: unknown) => {
               console.warn("ircx could not open the settings window", reason);
             })
           }

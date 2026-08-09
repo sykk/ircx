@@ -4,10 +4,7 @@ import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
 import { ChannelList } from "@/components/channels";
-import { PluginSheet } from "@/components/plugins";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
-import { ArchiveSheet } from "@/components/archive/ArchiveSheet";
-import { UploadSheet } from "@/components/uploads/UploadSheet";
 import { AppShell } from "@/components/shell/AppShell";
 import { WindowFrame } from "@/components/shell/WindowFrame";
 import { AppContextMenu } from "@/components/common/AppContextMenu";
@@ -15,7 +12,7 @@ import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
-import { loadPlugins } from "@/lib/plugins";
+import { loadPlugins, startPluginSync } from "@/lib/plugins";
 import { startAppearanceSync, startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
 
@@ -37,6 +34,9 @@ export function App() {
     const bridge = startBridge();
     let stopOpening = () => {};
     void loadPlugins();
+    // The plugin screens are in the settings window now; the count in the
+    // status bar is here, and nothing else would tell it an install happened.
+    const pluginSync = startPluginSync();
     bridge.then(
       () => {
         const state = useAppStore.getState();
@@ -66,6 +66,7 @@ export function App() {
       void bridge.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
       void appearance.then((stop) => stop());
+      void pluginSync.then((stop) => stop());
     };
   }, []);
 
@@ -80,9 +81,6 @@ export function App() {
       <CommandPalette />
       <SearchOverlay />
       <NetworkSetup />
-      <PluginSheet />
-      <UploadSheet />
-      <ArchiveSheet />
       <DropToUpload />
       <ChannelList />
 

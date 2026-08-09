@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { SECTIONS, type SectionId } from "@/components/settings/sections";
 import {
   DEFAULT_DENSITY,
   DEFAULT_PRESENTATION,
@@ -33,6 +34,7 @@ import type {
   AppState,
   ChatView,
   ConsoleInput,
+  Layout,
   SplitDirection,
   StoredLayout,
   TimelineState,
@@ -97,6 +99,11 @@ export interface AppActions {
   /** Refused for the last pane; the window always holds at least one. */
   closeView: (view: ViewId) => void;
   focusView: (view: ViewId) => void;
+  /** Opens the settings pane beside the focused one, or moves the open one to
+   * `section` and focuses it. Defaults to the first section. */
+  openSettings: (section?: SectionId) => void;
+  /** Moves the open settings pane to another section, for its own sidebar. */
+  setSettingsSection: (section: SectionId) => void;
   /** Moves one split's divider. `path` names the split by the route to it from
    * the root, which is what the component drawing the divider holds. */
   setSplitRatio: (path: SplitPath, ratio: number) => void;
@@ -172,6 +179,7 @@ const initialState: AppState = {
   viewOrder: [],
   activeViewId: null,
   layout: null,
+  settings: null,
   recent: [],
   rosterHidden: {},
   paletteOpen: false,
@@ -310,7 +318,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setActive: (target) =>
     set((s) => {
-      const id = s.activeViewId;
+      // The focused pane, unless settings has the focus: a conversation picked
+      // in the sidebar is meant for the pane the reader is reading in, and the
+      // settings pane has no target to point anywhere.
+      const id = chatPane(s);
       if (!target) {
         if (!id) return {};
         return retarget(s, id, "", "");
@@ -319,11 +330,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const read = readingTarget(s, target);
       if (!id) {
         const view = newView(target.network, target.target);
+        // Beside the settings pane when that is all the window holds, rather
+        // than over it: the reader opened settings and then went looking for a
+        // conversation to judge it against.
+        const layout: Layout = s.layout
+          ? splitLeaf(s.layout, s.settings?.view ?? "", "row", view.id)
+          : { type: "view", id: view.id };
         return {
-          views: { [view.id]: view },
-          viewOrder: [view.id],
+          views: { ...s.views, [view.id]: view },
+          viewOrder: paneOrder(layout),
           activeViewId: view.id,
-          layout: { type: "view", id: view.id },
+          layout,
           ...read,
         };
       }
@@ -394,7 +411,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   splitActiveView: (direction) =>
     set((s) => {
-      const active = s.activeViewId ? s.views[s.activeViewId] : undefined;
+      // The conversation the reader is on rather than the focused pane, so the
+      // keystroke still splits something when settings has the focus. Splitting
+      // settings itself would open a second copy of one window's worth of
+      // controls.
+      const from = chatPane(s);
+      const active = from ? s.views[from] : undefined;
       if (!active || !s.layout) return {};
 
       const opened = newView(active.network, active.target);
@@ -409,11 +431,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   closeView: (view) =>
     set((s) => {
-      if (!s.layout || !s.views[view] || s.viewOrder.length < 2) return {};
+      const held = s.views[view] !== undefined || s.settings?.view === view;
+      if (!s.layout || !held || s.viewOrder.length < 2) return {};
       const layout = removeLeaf(s.layout, view);
       if (!layout) return {};
 
-      const closed = s.views[view]!;
+      // Undefined for the settings pane, which has no conversation to leave.
+      const closed = s.views[view];
       const { [view]: _closed, ...views } = s.views;
       const { [view]: _read, ...viewAnchor } = s.viewAnchor;
       // Otherwise a later pane handed the same id would open with the closed
@@ -427,7 +451,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // read under would otherwise wait, stale, for the next visit.
       const seam =
         s.activeViewId === view &&
-        closed.network &&
+        closed?.network &&
         !Object.values(views).some(
           (v) => v.network === closed.network && v.target === closed.target,
         )
@@ -436,6 +460,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return {
         layout,
         views,
+        settings: s.settings?.view === view ? null : s.settings,
         viewAnchor,
         rosterHidden,
         consoleInput,
@@ -451,7 +476,35 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }),
 
   focusView: (view) =>
-    set((s) => (s.views[view] && s.activeViewId !== view ? { activeViewId: view } : {})),
+    set((s) => {
+      const held = s.views[view] !== undefined || s.settings?.view === view;
+      return held && s.activeViewId !== view ? { activeViewId: view } : {};
+    }),
+
+  openSettings: (section) =>
+    set((s) => {
+      // Already open is moved to, not opened again: one window's worth of
+      // settings twice over is two answers to every question on them.
+      if (s.settings) {
+        return {
+          settings: { ...s.settings, section: section ?? s.settings.section },
+          activeViewId: s.settings.view,
+        };
+      }
+
+      const view = mintViewId();
+      const settings = { view, section: section ?? SECTIONS[0]!.id };
+      // Beside the pane in focus rather than over it, which is the whole of why
+      // these are a pane: every setting on the Appearance page is judged
+      // against a conversation, and the one the reader is in beats the sample.
+      const beside = s.activeViewId ?? s.viewOrder[0];
+      const layout: Layout =
+        s.layout && beside ? splitLeaf(s.layout, beside, "row", view) : { type: "view", id: view };
+      return { settings, layout, viewOrder: paneOrder(layout), activeViewId: view };
+    }),
+
+  setSettingsSection: (section) =>
+    set((s) => (s.settings ? { settings: { ...s.settings, section } } : {})),
 
   setSplitRatio: (path, ratio) =>
     set((s) => {
@@ -621,6 +674,35 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setTypography: (next) => set({ typography: next }),
   setOverrides: (next) => set({ overrides: next }),
 }));
+
+/**
+ * The pane the reader is on a conversation in.
+ *
+ * The focused one, unless that is the settings pane — which holds no
+ * conversation, so it answers with the nearest pane that does. Without this,
+ * opening settings would take the sidebar's highlight, the status bar's
+ * connection, the search overlay's scope and a dropped file's destination with
+ * it, all of which ask where the reader is and none of which stopped being
+ * true because a settings pane took the focus.
+ *
+ * Left before right: `splitLeaf` puts an opened pane after the one it was
+ * split from, so the pane settings sits beside is the one before it.
+ *
+ * Undefined when no pane holds a conversation, which is a window with nothing
+ * open yet and one holding nothing but settings.
+ */
+export function chatPane(s: AppState): ViewId | undefined {
+  if (s.activeViewId && s.views[s.activeViewId]) return s.activeViewId;
+  const from = s.activeViewId ? s.viewOrder.indexOf(s.activeViewId) : -1;
+  if (from < 0) return s.viewOrder.find((id) => s.views[id]);
+  for (let step = 1; step < s.viewOrder.length; step += 1) {
+    const left = s.viewOrder[from - step];
+    if (left !== undefined && s.views[left]) return left;
+    const right = s.viewOrder[from + step];
+    if (right !== undefined && s.views[right]) return right;
+  }
+  return undefined;
+}
 
 /**
  * The first pane already on `target`, if any. Splitting deliberately opens a

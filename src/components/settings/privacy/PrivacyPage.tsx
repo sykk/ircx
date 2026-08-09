@@ -3,7 +3,7 @@ import { Group, PrimaryButton, SecondaryButton, SelectField } from "@/components
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { formatBytes } from "@/lib/bytes";
 import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
-import type { SettingsScope } from "@/lib/settingsWindow";
+import type { SettingsScope } from "@/components/settings/scope";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 
@@ -45,10 +45,8 @@ export function PrivacyPage({
   here,
   onDone,
 }: {
-  /** The conversation the client was on when this window was asked for, or
-   * null. Handed over rather than read from the store: this window runs no
-   * event bridge, so it has no conversations of its own — see
-   * src/lib/settingsWindow.ts. */
+  /** The conversation this page is scoped to, or null — see
+   * `src/components/settings/scope.ts`. */
   here: SettingsScope | null;
   onDone: () => void;
 }) {

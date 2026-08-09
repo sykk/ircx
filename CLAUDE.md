@@ -67,42 +67,51 @@ nothing is ever marked as being in a preset. This is the shape that keeps a
 theme a set of token values, which is the contract
 `overrides.ts` enforces and the reason widening `theme.json` was refused.
 
-All of it lives in a second window rather than a sheet over the client, in
+All of it lives in a pane of the client's own layout, in
 `src/components/settings`. A sheet is a scrim over the only evidence these
-settings can be judged against, and the page is built round that: a sample
-channel drawn by `buildRows` and `renderRow` — the timeline's own — over the
-theme cards and the rail. It is the real render path because the components
-under it read the presentation out of the store, so a preview cannot show a
-layout the client would not. `previewChannel.ts` is scripted for what
+settings can be judged against, which is what ruled a sheet out; a second window
+answered that and cost a second webview, a copy of every setting crossing
+between them, and a page that could not see a conversation. A pane is the
+answer that keeps the evidence and pays none of it: `openSettings` splits it
+beside the pane in focus, so the Appearance page is judged against the reader's
+own channel, at their own density, in their own theme.
+
+It is a leaf of `layout` whose id is deliberately not in `views`
+(`AppState.settings`). Settings is not a conversation, and everything that walks
+the panes looking for one — the pane already showing a target, the panes a
+closed conversation takes with it, what `toStored` writes down — asks `views`
+and gets nothing back, which is the answer each of them wants. So it is not
+written down either: the tree survives a restart as the conversations its panes
+hold, and its split collapses the way a closed conversation's does. What it does
+take from the tree is the machinery — a split, a divider that moves, a close, a
+place in `viewOrder`.
+
+`chatPane` is the other half. The pane in focus is not always one holding a
+conversation now, and the sidebar's highlight, the status bar, the search scope
+and a dropped file all ask where the reader is; none of them stopped being true
+because settings took the focus, so they ask that instead of `activeViewId`. A
+channel picked while settings has the focus goes to the pane beside it, and so
+does a split.
+
+The sample channel stays. `previewChannel.ts`, drawn by `buildRows` and
+`renderRow` — the timeline's own — is what the page has to show on a first run,
+where there is no conversation to sit beside. It is the real render path because
+the components under it read the presentation out of the store, so a preview
+cannot show a layout the client would not, and it is scripted for what
 `groups.ts` makes of it: a run, an addressed pair, a declared topic and a
 message in no group, which are the four states a spine has.
 
-Both windows are one `index.html` under one bundle, told apart by the query the
-settings window opens at — `SETTINGS_URL` in `src-tauri/src/commands.rs`, with
-the section after it. The query and not the window's label, though the label
-identifies the window to Rust: a label is only readable inside a Tauri webview,
-and keying on the URL leaves the page reachable at `/?settings` in the browser
-harness, which is where this project walks its layouts.
+The sections are `sections.ts`. Networks are still the gap, though no longer for
+the reason they were — a pane runs inside the client's event bridge and could
+watch a connection; moving the onboarding flow into this window is its own
+change. A page with a request in flight still says so through `SettingsBusy`,
+and Done declines while one is: closing loses the answer.
 
-What crosses between the two is a bare "this changed, go and look", carrying
-only the topic and which window wrote it — `announceSettings`. Nothing else
-travels, because both windows can already read whatever it was: the appearance
-from the localStorage they share, the plugins from the backend they share. A
-copy in the payload would be a second answer to a question with one. A preset
-says it once rather than three times; told after each of the settings it
-bundles, the other window would paint the new theme against the old faces on
-the way past.
-
-The sections are `sections.ts`, and the client keeps only what the settings
-window cannot answer. Networks are the gap, deliberately: configuring one is
-the onboarding flow and its last step watches the connection, which this window
-cannot see. What it does need from the client is the conversation on screen —
-the Privacy page scopes retention and deletion by it — and that is handed over
-through localStorage rather than the URL, because a channel is `#ircx` and a
-`#` in a URL is a fragment (`src/lib/settingsWindow.ts`). A page with a request
-in flight says so, and the window declines to close on Escape while one is:
-closing loses the answer, which is the guard each of these screens had as a
-sheet.
+A settings pane needs more room than a conversation, which degrades gracefully
+and this does not — `MIN_SETTINGS_PX` in `PaneTree.tsx`, measured, with the
+method in `docs/measurements.md`. A page that lays out against the window rather
+than against its pane will clip inside one; the Appearance rail was found doing
+exactly that.
 
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the

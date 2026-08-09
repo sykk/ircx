@@ -191,7 +191,6 @@ pub fn run() {
             commands::load_preview,
             commands::get_draft,
             commands::set_draft,
-            commands::open_settings,
             commands::list_themes,
             commands::install_theme,
             commands::themes_directory,

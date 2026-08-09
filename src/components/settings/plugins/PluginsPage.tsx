@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { SecondaryButton } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
-import { announcePlugins } from "@/lib/plugins";
 import { useAppStore } from "@/store";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
@@ -82,7 +81,6 @@ export function PluginsPage({ onDone }: { onDone: () => void }) {
     try {
       const installed = await ipc.installPlugin(source);
       useAppStore.getState().upsertPlugin(installed);
-      void announcePlugins();
       // Installing grants nothing, so the permissions are what the user is
       // asked about the moment a plugin lands.
       setEditing(installed.id);
@@ -98,7 +96,6 @@ export function PluginsPage({ onDone }: { onDone: () => void }) {
     try {
       await ipc.removePlugin(id);
       useAppStore.getState().dropPlugin(id);
-      void announcePlugins();
     } catch (reason) {
       setError(reasonOr(reason, "The plugin could not be removed."));
     }
@@ -110,7 +107,6 @@ export function PluginsPage({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       useAppStore.getState().upsertPlugin(await ipc.setPluginGrants(id, grants));
-      void announcePlugins();
       setEditing(null);
     } catch (reason) {
       setError(reasonOr(reason, "The permissions could not be saved."));

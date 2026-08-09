@@ -18,19 +18,17 @@ import { AppearancePage } from "./AppearancePage";
  * watch the themes directory and to tell the client's window what changed.
  * Most of what is here does not call that, but importing the barrel pulls the
  * module in — and the install buttons do. */
-const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock, announceMock } =
+const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock } =
   vi.hoisted(() => ({
     ipcMock: { installTheme: vi.fn(), themesDirectory: vi.fn() },
     chooseFolderMock: vi.fn(),
     revealFolderMock: vi.fn(),
     setWindowZoomMock: vi.fn(() => Promise.resolve()),
-    announceMock: vi.fn(() => Promise.resolve()),
   }));
 vi.mock("@/lib/ipc", () => ({
   ipc: ipcMock,
   onThemesChanged: vi.fn(),
   onSettingsChanged: vi.fn(),
-  announceSettings: announceMock,
   setWindowZoom: setWindowZoomMock,
   chooseFolder: chooseFolderMock,
   revealFolder: revealFolderMock,
@@ -480,17 +478,6 @@ describe("AppearancePage", () => {
       expect(useAppStore.getState().typography.zoom).toBe(1.1);
     });
 
-    /** The client's window has to repaint too, and a preset writes three
-     * settings. Told after each one it would paint the new theme against the
-     * old faces on the way past, which is a state nobody chose. */
-    it("tells the other window once rather than three times", () => {
-      open();
-      announceMock.mockClear();
-
-      fireEvent.click(button("Start from Classic IRC"));
-
-      expect(announceMock).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("installing a theme", () => {

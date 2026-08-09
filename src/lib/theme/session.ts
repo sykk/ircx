@@ -1,10 +1,4 @@
-import {
-  announceSettings,
-  ipc,
-  onSettingsChanged,
-  onThemesChanged,
-  setWindowZoom,
-} from "@/lib/ipc";
+import { ipc, onThemesChanged, setWindowZoom } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ThemeSource } from "@/types";
 import {
@@ -45,16 +39,13 @@ export function applyOpeningTheme(): void {
 /**
  * Every appearance setting as localStorage now has it, painted on this window.
  *
- * Two windows read these bytes — the client and the settings window are one
- * origin — and only the one that made a change has it on screen. This is how
- * the other one catches up, and it is why nothing travels in the message that
- * says so: what to paint is already written down, and a copy in the payload
- * would be a second answer to a question that has one.
+ * What the last run left, adopted whole at startup. Every later change goes
+ * through the functions below, which write the store and paint in the same
+ * call — so this is the opening state rather than a way of catching up.
  *
- * The catalogue is not touched. Which themes exist is a fact about the disk
- * that each window reads for itself through `startThemes`, and the settings
- * window has usually read more of it than a repaint should be allowed to throw
- * away.
+ * The catalogue is not touched. Which themes exist is a fact about the disk,
+ * read through `startThemes`, and by the time anything repaints it has usually
+ * read more of it than a repaint should be allowed to throw away.
  */
 export function adoptAppearance(): void {
   const wanted = storedThemeId() ?? FALLBACK_THEME_ID;
@@ -66,35 +57,9 @@ export function adoptAppearance(): void {
   useAppStore.setState({ themeId: wanted, density, overrides, presentation, typography });
   applyDensity(density);
   applyTypography(typography);
-  /* Each window scales itself rather than reaching for the other's webview:
-   * the scale is one setting and both windows adopt it by this path anyway, so
-   * asking for a second window's zoom would be a second way to do it. */
   void setWindowZoom(typography.zoom);
   applyOverrides(overrides);
   applyTheme(useAppStore.getState().themes.find((theme) => theme.id === wanted) ?? null);
-}
-
-/**
- * Follows the other window's appearance changes for as long as this one is
- * open. Resolves to an unsubscribe function.
- */
-export async function startAppearanceSync(): Promise<() => void> {
-  try {
-    return await onSettingsChanged("appearance", adoptAppearance);
-  } catch (reason) {
-    console.warn("ircx could not follow the other window's appearance", reason);
-    return () => {};
-  }
-}
-
-/* Set while a preset is writing the three settings it bundles, so the other
- * window is told once at the end rather than after each. Told three times it
- * would paint the new theme against the old timeline and the old faces on the
- * way past — the intermediate states are ones nobody chose. */
-let bundling = false;
-
-function announce(): void {
-  if (!bundling) void announceSettings("appearance");
 }
 
 /** Puts a theme on the window, remembers it for the next launch and tells the
@@ -113,7 +78,6 @@ export function selectTheme(id: string): void {
    * would resolve without it, and a stale copy of a theme nobody is using is
    * a stale copy waiting to be painted. */
   rememberInstalled(fromDisk.find((source) => source.id === id) ?? null);
-  announce();
 }
 
 /** The same three things for the density, in one place for the same reason.
@@ -123,7 +87,6 @@ export function selectDensity(id: DensityId): void {
   useAppStore.getState().setDensity(id);
   applyDensity(id);
   storeDensity(id);
-  announce();
 }
 
 /** One field of the presentation, merged over the rest. There is nothing to
@@ -133,7 +96,6 @@ export function selectPresentation(change: Partial<Presentation>): void {
   const next = { ...useAppStore.getState().presentation, ...change };
   useAppStore.getState().setPresentation(next);
   storePresentation(next);
-  announce();
 }
 
 /** One field of the typography, merged over the rest. The faces are tokens and
@@ -144,7 +106,6 @@ export function selectTypography(change: Partial<Typography>): void {
   applyTypography(next);
   storeTypography(next);
   if (change.zoom !== undefined) void setWindowZoom(next.zoom);
-  announce();
 }
 
 /** Every theme's edits, in the one place that paints, remembers and tells the
@@ -155,7 +116,6 @@ export function selectOverrides(next: Overrides): void {
   useAppStore.getState().setOverrides(next);
   applyOverrides(next);
   storeOverrides(next);
-  announce();
 }
 
 /** A palette and the layout that goes with it, in one click. Written through
@@ -165,15 +125,9 @@ export function selectOverrides(next: Overrides): void {
  * about a setting: `selectPresentation` merges, so a field the preset omits
  * keeps the value the reader gave it. */
 export function selectPreset(preset: Preset): void {
-  bundling = true;
-  try {
-    selectTheme(preset.theme);
-    selectPresentation(preset.presentation);
-    selectTypography(preset.faces);
-  } finally {
-    bundling = false;
-  }
-  announce();
+  selectTheme(preset.theme);
+  selectPresentation(preset.presentation);
+  selectTypography(preset.faces);
 }
 
 /** The themes directory as the backend last sent it. Held because what has to

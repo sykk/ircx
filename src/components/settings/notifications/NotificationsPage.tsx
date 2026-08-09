@@ -10,7 +10,7 @@ import {
 } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { announceHighlightWords } from "@/lib/highlights";
+import { loadHighlightWords } from "@/lib/highlights";
 import {
   allowedToNotify,
   storeNotifications,
@@ -18,7 +18,7 @@ import {
   type Notifications,
 } from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
-import type { SettingsScope } from "@/lib/settingsWindow";
+import type { SettingsScope } from "@/components/settings/scope";
 import type { MutedConversation } from "@/types";
 
 /**
@@ -37,9 +37,8 @@ export function NotificationsPage({
   here,
   onDone,
 }: {
-  /** The conversation the client was on when this window was asked for, or
-   * null. Handed over rather than read from the store, as the Privacy page's
-   * is — see `src/lib/settingsWindow.ts`. */
+  /** The conversation this page is scoped to, or null — see
+   * `src/components/settings/scope.ts`. */
   here: SettingsScope | null;
   onDone: () => void;
 }) {
@@ -128,7 +127,7 @@ export function NotificationsPage({
       report(true);
       try {
         await ipc.setHighlightWords(next);
-        await announceHighlightWords();
+        await loadHighlightWords();
         setError(null);
       } catch (reason) {
         setWords(before);

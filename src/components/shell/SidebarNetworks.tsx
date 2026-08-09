@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
 import { ipc } from "@/lib/ipc";
 import { Icon } from "@/components/common/Icon";
+import { useHangingMenu } from "@/components/common/hangingMenu";
 import { OverflowIcon } from "@/components/header/icons";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
@@ -525,6 +526,7 @@ function NetworkMenu({
   onSettings: () => void;
 }) {
   const button = useRef<HTMLButtonElement>(null);
+  const menu = useHangingMenu(open, button);
 
   const choose = (run: () => void) => () => {
     onOpenChange(false);
@@ -577,9 +579,10 @@ function NetworkMenu({
 
       {open && (
         <div
+          ref={menu}
           role="menu"
           aria-label={`${network.name} actions`}
-          className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
+          className="fixed z-[100] w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
         >
           <MenuItem onClick={choose(onCollapse)}>
             {collapsed ? "Show conversations" : "Hide conversations"}

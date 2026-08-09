@@ -354,6 +354,60 @@ across sites or serves something big, which is a third party in a walk and has
 not been done. Worth knowing before somebody spends an hour standing up a local
 server for it, as this run did.
 
+### Where a fetched preview is drawn
+
+A fetched preview no longer sits under the line. The line stays one row and the
+image is shown by hovering or focusing the filename, so a channel full of
+screenshots reads as a conversation rather than a gallery. What decides where
+that overlay opens is geometry, and jsdom has none: a peek that leaves its
+scroller and a peek that is painted over both look exactly like a correct one to
+`vitest`.
+
+**Walked in Chrome through `driver.mjs` on 2026-08-08**, seeded — nothing in
+`seed.mjs` had an attachment, so it carries one and a `load_preview` handler for
+it now. Two defects, neither reachable from a test.
+
+**It measured the wrong box.** The side was chosen against `window.innerHeight`,
+and the timeline scroller ends where the composer starts: `[84, 597]` of a 713px
+window. A line halfway down the pane therefore had 307px below it by that
+arithmetic and 191px of real room, and the peek ran out through the bottom of
+the scroller — 105px past it at 1200×560 with the line scrolled to the top. It
+measures the nearest scrolling ancestor now, and caps its own height to the room
+on the side it picks, because a pane short enough holds it on neither side. The
+same walk reads `peek [259, 444]` inside `scroller [84, 444]`.
+
+**Every timeline row is its own stacking context**, which is the one worth
+remembering. `Timeline.tsx` places each virtualised row with
+`transform: translateY(…)`, and a transform makes a stacking context — so the
+peek's `z-50` was scoped to its own row and every row below it painted over the
+top of it. What that looks like is not a z-index bug: it looks like a
+translucent panel, on a theme whose `--surface-overlay` is an opaque `#171c24`.
+The first reading of the screenshot was that the colour was wrong. The row the
+reader is on is lifted now.
+
+The image keeps its proportions when the cap bites — 263×175 for a 900×600
+source, a ratio of 1.500 — which is not free: `w-auto` with a `max-height` and a
+`height` attribute is the shape that squashes one.
+
+**What is not walked:**
+
+- **The pointer.** The row is lifted by `hover:z-10` and `focus-within:z-10`,
+  and only the second was ever exercised. `:hover` is a CSS pseudo-class and
+  wants a real pointer over the row; `driver.mjs` can only produce one through
+  `dragxy`, which presses and releases, and on this control that opens the URL
+  in a browser. The peek itself was opened by dispatching `pointerover`, which
+  React's enter/leave plugin does answer — but no CSS in this walk ever saw a
+  pointer. So the stacking fix is verified through the keyboard trigger and
+  inferred for the pointer one, which is the commoner of the two.
+- **The keyboard, end to end.** `document.hasFocus()` is false under headless
+  Chrome, and Chrome defers focus events on a programmatic `.focus()` until the
+  document has focus. The button really was focused — `:focus-within` applied
+  and the row measured `z-index: 10` — while React's `onFocus` never fired, so
+  the walk dispatched `focusin` to open the peek. Tabbing to a filename in a
+  window that has focus is therefore untested.
+- **WebKitGTK.** Chrome laid all of this out. The engine that ships has not
+  drawn a peek at all.
+
 ## Assembled-application testing
 
 Driven end to end on 2026-07-30 and written up in `docs/end-to-end-run.md`:

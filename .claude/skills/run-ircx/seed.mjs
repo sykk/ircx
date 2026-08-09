@@ -53,12 +53,36 @@ export const SEED = `
     raisedBy: [],
   });
 
+  // Stands in for what the previewer returns, which is a PNG. Any bytes the
+  // window can draw answer the only question the walk asks of it, which is
+  // where the peek lands and what it covers. The hashes are percent-encoded
+  // because a raw one ends the data URI.
+  const PREVIEW =
+    "data:image/svg+xml;utf8," +
+    "<svg xmlns='http://www.w3.org/2000/svg' width='900' height='600'>" +
+    "<rect width='900' height='600' fill='%23223344'/>" +
+    "<circle cx='450' cy='300' r='210' fill='%23e0a0c0'/>" +
+    "<text x='450' y='318' font-size='60' text-anchor='middle' fill='%23ffffff'>preview</text>" +
+    "</svg>";
+
+  const attached = (target, nick, offset) => ({
+    ...message(target, nick, "https://files.example/burp-req.png", offset),
+    attachments: [{
+      url: "https://files.example/burp-req.png",
+      filename: "burp-req.png",
+      mime: "image/png",
+      sizeBytes: 1153433n,
+      preview: null,
+    }],
+  });
+
   const history = {
     "#ircx": [
       message("#ircx", "sable", "morning", 0),
       message("#ircx", "marrow", "sable: did the pane branch land?", 30),
       message("#ircx", "sable", "marrow: yes, closes from the header now", 60),
       message("#ircx", "nyx", "[topic] release notes", 90),
+      attached("#ircx", "nyx", 105),
       message("#ircx", "kade", "i can take those", 120),
       message("#ircx", "walker", "i'll review them", 150),
       message("#ircx", "marrow", "walker: thanks", 180),
@@ -166,6 +190,13 @@ export const SEED = `
       const to = req.before ? (found === -1 ? all.length : found) : all.length;
       return all.slice(Math.max(0, to - req.limit), to);
     },
+    load_preview: ({ url }) => ({
+      url,
+      filename: "burp-req.png",
+      mime: "image/png",
+      sizeBytes: 1153433n,
+      preview: { dataUri: PREVIEW, width: 900, height: 600 },
+    }),
     get_draft: ({ target }) => drafts[target] ?? null,
     set_draft: ({ target, text }) => ((drafts[target] = text), null),
     mark_read: () => null,

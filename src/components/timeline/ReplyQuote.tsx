@@ -19,13 +19,17 @@ const CONNECTOR = "var(--timeline-quote-width) solid var(--border-strong)";
 export function ReplyQuote({ msgid, parent, onJump }: Props) {
   const excerpt = parent ? plainText(parent.text) : "";
 
+  // A msgid names the message on the wire and nothing the reader has ever seen,
+  // so the quote says the one thing it can: that this answers something the
+  // window does not hold. The connector still runs, the reply being a fact its
+  // sender declared whether or not we can show what it answers.
   if (!parent) {
     return (
       <div
         className="truncate pl-2 font-[family-name:var(--font-ui)] text-[12px]"
         style={{ borderLeft: CONNECTOR, color: "var(--text-faint)" }}
       >
-        in reply to {msgid}
+        in reply to an earlier message
       </div>
     );
   }

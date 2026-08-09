@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
-import { EMPTY_TIMELINE, TIMELINE_CAP, useAppStore } from "@/store";
+import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
 import { targetKey, useMembers, useTimelineForView, useView } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
@@ -85,7 +85,19 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     () => buildRows(messages, unreadFrom, ownNick, groups, roster),
     [messages, unreadFrom, ownNick, groups, roster],
   );
-  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  // A `+reply` names its parent the way the server does, and for a message we
+  // sent that is the `msgid` tag its echo carried, not the local id the UI drew
+  // it with. Both names have to reach the same message or a reply to your own
+  // line quotes nothing.
+  const byId = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) {
+      map.set(m.id, m);
+      const server = serverMsgid(m);
+      if (server !== null) map.set(server, m);
+    }
+    return map;
+  }, [messages]);
 
   const head = rows.length === 0 ? null : historyHead(timeline, loadError);
   const headRef = useRef<HTMLDivElement>(null);
@@ -238,13 +250,17 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   const jump = useCallback(
     (msgid: string) => {
-      const index = rowIndexOfMessage(rows, msgid);
+      // Rows and the flash are keyed by the id the UI drew, so the server's
+      // name for the message has to be resolved to it first.
+      const id = byId.get(msgid)?.id;
+      if (id === undefined) return;
+      const index = rowIndexOfMessage(rows, id);
       if (index === -1) return;
       followingRef.current = false;
       virtualizer.scrollToIndex(index, { align: "center" });
-      setFlashId(msgid);
+      setFlashId(id);
     },
-    [rows, virtualizer],
+    [byId, rows, virtualizer],
   );
 
   useEffect(() => {

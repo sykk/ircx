@@ -4,6 +4,8 @@ import { REQUIRED_TOKENS } from "./tokens";
 import type { Theme, ThemeLoad } from "./types";
 import { uiStylesheetProblem } from "./ui-css";
 
+import classicManifest from "@/styles/themes/ircx-classic/theme.json?raw";
+import classicStylesheet from "@/styles/themes/ircx-classic/theme.css?raw";
 import darkManifest from "@/styles/themes/ircx-dark/theme.json?raw";
 import darkStylesheet from "@/styles/themes/ircx-dark/theme.css?raw";
 import glassManifest from "@/styles/themes/ircx-glass/theme.json?raw";
@@ -21,6 +23,11 @@ export { REQUIRED_TOKENS };
  * statically. */
 export const FALLBACK_THEME_ID = "ircx-dark";
 
+/** Named because the Classic IRC preset in ./presets.ts selects it by id, and a
+ * preset naming a theme that is not shipped would fall back to the dark one
+ * while still turning the spine off. */
+export const CLASSIC_THEME_ID = "ircx-classic";
+
 export const BUILT_IN_SOURCES: readonly ThemeSource[] = [
   { id: FALLBACK_THEME_ID, manifest: darkManifest, stylesheet: darkStylesheet, uiStylesheet: "" },
   { id: "ircx-light", manifest: lightManifest, stylesheet: lightStylesheet, uiStylesheet: "" },
@@ -29,6 +36,12 @@ export const BUILT_IN_SOURCES: readonly ThemeSource[] = [
     manifest: glassManifest,
     stylesheet: glassStylesheet,
     uiStylesheet: glassUi,
+  },
+  {
+    id: CLASSIC_THEME_ID,
+    manifest: classicManifest,
+    stylesheet: classicStylesheet,
+    uiStylesheet: "",
   },
 ];
 

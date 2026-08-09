@@ -1,11 +1,20 @@
-import { ipc, onThemesChanged } from "@/lib/ipc";
+import { ipc, onThemesChanged, setWindowZoom } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import type { ThemeSource } from "@/types";
-import { applyDensity, applyOverrides, applyTheme, storeThemeId, storedThemeId } from "./apply";
+import {
+  applyDensity,
+  applyOverrides,
+  applyTheme,
+  applyTypography,
+  storeThemeId,
+  storedThemeId,
+} from "./apply";
 import { DEFAULT_DENSITY, type DensityId, storeDensity, storedDensity } from "./density";
 import { FALLBACK_THEME_ID, catalogue } from "./load";
+import type { Preset } from "./presets";
 import { storedOverrides } from "./overrides";
 import { type Presentation, storePresentation, storedPresentation } from "./presentation";
+import { type Typography, storeTypography, storedTypography } from "./typography";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 
 /** The theme the window opens in, resolved before the first paint: the
@@ -26,11 +35,14 @@ export function applyOpeningTheme(): void {
   const density = storedDensity() ?? DEFAULT_DENSITY;
   const overrides = storedOverrides();
   const presentation = storedPresentation();
+  const typography = storedTypography();
   const remembered = rememberedInstalled();
   const { themes } = catalogue(remembered ? [remembered] : []);
 
-  useAppStore.setState({ themes, themeId: wanted, density, overrides, presentation });
+  useAppStore.setState({ themes, themeId: wanted, density, overrides, presentation, typography });
   applyDensity(density);
+  applyTypography(typography);
+  void setWindowZoom(typography.zoom);
   applyOverrides(overrides);
   applyTheme(themes.find((theme) => theme.id === wanted) ?? null);
 }
@@ -69,6 +81,26 @@ export function selectPresentation(change: Partial<Presentation>): void {
   const next = { ...useAppStore.getState().presentation, ...change };
   useAppStore.getState().setPresentation(next);
   storePresentation(next);
+}
+
+/** One field of the typography, merged over the rest. The faces are tokens and
+ * repaint; the scale is not, and goes to the webview. */
+export function selectTypography(change: Partial<Typography>): void {
+  const next = { ...useAppStore.getState().typography, ...change };
+  useAppStore.getState().setTypography(next);
+  applyTypography(next);
+  storeTypography(next);
+  if (change.zoom !== undefined) void setWindowZoom(next.zoom);
+}
+
+/** A palette and the layout that goes with it, in one click. Written through
+ * the three functions above rather than around them, so a preset remembers
+ * itself exactly as the settings it sets do, and every one of them stays the
+ * reader's to change afterwards. */
+export function selectPreset(preset: Preset): void {
+  selectTheme(preset.theme);
+  selectPresentation(preset.presentation);
+  selectTypography(preset.faces);
 }
 
 /** The themes directory as the backend last sent it. Held because what has to

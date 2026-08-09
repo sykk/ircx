@@ -2070,6 +2070,58 @@ follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
   shape of code, which is a reason to expect it and not a reason to record it as
   seen.
 
+## The faces, the window scale, and a theme installed from a folder
+
+- **Both faces and the scale are unwatched in a real window.** `fontTokens` and
+  its painting order are asserted, and the appearance sheet's controls are
+  driven in jsdom, but which glyphs arrive is a question about the fonts on the
+  machine. Worth looking at: whether **Courier** is present at all on this
+  system — the stack falls through to `monospace`, so a reader who picks it and
+  sees no change has not found a bug — and whether prose set in the mono face
+  still reads as prose at the timeline's 13px.
+- **The window scale has never been seen to scale anything.** It goes to
+  `getCurrentWebview().setZoom`, which no test can call: jsdom has no webview,
+  and `setWindowZoom` swallows that deliberately so a browser is not a failure.
+  What wants watching is the thing the CSS `zoom` route was rejected for —
+  whether every measured placement still lands after a scale change. The
+  tooltips, the pointer menu and the sidebar's hanging menu all read
+  `getBoundingClientRect` against `window.innerWidth`, and the claim is that the
+  webview's own zoom moves both together. **Check the sidebar menu at 125%**,
+  which is where a disagreement would show first.
+- **Installing a theme is covered on both sides and joined in neither.** The
+  copy is tested in `src-tauri/src/themes.rs` against real temporary
+  directories, and the sheet's buttons in `AppearanceSheet.test.tsx` against a
+  mocked backend. Nothing has run the actual chain: pick a folder, watch the
+  2-second poll in `themes.rs` notice it, and see the theme appear in the list
+  and paint. The install selects what it copied, so a theme that lands and does
+  not paint means the id it answered with is not the id the catalogue built.
+- **Opening the themes folder** goes through `opener:allow-open-path`, a
+  capability added for it. A capability that is not granted fails at the call,
+  which is exactly what `openUrl` did before somebody clicked an `https://` link
+  — see the note on that in src/lib/ipc.ts.
+
+## Classic IRC, as a preset and as a palette
+
+The palette is held to every constraint in `src/styles/tokens.test.ts` — ten
+nick hues in the cool band, each clearing 5:1 against the lightest surface it
+can land on, all of them clear of the connection colours. That is the whole of
+what a test can say about it.
+
+- **It has not been looked at.** The old clients this is named for had sixteen
+  colours and no contrast floor, and the departures are deliberate: mIRC put a
+  nickname on pure red and pure green, which are the two colours this client
+  reserves for connection state. Whether what is left still reads as the old
+  thing is a judgement nobody has made yet.
+- **`--shadow-overlay` is a border rather than a shadow**, `0 0 0 1px`. Every
+  overlay in the app takes it — the palette, the sheets, the emoji picker — and
+  none has been seen wearing it. A flat overlay on a black ground may not
+  separate from what is behind it at all.
+- **The preset writes five settings and then stops existing.** Nothing marks it
+  as in use, by design. What has not been watched is the reverse: applying
+  Classic IRC and then changing one control back should leave the other four
+  alone, which `AppearanceSheet.test.tsx` asserts through the store and nobody
+  has seen on screen.
+
 ## Unread counts
 
 `mark_read` is the only thing that resets a conversation's unread count, and

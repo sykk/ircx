@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PRESENTATION } from "@/lib/theme";
+import { DEFAULT_PRESENTATION, DEFAULT_TYPOGRAPHY } from "@/lib/theme";
 import { targetKey, type TargetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import type { Channel, Network, Query } from "@/types";
@@ -74,6 +74,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     themeId: "ircx-dark",
     density: "comfortable",
     presentation: DEFAULT_PRESENTATION,
+    typography: DEFAULT_TYPOGRAPHY,
     overrides: {},
     sidebarWidth: 240,
     rosterWidth: null,

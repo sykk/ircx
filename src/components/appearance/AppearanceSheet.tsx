@@ -23,6 +23,7 @@ function Sheet() {
   const themeId = useAppStore((s) => s.themeId);
   const density = useAppStore((s) => s.density);
   const presentation = useAppStore((s) => s.presentation);
+  const typography = useAppStore((s) => s.typography);
 
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -78,6 +79,7 @@ function Sheet() {
             themeId={themeId}
             density={density}
             presentation={presentation}
+            typography={typography}
             onClose={close}
             onEdit={edit}
           />

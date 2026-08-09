@@ -8,6 +8,7 @@ import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 vi.mock("@/lib/ipc", () => ({
   ipc: { listThemes: () => Promise.resolve([]) },
   onThemesChanged: () => Promise.resolve(() => {}),
+  setWindowZoom: () => Promise.resolve(),
 }));
 
 /** The light theme's own stylesheet under another name, which is exactly how a

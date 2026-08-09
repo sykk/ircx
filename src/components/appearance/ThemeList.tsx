@@ -1,15 +1,30 @@
-import { CheckField, Group, SecondaryButton, SelectField } from "@/components/onboarding/fields";
+import { useState } from "react";
+import {
+  CheckField,
+  Group,
+  Note,
+  SecondaryButton,
+  SelectField,
+} from "@/components/onboarding/fields";
+import { chooseFolder, ipc, revealFolder } from "@/lib/ipc";
 import {
   CLOCK_FORMATS,
   DENSITIES,
+  MONO_FACES,
+  PRESETS,
+  PROSE_FACES,
+  ZOOM_LEVELS,
   selectDensity,
   selectPresentation,
+  selectPreset,
   selectTheme,
+  selectTypography,
   type BrokenTheme,
   type ClockFormat,
   type DensityId,
   type Presentation,
   type Theme,
+  type Typography,
 } from "@/lib/theme";
 
 /**
@@ -29,6 +44,7 @@ export function ThemeList({
   themeId,
   density,
   presentation,
+  typography,
   onClose,
   onEdit,
 }: {
@@ -37,6 +53,7 @@ export function ThemeList({
   themeId: string;
   density: DensityId;
   presentation: Presentation;
+  typography: Typography;
   onClose: () => void;
   onEdit: (theme: string) => void;
 }) {
@@ -102,6 +119,62 @@ export function ThemeList({
         </ul>
       </Group>
 
+      <InstallTheme />
+
+      <Group title="Start from">
+        <ul className="flex flex-col gap-1">
+          {PRESETS.map((preset) => (
+            <li key={preset.id}>
+              {/* Named apart from the theme of the same name, which is the
+                  next control down and is only half of what this does. */}
+              <button
+                type="button"
+                aria-label={`Start from ${preset.name}`}
+                onClick={() => selectPreset(preset)}
+                className="flex w-full flex-col items-start gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--surface-hover)]"
+              >
+                <span className="text-[13px] text-[var(--text-primary)]">{preset.name}</span>
+                <span className="text-[11px] text-[var(--text-muted)]">{preset.detail}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {/* Nothing here is marked as in use: a preset writes the settings below
+            and stops existing, and a mark would claim the window is in a mode
+            that can be left. */}
+        <Note>
+          A preset sets the theme, the timeline and the faces together. Each of them stays yours
+          to change afterwards.
+        </Note>
+      </Group>
+
+      <Group title="Type">
+        <SelectField
+          label="Prose"
+          value={typography.prose}
+          options={PROSE_FACES.map((face) => ({ value: face.id, label: face.name }))}
+          onChange={(prose) => selectTypography({ prose })}
+        />
+
+        <SelectField
+          label="Identifiers and code"
+          value={typography.mono}
+          options={MONO_FACES.map((face) => ({ value: face.id, label: face.name }))}
+          onChange={(mono) => selectTypography({ mono })}
+        />
+
+        <SelectField
+          label="Window scale"
+          value={String(typography.zoom)}
+          options={ZOOM_LEVELS.map((level) => ({
+            value: String(level),
+            label: `${Math.round(level * 100)}%`,
+          }))}
+          onChange={(zoom) => selectTypography({ zoom: Number(zoom) })}
+          hint="Scales the whole window, the way a browser's zoom does."
+        />
+      </Group>
+
       <Group title="Timeline">
         <SelectField<ClockFormat>
           label="Timestamp"
@@ -157,6 +230,71 @@ export function ThemeList({
       </p>
     </div>
   );
+}
+
+/**
+ * Copies a theme folder into the themes directory, and opens that directory.
+ *
+ * Nothing is added to the list here. The backend watches the directory and
+ * republishes it, which is the same route a theme copied in by hand takes — so
+ * a theme that installs and a theme that is dropped in arrive by one path and
+ * cannot disagree about what is on disk. What this does do is select what it
+ * installed: choosing it is the reason somebody installed it, and a theme that
+ * landed and did nothing reads as an install that failed.
+ */
+function InstallTheme() {
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function install() {
+    setProblem(null);
+
+    let source: string | null;
+    try {
+      source = await chooseFolder("Choose a theme folder");
+    } catch (reason) {
+      setProblem(reasonOr(reason, "The folder picker could not be opened."));
+      return;
+    }
+    if (source === null) return;
+
+    setBusy(true);
+    try {
+      selectTheme(await ipc.installTheme(source));
+    } catch (reason) {
+      setProblem(reasonOr(reason, "That theme could not be installed."));
+    }
+    setBusy(false);
+  }
+
+  async function reveal() {
+    setProblem(null);
+    try {
+      await revealFolder(await ipc.themesDirectory());
+    } catch (reason) {
+      setProblem(reasonOr(reason, "The themes folder could not be opened."));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <SecondaryButton label="Install a theme from a folder" onClick={() => void install()}>
+          {busy ? "Installing" : "Install a theme"}
+        </SecondaryButton>
+        <SecondaryButton label="Open the themes folder" onClick={() => void reveal()}>
+          Open themes folder
+        </SecondaryButton>
+      </div>
+      {problem && <Note error>{problem}</Note>}
+    </div>
+  );
+}
+
+/** Tauri rejects with the handler's own sentence, which is written for a
+ * reader; anything else is a bug in the bridge and gets the caller's. */
+function reasonOr(reason: unknown, fallback: string): string {
+  return typeof reason === "string" && reason.trim() !== "" ? reason : fallback;
 }
 
 /** The palette's line for a theme, in the palette's order — see `describeTheme`

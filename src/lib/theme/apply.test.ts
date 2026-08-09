@@ -226,7 +226,11 @@ describe("applyOverrides", () => {
     applyOverrides({});
 
     const properties = Array.from({ length: root.style.length }, (_, i) => root.style.item(i));
+    /* The two faces are painted with every theme, so they are here whatever the
+     * edits were — see `fontTokens` in the paint. */
     expect(properties.filter((name) => name.startsWith("--")).sort()).toEqual([
+      "--font-mono",
+      "--font-ui",
       "--surface-base",
       "--timeline-block-gap",
     ]);

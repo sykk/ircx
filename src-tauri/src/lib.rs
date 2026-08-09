@@ -191,6 +191,8 @@ pub fn run() {
             commands::get_draft,
             commands::set_draft,
             commands::list_themes,
+            commands::install_theme,
+            commands::themes_directory,
             commands::list_plugins,
             commands::plugin_permissions,
             commands::install_plugin,

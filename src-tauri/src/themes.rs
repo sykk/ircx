@@ -58,6 +58,71 @@ fn theme_id(path: &Path) -> Option<String> {
     Some(name.to_owned())
 }
 
+/// The three files a theme is made of. `ui.css` is optional and copied when it
+/// is there; the other two are what makes a directory a theme at all.
+const FILES: [&str; 3] = ["theme.json", "theme.css", "ui.css"];
+
+/// Copies a theme directory into the themes directory, and answers with the id
+/// it landed under — its folder name, which is what the rest of the theme
+/// system keys on.
+///
+/// Only those three files are copied, and nothing below them. A theme is a
+/// manifest and a stylesheet; anything else in the folder somebody picked is
+/// something they did not mean to install, and copying a tree the client never
+/// reads would make this a general file copier with a themes-shaped name.
+pub fn install(directory: &Path, source: &Path) -> Result<String, String> {
+    let Some(id) = theme_id(source) else {
+        return Err(format!(
+            "{} is not a folder. Pick the folder holding theme.json and theme.css.",
+            source.display()
+        ));
+    };
+
+    for required in ["theme.json", "theme.css"] {
+        if !source.join(required).is_file() {
+            return Err(format!(
+                "{id} has no {required}. A theme is a folder holding theme.json and theme.css."
+            ));
+        }
+    }
+
+    let target = directory.join(&id);
+    /* Installing the folder that is already installed would copy each file onto
+     * itself, and the picker puts that one click away: the themes directory is
+     * where somebody looking for an example to copy goes first. */
+    if same_place(source, &target) {
+        return Err(format!(
+            "{id} is already installed. There is nothing to copy."
+        ));
+    }
+
+    std::fs::create_dir_all(&target)
+        .map_err(|error| format!("ircx could not create {}: {error}", target.display()))?;
+
+    for file in FILES {
+        let from = source.join(file);
+        if !from.is_file() {
+            /* Reinstalling a theme that has dropped its ui.css must not leave
+             * the old one behind, animating a theme that no longer asks it. */
+            let _ = std::fs::remove_file(target.join(file));
+            continue;
+        }
+        std::fs::copy(&from, target.join(file))
+            .map_err(|error| format!("ircx could not copy {}: {error}", from.display()))?;
+    }
+
+    Ok(id)
+}
+
+/// Whether two paths name the same directory, compared after resolution so a
+/// symlink or a `..` in the picked path is still recognised.
+fn same_place(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
 /// Republishes the directory whenever it changes on disk. Polling metadata
 /// beats a watcher dependency here: the directory holds a handful of entries,
 /// and an editor that writes through a temporary file trips a watcher twice
@@ -109,4 +174,112 @@ fn fingerprint(directory: &Path) -> Vec<(String, u64, Option<std::time::SystemTi
     }
     marks.sort();
     marks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A theme folder with whichever files the test wants in it.
+    fn source(at: &Path, files: &[&str]) -> PathBuf {
+        let folder = at.join("harbour");
+        std::fs::create_dir_all(&folder).unwrap();
+        for file in files {
+            std::fs::write(folder.join(file), format!("{file} contents")).unwrap();
+        }
+        folder
+    }
+
+    #[test]
+    fn copies_a_theme_under_its_folder_name() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+        let from = source(picked.path(), &["theme.json", "theme.css"]);
+
+        let id = install(themes.path(), &from).unwrap();
+
+        assert_eq!(id, "harbour");
+        assert!(themes.path().join("harbour/theme.json").is_file());
+        assert!(themes.path().join("harbour/theme.css").is_file());
+    }
+
+    #[test]
+    fn takes_the_optional_ui_stylesheet_too() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+        let from = source(picked.path(), &["theme.json", "theme.css", "ui.css"]);
+
+        install(themes.path(), &from).unwrap();
+
+        assert!(themes.path().join("harbour/ui.css").is_file());
+    }
+
+    /// Nothing below the three is a theme, and copying it would make this a
+    /// general file copier that happens to be called from the theme sheet.
+    #[test]
+    fn leaves_everything_that_is_not_a_theme_file() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+        let from = source(picked.path(), &["theme.json", "theme.css", "notes.txt"]);
+        std::fs::create_dir_all(from.join("screenshots")).unwrap();
+
+        install(themes.path(), &from).unwrap();
+
+        assert!(!themes.path().join("harbour/notes.txt").exists());
+        assert!(!themes.path().join("harbour/screenshots").exists());
+    }
+
+    /// Left behind, it would animate a theme whose author took the file out.
+    #[test]
+    fn drops_a_ui_stylesheet_a_reinstall_no_longer_has() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+
+        install(
+            themes.path(),
+            &source(picked.path(), &["theme.json", "theme.css", "ui.css"]),
+        )
+        .unwrap();
+        std::fs::remove_file(picked.path().join("harbour/ui.css")).unwrap();
+        install(themes.path(), &picked.path().join("harbour")).unwrap();
+
+        assert!(!themes.path().join("harbour/ui.css").exists());
+    }
+
+    #[test]
+    fn names_the_file_a_folder_is_missing() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+        let from = source(picked.path(), &["theme.json"]);
+
+        let problem = install(themes.path(), &from).unwrap_err();
+
+        assert!(problem.contains("theme.css"), "{problem}");
+    }
+
+    #[test]
+    fn refuses_a_path_that_is_not_a_folder() {
+        let picked = tempfile::tempdir().unwrap();
+        let themes = tempfile::tempdir().unwrap();
+        let file = picked.path().join("theme.css");
+        std::fs::write(&file, "").unwrap();
+
+        assert!(install(themes.path(), &file).is_err());
+    }
+
+    /// The themes directory is where somebody goes for an example to copy, so
+    /// the picker puts installing a theme over itself one click away.
+    #[test]
+    fn refuses_to_install_a_theme_over_itself() {
+        let themes = tempfile::tempdir().unwrap();
+        let from = source(themes.path(), &["theme.json", "theme.css"]);
+
+        let problem = install(themes.path(), &from).unwrap_err();
+
+        assert!(problem.contains("already installed"), "{problem}");
+        assert_eq!(
+            std::fs::read_to_string(from.join("theme.css")).unwrap(),
+            "theme.css contents"
+        );
+    }
 }

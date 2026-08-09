@@ -5,17 +5,31 @@ import {
   applyDensity,
   applyOverrides,
   applyTheme,
+  applyTypography,
   catalogue,
   DEFAULT_DENSITY,
+  DEFAULT_TYPOGRAPHY,
 } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import type { AppState } from "@/store/types";
 import { AppearanceSheet } from "../AppearanceSheet";
 
 /* `selectTheme` lives in src/lib/theme/session.ts, which reaches the backend to
- * watch the themes directory. Nothing here calls that, but importing the barrel
- * pulls the module in. */
-vi.mock("@/lib/ipc", () => ({ ipc: {}, onThemesChanged: vi.fn() }));
+ * watch the themes directory. Most of what is here does not call that, but
+ * importing the barrel pulls the module in — and the install buttons do. */
+const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock } = vi.hoisted(() => ({
+  ipcMock: { installTheme: vi.fn(), themesDirectory: vi.fn() },
+  chooseFolderMock: vi.fn(),
+  revealFolderMock: vi.fn(),
+  setWindowZoomMock: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@/lib/ipc", () => ({
+  ipc: ipcMock,
+  onThemesChanged: vi.fn(),
+  setWindowZoom: setWindowZoomMock,
+  chooseFolder: chooseFolderMock,
+  revealFolder: revealFolderMock,
+}));
 
 const THEMES = catalogue().themes;
 
@@ -33,6 +47,8 @@ afterEach(() => {
   applyTheme(null);
   applyOverrides({});
   applyDensity(DEFAULT_DENSITY);
+  applyTypography(DEFAULT_TYPOGRAPHY);
+  vi.clearAllMocks();
   root.removeAttribute("style");
   root.removeAttribute("data-theme");
   localStorage.clear();
@@ -217,6 +233,137 @@ describe("AppearanceSheet", () => {
 
       fireEvent.click(field("Angle brackets around nicknames"));
       expect(useAppStore.getState().presentation.nickBrackets).toBe(false);
+    });
+  });
+
+  describe("type", () => {
+    it("paints the face that was chosen", () => {
+      open();
+      fireEvent.change(field("Prose"), { target: { value: "georgia" } });
+
+      expect(token("--font-ui")).toContain("Georgia");
+      expect(useAppStore.getState().typography.prose).toBe("georgia");
+    });
+
+    /** The terminal look. Prose follows the mono setting rather than naming a
+     * face, so changing the mono face changes both. */
+    it("sets prose in the mono face, and keeps the two together after", () => {
+      open();
+      fireEvent.change(field("Prose"), { target: { value: "mono" } });
+      expect(token("--font-ui")).toBe(token("--font-mono"));
+
+      fireEvent.change(field("Identifiers and code"), { target: { value: "courier" } });
+
+      expect(token("--font-ui")).toContain("Courier");
+      expect(token("--font-ui")).toBe(token("--font-mono"));
+    });
+
+    /** A theme states colours. The faces are painted after it for that reason,
+     * and this is the assertion that keeps it true. */
+    it("keeps the chosen face across a change of theme", () => {
+      open({ themeId: "ircx-dark" });
+      fireEvent.change(field("Prose"), { target: { value: "georgia" } });
+      fireEvent.click(screen.getByText("light · ircx · 1.0.0"));
+
+      expect(token("--surface-base")).toBe("#ffffff");
+      expect(token("--font-ui")).toContain("Georgia");
+    });
+
+    it("sends the window scale to the webview and remembers it", () => {
+      open();
+      fireEvent.change(field("Window scale"), { target: { value: "1.25" } });
+
+      expect(setWindowZoomMock).toHaveBeenCalledWith(1.25);
+      expect(localStorage.getItem("ircx.typography")).toContain('"zoom":1.25');
+    });
+  });
+
+  describe("a preset", () => {
+    /** The whole point of one: a look is a palette and a layout and a face, and
+     * asking somebody to find three settings after choosing a theme is asking
+     * them to guess what the theme was for. */
+    it("sets the theme, the timeline and the faces in one click", () => {
+      open({ themeId: "ircx-dark" });
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(useAppStore.getState().themeId).toBe("ircx-classic");
+      expect(token("--surface-base")).toBe("#000000");
+      expect(useAppStore.getState().presentation).toEqual({
+        spine: false,
+        clock: "24h-seconds",
+        nickBrackets: true,
+      });
+      expect(token("--font-ui")).toBe(token("--font-mono"));
+    });
+
+    /** Applying one is a starting point, not a mode. Every setting it wrote is
+     * still the reader's, and the controls below say what it left. */
+    it("leaves what it wrote open to being changed back", () => {
+      open();
+      fireEvent.click(button("Start from Classic IRC"));
+      fireEvent.click(field("Spine"));
+
+      expect(useAppStore.getState().presentation.spine).toBe(true);
+      expect(useAppStore.getState().themeId).toBe("ircx-classic");
+    });
+
+    it("does not touch the window scale", () => {
+      open();
+      fireEvent.change(field("Window scale"), { target: { value: "1.1" } });
+      setWindowZoomMock.mockClear();
+
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(setWindowZoomMock).not.toHaveBeenCalled();
+      expect(useAppStore.getState().typography.zoom).toBe(1.1);
+    });
+  });
+
+  describe("installing a theme", () => {
+    it("copies the folder that was picked and selects what landed", async () => {
+      chooseFolderMock.mockResolvedValue("/home/syk/themes/harbour");
+      ipcMock.installTheme.mockResolvedValue("harbour");
+      open();
+
+      fireEvent.click(button("Install a theme from a folder"));
+      await screen.findByText("Appearance");
+
+      expect(ipcMock.installTheme).toHaveBeenCalledWith("/home/syk/themes/harbour");
+      expect(useAppStore.getState().themeId).toBe("harbour");
+    });
+
+    it("does nothing at all when the picker is dismissed", async () => {
+      chooseFolderMock.mockResolvedValue(null);
+      open();
+
+      fireEvent.click(button("Install a theme from a folder"));
+      await screen.findByText("Appearance");
+
+      expect(ipcMock.installTheme).not.toHaveBeenCalled();
+    });
+
+    /** The backend's refusals name the file that is missing and what belongs in
+     * it. Swallowing one would leave a button that does nothing. */
+    it("shows the backend's own words when a folder is not a theme", async () => {
+      chooseFolderMock.mockResolvedValue("/home/syk/notes");
+      ipcMock.installTheme.mockRejectedValue(
+        "notes has no theme.css. A theme is a folder holding theme.json and theme.css.",
+      );
+      open();
+
+      fireEvent.click(button("Install a theme from a folder"));
+
+      expect(await screen.findByText(/notes has no theme\.css/)).toBeTruthy();
+    });
+
+    it("opens the folder themes live in", async () => {
+      ipcMock.themesDirectory.mockResolvedValue("/home/syk/.local/share/ircx/themes");
+      open();
+
+      fireEvent.click(button("Open the themes folder"));
+      await screen.findByText("Appearance");
+
+      expect(revealFolderMock).toHaveBeenCalledWith("/home/syk/.local/share/ircx/themes");
     });
   });
 

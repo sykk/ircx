@@ -38,6 +38,26 @@ a conversation, so a declared group falls back to the name above its run and an
 addressed one to the two nick colours; the gap between two blocks of one group
 comes back with it, there being nothing left to span it.
 
+The two faces and the window scale are the reader's too, in
+`src/lib/theme/typography.ts`. A face is chosen from a list rather than typed,
+because `src/lib/theme/overrides.ts` keeps `--font-ui` and `--font-mono` out of
+a theme's reach on the argument that an arbitrary value on the root element is a
+stylesheet-shaped hole, and a list opens that door only as far as a reader needs
+it. The faces paint after the theme, so a theme cannot take back a font somebody
+chose. The scale is not a token at all: the app sets its type in px, so a
+font-size on the root moves nothing, and a CSS `zoom` would scale boxes without
+scaling `window.innerWidth` — it goes to the webview's own zoom, where every
+measurement scales together.
+
+A look is more than a palette, so `src/lib/theme/presets.ts` is what bundles
+one: a theme, the three timeline settings and the two faces, applied together
+and each still the reader's afterwards. Classic IRC is the one that needed it —
+black surfaces are not the old clients, `<nick>` at the head of a run and no
+spine are the rest of it. A preset writes what somebody could have written by
+hand and stops existing; nothing is ever marked as being in a preset. This is
+the shape that keeps a theme a set of token values, which is the contract
+`overrides.ts` enforces and the reason widening `theme.json` was refused.
+
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the
 useful part: grouping separates conversations happening at once, so a channel

@@ -246,6 +246,25 @@ pub async fn list_themes(app: tauri::AppHandle) -> Result<Vec<ThemeSource>, Stri
     crate::themes::read(&directory)
 }
 
+/// `source` is the folder the user picked, holding the author's `theme.json`
+/// and `theme.css`. Answers with the id it installed under, which the window
+/// then selects; the directory watcher is what puts it in the list.
+#[tauri::command]
+pub async fn install_theme(app: tauri::AppHandle, source: String) -> Result<String, String> {
+    let directory = crate::themes::directory(&app)?;
+    crate::themes::install(&directory, std::path::Path::new(&source))
+}
+
+/// Where themes live, so the window can offer to open it. A path rather than
+/// the opening itself: the frontend already reaches the opener plugin for
+/// everything else it shows somebody.
+#[tauri::command]
+pub async fn themes_directory(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(crate::themes::directory(&app)?
+        .to_string_lossy()
+        .into_owned())
+}
+
 #[tauri::command]
 pub async fn list_plugins(app: State<'_, App>) -> Result<Vec<InstalledPlugin>, String> {
     app.list_plugins()

@@ -9,6 +9,7 @@ import {
 import { chooseFolder, ipc, revealFolder } from "@/lib/ipc";
 import {
   CLOCK_FORMATS,
+  CLOCK_SIDES,
   DENSITIES,
   MONO_FACES,
   PRESETS,
@@ -21,6 +22,7 @@ import {
   selectTypography,
   type BrokenTheme,
   type ClockFormat,
+  type ClockSide,
   type DensityId,
   type Presentation,
   type Theme,
@@ -186,6 +188,15 @@ export function ThemeList({
           onChange={(clock) => selectPresentation({ clock })}
         />
 
+        {/* Offered even with the clock off, where it changes nothing: hiding it
+            would move the controls under it every time somebody tried Off. */}
+        <SelectField<ClockSide>
+          label="Timestamp place"
+          value={presentation.clockSide}
+          options={CLOCK_SIDES.map(({ id, name }) => ({ value: id, label: name }))}
+          onChange={(clockSide) => selectPresentation({ clockSide })}
+        />
+
         <CheckField
           label="Spine"
           hint="The rule at the rail. Its colour names the conversation a run belongs to, which nothing else on the row says."
@@ -194,8 +205,15 @@ export function ThemeList({
         />
 
         <CheckField
+          label="Nickname on every line"
+          hint="Each line states who said it and when, instead of the run stating it once above them."
+          checked={presentation.nickEveryLine}
+          onChange={(nickEveryLine) => selectPresentation({ nickEveryLine })}
+        />
+
+        <CheckField
           label="Angle brackets around nicknames"
-          hint="<alice> at the head of a run, as clients that named every line wrote it."
+          hint="<alice> rather than alice, wherever the name is written, as clients that named every line wrote it."
           checked={presentation.nickBrackets}
           onChange={(nickBrackets) => selectPresentation({ nickBrackets })}
         />

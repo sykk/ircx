@@ -2,7 +2,8 @@ import { useState } from "react";
 import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
-import { Block, Clock } from "./MessageBlock";
+import { Clock } from "./Clock";
+import { Block } from "./MessageBlock";
 import { describePresenceRun, partitionSystemRun } from "./rows";
 
 /**

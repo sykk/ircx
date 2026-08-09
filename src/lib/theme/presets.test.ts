@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalogue } from "./load";
 import { PRESETS } from "./presets";
-import { CLOCK_FORMATS } from "./presentation";
+import { CLOCK_FORMATS, CLOCK_SIDES } from "./presentation";
 import { MONO_FACES, PROSE_FACES } from "./typography";
 
 const installed = new Set(catalogue().themes.map((theme) => theme.id));
@@ -15,6 +15,7 @@ describe("every preset", () => {
 
   it.each(PRESETS)("$name names settings the sheet also offers", (preset) => {
     expect(CLOCK_FORMATS.map((format) => format.id)).toContain(preset.presentation.clock);
+    expect(CLOCK_SIDES.map((side) => side.id)).toContain(preset.presentation.clockSide);
     expect(PROSE_FACES.map((face) => face.id)).toContain(preset.faces.prose);
     expect(MONO_FACES.map((face) => face.id)).toContain(preset.faces.mono);
   });
@@ -25,6 +26,14 @@ describe("every preset", () => {
   it.each(PRESETS)("$name leaves the window scale alone", (preset) => {
     expect(Object.keys(preset.faces).sort()).toEqual(["mono", "prose"]);
   });
+
+  /** The name in front of every line decides how much of the window a
+   * conversation takes rather than what it looks like, and somebody who reads a
+   * channel that way reads every look that way. A preset states the other four
+   * settings and says nothing about this one. */
+  it.each(PRESETS)("$name leaves the name on every line alone", (preset) => {
+    expect(Object.keys(preset.presentation)).not.toContain("nickEveryLine");
+  });
 });
 
 describe("the classic preset", () => {
@@ -34,6 +43,7 @@ describe("the classic preset", () => {
     expect(classic.presentation).toEqual({
       spine: false,
       clock: "24h-seconds",
+      clockSide: "left",
       nickBrackets: true,
     });
     expect(classic.faces.prose).toBe("mono");

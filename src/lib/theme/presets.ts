@@ -22,7 +22,11 @@ export interface Preset {
   name: string;
   detail: string;
   theme: string;
-  presentation: Presentation;
+  /** Every timeline setting but one. Whether the name is stated in front of
+   * every line stays where the reader left it: it decides how much of the
+   * window a conversation takes rather than what it looks like, and somebody
+   * who reads a channel that way reads every look that way. */
+  presentation: Omit<Presentation, "nickEveryLine">;
   /** The faces only. A preset does not touch the window scale: that is an
    * accessibility setting somebody chose for their eyes, and no look is worth
    * resizing the window somebody else set. */
@@ -33,9 +37,14 @@ export const PRESETS: readonly Preset[] = [
   {
     id: "classic",
     name: "Classic IRC",
-    detail: "Black ground, no spine, <nick> at the head of a run",
+    detail: "Black ground, no spine, the time and then <nick> at the head of a run",
     theme: CLASSIC_THEME_ID,
-    presentation: { spine: false, clock: "24h-seconds", nickBrackets: true },
+    presentation: {
+      spine: false,
+      clock: "24h-seconds",
+      clockSide: "left",
+      nickBrackets: true,
+    },
     faces: { prose: "mono", mono: "courier" },
   },
   {
@@ -43,7 +52,12 @@ export const PRESETS: readonly Preset[] = [
     name: "ircx",
     detail: "The dark theme and the layout the readability studies argue for",
     theme: FALLBACK_THEME_ID,
-    presentation: { spine: true, clock: "24h", nickBrackets: false },
+    presentation: {
+      spine: true,
+      clock: "24h",
+      clockSide: "right",
+      nickBrackets: false,
+    },
     faces: { prose: "inter", mono: "jetbrains" },
   },
 ];

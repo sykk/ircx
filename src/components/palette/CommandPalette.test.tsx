@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyDensity, applyTheme } from "@/lib/theme";
+import { applyDensity, applyTheme, DEFAULT_PRESENTATION } from "@/lib/theme";
 import { catalogue } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -505,6 +505,49 @@ describe("CommandPalette", () => {
 
       expect(useAppStore.getState().themeId).toBe("ircx-dark");
       expect(root.style.getPropertyValue("--surface-base")).toBe("#0a0d12");
+    });
+  });
+
+  /** The one timeline setting with a row of its own: it changes how much of the
+   * window a conversation takes, so it is turned on to read a busy channel and
+   * off again afterwards. */
+  describe("the nickname on every line", () => {
+    beforeEach(() => useAppStore.setState({ presentation: DEFAULT_PRESENTATION }));
+
+    afterEach(() => localStorage.clear());
+
+    it("turns it on, and remembers it, on Enter", () => {
+      render(<CommandPalette />);
+      type("Nickname on every line");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
+      expect(localStorage.getItem("ircx.presentation")).toContain('"nickEveryLine":true');
+      expect(useAppStore.getState().paletteOpen).toBe(false);
+    });
+
+    /* Named for what running it leaves behind, so the row a reader who already
+       turned it on finds is the one that turns it off again. */
+    it("offers the way back once it is on", () => {
+      useAppStore.setState({
+        presentation: { ...DEFAULT_PRESENTATION, nickEveryLine: true },
+      });
+      render(<CommandPalette />);
+      type("Nickname");
+
+      expect(optionLabels()).toEqual([expect.stringContaining("Nickname once above a run")]);
+
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(useAppStore.getState().presentation.nickEveryLine).toBe(false);
+    });
+
+    it("leaves the other timeline settings alone", () => {
+      render(<CommandPalette />);
+      type("Nickname on every line");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(useAppStore.getState().presentation.spine).toBe(true);
+      expect(useAppStore.getState().presentation.nickBrackets).toBe(false);
     });
   });
 });

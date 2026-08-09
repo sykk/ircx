@@ -330,8 +330,9 @@ export function formatClock(timestamp: string, format: ClockFormat): string | nu
   if (Number.isNaN(at.getTime())) return "--:--";
 
   const minutes = String(at.getMinutes()).padStart(2, "0");
-  if (format === "12h") {
-    return `${at.getHours() % 12 || 12}:${minutes} ${at.getHours() < 12 ? "AM" : "PM"}`;
+  if (format === "12h" || format === "12h-bare") {
+    const twelve = `${at.getHours() % 12 || 12}:${minutes}`;
+    return format === "12h-bare" ? twelve : `${twelve} ${at.getHours() < 12 ? "AM" : "PM"}`;
   }
 
   const clock = `${String(at.getHours()).padStart(2, "0")}:${minutes}`;

@@ -29,14 +29,18 @@ where the run names you; the mention is already marked by the line above the
 run and by the tint on its row, and letting it take the spine cost the accent
 the second block of every exchange the reader was in.
 
-The spine, the clock's format and the angle brackets an older client put round
-a nickname are the reader's, in the appearance sheet beside the density and in
-`src/lib/theme/presentation.ts`. They are settings rather than tokens, for the
-density's reason: a theme is a set of token values, and each of these three
-changes what a component draws. Turning the spine off costs the hue that names
-a conversation, so a declared group falls back to the name above its run and an
-addressed one to the two nick colours; the gap between two blocks of one group
-comes back with it, there being nothing left to span it.
+The spine, the clock's format, the side of the nickname it is set on, whether
+the name is stated in front of every line or once above the run, and the angle
+brackets an older client put round it are the reader's, in the appearance sheet
+beside the density and in `src/lib/theme/presentation.ts`. They are settings
+rather than tokens, for the density's reason: a theme is a set of token values,
+and each of them changes what a component draws. The name on every line is the
+prefix and not the column the head of a run replaced: it sits in the flow of the
+prose, where a longer name cannot move the left edge the words start at.
+Turning the spine off costs the hue that names a conversation, so a declared
+group falls back to the name above its run and an addressed one to the two nick
+colours; the gap between two blocks of one group comes back with it, there being
+nothing left to span it.
 
 The two faces and the window scale are the reader's too, in
 `src/lib/theme/typography.ts`. A face is chosen from a list rather than typed,
@@ -50,12 +54,16 @@ scaling `window.innerWidth` — it goes to the webview's own zoom, where every
 measurement scales together.
 
 A look is more than a palette, so `src/lib/theme/presets.ts` is what bundles
-one: a theme, the three timeline settings and the two faces, applied together
-and each still the reader's afterwards. Classic IRC is the one that needed it —
-black surfaces are not the old clients, `<nick>` at the head of a run and no
-spine are the rest of it. A preset writes what somebody could have written by
-hand and stops existing; nothing is ever marked as being in a preset. This is
-the shape that keeps a theme a set of token values, which is the contract
+one: a theme, the timeline settings and the two faces, applied together and each
+still the reader's afterwards. Classic IRC is the one that needed it — black
+surfaces are not the old clients, the time and then `<nick>` at the head of a
+run and no spine are the rest of it. What a preset does not touch is as
+deliberate: the window scale, because it is an accessibility setting somebody
+chose for their eyes, and the name in front of every line, because it decides
+how much of the window a conversation takes rather than what it looks like. A
+preset writes what somebody could have written by hand and stops existing;
+nothing is ever marked as being in a preset. This is the shape that keeps a
+theme a set of token values, which is the contract
 `overrides.ts` enforces and the reason widening `theme.json` was refused.
 
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing

@@ -270,6 +270,20 @@ describe("useAppHotkeys", () => {
     expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
+  /* Reached while reading a channel that has gone busy, which is when the
+     composer holds the caret. A chord that only worked with the timeline
+     focused would not be reachable at the moment it is wanted. */
+  it("puts the nickname on every line with Ctrl+Shift+N, and takes it off again", () => {
+    const { getByLabelText } = render(<AppHost />);
+
+    press(getByLabelText("composer"), { key: "n", code: "KeyN", ctrlKey: true, shiftKey: true });
+    expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
+    expect(localStorage.getItem("ircx.presentation")).toContain('"nickEveryLine":true');
+
+    press(document, { key: "n", code: "KeyN", ctrlKey: true, shiftKey: true });
+    expect(useAppStore.getState().presentation.nickEveryLine).toBe(false);
+  });
+
   it("opens search with Ctrl+F even from the composer", () => {
     const { getByLabelText } = render(<AppHost />);
 

@@ -87,7 +87,13 @@ describe("what the timeline draws", () => {
   it("opens on what the last session chose", () => {
     localStorage.setItem(
       "ircx.presentation",
-      JSON.stringify({ spine: false, clock: "12h", nickBrackets: true }),
+      JSON.stringify({
+        spine: false,
+        clock: "12h",
+        clockSide: "left",
+        nickBrackets: true,
+        nickEveryLine: true,
+      }),
     );
 
     applyOpeningTheme();
@@ -95,23 +101,41 @@ describe("what the timeline draws", () => {
     expect(useAppStore.getState().presentation).toEqual({
       spine: false,
       clock: "12h",
+      clockSide: "left",
       nickBrackets: true,
+      nickEveryLine: true,
     });
   });
 
   /* Held as one blob, so a change that did not merge would reset whichever of
-   * the three was not being set. */
-  it("merges one setting over the two it was not given", () => {
-    useAppStore.setState({ presentation: { spine: false, clock: "12h", nickBrackets: true } });
+   * the settings was not being set. */
+  it("merges one setting over the ones it was not given", () => {
+    useAppStore.setState({
+      presentation: {
+        spine: false,
+        clock: "12h",
+        clockSide: "left",
+        nickBrackets: true,
+        nickEveryLine: true,
+      },
+    });
 
     selectPresentation({ clock: "off" });
 
     expect(useAppStore.getState().presentation).toEqual({
       spine: false,
       clock: "off",
+      clockSide: "left",
       nickBrackets: true,
+      nickEveryLine: true,
     });
-    expect(storedPresentation()).toEqual({ spine: false, clock: "off", nickBrackets: true });
+    expect(storedPresentation()).toEqual({
+      spine: false,
+      clock: "off",
+      clockSide: "left",
+      nickBrackets: true,
+      nickEveryLine: true,
+    });
   });
 });
 

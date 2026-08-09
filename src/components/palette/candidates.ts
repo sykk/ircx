@@ -36,6 +36,9 @@ export type CandidateAction =
   | { type: "appearance" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
+  /** Carries what it will leave the setting at rather than reading the store
+   * when it runs, so the row and what running it does cannot disagree. */
+  | { type: "nickEveryLine"; on: boolean }
   /** A theme that failed to load. Running it prints why, which is the only
    * place the reasons can reach the person holding the file. */
   | { type: "themeProblem"; id: string; problems: string[] };
@@ -129,6 +132,7 @@ export type CandidateSources = Pick<
   | "brokenThemes"
   | "themeId"
   | "density"
+  | "presentation"
 >;
 
 /** Rebuilt when the store's channel, query, or network maps change — not per
@@ -246,6 +250,29 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       unread: 0,
     });
   }
+
+  // The one timeline setting with a row of its own. It changes how much of the
+  // window a conversation takes, so it is the one somebody turns on to read a
+  // busy channel and off again afterwards — the appearance sheet is a long way
+  // to go for that. Named for what running it leaves behind, the way Connect
+  // and Disconnect are.
+  const everyLine = state.presentation.nickEveryLine;
+  const nickLabel = everyLine ? "Nickname once above a run" : "Nickname on every line";
+  candidates.push({
+    id: "presentation:nickEveryLine",
+    kind: "action",
+    label: nickLabel,
+    detail: withChord(
+      everyLine
+        ? "State who said it and when once, above the run"
+        : "State who said it and when in front of each line",
+      "timeline.nickEveryLine",
+    ),
+    hay: prepare(nickLabel),
+    key: null,
+    action: { type: "nickEveryLine", on: !everyLine },
+    unread: 0,
+  });
 
   for (const broken of state.brokenThemes) {
     candidates.push({

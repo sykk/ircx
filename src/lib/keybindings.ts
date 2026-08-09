@@ -11,6 +11,7 @@ export type ActionId =
   | "palette.toggle"
   | "search.open"
   | "roster.toggle"
+  | "timeline.nickEveryLine"
   | "pane.splitVertical"
   | "pane.splitHorizontal"
   | "pane.close"
@@ -38,6 +39,11 @@ export const DEFAULT_BINDINGS: readonly Binding[] = [
   { chord: "Mod+K", action: "palette.toggle", whenTyping: true, description: "Command palette" },
   { chord: "Mod+F", action: "search.open", whenTyping: true, description: "Search current target" },
   { chord: "Mod+Shift+M", action: "roster.toggle", description: "Toggle member list" },
+  // Fires while typing, unlike the member list beside it. This one is reached
+  // while reading a channel that has gone busy, which is exactly when the
+  // composer holds the caret; two modifiers and a letter cannot arrive in the
+  // middle of a message by accident.
+  { chord: "Mod+Shift+N", action: "timeline.nickEveryLine", whenTyping: true, description: "Nickname on every line" },
 
   { chord: "Mod+\\", action: "pane.splitVertical", whenTyping: true, description: "Split pane side by side" },
   { chord: "Mod+Shift+\\", action: "pane.splitHorizontal", whenTyping: true, description: "Split pane top and bottom" },

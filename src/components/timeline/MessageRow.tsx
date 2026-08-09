@@ -3,14 +3,15 @@ import type { Annotation, ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
-import { serverMsgid } from "@/store";
+import { serverMsgid, useAppStore } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
+import { Clock } from "./Clock";
 import { bodyText } from "./groups";
 import { Markdown, Mentioned } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
-import type { FailureRun } from "./rows";
+import { writesOwnNick, type FailureRun } from "./rows";
 
 interface MessageRowProps {
   message: ChatMessage;
@@ -113,6 +114,7 @@ export function MessageRow({
             className="selectable font-[family-name:var(--font-ui)]"
             style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
+            <SenderPrefix message={message} />
             <Body message={message} mention={highlight ? ownNick : null} />
           </div>
 
@@ -169,6 +171,53 @@ export function MessageRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Who said it and when, in front of the line, for a reader who asked for the
+ * name on each of them rather than once above the run.
+ *
+ * It sits in the flow of the prose and not in a column of its own. A column is
+ * what the head of a run replaced: sized to the widest name in the block, it
+ * moved the left edge of the prose every time a longer name spoke. Inline, a
+ * second line of the same message wraps under the first word rather than under
+ * the name, which is the cost of printing the name on every line and is what
+ * the reader asked for.
+ *
+ * An action and a notice are skipped: both write their own nick into the body,
+ * so a prefix would name the sender twice on one line.
+ */
+function SenderPrefix({ message }: { message: ChatMessage }) {
+  const { clockSide, nickBrackets, nickEveryLine } = useAppStore((s) => s.presentation);
+  if (!nickEveryLine || writesOwnNick(message.kind)) return null;
+
+  const nick = message.sender.nick;
+  return (
+    /* Nowrap so the time and the name cannot be split from one another, and
+       mono so the colon closing the prefix is set with the name it follows. */
+    <span className="whitespace-nowrap font-[family-name:var(--font-mono)] text-[13px]">
+      {clockSide === "left" && (
+        <>
+          <Clock at={message.timestamp} />{" "}
+        </>
+      )}
+      <span className="font-semibold" style={{ color: nickColor(nick) }}>
+        {nickBrackets ? `<${nick}>` : nick}
+      </span>
+      {clockSide === "right" && (
+        <>
+          {" "}
+          <Clock at={message.timestamp} />
+        </>
+      )}
+      {/* The brackets already close the name. Without them the colon is what
+          separates it from what was said, in the form the reader wrote it in
+          when they asked for this. A space rather than a margin, so a line
+          copied out of the window reads as it does on the screen — the same
+          reason an action writes one after its own nick. */}
+      {nickBrackets ? " " : ": "}
+    </span>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
 import { runConnectionCommand } from "@/components/composer/commands";
-import { applyTheme, selectDensity, selectTheme } from "@/lib/theme";
+import { applyTheme, selectDensity, selectPresentation, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { SERVER_TARGET } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
@@ -49,6 +49,7 @@ function Palette() {
   const brokenThemes = useAppStore((s) => s.brokenThemes);
   const themeId = useAppStore((s) => s.themeId);
   const density = useAppStore((s) => s.density);
+  const presentation = useAppStore((s) => s.presentation);
 
   const candidates = useMemo(
     () =>
@@ -61,8 +62,19 @@ function Palette() {
         brokenThemes,
         themeId,
         density,
+        presentation,
       }),
-    [channels, queries, networks, networkOrder, themes, brokenThemes, themeId, density],
+    [
+      channels,
+      queries,
+      networks,
+      networkOrder,
+      themes,
+      brokenThemes,
+      themeId,
+      density,
+      presentation,
+    ],
   );
 
   const where = useMemo<CommandContext | null>(() => {
@@ -193,6 +205,9 @@ function Palette() {
         break;
       case "density":
         selectDensity(action.id);
+        break;
+      case "nickEveryLine":
+        selectPresentation({ nickEveryLine: action.on });
         break;
       case "themeProblem":
         setError(`${action.id}: ${action.problems.join(" ")}`);

@@ -4,6 +4,7 @@ import { renderRow } from "@/components/timeline/Timeline";
 import { assignGroups } from "@/components/timeline/groups";
 import { buildRows } from "@/components/timeline/rows";
 import { nickColor } from "@/lib/nickColor";
+import type { HighlightRule } from "@/store/selectors";
 import {
   PREVIEW_MEMBERS,
   PREVIEW_OWN_NICK,
@@ -28,6 +29,9 @@ import {
  * roster and the composer. Those are store-bound to a real pane in the client,
  * and a preview does not have one.
  */
+/** The nick the sample is written against, with no words beside it. */
+const PREVIEW_HIGHLIGHT: HighlightRule = { nick: PREVIEW_OWN_NICK, words: [] };
+
 export function Preview() {
   // Once per mount. The script is dated relative to today, and a preview whose
   // date rule changed under the reader at midnight would be a strange thing to
@@ -36,12 +40,16 @@ export function Preview() {
     const messages = previewMessages();
     const present = new Set(PREVIEW_MEMBERS.map((nick) => nick.toLowerCase()));
     const groups = assignGroups(messages, PREVIEW_MEMBERS);
-    return buildRows(messages, null, PREVIEW_OWN_NICK, groups, present);
+    return buildRows(messages, null, PREVIEW_HIGHLIGHT, groups, present);
   }, []);
 
   const context = useMemo(
     () => ({
       ownNick: PREVIEW_OWN_NICK,
+      // The nick and no words. The sample is a picture of how a conversation is
+      // set, and a reader's own keywords would light up lines of it at random
+      // depending on what they happened to have added.
+      highlight: PREVIEW_HIGHLIGHT,
       parentOf: () => undefined,
       onJump: () => {},
       // No hover controls: a react button in a sample is a control that answers

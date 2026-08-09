@@ -77,6 +77,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     rawLog: {},
     channelList: {},
     channelsOpen: null,
+  highlightWords: [],
   };
 }
 

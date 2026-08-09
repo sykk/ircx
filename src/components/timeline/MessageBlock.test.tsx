@@ -16,6 +16,9 @@ function block(over: Partial<Parameters<typeof MessageBlock>[0]> = {}) {
     <MessageBlock
       messages={[makeMessage({ id: "a", nick: "phrack", text: "tags fail" })]}
       ownNick={null}
+      // Follows the nick a case set, so a test that says who the reader is does
+      // not also have to say what makes a line loud for them.
+      highlight={{ nick: over.ownNick ?? null, words: [] }}
       parentOf={() => undefined}
       onJump={() => {}}
       canTag={false}

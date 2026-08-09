@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
-import { isHighlight } from "@/store/selectors";
+import { isHighlight, type HighlightRule } from "@/store/selectors";
 import { Clock } from "./Clock";
 import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
@@ -96,6 +96,7 @@ export function Block({
 interface Props {
   messages: ChatMessage[];
   ownNick: string | null;
+  highlight: HighlightRule;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
   canTag: boolean;
@@ -155,6 +156,7 @@ function repeatsQuote(messages: ChatMessage[], at: number): boolean {
 export function MessageBlock({
   messages,
   ownNick,
+  highlight,
   parentOf,
   onJump,
   canTag,
@@ -170,7 +172,7 @@ export function MessageBlock({
   const clockSide = useAppStore((s) => s.presentation.clockSide);
   const clock = useAppStore((s) => s.presentation.clock);
   const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
-  const addressed = messages.some((message) => isHighlight(message, ownNick, present));
+  const addressed = messages.some((message) => isHighlight(message, highlight, present));
   const failures = failureRuns(messages);
   // A rule raises a message to the same loudness a mention has — the badge
   // does not distinguish them — so the spine says so the same way. Which line
@@ -212,6 +214,7 @@ export function MessageBlock({
       message={message}
       quotedAbove={repeatsQuote(messages, at)}
       ownNick={ownNick}
+      highlight={highlight}
       parentOf={parentOf}
       onJump={onJump}
       canTag={canTag}

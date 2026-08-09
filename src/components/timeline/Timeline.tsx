@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
-import { targetKey, useMembers, useTimelineForView, useView } from "@/store/selectors";
+import { targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
 import { assignGroups } from "./groups";
@@ -55,6 +55,13 @@ interface TimelineForProps {
 function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
+  const highlightWords = useAppStore((s) => s.highlightWords);
+  // One object, so everything below decides loudness from the same pair rather
+  // than half of it.
+  const highlight = useMemo<HighlightRule>(
+    () => ({ nick: ownNick, words: highlightWords }),
+    [ownNick, highlightWords],
+  );
   const canTag = useAppStore(
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
@@ -82,8 +89,8 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   );
 
   const rows = useMemo(
-    () => buildRows(messages, unreadFrom, ownNick, groups, roster),
-    [messages, unreadFrom, ownNick, groups, roster],
+    () => buildRows(messages, unreadFrom, highlight, groups, roster),
+    [messages, unreadFrom, highlight, groups, roster],
   );
   // A `+reply` names its parent the way the server does, and for a message we
   // sent that is the `msgid` tag its echo carried, not the local id the UI drew
@@ -328,6 +335,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
               >
                 {renderRow(rows[item.index]!, {
                   ownNick,
+                  highlight,
                   parentOf,
                   onJump: jump,
                   canTag,
@@ -369,6 +377,10 @@ function historyHead(timeline: TimelineState, loadError: string | null): string 
 
 export interface RowContext {
   ownNick: string | null;
+  /** The reader's nick and the words beside it. Carried with the rest of the
+   * row's context so the appearance preview, which builds one of these by
+   * hand, decides loudness the way the client does. */
+  highlight: HighlightRule;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
   canTag: boolean;

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderHook, act } from "@testing-library/react";
 import { useAppStore } from "./index";
 import {
@@ -7,10 +8,12 @@ import {
   useNetworks,
   useQueriesFor,
   isHighlight,
-  mentions,
   selectQueued,
-  splitOnMention,
+  matchesHighlight,
+  splitOnHighlight,
   targetKey,
+  NO_HIGHLIGHT,
+  type HighlightRule,
 } from "./selectors";
 import { makeMessage } from "@/components/timeline/fixtures";
 import type { ChatView } from "./types";
@@ -303,31 +306,49 @@ describe("splitting", () => {
   });
 });
 
-describe("mentions", () => {
-  it("matches on word boundaries, not substrings", () => {
-    expect(mentions("sable: ping", "sable")).toBe(true);
-    expect(mentions("hey sable", "sable")).toBe(true);
-    expect(mentions("sableton is here", "sable")).toBe(false);
-    expect(mentions("unsable", "sable")).toBe(false);
-  });
+/** The rule as a nick and nothing beside it, which is what these cases are
+ * about. */
+const rule = (nick: string): HighlightRule => ({ nick, words: [] });
 
-  it("treats the IRC nick punctuation set as part of the nick", () => {
-    expect(mentions("hi [dev]", "[dev]")).toBe(true);
-    expect(mentions("re: a|b done", "a|b")).toBe(true);
-  });
+describe("the shared highlight cases", () => {
+  /** The same file `crates/ircx-core/src/text.rs` reads, and the reason both
+   * can be trusted to agree: the backend counts the badge and this decides the
+   * tint, so a case either language has not learned shows up as a channel that
+   * went loud with nothing marked in it. Read rather than imported, because it
+   * belongs to neither side and lives outside `src`. Read from the repo root,
+   * which is where vitest runs. */
+  const fixture = JSON.parse(readFileSync("fixtures/highlight.json", "utf8")) as { cases: { why: string; text: string; nick: string; words: string[]; raises: boolean }[] };
 
-  it("ignores case and an empty nick", () => {
-    expect(mentions("SABLE: hi", "sable")).toBe(true);
-    expect(mentions("anything", "")).toBe(false);
+  it.each(fixture.cases)("$why", ({ text, nick, words, raises }) => {
+    expect(matchesHighlight(text, { nick, words })).toBe(raises);
   });
 });
 
-describe("splitOnMention", () => {
+describe("matchesHighlight", () => {
+  it("matches on word boundaries, not substrings", () => {
+    expect(matchesHighlight("sable: ping", rule("sable"))).toBe(true);
+    expect(matchesHighlight("hey sable", rule("sable"))).toBe(true);
+    expect(matchesHighlight("sableton is here", rule("sable"))).toBe(false);
+    expect(matchesHighlight("unsable", rule("sable"))).toBe(false);
+  });
+
+  it("treats the IRC nick punctuation set as part of the nick", () => {
+    expect(matchesHighlight("hi [dev]", rule("[dev]"))).toBe(true);
+    expect(matchesHighlight("re: a|b done", rule("a|b"))).toBe(true);
+  });
+
+  it("ignores case and an empty nick", () => {
+    expect(matchesHighlight("SABLE: hi", rule("sable"))).toBe(true);
+    expect(matchesHighlight("anything", rule(""))).toBe(false);
+  });
+});
+
+describe("splitOnHighlight", () => {
   const marked = (runs: { text: string; mine: boolean }[]) =>
     runs.filter((run) => run.mine).map((run) => run.text);
 
   it("picks the nick out and leaves the rest of the line whole", () => {
-    expect(splitOnMention("hey sable, look", "sable")).toEqual([
+    expect(splitOnHighlight("hey sable, look", rule("sable"))).toEqual([
       { text: "hey ", mine: false },
       { text: "sable", mine: true },
       { text: ", look", mine: false },
@@ -337,28 +358,42 @@ describe("splitOnMention", () => {
   /** The trailing boundary is a lookahead for this: consumed, it became the
    * leading boundary the second occurrence needed and only the first matched. */
   it("finds every occurrence, including two in a row", () => {
-    expect(marked(splitOnMention("sable sable", "sable"))).toEqual(["sable", "sable"]);
+    expect(marked(splitOnHighlight("sable sable", rule("sable")))).toEqual(["sable", "sable"]);
   });
 
   it("keeps the casing the sender typed rather than the reader's own", () => {
-    expect(marked(splitOnMention("SABLE: hi", "sable"))).toEqual(["SABLE"]);
+    expect(marked(splitOnHighlight("SABLE: hi", rule("sable")))).toEqual(["SABLE"]);
   });
 
   it("marks nothing when the nick is absent, a substring, or unknown", () => {
-    expect(marked(splitOnMention("sableton is here", "sable"))).toEqual([]);
-    expect(marked(splitOnMention("nothing here", "sable"))).toEqual([]);
-    expect(marked(splitOnMention("hey sable", null))).toEqual([]);
+    expect(marked(splitOnHighlight("sableton is here", rule("sable")))).toEqual([]);
+    expect(marked(splitOnHighlight("nothing here", rule("sable")))).toEqual([]);
+    expect(marked(splitOnHighlight("hey sable", NO_HIGHLIGHT))).toEqual([]);
   });
 
   // Drawn and decided by one pattern. A row tinted with nothing picked out in
   // it, or a word picked out in a row that was never tinted, is the drift this
   // rules out.
-  it("agrees with mentions about what counts as one", () => {
+  it("agrees with matchesHighlight about what counts as one", () => {
     for (const text of ["sable: ping", "hey sable", "sableton is here", "unsable", "hi [dev]"]) {
       for (const nick of ["sable", "[dev]"]) {
-        expect(marked(splitOnMention(text, nick)).length > 0).toBe(mentions(text, nick));
+        expect(marked(splitOnHighlight(text, rule(nick))).length > 0).toBe(
+          matchesHighlight(text, rule(nick)),
+        );
       }
     }
+  });
+
+  it("marks a word the reader added, not only their nick", () => {
+    expect(marked(splitOnHighlight("the deploy went out", { nick: "sable", words: ["deploy"] })))
+      .toEqual(["deploy"]);
+  });
+
+  /** Longest first in the alternation, so the line is not marked twice over. */
+  it("marks the longer of two words that share a prefix", () => {
+    expect(
+      marked(splitOnHighlight("the deployment stalled", { nick: "sable", words: ["deploy", "deployment"] })),
+    ).toEqual(["deployment"]);
   });
 });
 
@@ -371,37 +406,37 @@ describe("who can address you", () => {
   const from = (nick: string, text: string) => makeMessage({ nick, text });
 
   it("marks somebody in the conversation naming you", () => {
-    expect(isHighlight(from("phrack", "sable: look at this"), "sable", new Set(["phrack"]))).toBe(
+    expect(isHighlight(from("phrack", "sable: look at this"), rule("sable"), new Set(["phrack"]))).toBe(
       true,
     );
   });
 
   it("does not mark a service that is not in it", () => {
     expect(
-      isHighlight(from("HistServ", "sable joined the channel"), "sable", new Set(["phrack"])),
+      isHighlight(from("HistServ", "sable joined the channel"), rule("sable"), new Set(["phrack"])),
     ).toBe(false);
   });
 
   it("folds the roster, because a server may answer in another casing", () => {
-    expect(isHighlight(from("Phrack", "sable: hi"), "sable", new Set(["phrack"]))).toBe(true);
+    expect(isHighlight(from("Phrack", "sable: hi"), rule("sable"), new Set(["phrack"]))).toBe(true);
   });
 
   /** A roster that has not arrived is not a channel nobody is in: the reader is
    * always in their own. */
   it("does not gate on an empty roster", () => {
-    expect(isHighlight(from("phrack", "sable: hi"), "sable", new Set())).toBe(true);
+    expect(isHighlight(from("phrack", "sable: hi"), rule("sable"), new Set())).toBe(true);
   });
 
   /** A query has no roster to check, and the only two people who can speak in
    * one are its two ends. */
   it("does not gate when no roster is given", () => {
-    expect(isHighlight(from("phrack", "sable: hi"), "sable")).toBe(true);
+    expect(isHighlight(from("phrack", "sable: hi"), rule("sable"))).toBe(true);
   });
 
   it("still ignores your own messages", () => {
     const own = makeMessage({ nick: "sable", text: "sable" });
     own.sender.isSelf = true;
-    expect(isHighlight(own, "sable", new Set(["sable"]))).toBe(false);
+    expect(isHighlight(own, rule("sable"), new Set(["sable"]))).toBe(false);
   });
 });
 

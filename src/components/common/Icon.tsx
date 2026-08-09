@@ -22,6 +22,9 @@ const PATHS = {
   droplet: "M8 2.4c2.4 2.6 3.9 4.6 3.9 6.4a3.9 3.9 0 0 1-7.8 0c0-1.8 1.5-3.8 3.9-6.4",
   // Privacy: what is kept about you, and for how long.
   shield: "M8 2.2 3.5 3.9v3.7c0 2.7 1.8 4.7 4.5 6.2 2.7-1.5 4.5-3.5 4.5-6.2V3.9z",
+  // Notifications, as the bell. The dome carries it at this size; the clapper
+  // under it is what keeps the silhouette from reading as an arch.
+  bell: "M8 2.7a3.3 3.3 0 0 1 3.3 3.3v2.5l1 2.1H3.7l1-2.1V6A3.3 3.3 0 0 1 8 2.7M6.7 12.9a1.4 1.4 0 0 0 2.6 0",
   // Plugins, as the plug rather than the puzzle piece: a jigsaw tab loses its
   // notch at 15px and reads as a rounded square.
   plug: "M6.2 2.3v3M9.8 2.3v3M4.4 5.3h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.3v2.4",

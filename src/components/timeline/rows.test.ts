@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/types";
+import { NO_HIGHLIGHT } from "@/store/selectors";
 import { makeConversation, makeMessage } from "./fixtures";
 import {
   BUCKET_MS,
@@ -297,7 +298,7 @@ describe("buildRows unread divider", () => {
         at(60_000 * 90, { id: "e", nick: "nyx", text: "sableton is elsewhere" }),
       ],
       "b",
-      "sable",
+      { nick: "sable", words: [] },
     );
 
     const divider = rows.find((r) => r.kind === "unread");
@@ -411,7 +412,7 @@ describe("buildRows and groups", () => {
       at(2_000, { id: "c", nick: "phrack" }),
     ];
     const rows = blocks(
-      buildRows(messages, null, null, new Map(messages.map((m) => [m.id, GROUP]))),
+      buildRows(messages, null, NO_HIGHLIGHT, new Map(messages.map((m) => [m.id, GROUP]))),
     );
 
     expect(rows.map((row) => row.opensGroup)).toEqual([true, false, false]);
@@ -419,7 +420,7 @@ describe("buildRows and groups", () => {
   });
 
   it("leaves a block in no group carrying none", () => {
-    const rows = blocks(buildRows([at(0, { id: "a" })], null, null, new Map()));
+    const rows = blocks(buildRows([at(0, { id: "a" })], null, NO_HIGHLIGHT, new Map()));
 
     expect(rows[0]!.group).toBeNull();
     expect(rows[0]!.opensGroup).toBe(false);
@@ -441,7 +442,7 @@ describe("buildRows and groups", () => {
       buildRows(
         messages,
         null,
-        null,
+        NO_HIGHLIGHT,
         new Map([
           ["a", GROUP],
           ["c", GROUP],
@@ -457,7 +458,7 @@ describe("buildRows and groups", () => {
   it("is broken by the unread seam", () => {
     const messages = [at(0, { id: "a", nick: "phrack" }), at(1_000, { id: "b", nick: "sable" })];
     const rows = blocks(
-      buildRows(messages, "b", null, new Map(messages.map((m) => [m.id, GROUP]))),
+      buildRows(messages, "b", NO_HIGHLIGHT, new Map(messages.map((m) => [m.id, GROUP]))),
     );
 
     expect(rows.map((row) => row.opensGroup)).toEqual([true, true]);
@@ -480,7 +481,7 @@ describe("a run that spans two groups", () => {
       at(1_000, { id: "b", nick: "syk", text: "walker: still there?" }),
       at(2_000, { id: "c", nick: "syk", text: "anyway" }),
     ];
-    const rows = blocks(buildRows(messages, null, null, new Map([["b", TALK]])));
+    const rows = blocks(buildRows(messages, null, NO_HIGHLIGHT, new Map([["b", TALK]])));
 
     expect(rows.map((row) => row.messages.map((m) => m.id))).toEqual([["a"], ["b"], ["c"]]);
     expect(rows.map((row) => row.group)).toEqual([null, TALK, null]);
@@ -497,7 +498,7 @@ describe("a run that spans two groups", () => {
       buildRows(
         messages,
         null,
-        null,
+        NO_HIGHLIGHT,
         new Map([
           ["a", TALK],
           ["b", TALK],

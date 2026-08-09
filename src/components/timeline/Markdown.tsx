@@ -3,7 +3,7 @@ import { stripIrcFormatting } from "@/lib/ircFormat";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
-import { splitOnMention } from "@/store/selectors";
+import { NO_HIGHLIGHT, splitOnHighlight, type HighlightRule } from "@/store/selectors";
 import { describeUrl } from "@/lib/url";
 
 /**
@@ -42,14 +42,14 @@ interface MarkdownProps {
    * The reader's nick, marked wherever it appears in the prose. Null leaves the
    * text alone, which is every render that is not a message addressed to them.
    */
-  mention?: string | null;
+  highlight?: HighlightRule | null;
 }
 
-export function Markdown({ text, urls = [], mention = null }: MarkdownProps) {
+export function Markdown({ text, urls = [], highlight = null }: MarkdownProps) {
   return (
     <>
       {parseMarkdown(stripIrcFormatting(text), urls).map((block, i) => (
-        <BlockView key={i} block={block} mention={mention} />
+        <BlockView key={i} block={block} highlight={highlight} />
       ))}
     </>
   );
@@ -59,7 +59,7 @@ export function Markdown({ text, urls = [], mention = null }: MarkdownProps) {
  * conversation off screen. */
 const PASTE_MAX_PX = 260;
 
-function BlockView({ block, mention }: { block: Block; mention: string | null }) {
+function BlockView({ block, highlight }: { block: Block; highlight: HighlightRule | null }) {
   if (block.type === "code") {
     const lines = block.text === "" ? 0 : block.text.split("\n").length;
     return (
@@ -89,7 +89,7 @@ function BlockView({ block, mention }: { block: Block; mention: string | null })
   // notice's `-nick-` on the same line as the first word.
   return (
     <span className="whitespace-pre-wrap break-words">
-      <Spans spans={block.spans} mention={mention} />
+      <Spans spans={block.spans} highlight={highlight} />
     </span>
   );
 }
@@ -172,11 +172,11 @@ function Link({ url }: { url: string }) {
   );
 }
 
-function Spans({ spans, mention }: { spans: Span[]; mention: string | null }) {
+function Spans({ spans, highlight }: { spans: Span[]; highlight: HighlightRule | null }) {
   return (
     <>
       {spans.map((span, i) => (
-        <Fragment key={i}>{renderSpan(span, mention)}</Fragment>
+        <Fragment key={i}>{renderSpan(span, highlight)}</Fragment>
       ))}
     </>
   );
@@ -189,8 +189,14 @@ function Spans({ spans, mention }: { spans: Span[]; mention: string | null }) {
  * quoted, not a person being addressed, and marking it would make the client
  * claim a piece of data was about you.
  */
-export function Mentioned({ text, mention }: { text: string; mention: string | null }) {
-  const runs = splitOnMention(text, mention);
+export function Mentioned({
+  text,
+  highlight,
+}: {
+  text: string;
+  highlight: HighlightRule | null;
+}) {
+  const runs = splitOnHighlight(text, highlight ?? NO_HIGHLIGHT);
   if (runs.length === 1) return <>{text}</>;
 
   return (
@@ -212,10 +218,10 @@ export function Mentioned({ text, mention }: { text: string; mention: string | n
   );
 }
 
-function renderSpan(span: Span, mention: string | null) {
+function renderSpan(span: Span, highlight: HighlightRule | null) {
   switch (span.type) {
     case "text":
-      return <Mentioned text={span.text} mention={mention} />;
+      return <Mentioned text={span.text} highlight={highlight} />;
     case "code":
       return (
         <code
@@ -228,13 +234,13 @@ function renderSpan(span: Span, mention: string | null) {
     case "strong":
       return (
         <strong className="font-semibold">
-          <Spans spans={span.spans} mention={mention} />
+          <Spans spans={span.spans} highlight={highlight} />
         </strong>
       );
     case "em":
       return (
         <em className="italic">
-          <Spans spans={span.spans} mention={mention} />
+          <Spans spans={span.spans} highlight={highlight} />
         </em>
       );
     case "link":
@@ -242,7 +248,7 @@ function renderSpan(span: Span, mention: string | null) {
     case "strike":
       return (
         <s style={{ color: "var(--text-muted)" }}>
-          <Spans spans={span.spans} mention={mention} />
+          <Spans spans={span.spans} highlight={highlight} />
         </s>
       );
   }

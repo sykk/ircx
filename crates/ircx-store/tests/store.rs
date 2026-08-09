@@ -2467,3 +2467,44 @@ fn a_wildcard_typed_into_the_search_box_is_a_character_to_look_for() {
     assert_eq!(found("_"), ["a"]);
     assert_eq!(found("%"), ["c"]);
 }
+
+/// The list somebody typed, in the order they typed it. Alphabetical would
+/// reorder the page under them on every save.
+#[test]
+fn highlight_words_keep_the_order_they_were_written_in() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_highlight_words(&["release".into(), "deploy".into(), "oncall".into()])
+        .unwrap();
+
+    assert_eq!(
+        store.highlight_words().unwrap(),
+        ["release", "deploy", "oncall"]
+    );
+}
+
+/// The match is caseless, so two spellings are one word. The first one typed is
+/// the one kept, which is the spelling the page shows back.
+#[test]
+fn one_word_twice_in_any_case_is_one_row() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_highlight_words(&["Deploy".into(), "deploy".into(), "DEPLOY".into()])
+        .unwrap();
+
+    assert_eq!(store.highlight_words().unwrap(), ["Deploy"]);
+}
+
+/// Wholesale, because a word has no identity beyond itself: adding one and
+/// removing one are the same write.
+#[test]
+fn writing_the_words_replaces_whatever_was_there() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_highlight_words(&["deploy".into()]).unwrap();
+    store.set_highlight_words(&["oncall".into()]).unwrap();
+
+    assert_eq!(store.highlight_words().unwrap(), ["oncall"]);
+
+    store.set_highlight_words(&[]).unwrap();
+    assert!(store.highlight_words().unwrap().is_empty());
+}

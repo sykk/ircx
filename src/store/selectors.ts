@@ -178,50 +178,96 @@ export function selectFirstConversation(s: AppState): ActiveTarget | null {
 const BOUNDARY = "[^\\w\\[\\]\\\\^{}|-]";
 
 /**
+ * What makes a line loud: the reader's nickname, and the words they added
+ * beside it on the settings window's Notifications page.
+ *
+ * One value rather than two, because everything that decides this needs both.
+ * A component handed only the nick would tint a row the badge disagreed with,
+ * which is the failure `fixtures/highlight.json` exists to prevent between the
+ * two languages and this type prevents inside one.
+ */
+export interface HighlightRule {
+  /** Null before the session has registered, when nothing is addressed to you
+   * yet because you have no name to be addressed by. */
+  nick: string | null;
+  words: readonly string[];
+}
+
+/** The rule with nothing in it. A conversation drawn against this has no loud
+ * lines, which is what the settings preview and a session mid-registration
+ * both want. */
+export const NO_HIGHLIGHT: HighlightRule = { nick: null, words: [] };
+
+function termsOf(rule: HighlightRule): string[] {
+  const terms = rule.words.filter((word) => word !== "");
+  if (rule.nick) terms.push(rule.nick);
+  // Longest first, so a line holding both `deploy` and `deployment` marks the
+  // longer one rather than the prefix the alternation reached first.
+  return terms.sort((a, b) => b.length - a.length);
+}
+
+/**
  * The trailing boundary is a lookahead rather than a match: consumed, it became
  * the leading boundary the next occurrence needed, so `syk syk` found one
  * mention instead of two. Nothing about which texts match changes.
  */
-/** Only ever the reader's own nick, so this stays a handful of entries. Safe
- * to share because `.test` without `g` and `matchAll` (which clones) leave
- * `lastIndex` alone; a caller that ran `exec` on a `g` pattern would not be. */
-const mentionPatterns = new Map<string, RegExp>();
+/** Keyed by the whole term list, so it holds one pattern per distinct rule —
+ * a handful, and one more each time the words are edited. Safe to share
+ * because `.test` without `g` and `matchAll` (which clones) leave `lastIndex`
+ * alone; a caller that ran `exec` on a `g` pattern would not be. */
+const highlightPatterns = new Map<string, RegExp | null>();
 
-function mentionPattern(nick: string, flags: string): RegExp {
-  const key = `${flags}\0${nick}`;
-  const held = mentionPatterns.get(key);
-  if (held) return held;
-  const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(^|${BOUNDARY})(${escaped})(?=${BOUNDARY}|$)`, flags);
-  mentionPatterns.set(key, pattern);
+/** Null where there is nothing to match, which an empty alternation would
+ * otherwise turn into a pattern matching every position in the line. */
+function highlightPattern(terms: readonly string[], flags: string): RegExp | null {
+  const key = `${flags}\0${terms.join("\0")}`;
+  const held = highlightPatterns.get(key);
+  if (held !== undefined) return held;
+  const pattern =
+    terms.length === 0
+      ? null
+      : new RegExp(
+          `(^|${BOUNDARY})(${terms.map(escapeTerm).join("|")})(?=${BOUNDARY}|$)`,
+          flags,
+        );
+  highlightPatterns.set(key, pattern);
   return pattern;
 }
 
-/** Whether `text` mentions `nick` on a word boundary: `sable` matches, `sableton` does not. */
-export function mentions(text: string, nick: string): boolean {
-  if (!nick) return false;
-  return mentionPattern(nick, "i").test(text);
+/** A word is a word and not a pattern: somebody who works on `c++` may say so. */
+function escapeTerm(term: string): string {
+  return term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whether `text` is loud under `rule`: the nick, or any of the words, each on
+ * a nickname boundary. `sable` matches, `sableton` does not, and neither does
+ * `sable|away`. */
+export function matchesHighlight(text: string, rule: HighlightRule): boolean {
+  return highlightPattern(termsOf(rule), "i")?.test(text) ?? false;
 }
 
 export interface TextRun {
   text: string;
-  /** True for the reader's own nick, which is drawn as the mention it is. */
+  /** True for what made the line loud — the reader's own nick, or one of their
+   * words. Both are drawn the same way, because both are the reader finding
+   * the thing they were told about. */
   mine: boolean;
 }
 
 /**
- * `text` split into runs, marking the ones that are the reader's own nick.
+ * `text` split into runs, marking the ones the rule matched.
  *
- * Shares its pattern with `mentions`, so what a message is highlighted for and
- * what gets marked inside it cannot come apart — a row tinted with nothing
- * picked out in it would leave the reader hunting for the word.
+ * Shares its pattern with `matchesHighlight`, so what a message is highlighted
+ * for and what gets marked inside it cannot come apart — a row tinted with
+ * nothing picked out in it would leave the reader hunting for the word.
  */
-export function splitOnMention(text: string, nick: string | null): TextRun[] {
-  if (!nick) return [{ text, mine: false }];
+export function splitOnHighlight(text: string, rule: HighlightRule): TextRun[] {
+  const pattern = highlightPattern(termsOf(rule), "gi");
+  if (!pattern) return [{ text, mine: false }];
 
   const runs: TextRun[] = [];
   let at = 0;
-  for (const match of text.matchAll(mentionPattern(nick, "gi"))) {
+  for (const match of text.matchAll(pattern)) {
     const start = match.index + match[1]!.length;
     const end = start + match[2]!.length;
     if (start > at) runs.push({ text: text.slice(at, start), mine: false });
@@ -249,17 +295,20 @@ export function splitOnMention(text: string, nick: string | null): TextRun[] {
  * nobody is in — the reader is always in their own channel — so it does not
  * gate. Queries pass no set at all: the two people in one are the only two who
  * can speak.
+ *
+ * The reader's words are gated the same way the nick is. Somebody who has left
+ * is not talking to the channel, whichever of the two the line matched.
  */
 export function isHighlight(
   message: ChatMessage,
-  ownNick: string | null,
+  rule: HighlightRule,
   present?: ReadonlySet<string>,
 ): boolean {
-  if (!ownNick || message.sender.isSelf) return false;
+  if (message.sender.isSelf) return false;
   if (present && present.size > 0 && !present.has(message.sender.nick.toLowerCase())) {
     return false;
   }
-  return mentions(message.text, ownNick);
+  return matchesHighlight(message.text, rule);
 }
 
 export { targetKey };

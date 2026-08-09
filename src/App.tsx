@@ -12,6 +12,7 @@ import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
+import { loadHighlightWords, startHighlightSync } from "@/lib/highlights";
 import { loadPlugins, startPluginSync } from "@/lib/plugins";
 import { startAppearanceSync, startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
@@ -33,6 +34,10 @@ export function App() {
     const appearance = startAppearanceSync();
     const bridge = startBridge();
     let stopOpening = () => {};
+    // The timeline tints a line against these, and the settings window is
+    // where they are written.
+    void loadHighlightWords();
+    const highlightSync = startHighlightSync();
     void loadPlugins();
     // The plugin screens are in the settings window now; the count in the
     // status bar is here, and nothing else would tell it an install happened.
@@ -67,6 +72,7 @@ export function App() {
       void themes.then((stop) => stop());
       void appearance.then((stop) => stop());
       void pluginSync.then((stop) => stop());
+      void highlightSync.then((stop) => stop());
     };
   }, []);
 

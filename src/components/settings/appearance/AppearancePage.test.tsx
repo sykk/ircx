@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import {
@@ -12,23 +12,31 @@ import {
 } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import type { AppState } from "@/store/types";
-import { AppearanceSheet } from "../AppearanceSheet";
+import { AppearancePage } from "./AppearancePage";
 
 /* `selectTheme` lives in src/lib/theme/session.ts, which reaches the backend to
- * watch the themes directory. Most of what is here does not call that, but
- * importing the barrel pulls the module in — and the install buttons do. */
-const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock } = vi.hoisted(() => ({
-  ipcMock: { installTheme: vi.fn(), themesDirectory: vi.fn() },
-  chooseFolderMock: vi.fn(),
-  revealFolderMock: vi.fn(),
-  setWindowZoomMock: vi.fn(() => Promise.resolve()),
-}));
+ * watch the themes directory and to tell the client's window what changed.
+ * Most of what is here does not call that, but importing the barrel pulls the
+ * module in — and the install buttons do. */
+const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock, announceMock } =
+  vi.hoisted(() => ({
+    ipcMock: { installTheme: vi.fn(), themesDirectory: vi.fn() },
+    chooseFolderMock: vi.fn(),
+    revealFolderMock: vi.fn(),
+    setWindowZoomMock: vi.fn(() => Promise.resolve()),
+    announceMock: vi.fn(() => Promise.resolve()),
+  }));
 vi.mock("@/lib/ipc", () => ({
   ipc: ipcMock,
   onThemesChanged: vi.fn(),
+  onAppearanceChanged: vi.fn(),
+  announceAppearance: announceMock,
   setWindowZoom: setWindowZoomMock,
   chooseFolder: chooseFolderMock,
   revealFolder: revealFolderMock,
+  insideTauri: () => false,
+  reasonOr: (reason: unknown, fallback: string) =>
+    typeof reason === "string" && reason.trim() !== "" ? reason : fallback,
 }));
 
 const THEMES = catalogue().themes;
@@ -37,7 +45,7 @@ const root = document.documentElement;
 
 beforeEach(() => {
   resetStore();
-  useAppStore.setState({ appearanceOpen: true, themes: THEMES });
+  useAppStore.setState({ themes: THEMES });
 });
 
 /* The theme, the edits and the density are module state in
@@ -54,13 +62,19 @@ afterEach(() => {
   localStorage.clear();
 });
 
+const done = vi.fn();
+
 function open(patch: Partial<AppState> = {}) {
   useAppStore.setState(patch);
-  return render(<AppearanceSheet />);
+  return render(<AppearancePage onDone={done} />);
 }
 
 function button(name: string | RegExp): HTMLButtonElement {
   return screen.getByRole("button", { name }) as HTMLButtonElement;
+}
+
+function radio(name: string | RegExp): HTMLElement {
+  return screen.getByRole("radio", { name });
 }
 
 function field(token: string): HTMLInputElement {
@@ -77,35 +91,28 @@ function token(name: string): string {
   return root.style.getPropertyValue(name);
 }
 
-describe("AppearanceSheet", () => {
-  it("stays out of the way until something opens it", () => {
-    useAppStore.setState({ appearanceOpen: false });
-    const { container } = render(<AppearanceSheet />);
+/** Chooses a theme the way the reader does. Tests that assert a painted token
+ * have to go through this rather than setting `themeId`: src/lib/theme/apply.ts
+ * merges the edits for the theme it has been given, and a store that names one
+ * nobody painted leaves it with none. */
+function choose(name: RegExp) {
+  fireEvent.click(button(name));
+}
 
-    expect(container.firstChild).toBeNull();
-  });
+/** The sample conversation. Scoped, because the theme cards hold a sample of
+ * their own and both draw nicknames. */
+function preview(): HTMLElement {
+  return document.querySelector<HTMLElement>("[inert]")!;
+}
 
-  /** Firing Escape at the dialog element proves nothing on its own: React
-   * listens at the root, so the handler only runs for a keystroke that starts
-   * inside. Nothing in the sheet takes focus by itself, so this asserts the
-   * sheet takes it — otherwise Escape goes wherever focus was left and the only
-   * way out is the mouse. */
-  it("takes focus, so Escape reaches it and closes it", () => {
-    open();
-    const dialog = screen.getByRole("dialog");
-    expect(document.activeElement).toBe(dialog);
-
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    expect(useAppStore.getState().appearanceOpen).toBe(false);
-  });
-
+describe("AppearancePage", () => {
   it("names every theme by author and appearance, and says which is in use", () => {
     open({ themeId: "ircx-dark" });
 
-    expect(screen.getByText("ircx Dark")).toBeTruthy();
-    expect(screen.getByText("dark · ircx · 1.0.0 · in use")).toBeTruthy();
-    expect(screen.getByText("ircx Light")).toBeTruthy();
-    expect(screen.getByText("light · ircx · 1.0.0")).toBeTruthy();
+    expect(button(/^ircx Dark/).textContent).toContain("dark · in use");
+    expect(button(/^ircx Light/).textContent).toContain("light");
+    expect(button(/^ircx Light/).textContent).not.toContain("in use");
+    expect(screen.getAllByText("ircx · 1.0.0").length).toBe(THEMES.length);
   });
 
   /** #312. The sentence under the name is the only place it was said, so a
@@ -121,7 +128,7 @@ describe("AppearanceSheet", () => {
 
   it("paints the theme that was chosen", () => {
     open({ themeId: "ircx-dark" });
-    fireEvent.click(screen.getByText("light · ircx · 1.0.0"));
+    fireEvent.click(button(/^ircx Light/));
 
     expect(token("--surface-base")).toBe("#ffffff");
     expect(root.dataset.theme).toBe("ircx-light");
@@ -129,7 +136,20 @@ describe("AppearanceSheet", () => {
   });
 
   /**
-   * The reason this screen is worth a sheet of its own. A theme that would not
+   * A card is painted in its own theme's tokens rather than the one in force,
+   * which is the whole reason the row is worth its space: two dark themes are
+   * told apart by looking at them. The tokens are put on the card inline, so
+   * this is where that wiring is asserted.
+   */
+  it("draws each card in the colours of the theme it offers", () => {
+    open({ themeId: "ircx-dark" });
+    const sample = button(/^ircx Light/).querySelector<HTMLElement>("[style*='--surface-base']");
+
+    expect(sample?.style.getPropertyValue("--surface-base")).toBe("#ffffff");
+  });
+
+  /**
+   * The reason this screen is worth a window of its own. A theme that would not
    * load used to reach the person holding the file as a console warning and a
    * single line in the palette with every sentence but the first cut off; each
    * problem names the field that is wrong and what belongs in it, so each one
@@ -159,6 +179,31 @@ describe("AppearanceSheet", () => {
     ).toBeTruthy();
   });
 
+  describe("the preview", () => {
+    /* The point of drawing it with `buildRows` and `renderRow` rather than by
+     * hand: the components underneath read the settings out of the store, so
+     * the sample cannot show a layout the client would not. */
+    it("answers a timeline setting the way the timeline does", () => {
+      open();
+      expect(within(preview()).queryAllByText("<alex>")).toHaveLength(0);
+      expect(within(preview()).getAllByText("alex").length).toBeGreaterThan(0);
+
+      fireEvent.click(field("Angle brackets around nicknames"));
+
+      expect(within(preview()).getAllByText("<alex>").length).toBeGreaterThan(0);
+    });
+
+    /* Inert rather than merely unclickable. The sample holds a channel name, a
+     * roster and a composer that lead nowhere, and a dozen dead tab stops
+     * between the cards and the controls is what leaving them focusable
+     * costs. */
+    it("keeps the sample out of the tab order", () => {
+      const { container } = open();
+
+      expect(container.querySelector("[inert]")).toBeTruthy();
+    });
+  });
+
   describe("density", () => {
     it("offers the three and no others", () => {
       open();
@@ -170,21 +215,67 @@ describe("AppearanceSheet", () => {
 
     it("repaints the timeline on the one that was chosen", () => {
       open();
-      fireEvent.click(button(/Compact/));
+      fireEvent.click(radio(/Compact/));
 
       expect(token("--timeline-block-gap")).toBe("6px");
       expect(useAppStore.getState().density).toBe("compact");
     });
 
-    it("marks the density in use as pressed, and moves the mark when it changes", () => {
+    it("marks the density in use, and moves the mark when it changes", () => {
       open();
-      expect(button(/Comfortable/).getAttribute("aria-pressed")).toBe("true");
-      expect(button(/Compact/).getAttribute("aria-pressed")).toBe("false");
+      expect(radio(/Comfortable/).getAttribute("aria-checked")).toBe("true");
+      expect(radio(/Compact/).getAttribute("aria-checked")).toBe("false");
 
-      fireEvent.click(button(/Compact/));
+      fireEvent.click(radio(/Compact/));
 
-      expect(button(/Compact/).getAttribute("aria-pressed")).toBe("true");
-      expect(button(/Comfortable/).getAttribute("aria-pressed")).toBe("false");
+      expect(radio(/Compact/).getAttribute("aria-checked")).toBe("true");
+      expect(radio(/Comfortable/).getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
+  describe("the accent", () => {
+    /* Three tokens rather than one. `--accent` alone would leave the hover
+     * state solved against the theme author's blue and every mention tinted in
+     * it, `--accent-muted` being a background. */
+    it("writes all three accent tokens onto the theme in force", () => {
+      open({ themeId: "ircx-dark" });
+      choose(/^ircx Dark/);
+      fireEvent.click(radio("Jade"));
+
+      expect(token("--accent")).toBe("#3fb950");
+      expect(token("--accent-hover")).toBe("#56d364");
+      expect(token("--accent-muted")).toBe("#3fb95033");
+    });
+
+    /** An accent is one of the theme's tokens, so it is stored as an edit to
+     * that theme: a colour chosen against dark surfaces does not follow the
+     * reader onto the light ones. */
+    it("keeps the accent with the theme it was chosen for", () => {
+      open({ themeId: "ircx-dark" });
+      choose(/^ircx Dark/);
+      fireEvent.click(radio("Jade"));
+      choose(/^ircx Light/);
+
+      expect(token("--accent")).toBe("#0969da");
+      expect(useAppStore.getState().overrides["ircx-dark"]?.["--accent"]).toBe("#3fb950");
+    });
+
+    /** Hover has to go the other way on a light ground, so the appearance the
+     * theme declares is what picks it. */
+    it("darkens the hover on a light theme instead of lifting it", () => {
+      open({ themeId: "ircx-light" });
+      choose(/^ircx Light/);
+      fireEvent.click(radio("Jade"));
+
+      expect(token("--accent-hover")).toBe("#238636");
+    });
+
+    it("marks the accent in force when the theme already uses one of them", () => {
+      open({ themeId: "ircx-dark" });
+      fireEvent.click(radio("Violet"));
+
+      expect(radio("Violet").getAttribute("aria-checked")).toBe("true");
+      expect(radio("Jade").getAttribute("aria-checked")).toBe("false");
     });
   });
 
@@ -282,18 +373,45 @@ describe("AppearanceSheet", () => {
     it("keeps the chosen face across a change of theme", () => {
       open({ themeId: "ircx-dark" });
       fireEvent.change(field("Prose"), { target: { value: "georgia" } });
-      fireEvent.click(screen.getByText("light · ircx · 1.0.0"));
+      fireEvent.click(button(/^ircx Light/));
 
       expect(token("--surface-base")).toBe("#ffffff");
       expect(token("--font-ui")).toContain("Georgia");
     });
+  });
 
-    it("sends the window scale to the webview and remembers it", () => {
+  describe("the window scale", () => {
+    it("sends the step to the webview and remembers it", () => {
       open();
-      fireEvent.change(field("Window scale"), { target: { value: "1.25" } });
+      fireEvent.click(button("Larger"));
 
-      expect(setWindowZoomMock).toHaveBeenCalledWith(1.25);
-      expect(localStorage.getItem("ircx.typography")).toContain('"zoom":1.25');
+      expect(setWindowZoomMock).toHaveBeenCalledWith(1.1);
+      expect(localStorage.getItem("ircx.typography")).toContain('"zoom":1.1');
+    });
+
+    it("says where it now is", () => {
+      open();
+      fireEvent.click(button("Larger"));
+      fireEvent.click(button("Larger"));
+
+      expect(screen.getByText("125%")).toBeTruthy();
+    });
+
+    /* Both ends stop rather than wrapping: a scale is a line, not a ring, and
+     * the reader stepping to one end of it has arrived rather than started
+     * again. */
+    it("stops at each end of the list", () => {
+      open({ typography: { ...DEFAULT_TYPOGRAPHY, zoom: 1.25 } });
+      expect(button("Larger").disabled).toBe(true);
+      expect(button("Smaller").disabled).toBe(false);
+
+      fireEvent.click(button("Smaller"));
+      fireEvent.click(button("Smaller"));
+      fireEvent.click(button("Smaller"));
+      fireEvent.click(button("Smaller"));
+
+      expect(screen.getByText("80%")).toBeTruthy();
+      expect(button("Smaller").disabled).toBe(true);
     });
   });
 
@@ -340,15 +458,38 @@ describe("AppearanceSheet", () => {
       expect(useAppStore.getState().themeId).toBe("ircx-classic");
     });
 
+    /** Nothing marks a preset as being in force, because nothing is: it writes
+     * the settings and stops existing. A radio here would claim the window is
+     * in a mode that can be left. */
+    it("is offered as an action rather than a state", () => {
+      open();
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(button("Start from Classic IRC").getAttribute("aria-checked")).toBeNull();
+      expect(button("Start from Classic IRC").getAttribute("aria-pressed")).toBeNull();
+    });
+
     it("does not touch the window scale", () => {
       open();
-      fireEvent.change(field("Window scale"), { target: { value: "1.1" } });
+      fireEvent.click(button("Larger"));
       setWindowZoomMock.mockClear();
 
       fireEvent.click(button("Start from Classic IRC"));
 
       expect(setWindowZoomMock).not.toHaveBeenCalled();
       expect(useAppStore.getState().typography.zoom).toBe(1.1);
+    });
+
+    /** The client's window has to repaint too, and a preset writes three
+     * settings. Told after each one it would paint the new theme against the
+     * old faces on the way past, which is a state nobody chose. */
+    it("tells the other window once rather than three times", () => {
+      open();
+      announceMock.mockClear();
+
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(announceMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -408,9 +549,18 @@ describe("AppearanceSheet", () => {
 
       expect(token("--accent")).toBe("#2c8a6d");
 
-      rerender(<AppearanceSheet />);
+      rerender(<AppearancePage onDone={done} />);
       expect(field("--accent").value).toBe("#2c8a6d");
       expect(token("--accent")).toBe("#2c8a6d");
+    });
+
+    /** The swatch row is seven of the tokens this screen holds all of, so it
+     * has to be the way out to the rest of them. */
+    it("is where Custom… leads, on the theme in force", () => {
+      open({ themeId: "ircx-light" });
+      fireEvent.click(button("Custom…"));
+
+      expect(field("--accent").value).toBe("#0969da");
     });
 
     it("gives the token back to the theme's author on reset", () => {

@@ -2035,7 +2035,7 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
 
 ## The spine, the clock and the nickname, turned off and changed
 
-Three settings in the appearance sheet beside the density, held in
+Three settings on the settings window's Appearance page beside the density, held in
 `localStorage` under `ircx.presentation`. What each one draws is asserted in
 `MessageBlock.test.tsx` against the DOM, and the round trip through storage in
 `session.test.ts`. **None of it has been looked at in a running window.** What
@@ -2073,7 +2073,7 @@ follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
 ## The faces, the window scale, and a theme installed from a folder
 
 - **Both faces and the scale are unwatched in a real window.** `fontTokens` and
-  its painting order are asserted, and the appearance sheet's controls are
+  its painting order are asserted, and the Appearance page's controls are
   driven in jsdom, but which glyphs arrive is a question about the fonts on the
   machine. Worth looking at: whether **Courier** is present at all on this
   system — the stack falls through to `monospace`, so a reader who picks it and
@@ -2091,7 +2091,7 @@ follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
   has landed by then.
 - **Installing a theme is covered on both sides and joined in neither.** The
   copy is tested in `src-tauri/src/themes.rs` against real temporary
-  directories, and the sheet's buttons in `AppearanceSheet.test.tsx` against a
+  directories, and the page's buttons in `AppearancePage.test.tsx` against a
   mocked backend. Nothing has run the actual chain: pick a folder, watch the
   2-second poll in `themes.rs` notice it, and see the theme appear in the list
   and paint. The install selects what it copied, so a theme that lands and does
@@ -2128,8 +2128,54 @@ what a test can say about it.
 - **The preset writes five settings and then stops existing.** Nothing marks it
   as in use, by design. What has not been watched is the reverse: applying
   Classic IRC and then changing one control back should leave the other four
-  alone, which `AppearanceSheet.test.tsx` asserts through the store and nobody
+  alone, which `AppearancePage.test.tsx` asserts through the store and nobody
   has seen on screen.
+
+## The settings window
+
+A second Tauri window, opened by `open_settings`. Walked in the browser
+harness at `/?settings` — the layout, the preview, the preset, the accent
+swatches and the scale stepper all answered there — and then twice in the
+assembled release app on `Xvfb`.
+
+**Seen on 2026-08-09, in the real app:**
+
+- **The window opens.** `Ctrl+,` built it, and it came up undecorated and
+  transparent like the client with its own title bar, its sidebar, the preview
+  and the rail all drawn. This is the part no frontend test reaches:
+  `WebviewWindowBuilder` is Rust, and the settings window needed its own entry
+  in `capabilities/default.json` before its `invoke` calls would be allowed.
+- **A theme crossing between the two windows.** Chose ircx Light in the
+  settings window, pressed Escape, and the client behind it had repainted
+  light. **This failed the first time and found the bug**: `startAppearanceSync`
+  was mounted in `SettingsWindow` and nowhere else, so the settings window
+  listened to the client and the client listened to nothing. Every unit test
+  passed throughout — they exercise `adoptAppearance` directly, and no test in
+  one webview can notice that the other never subscribed.
+
+**Still unseen**, and none of it is reachable from jsdom either:
+
+- **Opening it twice.** The second call should find the window by its label and
+  focus it rather than build another. Minimise first, then `Ctrl+,` again.
+- **Every other setting crossing.** Only the theme has been watched. The
+  density, the accent, both faces and each of the five timeline settings go by
+  the same path and the same one message, which is a reason to expect them and
+  not a reason to record them as seen.
+- **The reverse direction.** `Ctrl+Shift+N` in the client should move the
+  checkbox in the settings window. Nothing has driven the client while the
+  settings window was on screen.
+- **A preset across two windows.** It writes three settings and says so once.
+  What that is for is the flicker: told three times, the client would paint the
+  new theme against the old faces on the way past. Whether one message makes
+  the client's repaint look atomic is a matter of watching it.
+- **The window scale with two windows open.** Each window scales itself, on the
+  same setting, by adopting it — there is no cross-webview zoom call. Both
+  should reach 125% together.
+- **Escape from a token field.** Asserted in jsdom against the editor behind
+  Custom…; the rule is that Escape abandons a value being typed rather than
+  taking the window with it, and a real webview has never been asked.
+- **The resize grips.** `WindowFrame` is the client's, mounted in a window it
+  was not written for.
 
 ## Unread counts
 

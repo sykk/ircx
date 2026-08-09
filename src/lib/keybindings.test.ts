@@ -109,6 +109,7 @@ describe("the shipped table", () => {
         "Alt+Shift+ArrowDown",
         "Alt+Shift+ArrowUp",
         "Escape",
+        "Mod+,",
         "Mod+F",
         "Mod+K",
         "Mod+W",

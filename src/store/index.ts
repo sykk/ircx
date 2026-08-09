@@ -125,7 +125,6 @@ export interface AppActions {
    * them. An empty list is nothing to confirm and clears it too. */
   setUploadRequest: (paths: string[] | null) => void;
   toggleArchive: (open?: boolean) => void;
-  toggleAppearance: (open?: boolean) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
@@ -181,7 +180,6 @@ const initialState: AppState = {
   uploadOpen: false,
   uploadRequest: null,
   archiveOpen: false,
-  appearanceOpen: false,
   channelsOpen: null,
   plugins: [],
   pluginsUnavailable: null,
@@ -581,7 +579,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setUploadRequest: (paths) =>
     set({ uploadRequest: paths === null || paths.length === 0 ? null : paths }),
   toggleArchive: (open) => set((s) => ({ archiveOpen: open ?? !s.archiveOpen })),
-  toggleAppearance: (open) => set((s) => ({ appearanceOpen: open ?? !s.appearanceOpen })),
   showChannels: (network) => set({ channelsOpen: network }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),

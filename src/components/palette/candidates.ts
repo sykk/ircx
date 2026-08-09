@@ -33,7 +33,7 @@ export type CandidateAction =
   | { type: "plugins" }
   | { type: "uploads" }
   | { type: "archive" }
-  | { type: "appearance" }
+  | { type: "settings" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** Carries what it will leave the setting at rather than reading the store
@@ -366,8 +366,8 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     action: { type: "archive" },
   },
   {
-    label: "Appearance",
-    detail: "Themes and presets, the density, the timeline, the faces",
-    action: { type: "appearance" },
+    label: "Settings",
+    detail: withChord("Themes and presets, the density, the timeline, the faces", "settings.open"),
+    action: { type: "settings" },
   },
 ];

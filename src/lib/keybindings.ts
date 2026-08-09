@@ -10,6 +10,7 @@
 export type ActionId =
   | "palette.toggle"
   | "search.open"
+  | "settings.open"
   | "roster.toggle"
   | "timeline.nickEveryLine"
   | "pane.splitVertical"
@@ -38,6 +39,10 @@ export interface Binding {
 export const DEFAULT_BINDINGS: readonly Binding[] = [
   { chord: "Mod+K", action: "palette.toggle", whenTyping: true, description: "Command palette" },
   { chord: "Mod+F", action: "search.open", whenTyping: true, description: "Search current target" },
+  // The chord every desktop client puts its preferences on. Fires while
+  // typing, as the palette does: it opens a second window rather than taking
+  // anything over, so a message half written is still there afterwards.
+  { chord: "Mod+,", action: "settings.open", whenTyping: true, description: "Settings" },
   { chord: "Mod+Shift+M", action: "roster.toggle", description: "Toggle member list" },
   // Fires while typing, unlike the member list beside it. This one is reached
   // while reading a channel that has gone busy, which is exactly when the

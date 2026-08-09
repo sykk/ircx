@@ -351,7 +351,7 @@ function historyHead(timeline: TimelineState, loadError: string | null): string 
   return timeline.hasMore ? null : "Beginning of history";
 }
 
-interface RowContext {
+export interface RowContext {
   ownNick: string | null;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
@@ -362,7 +362,11 @@ interface RowContext {
   present: ReadonlySet<string>;
 }
 
-function renderRow(row: TimelineRow, context: RowContext) {
+/** One row of a conversation, whichever of the five kinds it is. Exported so
+ * the appearance preview draws its sample channel down this same path: a
+ * preview that reimplemented the rows would be a drawing of the settings
+ * rather than the settings. */
+export function renderRow(row: TimelineRow, context: RowContext) {
   if (row.kind === "unread") return <UnreadDivider seam={row.seam} />;
   if (row.kind === "history") return <HistoryDivider opens={row.opens} />;
   if (row.kind === "date") return <DateSeparator at={row.at} />;

@@ -34,12 +34,15 @@ export {
 export type { ClockFormat, ClockSide, Presentation } from "./presentation";
 export { applyUiStylesheet, clearUiStylesheet, uiStylesheetProblem } from "./ui-css";
 export {
+  adoptAppearance,
   applyOpeningTheme,
   selectDensity,
+  selectOverrides,
   selectPresentation,
   selectPreset,
   selectTheme,
   selectTypography,
+  startAppearanceSync,
   startThemes,
 } from "./session";
 export { TOKEN_CATALOGUE, TOKEN_GROUPS } from "./tokens";

@@ -11,6 +11,12 @@ import {
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { announceHighlightWords } from "@/lib/highlights";
+import {
+  allowedToNotify,
+  storeNotifications,
+  storedNotifications,
+  type Notifications,
+} from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
 import type { SettingsScope } from "@/lib/settingsWindow";
 import type { MutedConversation } from "@/types";
@@ -39,6 +45,8 @@ export function NotificationsPage({
 }) {
   const [words, setWords] = useState<string[] | null>(null);
   const [muted, setMuted] = useState<MutedConversation[]>([]);
+  const [notify, setNotify] = useState<Notifications>(storedNotifications);
+  const [refused, setRefused] = useState(false);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
@@ -61,6 +69,27 @@ export function NotificationsPage({
   }, []);
 
   useEffect(readMuted, [readMuted]);
+
+  /**
+   * Turns a notification switch on or off.
+   *
+   * The desktop is asked for permission when a switch goes on rather than at
+   * startup: the prompt is about something the reader has just asked for. A
+   * refusal leaves the switch off and says so, because the alternative is a
+   * setting that reads as on and does nothing.
+   */
+  const choose = useCallback(async (next: Notifications) => {
+    const turningOn =
+      (next.highlights && !storedNotifications().highlights) ||
+      (next.directMessages && !storedNotifications().directMessages);
+    if (turningOn && !(await allowedToNotify())) {
+      setRefused(true);
+      return;
+    }
+    setRefused(false);
+    setNotify(next);
+    storeNotifications(next);
+  }, []);
 
   /**
    * Mutes or unmutes one conversation, or a whole network for a null target.
@@ -195,6 +224,31 @@ export function NotificationsPage({
         </Note>
 
         {error !== null && <Note error>{error}</Note>}
+      </Group>
+
+      <Group title="What interrupts you">
+        <CheckField
+          label="Notify me about highlights"
+          hint="Your nickname, or one of the words above, in a channel."
+          checked={notify.highlights}
+          onChange={(highlights) => void choose({ ...notify, highlights })}
+        />
+        <CheckField
+          label="Notify me about direct messages"
+          hint="Any line in a query. Somebody opened a conversation with you and nobody else, so there is no word to match."
+          checked={notify.directMessages}
+          onChange={(directMessages) => void choose({ ...notify, directMessages })}
+        />
+        <Note>
+          Nothing arrives for the conversation you are looking at. Clicking a notification does
+          not open it — the desktop does not tell ircx it was clicked — so it names the
+          conversation instead.
+        </Note>
+        {refused && (
+          <Note error>
+            Your desktop refused notifications for ircx. Allow them in its settings and try again.
+          </Note>
+        )}
       </Group>
 
       <Group title="Muted conversations">

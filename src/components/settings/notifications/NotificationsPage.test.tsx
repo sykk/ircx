@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import type * as Ipc from "@/lib/ipc";
 import type { SettingsScope } from "@/lib/settingsWindow";
+import type * as Notifications from "@/lib/notifications";
 import { NotificationsPage } from "./NotificationsPage";
 
-const { ipcMock, announceMock } = vi.hoisted(() => ({
+const { ipcMock, announceMock, allowedMock } = vi.hoisted(() => ({
   ipcMock: {
     highlightWords: vi.fn(),
     setHighlightWords: vi.fn(),
@@ -13,6 +14,7 @@ const { ipcMock, announceMock } = vi.hoisted(() => ({
     setMuted: vi.fn(),
   },
   announceMock: vi.fn(),
+  allowedMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
@@ -23,6 +25,13 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
 
 vi.mock("@/lib/highlights", () => ({ announceHighlightWords: announceMock }));
 
+vi.mock("@/lib/notifications", async (importOriginal) => ({
+  ...(await importOriginal<typeof Notifications>()),
+  // The desktop's answer, which no test here is about. The page's own job is
+  // to leave the switch off when it is refused.
+  allowedToNotify: allowedMock,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
@@ -31,6 +40,8 @@ beforeEach(() => {
   ipcMock.mutedConversations.mockResolvedValue([]);
   ipcMock.setMuted.mockResolvedValue(undefined);
   announceMock.mockResolvedValue(undefined);
+  allowedMock.mockResolvedValue(true);
+  localStorage.clear();
 });
 
 const done = vi.fn();
@@ -153,6 +164,46 @@ describe("the notifications page", () => {
 
     expect(await screen.findByText(/Open this from a conversation to mute it/)).toBeTruthy();
     expect(screen.queryByLabelText(/^Mute /)).toBeNull();
+  });
+
+  it("remembers a switch that was turned on", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Notify me about highlights"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}")).toEqual({
+        highlights: true,
+        directMessages: false,
+      }),
+    );
+  });
+
+  /** A switch that reads as on and raises nothing is worse than one that never
+   * went on. */
+  it("leaves the switch off when the desktop refuses", async () => {
+    allowedMock.mockResolvedValue(false);
+    open();
+    const box = await screen.findByLabelText("Notify me about direct messages");
+    fireEvent.click(box);
+
+    expect(await screen.findByText(/Your desktop refused notifications/)).toBeTruthy();
+    expect((box as HTMLInputElement).checked).toBe(false);
+    expect(localStorage.getItem("ircx.notifications")).toBeNull();
+  });
+
+  /** Turning one off is not a moment to ask permission for anything. */
+  it("does not ask the desktop when a switch goes off", async () => {
+    localStorage.setItem(
+      "ircx.notifications",
+      JSON.stringify({ highlights: true, directMessages: false }),
+    );
+    open();
+    fireEvent.click(await screen.findByLabelText("Notify me about highlights"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").highlights).toBe(false),
+    );
+    expect(allowedMock).not.toHaveBeenCalled();
   });
 
   it("says why the list could not be read", async () => {

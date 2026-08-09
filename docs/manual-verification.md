@@ -3634,3 +3634,34 @@ first:
   `StrictMode`, which means the harder case rather than the shipped one — the
   restore is the code path that behaves differently under it, and it is the one
   watched here. What is unwalked is the easier path.
+
+## Desktop notifications
+
+Nothing in the suite raises one. `worthNotifying` is tested for every reason it
+stays quiet — muted, watched, replayed, the reader's own line, each switch on
+its own — and that is the whole of the decision. What is unverified is
+everything after it: `sendNotification` reaching a notification daemon, the
+permission prompt, and what the desktop does with a notification once it has
+one.
+
+**What needs a person, on each desktop:**
+
+- A notification appears at all, and carries the conversation in its title.
+  `phrack in #ircx` for a channel, the sender's nick alone for a query.
+- The permission prompt. On macOS the first `requestPermission` is a system
+  dialog; on Linux there is usually nothing to grant and it answers straight
+  away. A refusal has to leave the switch off — the page says so, and the page
+  is tested against a mocked refusal, but not against a real one.
+- Nothing arrives for the conversation on screen while the window has focus,
+  and something does the moment the window loses it. The focus half comes from
+  `onFocusChanged`, which no test can drive.
+- A burst. Twenty highlights in a second is twenty notifications; whether the
+  desktop coalesces them is the desktop's business, and worth watching before
+  deciding ircx should.
+
+**What cannot be made to work, and is not a bug here:** clicking a notification
+does not open the conversation. `tauri-plugin-notification`'s desktop path is
+`notification.show()` and nothing else — no `actionPerformed` is ever emitted,
+so `onAction` is mobile-only. The notification names the conversation for that
+reason. Making it clickable means notifying outside the plugin, per platform,
+which is a larger thing than this feature is.

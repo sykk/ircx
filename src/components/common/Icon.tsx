@@ -25,6 +25,12 @@ const PATHS = {
   // Notifications, as the bell. The dome carries it at this size; the clapper
   // under it is what keeps the silhouette from reading as an arch.
   bell: "M8 2.7a3.3 3.3 0 0 1 3.3 3.3v2.5l1 2.1H3.7l1-2.1V6A3.3 3.3 0 0 1 8 2.7M6.7 12.9a1.4 1.4 0 0 0 2.6 0",
+  // A muted conversation, as the bell with the stroke every mute control has
+  // drawn since the first one. The dome is clipped where the stroke crosses it
+  // rather than drawn under it: at 12px an unbroken bell behind a line reads as
+  // a bell with a scratch.
+  bellOff:
+    "M11.3 9.1V6a3.3 3.3 0 0 0-5-2.8M4.7 5.4V6v2.5l-1 2.1h6.6M6.7 12.9a1.4 1.4 0 0 0 2.6 0M3 3l10 10",
   // Plugins, as the plug rather than the puzzle piece: a jigsaw tab loses its
   // notch at 15px and reads as a rounded square.
   plug: "M6.2 2.3v3M9.8 2.3v3M4.4 5.3h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.3v2.4",

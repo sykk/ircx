@@ -578,7 +578,7 @@ describe("a query whose other end renames", () => {
   function withQuery() {
     useAppStore.setState({
       queries: {
-        [OLD]: { network: "libera", nick: "oldname", account: null, unread: 2, online: true },
+        [OLD]: { network: "libera", nick: "oldname", account: null, unread: 2, online: true, muted: false },
       },
       timelines: {
         [OLD]: {

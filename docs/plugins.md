@@ -434,6 +434,17 @@ rather than on draw and nothing waits for a plugin. The badge therefore moves a
 beat later than the message. That is the cost of the conversation never
 stalling on somebody else's code, and it is the same trade the annotator makes.
 
+Two places a raise reaches the archive and the message and no badge. In a
+**query**, because a query has no loud badge to reach: its badge already means
+somebody opened a conversation with the reader and nobody else, and a second
+colour would say the same thing twice. In a **muted** conversation, because
+that is what the reader asked for — and the rule is still asked, and what it
+raised is still written down, because mute is a statement about being
+interrupted rather than about the record. `docs/notifications.md` argues both.
+
+A rule cannot tell the difference and is not meant to: it answers what was
+worth reading, and where that lands is the client's.
+
 ### Which messages a rule is asked about
 
 Less than an annotator gets. On top of the joins and server chatter neither one
@@ -442,7 +453,7 @@ sees, a rule is not handed:
 | what | why |
 |---|---|
 | the user's own lines | interrupting somebody with their own words is not a rule's to decide |
-| anything already mentioning their nick | the host raised it, and a rule cannot lower it, so the call could not change the answer |
+| anything already mentioning their nick, or holding a word they added beside it | the host raised it, and a rule cannot lower it, so the call could not change the answer |
 | a history backfill | a backfill is not an interruption: it already happened, and the user asked to see it |
 
 The last one is the difference between a rule and an annotator worth knowing:

@@ -245,6 +245,10 @@ pub struct Channel {
     pub member_count: u32,
     pub unread: u32,
     pub highlights: u32,
+    /// Set by muting this conversation or the network it is on. The count
+    /// beside it still rises; what mute stops is `highlights`, so the badge
+    /// stays quiet rather than going away.
+    pub muted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -276,6 +280,24 @@ pub struct Query {
     pub account: Option<String>,
     pub unread: u32,
     pub online: bool,
+    /// A query has no loud badge to quieten, so this marks the row and waits
+    /// for the desktop notification it will keep away.
+    pub muted: bool,
+}
+
+/// Something the reader muted, for the settings window's list of them.
+///
+/// The network's name travels with its id because that window has no network
+/// list to look one up in — it runs no event bridge — and a page listing
+/// hashes is a page nobody can act on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MutedConversation {
+    pub network: NetworkId,
+    pub network_name: String,
+    /// Empty for the network itself rather than one conversation on it.
+    pub target: TargetName,
 }
 
 /// One line of a `LIST` reply. Not a `Channel`: the user is not in it, so there

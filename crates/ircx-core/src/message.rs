@@ -427,9 +427,14 @@ impl SessionState {
 
         let highlight = text::raises(&message.text, &self.nick, &self.highlight_words);
         let key = self.fold(&message.target);
+        // Muted suppresses the badge going loud and nothing else. The answer
+        // returned below is the rule's, not the badge's: it is what keeps a
+        // notification rule from being asked about a message the host already
+        // raised, and mute is not the host changing its mind about that.
+        let quiet = self.is_muted(&key);
         if let Some(channel) = self.channels.get_mut(&key) {
             channel.unread += 1;
-            channel.highlights += u32::from(highlight);
+            channel.highlights += u32::from(highlight && !quiet);
             self.emit_channel(&key);
         } else if let Some(query) = self.queries.get_mut(&key) {
             query.unread += 1;

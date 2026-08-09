@@ -313,6 +313,7 @@ mod tests {
                 member_count: 1,
                 unread,
                 highlights: 0,
+                muted: false,
             },
         }
     }

@@ -43,11 +43,12 @@ function channel(name: string, unread = 0): Channel {
     memberCount: 2,
     unread,
     highlights: 0,
+    muted: false,
   };
 }
 
 function query(nick: string): Query {
-  return { network: "libera", nick, account: null, unread: 0, online: true };
+  return { network: "libera", nick, account: null, unread: 0, online: true, muted: false };
 }
 
 beforeEach(() => {

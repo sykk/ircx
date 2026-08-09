@@ -2,12 +2,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import type * as Ipc from "@/lib/ipc";
+import type { SettingsScope } from "@/lib/settingsWindow";
 import { NotificationsPage } from "./NotificationsPage";
 
 const { ipcMock, announceMock } = vi.hoisted(() => ({
   ipcMock: {
     highlightWords: vi.fn(),
     setHighlightWords: vi.fn(),
+    mutedConversations: vi.fn(),
+    setMuted: vi.fn(),
   },
   announceMock: vi.fn(),
 }));
@@ -25,13 +28,18 @@ beforeEach(() => {
   resetStore();
   ipcMock.highlightWords.mockResolvedValue([]);
   ipcMock.setHighlightWords.mockResolvedValue(undefined);
+  ipcMock.mutedConversations.mockResolvedValue([]);
+  ipcMock.setMuted.mockResolvedValue(undefined);
   announceMock.mockResolvedValue(undefined);
 });
 
 const done = vi.fn();
 
-function open() {
-  render(<NotificationsPage onDone={done} />);
+/** Where the client was when the window opened, as `readScope` hands it over. */
+const HERE = { network: "libera", networkName: "Libera.Chat", target: "#ircx" };
+
+function open(here: SettingsScope | null = HERE) {
+  render(<NotificationsPage here={here} onDone={done} />);
 }
 
 async function type(word: string) {
@@ -99,6 +107,52 @@ describe("the notifications page", () => {
 
     expect(await screen.findByText("The archive is read-only.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove deploy" })).toBeNull();
+  });
+
+  it("mutes the conversation the client was on", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Mute #ircx"));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("libera", "#ircx", true));
+  });
+
+  /** A null target is the network itself, which is how the store keys it. */
+  it("mutes a whole network", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Mute everything on Libera.Chat"));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("libera", null, true));
+  });
+
+  it("marks the conversation as muted when it already is", async () => {
+    ipcMock.mutedConversations.mockResolvedValue([
+      { network: "libera", networkName: "Libera.Chat", target: "#IRCX" },
+    ]);
+    open();
+
+    const box = await screen.findByLabelText("Mute #ircx");
+    // Caselessly: the store keeps the target as it was typed, and a channel is
+    // the same channel in either case.
+    await waitFor(() => expect((box as HTMLInputElement).checked).toBe(true));
+  });
+
+  /** The settings window knows one conversation. Everything else muted has to
+   * be reachable from here or it cannot be undone from this window at all. */
+  it("lists what is muted elsewhere, and unmutes it", async () => {
+    ipcMock.mutedConversations.mockResolvedValue([
+      { network: "hackint", networkName: "hackint", target: "#other" },
+    ]);
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Unmute" }));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("hackint", "#other", false));
+  });
+
+  it("offers nothing to mute when no conversation was open", async () => {
+    open(null);
+
+    expect(await screen.findByText(/Open this from a conversation to mute it/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Mute /)).toBeNull();
   });
 
   it("says why the list could not be read", async () => {

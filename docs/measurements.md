@@ -108,16 +108,19 @@ later one. That it is drawn at all was checked by screenshot rather than timed.
 | the same | 2026-08-01 | 11,320,792 | 10.80 MiB |
 | the same, when the plugin runtime landed (#88) | 2026-07-30 | 10,570,584 | 10.08 MiB |
 | **the application binary, frontend inside it** | 2026-08-02 | 11,897,816 | 11.35 MiB |
+| the same, a week later | 2026-08-09 | 12,696,096 | 12.11 MiB |
 
 The first three are the Rust side only — no frontend bundle embedded, no
 installer packaging. **11,932 bytes over a day**, across the delivery-state
 work (#332, #334, #335), the burst batching and the migration test.
 
-The last row is what a user runs, and it is new here. `npm run tauri build`
-embeds the built frontend in the binary; `cargo build --release` does not, and
-both land on `target/release/ircx`. So the difference between the two rows —
-**564,864 bytes, 551.6 KiB** — is `dist/` compressed into the executable, and
-the figure this file has always quoted is the one without it.
+The last two rows are what a user runs. `npm run tauri build` embeds the built
+frontend in the binary; `cargo build --release` does not, and both land on
+`target/release/ircx`. So the difference between the two rows measured on
+2026-08-02 — **564,864 bytes, 551.6 KiB** — is `dist/` compressed into the
+executable, and the figure this file quoted before that day is the one without
+it. The 2026-08-09 row is the same build a week on; *Where the week to
+2026-08-09 went* takes it apart.
 
 **Covers:** `cargo build --release -p ircx` on the profile in the workspace
 `Cargo.toml` — `lto = true`, `opt-level = "s"`, `strip = true`, `panic`
@@ -156,6 +159,60 @@ bytes, measured the same way, back to back. Almost all of it is QuickJS, which
 the spike measured on its own at 793 KiB. The `network-requests` permission
 adds nothing to that: plugins fetch through `ircx-net`, which the binary
 already carried. None of it is touched at launch by a user with no plugins.
+
+### Where the week to 2026-08-09 went
+
+**798,280 bytes, 779.6 KiB, over 88 merges.** Attributed by rebuilding at
+waypoints rather than by dependency diff, so unlike the #88 row below this one
+says where the growth *did* come from.
+
+The baseline was rebuilt first, and came back at 11,897,816 bytes — the
+2026-08-02 figure above, to the byte. Nothing about the toolchain or the
+dependencies had drifted underneath the comparison, which is what makes the
+rest of the table worth reading.
+
+| | bytes | added | of the week |
+|---|---|---|---|
+| `cdc2729`, the 2026-08-02 baseline | 11,897,816 | — | |
+| through 2026-08-05 | 12,034,848 | 137,032 | 17.2% |
+| through 2026-08-07 | 12,039,584 | 4,736 | 0.6% |
+| the glass theme, emoji picker, context menu, CTCP | 12,142,912 | 103,328 | 12.9% |
+| **the upload secret, and the keyring with it (#446)** | **12,567,072** | **424,160** | **53.1%** |
+| the four public hosts (#449, #450) | 12,590,240 | 23,168 | 2.9% |
+| link previews (#451, #452) | 12,590,240 | 0 | — |
+| the sidebar menus placed by measurement (#454) | 12,594,336 | 4,096 | 0.5% |
+| the appearance settings (#453, #455, #456) | 12,636,192 | 41,856 | 5.2% |
+| the settings window (#458, #460) | 12,696,096 | 59,904 | 7.5% |
+| a reply quoting your own line (#457) | 12,696,096 | 0 | — |
+| worktree target directories (#461) | 12,696,096 | 0 | — |
+
+The rows sum to 798,280 exactly; nothing is unaccounted for.
+
+**Half the week is one feature's dependencies.** Asking for the secret an
+upload provider signs with (#446) put the system keyring behind it, and that
+pulled in twenty-five crates — `secret-service` and `dbus-secret-service`, and
+the crypto they need: `aes`, `cbc`, `cipher`, `hkdf`, `hmac`, `sha1`, `rand`,
+`zerocopy`, the `num` family. 414 KiB for one field on one form. Its interval
+also holds a test fix (#447) and a CI file (#448), neither of which is in the
+binary, and #446 is the only merge in it that touched `Cargo.lock`.
+
+The rest is what the code cost. The two largest features of the week by diff —
+the appearance settings and the settings window — are **99.4 KiB between them,
+12.7%**, which is roughly what a week of UI is worth when the dependencies
+stand still.
+
+**Covers:** the same method as the row above — `npm run tauri build --
+--no-bundle`, `stat -c%s` on `target/release/ircx`, Linux x86-64, the workspace
+release profile. Each waypoint built in one worktree, checked out in turn, so
+the target directory is warm and the comparison is between binaries rather than
+between build environments. Every build was confirmed to have reached *Built
+application* before its size was read: a `tauri build` that fails leaves the
+previous binary in place, and `stat` cannot tell.
+
+**Excludes changes below about 4 KiB.** Three rows read 0 and are not zero —
+a frontend-only change small enough for its compressed assets to land inside
+the padding the executable already carries does not move the file size at all.
+Read those as under the floor of this method rather than as free.
 
 ## What a worktree's build costs
 

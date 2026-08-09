@@ -1199,6 +1199,26 @@ describe("drawing a reply quote", () => {
 
     expect(quotes()).toHaveLength(2);
   });
+
+  /** A reply names its parent the way the server does. Our own lines keep the
+   * local id they were drawn with, so quoting one means resolving its `msgid`
+   * tag — otherwise answering yourself quoted a base32 id at you. */
+  it("quotes a message we sent, named by the msgid its echo carried", () => {
+    seed([
+      makeMessage({
+        id: "local-1",
+        idIsLocal: true,
+        tags: [["msgid", "789"]],
+        nick: "syk",
+        text: "the flag is in the env",
+      }),
+      reply("a", { replyTo: "789" }),
+    ]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    expect(quotes()).toHaveLength(2);
+    expect(screen.queryByText("in reply to 789")).toBe(null);
+  });
 });
 
 /**

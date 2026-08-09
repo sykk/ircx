@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Attachment, AttachmentPreview } from "@/types";
+import { Icon } from "@/components/common/Icon";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { ipc, openExternal } from "@/lib/ipc";
 import { formatBytes } from "@/lib/bytes";
@@ -13,25 +14,6 @@ function filenameOf(attachment: Attachment): string {
   if (attachment.filename) return attachment.filename;
   const path = attachment.url.split("?")[0] ?? attachment.url;
   return path.slice(path.lastIndexOf("/") + 1) || attachment.url;
-}
-
-function Paperclip() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width={13}
-      height={13}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M11.5 6.5 6.75 11.25a2 2 0 0 1-2.83-2.83l5.4-5.4a3 3 0 0 1 4.24 4.24l-5.4 5.4" />
-    </svg>
-  );
 }
 
 /**
@@ -74,7 +56,7 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
     >
       <div className="flex items-baseline gap-2">
         <span className="translate-y-px" style={{ color: "var(--text-faint)" }}>
-          <Paperclip />
+          <Icon name="paperclip" size={13} />
         </span>
         {/* Opened outside this window rather than linked into it. An `href`
             with `target="_blank"` leaves what happens to the webview, and a

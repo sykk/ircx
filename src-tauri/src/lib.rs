@@ -201,6 +201,8 @@ pub fn run() {
             commands::remove_plugin,
             commands::archive_summary,
             commands::set_retention,
+            commands::highlight_words,
+            commands::set_highlight_words,
             commands::export_archive,
             commands::delete_archive,
             commands::announce,

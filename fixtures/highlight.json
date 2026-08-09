@@ -1,0 +1,138 @@
+{
+  "about": [
+    "What raises a conversation: the reader's nickname, or one of the words they",
+    "added beside it. The rule is implemented twice — crates/ircx-core/src/text.rs",
+    "decides the badge and what a notification rule is asked about, and",
+    "src/store/selectors.ts decides the tint and which span inside the line is",
+    "marked. Neither can be derived from the other: the frontend needs the matched",
+    "span to draw it, the backend needs the answer before the message is sent.",
+    "",
+    "So both read this file. A case added here fails in whichever language has not",
+    "learned it yet, which is the only thing keeping a badge that goes loud and a",
+    "line with nothing marked in it from being two different opinions again.",
+    "",
+    "A term is matched on nickname boundaries: the characters either side must be",
+    "outside \\w and RFC 2812's []\\^{}|-. `raises` is true when any term matches."
+  ],
+  "cases": [
+    {
+      "why": "The plain case, and the one every other line here is a departure from",
+      "text": "syk: have a look at this",
+      "nick": "syk",
+      "words": [],
+      "raises": true
+    },
+    {
+      "why": "A longer name that begins with the nick is not the nick",
+      "text": "sykk was here",
+      "nick": "syk",
+      "words": [],
+      "raises": false
+    },
+    {
+      "why": "Case folded, because nobody types a nickname the way it is registered",
+      "text": "SYK, ping",
+      "nick": "syk",
+      "words": [],
+      "raises": true
+    },
+    {
+      "why": "An away nick is a different name, and the reader is not being addressed by it",
+      "text": "hey syk|away, you around?",
+      "nick": "syk",
+      "words": [],
+      "raises": false
+    },
+    {
+      "why": "A hyphen is a nickname character, so syk-foo is somebody else again",
+      "text": "syk-foo pushed a fix",
+      "nick": "syk",
+      "words": [],
+      "raises": false
+    },
+    {
+      "why": "A letter outside ASCII is not a nickname character, so it ends the name",
+      "text": "syké",
+      "nick": "syk",
+      "words": [],
+      "raises": true
+    },
+    {
+      "why": "Punctuation either side is a boundary, which is how a nick is usually written",
+      "text": "(syk) and nobody else",
+      "nick": "syk",
+      "words": [],
+      "raises": true
+    },
+    {
+      "why": "A word raises the same way the nick does",
+      "text": "the deploy went out",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": true
+    },
+    {
+      "why": "A word inside a longer word is not the word",
+      "text": "nothing redeployed since friday",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": false
+    },
+    {
+      "why": "A word is folded like a nick",
+      "text": "DEPLOY finished",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": true
+    },
+    {
+      "why": "The hyphen rule is the nick's rule, applied to a word: this is the cost of one rule rather than two",
+      "text": "deploy-prod is broken",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": false
+    },
+    {
+      "why": "Any of the words, not the first one",
+      "text": "the release is out",
+      "nick": "syk",
+      "words": ["deploy", "release"],
+      "raises": true
+    },
+    {
+      "why": "A word at the start of the line has a boundary behind it",
+      "text": "deploy?",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": true
+    },
+    {
+      "why": "A word with regex punctuation in it is a word, not a pattern",
+      "text": "written in c++ apparently",
+      "nick": "syk",
+      "words": ["c++"],
+      "raises": true
+    },
+    {
+      "why": "And that word does not match what the pattern it looks like would have",
+      "text": "written in c apparently",
+      "nick": "syk",
+      "words": ["c++"],
+      "raises": false
+    },
+    {
+      "why": "No nick and no words raises nothing, which is a session that has not registered yet",
+      "text": "anybody there?",
+      "nick": "",
+      "words": [],
+      "raises": false
+    },
+    {
+      "why": "A line that mentions nobody",
+      "text": "the build is green",
+      "nick": "syk",
+      "words": ["deploy"],
+      "raises": false
+    }
+  ]
+}

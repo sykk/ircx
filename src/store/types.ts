@@ -188,6 +188,10 @@ export interface AppState {
   /** The network whose channel list is on screen, or null. Held rather than a
    * boolean because a list belongs to the network that answered it. */
   channelsOpen: string | null;
+  /** The words that raise a conversation beside the reader's nickname, as the
+   * backend holds them. The badge is counted there and the tint is decided
+   * here, and this is the copy the second half of that reads. */
+  highlightWords: string[];
   /** Every installed plugin, with what it asked for and what it was allowed.
    * Read once at startup, and kept current by the sheet that changes it — the
    * status bar reads the same list with no sheet open. */

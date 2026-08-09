@@ -605,3 +605,61 @@ fn highlights(actions: &[Action]) -> Option<u32> {
         _ => None,
     })
 }
+
+/// A word the reader added does what their nick does: the channel goes loud.
+#[test]
+fn a_word_the_reader_added_makes_the_channel_as_loud_as_a_mention() {
+    let mut session = session();
+    session.set_highlight_words(vec!["deploy".into()]);
+    let arrived = session.on_line(&format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"
+    ));
+
+    assert_eq!(highlights(&arrived), Some(1));
+}
+
+/// The same invariant a mention has, widened by the words: a rule is never
+/// asked about a message the host already raised, because it could not lower it
+/// and the answer would change nothing.
+#[test]
+fn a_rule_is_not_asked_about_a_word_the_reader_added() {
+    let mut session = session();
+    session.set_highlight_words(vec!["deploy".into()]);
+    let lines = [
+        format!(":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"),
+        format!(":kade!k@h PRIVMSG {CHANNEL} :morning"),
+    ];
+
+    assert_eq!(
+        asked(&mut session, &lines),
+        ["morning"],
+        "the word raised the first line without asking anybody"
+    );
+}
+
+/// A word counts from the next message rather than backwards over the badge.
+/// The badge records what arrived while the reader was away, and a word added
+/// now did not interrupt them then.
+#[test]
+fn a_word_added_later_does_not_reach_back_over_the_badge() {
+    let mut session = session();
+    let before = session.on_line(&format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"
+    ));
+    assert_eq!(
+        highlights(&before),
+        Some(0),
+        "no word was set when it arrived"
+    );
+
+    session.set_highlight_words(vec!["deploy".into()]);
+    let after = session.on_line(&format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed again"
+    ));
+
+    assert_eq!(
+        highlights(&after),
+        Some(1),
+        "the second line counted and the first was left where it was"
+    );
+}

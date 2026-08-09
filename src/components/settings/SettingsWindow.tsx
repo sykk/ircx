@@ -8,6 +8,7 @@ import { readScope, type SettingsScope } from "@/lib/settingsWindow";
 import { startAppearanceSync, startThemes } from "@/lib/theme";
 import { AppearancePage } from "./appearance/AppearancePage";
 import { PluginsPage } from "./plugins/PluginsPage";
+import { NotificationsPage } from "./notifications/NotificationsPage";
 import { PrivacyPage } from "./privacy/PrivacyPage";
 import { UploadsPage } from "./uploads/UploadsPage";
 import { SettingsBusy, useSettingsBusy } from "./SettingsPage";
@@ -111,6 +112,7 @@ function Window() {
           className="min-w-0 overflow-y-auto"
         >
           {section === "appearance" && <AppearancePage onDone={close} />}
+          {section === "notifications" && <NotificationsPage onDone={close} />}
           {section === "uploads" && <UploadsPage onDone={close} />}
           {section === "privacy" && <PrivacyPage here={scope} onDone={close} />}
           {section === "plugins" && <PluginsPage onDone={close} />}

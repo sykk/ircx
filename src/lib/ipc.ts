@@ -141,6 +141,8 @@ export const ipc = {
     invoke<ArchiveSummary>("archive_summary", { network, target }),
   setRetention: (network: string, target: string | null, days: number | null) =>
     invoke<void>("set_retention", { network, target, days }),
+  highlightWords: () => invoke<string[]>("highlight_words"),
+  setHighlightWords: (words: string[]) => invoke<void>("set_highlight_words", { words }),
   exportArchive: (scope: ArchiveScope, path: string) =>
     invoke<number>("export_archive", { scope, path }),
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
@@ -311,7 +313,7 @@ export function onThemesChanged(handler: (themes: ThemeSource[]) => void) {
  * asks the backend again. Either way the message says go and look; where to
  * look is the subscriber's business.
  */
-export type SettingsTopic = "appearance" | "plugins";
+export type SettingsTopic = "appearance" | "plugins" | "notifications";
 
 /**
  * Says a setting changed, so the other window catches up.

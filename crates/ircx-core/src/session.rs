@@ -178,6 +178,11 @@ pub struct SessionState {
     pub(crate) isupport: ISupport,
     pub(crate) caps: Caps,
     pub(crate) nick: String,
+    /// What raises a conversation beside the nick. Read from the store when the
+    /// session starts and replaced whenever the settings window writes it, so a
+    /// word added mid-conversation counts from the next line rather than from
+    /// the next launch.
+    pub(crate) highlight_words: Vec<String>,
     pub(crate) user: Option<String>,
     pub(crate) host: Option<String>,
     pub(crate) account: Option<String>,
@@ -241,6 +246,7 @@ impl SessionState {
         };
         Self {
             nick: config.nick.clone(),
+            highlight_words: Vec::new(),
             config,
             isupport: ISupport::default(),
             caps: Caps::default(),
@@ -420,6 +426,16 @@ impl SessionState {
             self.send_command("PING", &[&token]);
         }
         self.drain()
+    }
+
+    /// Replaces the words that raise a conversation beside the nick.
+    ///
+    /// Counts from the next message rather than backwards over the ones already
+    /// here: a badge is a record of what arrived while you were away, and
+    /// rewriting it when a word is added would report a channel as having
+    /// interrupted you at a time when it did not.
+    pub fn set_highlight_words(&mut self, words: Vec<String>) {
+        self.highlight_words = words;
     }
 
     /// A rule thought something in this conversation worth interrupting the

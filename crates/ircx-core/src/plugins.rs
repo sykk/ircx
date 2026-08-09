@@ -59,17 +59,25 @@ pub fn spoken(messages: &[ChatMessage]) -> Vec<ArrivedMessage> {
 /// still change the answer for.
 ///
 /// Two more are left out. The user's own lines, because interrupting somebody
-/// with their own words is not something a rule should decide. And anything
-/// that already mentions their nick, because the host raised that one and a
-/// rule cannot lower it, so the call could not change the outcome.
+/// with their own words is not something a rule should decide. And anything the
+/// host already raised — their nick, or one of the words they added beside it —
+/// because a rule cannot lower it, so the call could not change the outcome.
 ///
 /// A rule is therefore handed strictly less than an annotator, and the
-/// difference is the part where the answer was already known.
-pub fn worth_raising(messages: &[ChatMessage], nick: &str) -> Vec<ArrivedMessage> {
+/// difference is the part where the answer was already known. A word added on
+/// the settings page narrows this further, which is the intended direction: it
+/// is the reader saying they already know they want to be told.
+pub fn worth_raising(
+    messages: &[ChatMessage],
+    nick: &str,
+    words: &[String],
+) -> Vec<ArrivedMessage> {
     messages
         .iter()
         .filter(|message| {
-            is_speech(message) && !message.sender.is_self && !text::mentions(&message.text, nick)
+            is_speech(message)
+                && !message.sender.is_self
+                && !text::raises(&message.text, nick, words)
         })
         .map(arrived)
         .collect()

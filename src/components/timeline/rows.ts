@@ -1,6 +1,6 @@
 import type { ChatMessage, MessageKind } from "@/types";
 import type { ClockFormat } from "@/lib/theme";
-import { isHighlight } from "@/store/selectors";
+import { isHighlight, NO_HIGHLIGHT, type HighlightRule } from "@/store/selectors";
 import type { Group } from "./groups";
 
 /**
@@ -201,7 +201,7 @@ function continuesRun(
 export function buildRows(
   messages: readonly ChatMessage[],
   unreadFrom: string | null,
-  ownNick: string | null = null,
+  highlight: HighlightRule = NO_HIGHLIGHT,
   groups: ReadonlyMap<string, Group> = new Map(),
   present?: ReadonlySet<string>,
 ): TimelineRow[] {
@@ -252,7 +252,7 @@ export function buildRows(
       rows.push({
         kind: "unread",
         id: "unread",
-        seam: measureSeam(messages.slice(i), ownNick, present),
+        seam: measureSeam(messages.slice(i), highlight, present),
       });
     }
 
@@ -302,7 +302,7 @@ export function rowMessages(row: TimelineRow): readonly ChatMessage[] {
 /** Presence is not counted: the seam measures what people said. */
 function measureSeam(
   unread: readonly ChatMessage[],
-  ownNick: string | null,
+  highlight: HighlightRule,
   present?: ReadonlySet<string>,
 ): Seam {
   const speech = unread.filter((m) => !isSystemKind(m.kind));
@@ -312,7 +312,7 @@ function measureSeam(
     messages: speech.length,
     people: new Set(speech.map((m) => m.sender.nick)).size,
     spanMs: first && last ? Math.max(0, Date.parse(last.timestamp) - Date.parse(first.timestamp)) : 0,
-    mentions: speech.filter((m) => isHighlight(m, ownNick, present)).length,
+    mentions: speech.filter((m) => isHighlight(m, highlight, present)).length,
   };
 }
 
@@ -440,7 +440,11 @@ export function presenceInvolving(
   messages: readonly ChatMessage[],
   ownNick: string | null,
 ): number {
-  return messages.filter((m) => m.sender.isSelf || isHighlight(m, ownNick)).length;
+  // The nick alone, not the words beside it. This asks whether a join or a
+  // part was about the reader, and a word they added is about what people are
+  // talking about rather than who came and went.
+  return messages.filter((m) => m.sender.isSelf || isHighlight(m, { nick: ownNick, words: [] }))
+    .length;
 }
 
 /** The whole digest: how long, what happened, and whether it was about you. */

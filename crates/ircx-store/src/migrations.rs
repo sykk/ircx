@@ -17,6 +17,7 @@ const MIGRATIONS: &[&str] = &[
     CLIENT_CERTIFICATE,
     TIMELINE_NOCASE,
     UPLOAD_FORM,
+    HIGHLIGHT_WORDS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -328,6 +329,21 @@ CREATE TRIGGER messages_substr_update AFTER UPDATE ON messages BEGIN
     INSERT INTO messages_substr (messages_substr, rowid, text) VALUES ('delete', old.id, old.text);
     INSERT INTO messages_substr (rowid, text) VALUES (new.id, new.text);
 END;
+"#;
+
+/// The words that raise a conversation the way the reader's nickname does.
+///
+/// One table for the client rather than one per network: the question a word
+/// answers is "tell me when anybody says this", and nobody means it about one
+/// network and not another.
+///
+/// `NOCASE` because the match is case folded, so `Deploy` and `deploy` are one
+/// word and the primary key is what says so. The reader's own spelling is what
+/// comes back — the row is stored as it was typed, and only compared caselessly.
+const HIGHLIGHT_WORDS: &str = r#"
+CREATE TABLE highlight_word (
+    word TEXT PRIMARY KEY COLLATE NOCASE
+);
 "#;
 
 #[cfg(test)]

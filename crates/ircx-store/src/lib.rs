@@ -764,6 +764,40 @@ impl Store {
         Ok(())
     }
 
+    /// The words that raise a conversation beside the reader's nickname, in the
+    /// order they were last written.
+    ///
+    /// Insertion order rather than alphabetical: this is a list somebody typed,
+    /// and a page that reorders it under them on every save is one they cannot
+    /// keep their place in.
+    pub fn highlight_words(&self) -> Result<Vec<String>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare("SELECT word FROM highlight_word ORDER BY rowid")?;
+        let words = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(words)
+    }
+
+    /// Replaces the list wholesale, which is how the page edits it: a word has
+    /// no identity beyond itself, so an addition and a removal are the same
+    /// write.
+    pub fn set_highlight_words(&self, words: &[String]) -> Result<(), StoreError> {
+        let mut conn = self.writing();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM highlight_word", [])?;
+        for word in words {
+            // Two spellings of one word collide on the caseless key, and the
+            // one typed first is the one kept.
+            tx.execute(
+                "INSERT OR IGNORE INTO highlight_word (word) VALUES (?1)",
+                params![word],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// `target` of `None` sets the network default. `days` of `None` keeps
     /// messages forever, and as a target override it outranks the default.
     pub fn set_retention(

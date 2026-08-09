@@ -124,6 +124,10 @@ export interface AppActions {
   setUploadRequest: (paths: string[] | null) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
+  /** The words that raise a conversation beside the reader's nickname. Held
+   * here rather than fetched where they are used: the timeline asks the
+   * question once per message, and the answer is one round trip per launch. */
+  setHighlightWords: (words: string[]) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
   /** Records that the library could not be read at all. */
   setPluginsUnavailable: (reason: string) => void;
@@ -175,6 +179,7 @@ const initialState: AppState = {
   setup: null,
   uploadRequest: null,
   channelsOpen: null,
+  highlightWords: [],
   plugins: [],
   pluginsUnavailable: null,
   collapsedNetworks: {},
@@ -571,6 +576,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setUploadRequest: (paths) =>
     set({ uploadRequest: paths === null || paths.length === 0 ? null : paths }),
   showChannels: (network) => set({ channelsOpen: network }),
+  setHighlightWords: (highlightWords) => set({ highlightWords }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
   upsertPlugin: (plugin) =>

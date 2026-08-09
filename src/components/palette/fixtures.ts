@@ -130,5 +130,6 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     rawLog: {},
     channelList: {},
     channelsOpen: null,
+  highlightWords: [],
   };
 }

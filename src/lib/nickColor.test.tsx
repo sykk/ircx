@@ -5,6 +5,7 @@ import { MemberRow } from "@/components/drawer/MemberRow";
 import { makeMessage } from "@/components/timeline/fixtures";
 import { MessageBlock } from "@/components/timeline/MessageBlock";
 import { nickColor, nickColorIndex, PALETTE_SIZE } from "./nickColor";
+import { NO_HIGHLIGHT } from "@/store/selectors";
 
 describe("nickColor", () => {
   it("ignores case, because IRC nicks do", () => {
@@ -64,6 +65,7 @@ describe("nick colour across surfaces", () => {
         <MessageBlock
           messages={[makeMessage({ nick })]}
           ownNick={null}
+          highlight={NO_HIGHLIGHT}
           parentOf={() => undefined}
           onJump={() => {}}
           canTag={false}

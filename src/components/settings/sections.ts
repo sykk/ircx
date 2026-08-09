@@ -1,6 +1,6 @@
 import type { IconName } from "@/components/common/Icon";
 
-export type SectionId = "appearance" | "uploads" | "privacy" | "plugins";
+export type SectionId = "appearance" | "notifications" | "uploads" | "privacy" | "plugins";
 
 export interface Section {
   id: SectionId;
@@ -11,9 +11,9 @@ export interface Section {
 /**
  * The settings window's sections, in the order the sidebar lists them.
  *
- * The order is how far each one reaches: what the window looks like, then
- * where files go, then what is written down about you, then what other
- * people's code is allowed to do.
+ * The order is how far each one reaches: what the window looks like, then what
+ * is allowed to interrupt you, then where files go, then what is written down
+ * about you, then what other people's code is allowed to do.
  *
  * Networks are not here, and that is the one deliberate gap. Configuring a
  * network is the onboarding flow — pick, fill in, connect — and its last step
@@ -24,6 +24,7 @@ export interface Section {
  */
 export const SECTIONS: readonly Section[] = [
   { id: "appearance", name: "Appearance", icon: "droplet" },
+  { id: "notifications", name: "Notifications", icon: "bell" },
   { id: "uploads", name: "Uploads", icon: "paperclip" },
   { id: "privacy", name: "Privacy", icon: "shield" },
   { id: "plugins", name: "Plugins", icon: "plug" },

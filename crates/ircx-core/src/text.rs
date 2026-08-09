@@ -95,8 +95,23 @@ pub fn split_for_wire(text: &str, budget: usize) -> Vec<String> {
     pieces
 }
 
+/// What a nickname is made of: `\w`, and the `[]\^{}|-` RFC 2812 allows.
+///
+/// A match butting up against one of these is part of a longer name rather than
+/// this one. `syk|away` is somebody else — the same person, but not the name
+/// they are being addressed by, and the badge going loud for it was the client
+/// answering a question nobody asked.
+///
+/// ASCII rather than Unicode alphanumerics, because the same rule is a regular
+/// expression on the other side of the app (`mentionPattern` in
+/// `src/store/selectors.ts`) and `\w` there is ASCII. Two implementations of one
+/// rule is what `fixtures/highlight.json` exists to hold together.
+fn nick_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '_' | '[' | ']' | '\\' | '^' | '{' | '}' | '|' | '-')
+}
+
 /// Whether `nick` is addressed in `text`, rather than merely a substring of a
-/// longer word.
+/// longer name.
 pub fn mentions(text: &str, nick: &str) -> bool {
     if nick.is_empty() {
         return false;
@@ -106,8 +121,20 @@ pub fn mentions(text: &str, nick: &str) -> bool {
     text.match_indices(&nick).any(|(index, _)| {
         let before = text[..index].chars().next_back();
         let after = text[index + nick.len()..].chars().next();
-        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+        !before.is_some_and(nick_char) && !after.is_some_and(nick_char)
     })
+}
+
+/// Whether this line is worth raising for: the reader's nickname, or one of the
+/// words they added beside it.
+///
+/// A word is matched exactly as the nick is, which is the whole reason this
+/// defers to [`mentions`] rather than doing its own search. Adding `deploy`
+/// buys you the word-boundary rule and the case folding that a nickname
+/// already had, and nothing else — `redeployed` is not a match, for the same
+/// reason `sykk` does not mention `syk`.
+pub fn raises(text: &str, nick: &str, words: &[String]) -> bool {
+    mentions(text, nick) || words.iter().any(|word| mentions(text, word))
 }
 
 fn scheme_start(text: &str, scheme_end: usize) -> Option<usize> {
@@ -173,6 +200,46 @@ mod tests {
 
     fn urls(text: &str) -> Vec<String> {
         attachments(text).into_iter().map(|a| a.url).collect()
+    }
+
+    /// Every case in `fixtures/highlight.json`, which `raises` in
+    /// `src/store/selectors.ts` is held to as well.
+    ///
+    /// A case that passes here and fails there is the divergence the file
+    /// exists to catch: the badge counted a message the timeline drew nothing
+    /// in, or the other way round.
+    #[test]
+    fn the_shared_highlight_cases_hold() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../fixtures/highlight.json"))
+                .expect("fixtures/highlight.json does not parse");
+        let cases = fixture["cases"]
+            .as_array()
+            .expect("fixtures/highlight.json has no cases");
+        assert!(!cases.is_empty(), "the fixture asserts nothing");
+
+        for case in cases {
+            let text = case["text"].as_str().expect("a case with no text");
+            let nick = case["nick"].as_str().expect("a case with no nick");
+            let words: Vec<String> = case["words"]
+                .as_array()
+                .expect("a case with no words")
+                .iter()
+                .map(|word| {
+                    word.as_str()
+                        .expect("a word that is not a string")
+                        .to_owned()
+                })
+                .collect();
+            let expected = case["raises"].as_bool().expect("a case with no answer");
+
+            assert_eq!(
+                raises(text, nick, &words),
+                expected,
+                "{}\n  text:  {text:?}\n  nick:  {nick:?}\n  words: {words:?}",
+                case["why"].as_str().unwrap_or("(no reason given)"),
+            );
+        }
     }
 
     #[test]

@@ -4,7 +4,7 @@ import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
 import { serverMsgid, useAppStore } from "@/store";
-import { isHighlight } from "@/store/selectors";
+import { isHighlight, type HighlightRule } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
 import { Clock } from "./Clock";
 import { bodyText } from "./groups";
@@ -22,6 +22,10 @@ interface MessageRowProps {
    * #138. */
   quotedAbove: boolean;
   ownNick: string | null;
+  /** What makes a line loud: the reader's nick and the words beside it. Passed
+   * rather than read here, so the appearance preview can draw a sample channel
+   * against a rule of its own. */
+  highlight: HighlightRule;
   parentOf: (msgid: string) => ChatMessage | undefined;
   onJump: (msgid: string) => void;
   /** False on a server without `message-tags`. Both reacting and replying put
@@ -40,6 +44,7 @@ export function MessageRow({
   message,
   quotedAbove,
   ownNick,
+  highlight,
   parentOf,
   onJump,
   canTag,
@@ -49,7 +54,7 @@ export function MessageRow({
   flashing,
   failure,
 }: MessageRowProps) {
-  const highlight = isHighlight(message, ownNick, present);
+  const loud = isHighlight(message, highlight, present);
   // A rule raised this line to the same loudness a mention has, so it is marked
   // the same way: the row tinted, and the reason said in the words for it.
   const raised = (message.raisedBy ?? []).length > 0;
@@ -62,14 +67,14 @@ export function MessageRow({
   return (
     <div
       data-msgid={message.id}
-      data-highlight={highlight || undefined}
+      data-highlight={loud || undefined}
       data-ui="message-row"
       className="group text-[13px]"
       style={{
         paddingBlock: "var(--timeline-row-pad-y)",
         background: flashing
           ? "var(--surface-active)"
-          : highlight || raised
+          : loud || raised
             ? "var(--mention-bg)"
             : undefined,
         // The rule marking a mention is the block's spine, which the block
@@ -115,7 +120,7 @@ export function MessageRow({
             style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
             <SenderPrefix message={message} />
-            <Body message={message} mention={highlight ? ownNick : null} />
+            <Body message={message} highlight={loud ? highlight : null} />
           </div>
 
           {message.attachments.map((attachment) => (
@@ -227,10 +232,10 @@ function urlsOf(message: ChatMessage): string[] {
   return message.attachments.map((attachment) => attachment.url);
 }
 
-/** `mention` is the reader's nick only where this message is one; a line the
+/** `highlight` is the rule only where this message matched it; a line the
  * reader sent that happens to contain their own name is not addressed to
  * them, and isHighlight already says so. */
-function Body({ message, mention }: { message: ChatMessage; mention: string | null }) {
+function Body({ message, highlight }: { message: ChatMessage; highlight: HighlightRule | null }) {
   if (message.kind === "action") {
     return (
       <span>
@@ -240,7 +245,7 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
         >
           * {message.sender.nick}{" "}
         </span>
-        <Mentioned text={stripIrcFormatting(message.text)} mention={mention} />
+        <Mentioned text={stripIrcFormatting(message.text)} highlight={highlight} />
       </span>
     );
   }
@@ -254,7 +259,7 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
         >
           -{message.sender.nick}-{" "}
         </span>
-        <Markdown text={message.text} urls={urlsOf(message)} mention={mention} />
+        <Markdown text={message.text} urls={urlsOf(message)} highlight={highlight} />
       </span>
     );
   }
@@ -262,7 +267,7 @@ function Body({ message, mention }: { message: ChatMessage; mention: string | nu
   // `bodyText` drops a bracket the sender typed to name a group, which the
   // block has already printed above the run. The archive keeps the raw text,
   // so search still matches what was written.
-  return <Markdown text={bodyText(message)} urls={urlsOf(message)} mention={mention} />;
+  return <Markdown text={bodyText(message)} urls={urlsOf(message)} highlight={highlight} />;
 }
 
 /**

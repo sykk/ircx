@@ -30,6 +30,8 @@
 //! remove_plugin(plugin: String)               -> ()
 //! archive_summary(network, target)            -> ArchiveSummary
 //! set_retention(network, target, days)        -> ()
+//! highlight_words()                           -> Vec<String>
+//! set_highlight_words(words: Vec<String>)     -> ()
 //! export_archive(scope, path)                 -> u64
 //! delete_archive(scope)                       -> ()
 //! ```

@@ -434,6 +434,19 @@ pub async fn set_retention(
         .map_err(describe)
 }
 
+/// The words that raise a conversation beside the reader's nickname.
+#[tauri::command]
+pub async fn highlight_words(app: State<'_, App>) -> Result<Vec<String>, String> {
+    app.store().highlight_words().map_err(describe)
+}
+
+/// Replaces the list, and tells every connected network so the change counts
+/// from the next message rather than the next launch.
+#[tauri::command]
+pub async fn set_highlight_words(app: State<'_, App>, words: Vec<String>) -> Result<(), String> {
+    app.set_highlight_words(words).await
+}
+
 /// Writes the archive to `path` as JSON Lines and answers with how many bytes
 /// went, which is the only thing the caller can show that the file itself does
 /// not already say.

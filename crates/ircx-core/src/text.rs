@@ -110,6 +110,18 @@ pub fn mentions(text: &str, nick: &str) -> bool {
     })
 }
 
+/// Whether this line is worth raising for: the reader's nickname, or one of the
+/// words they added beside it.
+///
+/// A word is matched exactly as the nick is, which is the whole reason this
+/// defers to [`mentions`] rather than doing its own search. Adding `deploy`
+/// buys you the word-boundary rule and the case folding that a nickname
+/// already had, and nothing else — `redeployed` is not a match, for the same
+/// reason `sykk` does not mention `syk`.
+pub fn raises(text: &str, nick: &str, words: &[String]) -> bool {
+    mentions(text, nick) || words.iter().any(|word| mentions(text, word))
+}
+
 fn scheme_start(text: &str, scheme_end: usize) -> Option<usize> {
     let start = text[..scheme_end]
         .char_indices()

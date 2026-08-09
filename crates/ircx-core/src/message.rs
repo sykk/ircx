@@ -396,7 +396,7 @@ impl SessionState {
         // Which messages a rule is worth asking about, worked out before the
         // batch is given away.
         let ask = match live {
-            true => plugins::worth_raising(&messages, &self.nick),
+            true => plugins::worth_raising(&messages, &self.nick, &self.highlight_words),
             false => Vec::new(),
         };
         self.emit(IrcxEvent::MessagesAppended {
@@ -425,7 +425,7 @@ impl SessionState {
             return None;
         }
 
-        let highlight = text::mentions(&message.text, &self.nick);
+        let highlight = text::raises(&message.text, &self.nick, &self.highlight_words);
         let key = self.fold(&message.target);
         if let Some(channel) = self.channels.get_mut(&key) {
             channel.unread += 1;

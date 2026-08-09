@@ -195,6 +195,12 @@ pub enum SessionCommand {
     PluginChanged {
         plugin: String,
     },
+    /// The reader changed the words that raise a conversation beside their
+    /// nick. Carried rather than re-read, because every session would otherwise
+    /// go to the same table for the same answer on the async runtime.
+    HighlightWordsChanged {
+        words: Vec<String>,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -386,6 +392,13 @@ async fn drive(
     context: &Context,
 ) {
     let mut backoff = Backoff::new(BackoffPolicy::default());
+    // A list that cannot be read leaves the nick as the whole rule, which is
+    // what it was before anybody added a word. Quieter than it should be beats
+    // refusing to connect over a settings table.
+    match context.store.highlight_words() {
+        Ok(words) => session.set_highlight_words(words),
+        Err(error) => warn!(%error, "could not read the words that raise a conversation"),
+    }
     let remembered = match context.store.open_targets(&context.network) {
         Ok(targets) => targets,
         Err(error) => {
@@ -591,6 +604,10 @@ async fn apply(
             // something they were ever shown.
             strike_cleared(&context.strikes, Hook::Annotate, &plugin);
             strike_cleared(&context.strikes, Hook::Notify, &plugin);
+            Vec::new()
+        }
+        SessionCommand::HighlightWordsChanged { words } => {
+            session.set_highlight_words(words);
             Vec::new()
         }
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),

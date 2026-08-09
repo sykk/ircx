@@ -395,6 +395,41 @@ impl App {
         Ok(())
     }
 
+    /// Writes the words that raise a conversation, then hands them to every
+    /// network that has a session.
+    ///
+    /// A word is trimmed and an empty one dropped here rather than in the
+    /// store: the list arrives from a text field, where a blank line is a
+    /// keystroke rather than an intention, and a word of no characters would
+    /// match nothing anyway.
+    ///
+    /// The store is written first. A network too busy to be told picks the list
+    /// up the next time it starts, and losing the write to save a send nobody
+    /// is waiting for would be the wrong way round.
+    pub async fn set_highlight_words(&self, words: Vec<String>) -> Result<(), String> {
+        let words: Vec<String> = words
+            .into_iter()
+            .map(|word| word.trim().to_owned())
+            .filter(|word| !word.is_empty())
+            .collect();
+        self.store.set_highlight_words(&words).map_err(describe)?;
+
+        // Collected before the awaits, because `guard` is a std lock. The same
+        // shape as `plugin_changed` below, and for the same reason.
+        let senders: Vec<_> = self.guard().values().map(NetworkHandle::commands).collect();
+        for sender in senders {
+            let changed = SessionCommand::HighlightWordsChanged {
+                words: words.clone(),
+            };
+            match timeout(REPLY_TIMEOUT, sender.send(changed)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => warn!("a network stopped before it could be told the words changed"),
+                Err(_) => warn!("a network was too busy to be told the words changed"),
+            }
+        }
+        Ok(())
+    }
+
     /// Tells every running network that this plugin's library entry changed, so
     /// a hook it dropped is asked again.
     ///

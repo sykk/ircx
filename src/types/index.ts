@@ -28,6 +28,7 @@ export type { IrcxEvent } from "./generated/IrcxEvent";
 export type { Member } from "./generated/Member";
 export type { MessageKind } from "./generated/MessageKind";
 export type { MessageSource } from "./generated/MessageSource";
+export type { MutedConversation } from "./generated/MutedConversation";
 export type { Network } from "./generated/Network";
 export type { NetworkConfig } from "./generated/NetworkConfig";
 export type { PluginCommand } from "./generated/PluginCommand";

@@ -1,4 +1,5 @@
 import { ipc, onIrcxEvent } from "@/lib/ipc";
+import { notifyForEvents } from "@/lib/notifications";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { IrcxEvent } from "@/types";
@@ -16,14 +17,24 @@ export async function startBridge(): Promise<() => void> {
   const stopFollowingFocus = followFocus();
 
   const unlisten = await onIrcxEvent((events) => {
-    if (loaded) useAppStore.getState().applyEvents(events);
-    else held.push(...events);
+    if (loaded) {
+      useAppStore.getState().applyEvents(events);
+      // After the store has taken them, so what is muted and what is on screen
+      // are asked of the state the reader is looking at rather than the one
+      // before this batch.
+      notifyForEvents(events);
+    } else held.push(...events);
   });
 
   try {
     await loadSnapshot();
   } finally {
     loaded = true;
+    // The held events are what arrived while the snapshot was in flight, which
+    // is the first fraction of a second of a launch. Applied, and deliberately
+    // not notified for: a client that has just started has not been away, and
+    // a burst of notifications for a conversation being drawn for the first
+    // time is the launch itself interrupting somebody.
     useAppStore.getState().applyEvents(held);
     held.length = 0;
   }

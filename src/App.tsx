@@ -13,6 +13,7 @@ import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadHighlightWords, startHighlightSync } from "@/lib/highlights";
+import { startNotifications } from "@/lib/notifications";
 import { loadPlugins, startPluginSync } from "@/lib/plugins";
 import { startAppearanceSync, startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
@@ -38,6 +39,9 @@ export function App() {
     // where they are written.
     void loadHighlightWords();
     const highlightSync = startHighlightSync();
+    // Follows whether the window has focus, which is what keeps a notification
+    // from arriving for the line somebody just watched appear.
+    const notifications = startNotifications();
     void loadPlugins();
     // The plugin screens are in the settings window now; the count in the
     // status bar is here, and nothing else would tell it an install happened.
@@ -73,6 +77,7 @@ export function App() {
       void appearance.then((stop) => stop());
       void pluginSync.then((stop) => stop());
       void highlightSync.then((stop) => stop());
+      void notifications.then((stop) => stop());
     };
   }, []);
 

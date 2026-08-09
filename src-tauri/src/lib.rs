@@ -165,6 +165,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
@@ -203,6 +204,8 @@ pub fn run() {
             commands::set_retention,
             commands::highlight_words,
             commands::set_highlight_words,
+            commands::muted_conversations,
+            commands::set_muted,
             commands::export_archive,
             commands::delete_archive,
             commands::announce,

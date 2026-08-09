@@ -2508,3 +2508,66 @@ fn writing_the_words_replaces_whatever_was_there() {
     store.set_highlight_words(&[]).unwrap();
     assert!(store.highlight_words().unwrap().is_empty());
 }
+
+/// A row is the whole state, so unmuting is a deletion and asking about
+/// something never muted is an empty answer rather than a missing one.
+#[test]
+fn muting_is_a_row_and_unmuting_takes_it_away() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_muted("libera", Some("#ircx"), true).unwrap();
+    store.set_muted("libera", None, true).unwrap();
+
+    let mut targets = store.muted_targets("libera").unwrap();
+    targets.sort();
+    assert_eq!(
+        targets,
+        ["", "#ircx"],
+        "an empty target is the network itself"
+    );
+
+    store.set_muted("libera", Some("#ircx"), false).unwrap();
+    assert_eq!(store.muted_targets("libera").unwrap(), [""]);
+}
+
+/// The settings window has no network list to look an id up in, so the name
+/// travels with it.
+#[test]
+fn the_muted_list_names_the_network() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera.Chat")).unwrap();
+    store.set_muted(&id, Some("#ircx"), true).unwrap();
+    store.set_muted("gone", Some("#orphan"), true).unwrap();
+
+    let listed = store.muted_conversations().unwrap();
+    assert!(
+        listed.contains(&(id.clone(), "Libera.Chat".into(), "#ircx".into())),
+        "the configured network is named: {listed:?}"
+    );
+    assert!(
+        listed.contains(&("gone".into(), "gone".into(), "#orphan".into())),
+        "a network with no config falls back to its id rather than vanishing: {listed:?}"
+    );
+}
+
+/// A mute follows a renamed query the way its draft does. Leaving it behind
+/// fails in the direction that interrupts you.
+#[test]
+fn a_mute_follows_a_renamed_query() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_muted("libera", Some("buildbot"), true).unwrap();
+    store.move_muted("libera", "buildbot", "buildbot_").unwrap();
+
+    assert_eq!(store.muted_targets("libera").unwrap(), ["buildbot_"]);
+}
+
+/// Mute is a setting, and one on a network that is gone is one nobody can find
+/// to undo.
+#[test]
+fn removing_a_network_takes_its_mutes() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera.Chat")).unwrap();
+    store.set_muted(&id, Some("#ircx"), true).unwrap();
+    store.remove_network(&id).unwrap();
+
+    assert!(store.muted_targets(&id).unwrap().is_empty());
+}

@@ -183,6 +183,15 @@ pub struct SessionState {
     /// word added mid-conversation counts from the next line rather than from
     /// the next launch.
     pub(crate) highlight_words: Vec<String>,
+    /// Conversations that may not interrupt the reader, as the store holds
+    /// them: an empty string among them is the whole network.
+    ///
+    /// Held unfolded and compared through `fold`, because this is seeded before
+    /// the connection has said what its CASEMAPPING is — folding on receipt
+    /// would settle `#Foo` against the wrong rule for the rest of the session.
+    /// The list is a handful of names, so the walk costs nothing worth keeping
+    /// a second copy to avoid.
+    pub(crate) muted: Vec<TargetName>,
     pub(crate) user: Option<String>,
     pub(crate) host: Option<String>,
     pub(crate) account: Option<String>,
@@ -247,6 +256,7 @@ impl SessionState {
         Self {
             nick: config.nick.clone(),
             highlight_words: Vec::new(),
+            muted: Vec::new(),
             config,
             isupport: ISupport::default(),
             caps: Caps::default(),
@@ -446,9 +456,50 @@ impl SessionState {
     /// nothing it could be asked to take back.
     pub fn raise(&mut self, target: &str) -> Vec<Action> {
         let key = self.fold(target);
+        // Mute is applied here rather than by not asking the rule. By now the
+        // rule has answered, the archive holds the raise and the message draws
+        // the line naming what raised it — which is the record, and a
+        // conversation unmuted next week still shows it. What mute takes away
+        // is the interruption, and the badge is the whole of that.
+        if self.is_muted(&key) {
+            return self.drain();
+        }
+        // A query has no counter to reach, and deliberately none: its badge is
+        // already the loud one, because somebody opened a conversation with the
+        // reader and nobody else. A rule can raise in one and this will not
+        // move — `docs/notifications.md` argues it, and `docs/plugins.md` tells
+        // a rule author. What the raise leaves there is the archive row and the
+        // line under the message.
         if let Some(channel) = self.channels.get_mut(&key) {
             channel.highlights += 1;
             self.emit_channel(&key);
+        }
+        self.drain()
+    }
+
+    /// Whether this conversation may interrupt the reader. `key` is folded, as
+    /// every caller of this already holds one.
+    pub(crate) fn is_muted(&self, key: &str) -> bool {
+        self.muted
+            .iter()
+            .any(|muted| muted.is_empty() || self.fold(muted) == key)
+    }
+
+    /// Replaces what is muted, and says so about every conversation on the
+    /// screen.
+    ///
+    /// All of them rather than the ones that changed: the mark in the sidebar
+    /// is drawn from the conversation, and working out which rows moved costs
+    /// more than re-stating a list somebody is looking at.
+    pub fn set_muted(&mut self, muted: Vec<TargetName>) -> Vec<Action> {
+        self.muted = muted;
+        let channels: Vec<String> = self.channels.keys().cloned().collect();
+        for key in channels {
+            self.emit_channel(&key);
+        }
+        let queries: Vec<String> = self.queries.keys().cloned().collect();
+        for key in queries {
+            self.emit_query(&key);
         }
         self.drain()
     }
@@ -2320,6 +2371,7 @@ impl SessionState {
             member_count: state.map(|c| c.members.len() as u32).unwrap_or_default(),
             unread: state.map(|c| c.unread).unwrap_or_default(),
             highlights: state.map(|c| c.highlights).unwrap_or_default(),
+            muted: self.is_muted(key),
         }
     }
 
@@ -2331,6 +2383,7 @@ impl SessionState {
             account: state.and_then(|q| q.account.clone()),
             unread: state.map(|q| q.unread).unwrap_or_default(),
             online: state.is_some_and(|q| q.online),
+            muted: self.is_muted(key),
         }
     }
 

@@ -462,6 +462,7 @@ function SidebarRow({
           {row.query.nick}
         </span>
         <span className="flex-1" />
+        {row.query.muted && <MutedMark />}
         {row.query.unread > 0 && <Badge count={row.query.unread} />}
       </button>
     );
@@ -488,10 +489,29 @@ function SidebarRow({
           <Icon name="lock" size={12} />
         </span>
       )}
+      {row.channel.muted && <MutedMark />}
       {row.channel.unread > 0 && (
         <Badge count={row.channel.unread} highlight={row.channel.highlights > 0} />
       )}
     </button>
+  );
+}
+
+/**
+ * Why a conversation is quiet, where somebody would go looking for it.
+ *
+ * The row is the answer to "why did this not go loud", and the settings window
+ * only knows the conversation the client happened to be on when it opened. A
+ * mute nobody can find is worse than no mute: the channel is simply broken.
+ *
+ * Beside the lock rather than instead of the badge — the count still rises, and
+ * a muted conversation with unread messages has both things to say.
+ */
+function MutedMark() {
+  return (
+    <span className="text-[var(--text-faint)]" title="Muted" aria-label="Muted" role="img">
+      <Icon name="bellOff" size={12} />
+    </span>
   );
 }
 

@@ -15,6 +15,7 @@ import type {
   InstalledPlugin,
   IrcxEvent,
   Member,
+  MutedConversation,
   NetworkConfig,
   PluginGrants,
   PluginPermissionInfo,
@@ -143,6 +144,9 @@ export const ipc = {
     invoke<void>("set_retention", { network, target, days }),
   highlightWords: () => invoke<string[]>("highlight_words"),
   setHighlightWords: (words: string[]) => invoke<void>("set_highlight_words", { words }),
+  mutedConversations: () => invoke<MutedConversation[]>("muted_conversations"),
+  setMuted: (network: string, target: string | null, muted: boolean) =>
+    invoke<void>("set_muted", { network, target, muted }),
   exportArchive: (scope: ArchiveScope, path: string) =>
     invoke<number>("export_archive", { scope, path }),
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),

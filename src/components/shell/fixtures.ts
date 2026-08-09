@@ -85,12 +85,13 @@ export function makeChannel(
     memberCount: 0,
     unread: 0,
     highlights: 0,
+    muted: false,
     ...patch,
   };
 }
 
 export function makeQuery(network: string, nick: string, patch: Partial<Query> = {}): Query {
-  return { network, nick, account: null, unread: 0, online: true, ...patch };
+  return { network, nick, account: null, unread: 0, online: true, muted: false, ...patch };
 }
 
 export function seedStore(

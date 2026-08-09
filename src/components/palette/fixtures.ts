@@ -76,6 +76,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
       memberCount: 12,
       unread: made % 11 === 0 ? made % 40 : 0,
       highlights: 0,
+      muted: false,
     };
   }
 
@@ -88,6 +89,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
       account: null,
       unread: i % 5 === 0 ? 3 : 0,
       online: true,
+      muted: false,
     };
   }
 

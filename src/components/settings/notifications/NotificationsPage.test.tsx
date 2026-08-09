@@ -2,14 +2,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import type * as Ipc from "@/lib/ipc";
+import type { SettingsScope } from "@/lib/settingsWindow";
+import type * as Notifications from "@/lib/notifications";
 import { NotificationsPage } from "./NotificationsPage";
 
-const { ipcMock, announceMock } = vi.hoisted(() => ({
+const { ipcMock, announceMock, allowedMock } = vi.hoisted(() => ({
   ipcMock: {
     highlightWords: vi.fn(),
     setHighlightWords: vi.fn(),
+    mutedConversations: vi.fn(),
+    setMuted: vi.fn(),
   },
   announceMock: vi.fn(),
+  allowedMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
@@ -20,18 +25,32 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
 
 vi.mock("@/lib/highlights", () => ({ announceHighlightWords: announceMock }));
 
+vi.mock("@/lib/notifications", async (importOriginal) => ({
+  ...(await importOriginal<typeof Notifications>()),
+  // The desktop's answer, which no test here is about. The page's own job is
+  // to leave the switch off when it is refused.
+  allowedToNotify: allowedMock,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
   ipcMock.highlightWords.mockResolvedValue([]);
   ipcMock.setHighlightWords.mockResolvedValue(undefined);
+  ipcMock.mutedConversations.mockResolvedValue([]);
+  ipcMock.setMuted.mockResolvedValue(undefined);
   announceMock.mockResolvedValue(undefined);
+  allowedMock.mockResolvedValue(true);
+  localStorage.clear();
 });
 
 const done = vi.fn();
 
-function open() {
-  render(<NotificationsPage onDone={done} />);
+/** Where the client was when the window opened, as `readScope` hands it over. */
+const HERE = { network: "libera", networkName: "Libera.Chat", target: "#ircx" };
+
+function open(here: SettingsScope | null = HERE) {
+  render(<NotificationsPage here={here} onDone={done} />);
 }
 
 async function type(word: string) {
@@ -99,6 +118,92 @@ describe("the notifications page", () => {
 
     expect(await screen.findByText("The archive is read-only.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove deploy" })).toBeNull();
+  });
+
+  it("mutes the conversation the client was on", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Mute #ircx"));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("libera", "#ircx", true));
+  });
+
+  /** A null target is the network itself, which is how the store keys it. */
+  it("mutes a whole network", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Mute everything on Libera.Chat"));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("libera", null, true));
+  });
+
+  it("marks the conversation as muted when it already is", async () => {
+    ipcMock.mutedConversations.mockResolvedValue([
+      { network: "libera", networkName: "Libera.Chat", target: "#IRCX" },
+    ]);
+    open();
+
+    const box = await screen.findByLabelText("Mute #ircx");
+    // Caselessly: the store keeps the target as it was typed, and a channel is
+    // the same channel in either case.
+    await waitFor(() => expect((box as HTMLInputElement).checked).toBe(true));
+  });
+
+  /** The settings window knows one conversation. Everything else muted has to
+   * be reachable from here or it cannot be undone from this window at all. */
+  it("lists what is muted elsewhere, and unmutes it", async () => {
+    ipcMock.mutedConversations.mockResolvedValue([
+      { network: "hackint", networkName: "hackint", target: "#other" },
+    ]);
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Unmute" }));
+
+    await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("hackint", "#other", false));
+  });
+
+  it("offers nothing to mute when no conversation was open", async () => {
+    open(null);
+
+    expect(await screen.findByText(/Open this from a conversation to mute it/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Mute /)).toBeNull();
+  });
+
+  it("remembers a switch that was turned on", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Notify me about highlights"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}")).toEqual({
+        highlights: true,
+        directMessages: false,
+      }),
+    );
+  });
+
+  /** A switch that reads as on and raises nothing is worse than one that never
+   * went on. */
+  it("leaves the switch off when the desktop refuses", async () => {
+    allowedMock.mockResolvedValue(false);
+    open();
+    const box = await screen.findByLabelText("Notify me about direct messages");
+    fireEvent.click(box);
+
+    expect(await screen.findByText(/Your desktop refused notifications/)).toBeTruthy();
+    expect((box as HTMLInputElement).checked).toBe(false);
+    expect(localStorage.getItem("ircx.notifications")).toBeNull();
+  });
+
+  /** Turning one off is not a moment to ask permission for anything. */
+  it("does not ask the desktop when a switch goes off", async () => {
+    localStorage.setItem(
+      "ircx.notifications",
+      JSON.stringify({ highlights: true, directMessages: false }),
+    );
+    open();
+    fireEvent.click(await screen.findByLabelText("Notify me about highlights"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").highlights).toBe(false),
+    );
+    expect(allowedMock).not.toHaveBeenCalled();
   });
 
   it("says why the list could not be read", async () => {

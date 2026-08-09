@@ -112,7 +112,7 @@ function Window() {
           className="min-w-0 overflow-y-auto"
         >
           {section === "appearance" && <AppearancePage onDone={close} />}
-          {section === "notifications" && <NotificationsPage onDone={close} />}
+          {section === "notifications" && <NotificationsPage here={scope} onDone={close} />}
           {section === "uploads" && <UploadsPage onDone={close} />}
           {section === "privacy" && <PrivacyPage here={scope} onDone={close} />}
           {section === "plugins" && <PluginsPage onDone={close} />}

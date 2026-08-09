@@ -307,7 +307,12 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
                 key={item.key}
                 data-index={item.index}
                 ref={virtualizer.measureElement}
-                className="absolute top-0 left-0 w-full"
+                // The translate makes every row its own stacking context, so an
+                // overlay opened inside one — an attachment peek, a reaction
+                // picker — is painted over by every row below it however high
+                // its own z-index goes. Lifting the row the reader is on is
+                // what puts the overlay above its neighbours.
+                className="absolute top-0 left-0 w-full hover:z-10 focus-within:z-10"
                 style={{ transform: `translateY(${item.start - headPx}px)` }}
               >
                 {renderRow(rows[item.index]!, {

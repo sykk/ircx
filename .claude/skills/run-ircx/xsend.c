@@ -3,6 +3,11 @@
  *   xsend type <text>     insert the text a character at a time
  *   xsend key <name>      a keysym by name, with ctrl+/shift+/alt+ prefixes
  *   xsend click <x> <y>   move the pointer there and click button 1
+ *   xsend move <x> <y>    move the pointer there and press nothing
+ *
+ * `move` is what a hover is: a CSS :hover rule answers to where the pointer is
+ * rather than to any event a script can dispatch, so anything drawn on hover
+ * can only be photographed by putting the pointer on it and leaving it there.
  *
  * Every character goes through XKeysymToKeycode, so a keysym the layout does
  * not carry is reported rather than typed as something else.
@@ -57,7 +62,7 @@ static int tap(KeySym sym, unsigned mods) {
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "usage: xsend type <text> | key <name> | click <x> <y>\n");
+    fprintf(stderr, "usage: xsend type <text> | key <name> | click <x> <y> | move <x> <y>\n");
     return 2;
   }
   dpy = XOpenDisplay(NULL);
@@ -97,6 +102,10 @@ int main(int argc, char **argv) {
     usleep(60000);
     XTestFakeButtonEvent(dpy, 1, True, 0);
     XTestFakeButtonEvent(dpy, 1, False, 0);
+    XFlush(dpy);
+  } else if (!strcmp(argv[1], "move")) {
+    if (argc < 4) { fprintf(stderr, "move needs x and y\n"); return 2; }
+    XTestFakeMotionEvent(dpy, -1, atoi(argv[2]), atoi(argv[3]), 0);
     XFlush(dpy);
   } else {
     fprintf(stderr, "unknown command %s\n", argv[1]);

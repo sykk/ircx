@@ -260,6 +260,10 @@ async function command(line) {
       xsend("click", rest[0], rest[1]);
       await sleep(250);
       return "ok clicked";
+    case "move":
+      xsend("move", rest[0], rest[1]);
+      await sleep(250);
+      return "ok moved";
     case "ss": {
       const shot = spawnSync("import", ["-window", "root", argument], {
         env: { ...process.env, DISPLAY },

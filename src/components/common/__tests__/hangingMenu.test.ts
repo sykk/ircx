@@ -48,3 +48,35 @@ describe("a menu hanging off a button", () => {
     expect(at.left).toBe(424);
   });
 });
+
+/** The conversation menu hangs off the row it was right-clicked on rather than
+ * off a button inside it, so at the same floor it is aligned to 180px of row and
+ * clears the left edge on its own. What it shares with the network menu is the
+ * list: both sit in an `overflow-y-auto` scroller, which clips them near the
+ * bottom whatever their coordinates. */
+describe("a menu hanging off a sidebar row", () => {
+  const ROW = { left: 0, right: 180, top: 210, bottom: 236 };
+  const ONE_ITEM = { width: 176, height: 44 };
+
+  /** Right-aligning it to 180px of row leaves it 4px from the window, which is
+   * inside the 8px every other measured box keeps, so it moves the 4px out. It
+   * cleared the edge before this change and now clears it by the same margin
+   * the tooltips do. */
+  it("takes the window margin the rest of the app keeps", () => {
+    const at = hangingMenuAt(ROW, ONE_ITEM, WINDOW);
+
+    expect(ROW.right - ONE_ITEM.width).toBe(4);
+    expect(at.left).toBe(8);
+    expect(at.top).toBe(240);
+  });
+
+  /** The bug the row's own width hid: cut off by the bottom of the list rather
+   * than by the left of the window. */
+  it("opens upwards for a row near the bottom of a long list", () => {
+    const low = { left: 0, right: 180, top: 660, bottom: 686 };
+    const at = hangingMenuAt(low, ONE_ITEM, WINDOW);
+
+    expect(at.top).toBe(low.top - ONE_ITEM.height - 4);
+    expect(at.top + ONE_ITEM.height).toBeLessThanOrEqual(low.top);
+  });
+});

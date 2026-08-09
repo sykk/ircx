@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { edgeShift } from "./Tooltip";
 
 /** How close to a window edge a menu may sit, and how far it hangs below the
@@ -41,35 +41,41 @@ export function hangingMenuAt(
 }
 
 /**
- * Hangs a menu off a button, inside the window.
+ * Hangs a menu off whatever it belongs to, inside the window.
  *
- * The sidebar's network menu used to be `absolute top-full right-0 w-44` in the
- * button's own box, which put its left edge 176px to the left of a button that
- * sits about 137px into a sidebar at its 180px floor — so the menu was drawn
- * from -39px and the reader saw four labels with their first word cut off. The
- * list it hangs in is `overflow-y-auto`, and a scroller clips both axes, so an
- * absolute menu could not have escaped even had it fitted the window.
+ * The sidebar's two menus were both `absolute top-full right-0 w-44`, and both
+ * were clipped by the list they hang in — `overflow-y-auto`, and a scroller with
+ * one axis not `visible` clips the other too, so neither could escape whatever
+ * its coordinates. The network menu was cut off horizontally as well: 176px
+ * right-aligned to a button that sits about 137px into a sidebar at its 180px
+ * floor drew it from -39px, and the reader saw four labels with their first word
+ * missing.
  *
- * Fixed, then, and placed by measurement. It does not follow the list if that
- * is scrolled under it — neither does the pointer menu — and any click outside
+ * Fixed, then, and placed by measurement. `anchorOf` is given the menu and
+ * answers with the box to hang it from, because the two callers anchor to
+ * different things: the network menu to its own button, so it opens back over
+ * the sidebar, and the conversation menu to the row it was right-clicked on,
+ * which is the full width of the sidebar. It does not follow the list if that is
+ * scrolled under it — neither does the pointer menu — and any click outside
  * closes it first.
  */
-export function useHangingMenu(open: boolean, anchor: RefObject<HTMLElement | null>) {
+export function useHangingMenu(open: boolean, anchorOf: (menu: HTMLElement) => HTMLElement | null) {
   const menu = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const node = menu.current;
-    const button = anchor.current;
-    if (!node || !button) return;
+    if (!node) return;
+    const anchor = anchorOf(node);
+    if (!anchor) return;
 
     const { left, top } = hangingMenuAt(
-      button.getBoundingClientRect(),
+      anchor.getBoundingClientRect(),
       { width: node.offsetWidth, height: node.offsetHeight },
       { width: window.innerWidth, height: window.innerHeight },
     );
     node.style.left = `${left}px`;
     node.style.top = `${top}px`;
-  }, [open, anchor]);
+  }, [open, anchorOf]);
 
   return menu;
 }

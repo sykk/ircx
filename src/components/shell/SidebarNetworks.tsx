@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
 import { ipc } from "@/lib/ipc";
@@ -526,7 +526,9 @@ function NetworkMenu({
   onSettings: () => void;
 }) {
   const button = useRef<HTMLButtonElement>(null);
-  const menu = useHangingMenu(open, button);
+  /** Stable, because the placing effect takes it as a dependency. */
+  const anchorToButton = useCallback(() => button.current, []);
+  const menu = useHangingMenu(open, anchorToButton);
 
   const choose = (run: () => void) => () => {
     onOpenChange(false);
@@ -633,6 +635,10 @@ function CloseButton({
   );
 }
 
+/** Hoisted so its identity is stable: an arrow written at the call site is a
+ * new function every render, and the placing effect takes it as a dependency. */
+const anchorToRow = (menu: HTMLElement) => menu.parentElement;
+
 /**
  * What can be done to one conversation beyond the ×. Only closing, for now.
  * Reached from a right-click; the × is the direct route #121 asked for.
@@ -652,6 +658,11 @@ function ConversationMenu({
   onOpenChange: (open: boolean) => void;
   onClose: () => void;
 }) {
+  /* The row this was right-clicked on, which is the menu's own parent and the
+   * full width of the sidebar. Called before the early return below, hooks
+   * being hooks. */
+  const menu = useHangingMenu(open, anchorToRow);
+
   if (!open) return null;
 
   const choose = () => {
@@ -661,9 +672,10 @@ function ConversationMenu({
 
   return (
     <div
+      ref={menu}
       role="menu"
       aria-label={`${label} actions`}
-      className="absolute top-full right-0 z-10 mt-1 w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
+      className="fixed z-[100] w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           onOpenChange(false);

@@ -29,6 +29,15 @@ where the run names you; the mention is already marked by the line above the
 run and by the tint on its row, and letting it take the spine cost the accent
 the second block of every exchange the reader was in.
 
+The spine, the clock's format and the angle brackets an older client put round
+a nickname are the reader's, in the appearance sheet beside the density and in
+`src/lib/theme/presentation.ts`. They are settings rather than tokens, for the
+density's reason: a theme is a set of token values, and each of these three
+changes what a component draws. Turning the spine off costs the hue that names
+a conversation, so a declared group falls back to the name above its run and an
+addressed one to the two nick colours; the gap between two blocks of one group
+comes back with it, there being nothing left to span it.
+
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the
 useful part: grouping separates conversations happening at once, so a channel

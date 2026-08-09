@@ -346,11 +346,35 @@ describe("rowIndexOfMessage", () => {
 describe("formatClock", () => {
   it("pads to HH:MM", () => {
     const stamp = new Date(2026, 6, 29, 2, 5).toISOString();
-    expect(formatClock(stamp)).toBe("02:05");
+    expect(formatClock(stamp, "24h")).toBe("02:05");
+  });
+
+  it("pads the seconds too", () => {
+    const stamp = new Date(2026, 6, 29, 2, 5, 7).toISOString();
+    expect(formatClock(stamp, "24h-seconds")).toBe("02:05:07");
+  });
+
+  it("writes midnight and noon as 12 rather than 0", () => {
+    const midnight = new Date(2026, 6, 29, 0, 5).toISOString();
+    const noon = new Date(2026, 6, 29, 12, 5).toISOString();
+    expect(formatClock(midnight, "12h")).toBe("12:05 AM");
+    expect(formatClock(noon, "12h")).toBe("12:05 PM");
+  });
+
+  it("does not pad the hour in 12-hour", () => {
+    const stamp = new Date(2026, 6, 29, 14, 32).toISOString();
+    expect(formatClock(stamp, "12h")).toBe("2:32 PM");
+  });
+
+  it("gives nothing to draw when the clock is off", () => {
+    const stamp = new Date(2026, 6, 29, 2, 5).toISOString();
+    expect(formatClock(stamp, "off")).toBeNull();
+    /* Before the date is even looked at: off is off whatever arrived. */
+    expect(formatClock("not a date", "off")).toBeNull();
   });
 
   it("does not throw on a timestamp the server mangled", () => {
-    expect(formatClock("not a date")).toBe("--:--");
+    expect(formatClock("not a date", "24h")).toBe("--:--");
   });
 });
 

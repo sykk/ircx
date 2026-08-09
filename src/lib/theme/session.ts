@@ -5,6 +5,7 @@ import { applyDensity, applyOverrides, applyTheme, storeThemeId, storedThemeId }
 import { DEFAULT_DENSITY, type DensityId, storeDensity, storedDensity } from "./density";
 import { FALLBACK_THEME_ID, catalogue } from "./load";
 import { storedOverrides } from "./overrides";
+import { type Presentation, storePresentation, storedPresentation } from "./presentation";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 
 /** The theme the window opens in, resolved before the first paint: the
@@ -24,10 +25,11 @@ export function applyOpeningTheme(): void {
   const wanted = storedThemeId() ?? FALLBACK_THEME_ID;
   const density = storedDensity() ?? DEFAULT_DENSITY;
   const overrides = storedOverrides();
+  const presentation = storedPresentation();
   const remembered = rememberedInstalled();
   const { themes } = catalogue(remembered ? [remembered] : []);
 
-  useAppStore.setState({ themes, themeId: wanted, density, overrides });
+  useAppStore.setState({ themes, themeId: wanted, density, overrides, presentation });
   applyDensity(density);
   applyOverrides(overrides);
   applyTheme(themes.find((theme) => theme.id === wanted) ?? null);
@@ -58,6 +60,15 @@ export function selectDensity(id: DensityId): void {
   useAppStore.getState().setDensity(id);
   applyDensity(id);
   storeDensity(id);
+}
+
+/** One field of the presentation, merged over the rest. There is nothing to
+ * paint: none of the three is a token, so the components that draw the spine,
+ * the clock and the nickname read them from the store. */
+export function selectPresentation(change: Partial<Presentation>): void {
+  const next = { ...useAppStore.getState().presentation, ...change };
+  useAppStore.getState().setPresentation(next);
+  storePresentation(next);
 }
 
 /** The themes directory as the backend last sent it. Held because what has to

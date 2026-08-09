@@ -1,15 +1,20 @@
-import { Group, SecondaryButton } from "@/components/onboarding/fields";
+import { CheckField, Group, SecondaryButton, SelectField } from "@/components/onboarding/fields";
 import {
+  CLOCK_FORMATS,
   DENSITIES,
   selectDensity,
+  selectPresentation,
   selectTheme,
   type BrokenTheme,
+  type ClockFormat,
   type DensityId,
+  type Presentation,
   type Theme,
 } from "@/lib/theme";
 
 /**
- * The themes that loaded, the densities, and the themes that did not.
+ * The themes that loaded, the densities, what the timeline draws, and the
+ * themes that did not load.
  *
  * The failures are the reason this screen is worth a sheet of its own. Until
  * now a directory that would not load reached the person holding the file as a
@@ -23,6 +28,7 @@ export function ThemeList({
   broken,
   themeId,
   density,
+  presentation,
   onClose,
   onEdit,
 }: {
@@ -30,6 +36,7 @@ export function ThemeList({
   broken: readonly BrokenTheme[];
   themeId: string;
   density: DensityId;
+  presentation: Presentation;
   onClose: () => void;
   onEdit: (theme: string) => void;
 }) {
@@ -93,6 +100,32 @@ export function ThemeList({
             </li>
           ))}
         </ul>
+      </Group>
+
+      <Group title="Timeline">
+        <SelectField<ClockFormat>
+          label="Timestamp"
+          value={presentation.clock}
+          options={CLOCK_FORMATS.map(({ id, name, example }) => ({
+            value: id,
+            label: example === null ? name : `${name} · ${example}`,
+          }))}
+          onChange={(clock) => selectPresentation({ clock })}
+        />
+
+        <CheckField
+          label="Spine"
+          hint="The rule at the rail. Its colour names the conversation a run belongs to, which nothing else on the row says."
+          checked={presentation.spine}
+          onChange={(spine) => selectPresentation({ spine })}
+        />
+
+        <CheckField
+          label="Angle brackets around nicknames"
+          hint="<alice> at the head of a run, as clients that named every line wrote it."
+          checked={presentation.nickBrackets}
+          onChange={(nickBrackets) => selectPresentation({ nickBrackets })}
+        />
       </Group>
 
       {broken.length > 0 && (

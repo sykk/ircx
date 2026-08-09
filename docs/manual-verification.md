@@ -2033,6 +2033,43 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
   before somebody files it: `loadOlder` fills the viewport and stops, which is
   what it is supposed to do.
 
+## The spine, the clock and the nickname, turned off and changed
+
+Three settings in the appearance sheet beside the density, held in
+`localStorage` under `ircx.presentation`. What each one draws is asserted in
+`MessageBlock.test.tsx` against the DOM, and the round trip through storage in
+`session.test.ts`. **None of it has been looked at in a running window.** What
+follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
+
+- **The ladder with no spine.** The two columns close to zero, so the prose
+  moves 30px left — the spine's 2px and the 28px gap after it. Speech and
+  presence share the ladder, so both should move together and a digest should
+  still begin at the same edge as the run above it. Nobody has seen that they
+  do.
+- **A group with no spine to carry it.** The hue is the only thing that says
+  which conversation a block belongs to, so turning the spine off costs it. A
+  declared group keeps its name above the run; an addressed group keeps nothing
+  but the two nick colours. Whether an addressed group is still legible is the
+  open question, and it is a matter of looking at a busy channel rather than of
+  mechanism.
+- **The gap between two blocks of one group.** With the spine off the gap comes
+  back, on the argument that nothing spans it any more. The test asserts the
+  padding moved; what it cannot say is whether a group then reads as several
+  separate runs, which is what closing the gap was for.
+- **`Off` in a block header.** `Clock` returns nothing, so the header is a
+  nickname and a `gap-2` with nothing on the other side of it. Flexbox drops the
+  gap along with the child, so there should be no trailing space — an argument
+  about flexbox rather than a screenshot.
+- **Angle brackets at the head of a run.** `docs/mockup.png` does not draw them,
+  and a bracketed name is wider than a bare one in the same 13px mono. Nothing
+  measures the header, so nothing should reflow, but the header sits above the
+  prose rather than beside it and how `<phrack>` reads there is a matter of
+  looking.
+- **Surviving a restart.** `ircx.density` was read back by hand after a restart
+  on 2026-07-31; `ircx.presentation` has not been. It is written by the same
+  shape of code, which is a reason to expect it and not a reason to record it as
+  seen.
+
 ## Unread counts
 
 `mark_read` is the only thing that resets a conversation's unread count, and

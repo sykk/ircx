@@ -22,6 +22,7 @@ function Sheet() {
   const broken = useAppStore((s) => s.brokenThemes);
   const themeId = useAppStore((s) => s.themeId);
   const density = useAppStore((s) => s.density);
+  const presentation = useAppStore((s) => s.presentation);
 
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -76,6 +77,7 @@ function Sheet() {
             broken={broken}
             themeId={themeId}
             density={density}
+            presentation={presentation}
             onClose={close}
             onEdit={edit}
           />

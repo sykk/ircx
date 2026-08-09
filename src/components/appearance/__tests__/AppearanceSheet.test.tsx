@@ -172,6 +172,54 @@ describe("AppearanceSheet", () => {
     });
   });
 
+  describe("what the timeline draws", () => {
+    it("offers every clock format, and says what each one prints", () => {
+      open();
+      const options = [...field("Timestamp").querySelectorAll("option")].map(
+        (option) => option.textContent,
+      );
+
+      expect(options).toEqual([
+        "24-hour · 14:32",
+        "24-hour with seconds · 14:32:07",
+        "12-hour · 2:32 PM",
+        "Off",
+      ]);
+    });
+
+    it("keeps the chosen format for the next launch", () => {
+      open();
+      fireEvent.change(field("Timestamp"), { target: { value: "12h" } });
+
+      expect(useAppStore.getState().presentation.clock).toBe("12h");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"clock":"12h"');
+    });
+
+    /* The other two fields have to survive the change untouched: the setting is
+     * stored as one blob, so a write that forgot to merge would quietly reset
+     * whichever of the three was not being edited. */
+    it("changes one setting without disturbing the other two", () => {
+      open();
+      fireEvent.change(field("Timestamp"), { target: { value: "off" } });
+      fireEvent.click(field("Spine"));
+
+      expect(useAppStore.getState().presentation).toEqual({
+        spine: false,
+        clock: "off",
+        nickBrackets: false,
+      });
+    });
+
+    it("turns the nickname brackets on and off again", () => {
+      open();
+      fireEvent.click(field("Angle brackets around nicknames"));
+      expect(useAppStore.getState().presentation.nickBrackets).toBe(true);
+
+      fireEvent.click(field("Angle brackets around nicknames"));
+      expect(useAppStore.getState().presentation.nickBrackets).toBe(false);
+    });
+  });
+
   describe("editing a token", () => {
     it("paints the value and keeps it across a re-render", () => {
       const { rerender } = open({ themeId: "ircx-dark" });

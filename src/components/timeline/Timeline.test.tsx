@@ -157,8 +157,10 @@ describe("Timeline", () => {
 
     const clocks = document.querySelectorAll("time");
     expect(clocks).toHaveLength(3);
-    expect(clocks[0]!.textContent).toBe(formatClock(new Date(base).toISOString()));
-    expect(clocks[2]!.textContent).toBe(formatClock(new Date(base + 61_000).toISOString()));
+    expect(clocks[0]!.textContent).toBe(formatClock(new Date(base).toISOString(), "24h"));
+    expect(clocks[2]!.textContent).toBe(
+      formatClock(new Date(base + 61_000).toISOString(), "24h"),
+    );
     expect(screen.getByText("first")).toBeTruthy();
     expect(screen.getByText("second")).toBeTruthy();
   });

@@ -366,6 +366,15 @@ describe("formatClock", () => {
     expect(formatClock(stamp, "12h")).toBe("2:32 PM");
   });
 
+  /* The suffix is what a 12-hour clock costs in width, and a reader watching a
+     channel in one afternoon already knows which half of the day it is. */
+  it("drops AM and PM but keeps the 12-hour reading", () => {
+    const morning = new Date(2026, 6, 29, 2, 5).toISOString();
+    const afternoon = new Date(2026, 6, 29, 14, 32).toISOString();
+    expect(formatClock(morning, "12h-bare")).toBe("2:05");
+    expect(formatClock(afternoon, "12h-bare")).toBe("2:32");
+  });
+
   it("gives nothing to draw when the clock is off", () => {
     const stamp = new Date(2026, 6, 29, 2, 5).toISOString();
     expect(formatClock(stamp, "off")).toBeNull();

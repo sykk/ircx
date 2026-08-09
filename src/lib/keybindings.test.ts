@@ -85,6 +85,7 @@ describe("the shipped table", () => {
     ["Alt+ArrowLeft", "history.back"],
     ["Alt+ArrowRight", "history.forward"],
     ["Mod+Shift+M", "roster.toggle"],
+    ["Mod+Shift+N", "timeline.nickEveryLine"],
     ["Mod+F", "search.open"],
     ["Escape", "overlay.dismiss"],
   ])("binds %s to %s", (chord, action) => {
@@ -99,7 +100,7 @@ describe("the shipped table", () => {
     }
   });
 
-  it("lets exactly the overlay, pane and target-walking chords through while typing", () => {
+  it("lets exactly the overlay, pane, target-walking and reading chords through while typing", () => {
     const typing = DEFAULT_BINDINGS.filter((b) => b.whenTyping).map((b) => b.chord);
     expect(typing.toSorted()).toEqual(
       [
@@ -111,6 +112,7 @@ describe("the shipped table", () => {
         "Mod+F",
         "Mod+K",
         "Mod+W",
+        "Mod+Shift+N",
         "Mod+Shift+\\",
         "Mod+\\",
       ].toSorted(),

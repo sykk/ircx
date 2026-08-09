@@ -30,6 +30,14 @@ function block(over: Partial<Parameters<typeof MessageBlock>[0]> = {}) {
   );
 }
 
+/** The line the run opens with: whoever spoke and when, in the order the reader
+ * asked for them in. */
+function head(container: HTMLElement): HTMLElement {
+  const clock = container.querySelector("time");
+  if (!clock) throw new Error("the block drew no clock");
+  return clock.parentElement!;
+}
+
 function spine(container: HTMLElement): HTMLElement {
   const found = container.querySelector<HTMLElement>("[data-spine]");
   if (!found) throw new Error("the block drew no spine");
@@ -192,6 +200,88 @@ describe("the nickname at the head of a run", () => {
 
     expect(getByText("<phrack>")).toBeTruthy();
     expect(queryByText("phrack")).toBeNull();
+  });
+
+  it("opens the head of the run, the clock behind it", () => {
+    const { container } = block();
+
+    expect(head(container).firstElementChild!.textContent).toBe("phrack");
+  });
+
+  it("stands behind the clock for a reader who put the time first", () => {
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, clockSide: "left" } });
+    const { container } = block();
+
+    expect(head(container).firstElementChild!.tagName).toBe("TIME");
+    expect(head(container).lastElementChild!.textContent).toBe("phrack");
+  });
+});
+
+describe("the nickname in front of every line", () => {
+  beforeEach(() =>
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickEveryLine: true },
+    }),
+  );
+
+  const said = [
+    makeMessage({ id: "a", nick: "phrack", text: "hi" }),
+    makeMessage({ id: "b", nick: "phrack", text: "how are you?" }),
+  ];
+
+  function rows(container: HTMLElement): HTMLElement[] {
+    return [...container.querySelectorAll<HTMLElement>("[data-ui='message-row']")];
+  }
+
+  it("names the sender on each of them", () => {
+    const { getAllByText } = block({ messages: said });
+
+    expect(getAllByText("phrack")).toHaveLength(2);
+  });
+
+  /* The head of the run is what the prefix replaces. Left standing it would
+   * state the name and the time a third time for a two-line run. */
+  it("draws no head above the run, and puts its clock on each line", () => {
+    const { container } = block({ messages: said });
+
+    expect(rows(container).every((row) => row.querySelector("time") !== null)).toBe(true);
+    expect(container.querySelectorAll("time")).toHaveLength(2);
+  });
+
+  /* Copied out of the window as well as read in it: the separator is a
+   * character in the line rather than a margin between two elements. */
+  it("closes the name with a colon, or with the brackets when it wears them", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickEveryLine: true, clockSide: "left" },
+    });
+    const { container, unmount } = block({ messages: said });
+    expect(container.textContent).toContain("phrack: hi");
+
+    unmount();
+    useAppStore.setState({
+      presentation: {
+        ...DEFAULT_PRESENTATION,
+        nickEveryLine: true,
+        nickBrackets: true,
+        clockSide: "left",
+      },
+    });
+    const bracketed = block({ messages: said });
+
+    expect(bracketed.getAllByText("<phrack>")).toHaveLength(2);
+    expect(bracketed.container.textContent).not.toContain("phrack:");
+    expect(bracketed.container.textContent).toContain("<phrack> hi");
+  });
+
+  /* An action and a notice write the sender into the body themselves. A prefix
+   * in front of one of those names them twice on the same line. */
+  it("leaves an action to write its own nick", () => {
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: "phrack", kind: "action", text: "waves" })],
+    });
+
+    expect(container.textContent).toContain("* phrack waves");
+    expect(container.textContent).not.toContain("phrack:");
   });
 });
 

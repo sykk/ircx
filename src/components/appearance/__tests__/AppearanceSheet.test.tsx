@@ -199,6 +199,7 @@ describe("AppearanceSheet", () => {
         "24-hour · 14:32",
         "24-hour with seconds · 14:32:07",
         "12-hour · 2:32 PM",
+        "12-hour, no suffix · 2:32",
         "Off",
       ]);
     });
@@ -211,10 +212,10 @@ describe("AppearanceSheet", () => {
       expect(localStorage.getItem("ircx.presentation")).toContain('"clock":"12h"');
     });
 
-    /* The other two fields have to survive the change untouched: the setting is
+    /* The other fields have to survive the change untouched: the setting is
      * stored as one blob, so a write that forgot to merge would quietly reset
-     * whichever of the three was not being edited. */
-    it("changes one setting without disturbing the other two", () => {
+     * whichever of them was not being edited. */
+    it("changes one setting without disturbing the others", () => {
       open();
       fireEvent.change(field("Timestamp"), { target: { value: "off" } });
       fireEvent.click(field("Spine"));
@@ -222,8 +223,26 @@ describe("AppearanceSheet", () => {
       expect(useAppStore.getState().presentation).toEqual({
         spine: false,
         clock: "off",
+        clockSide: "right",
         nickBrackets: false,
+        nickEveryLine: false,
       });
+    });
+
+    it("moves the timestamp to the other side of the nickname", () => {
+      open();
+      fireEvent.change(field("Timestamp place"), { target: { value: "left" } });
+
+      expect(useAppStore.getState().presentation.clockSide).toBe("left");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"clockSide":"left"');
+    });
+
+    it("puts the nickname in front of every line", () => {
+      open();
+      fireEvent.click(field("Nickname on every line"));
+
+      expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
+      expect(localStorage.getItem("ircx.presentation")).toContain('"nickEveryLine":true');
     });
 
     it("turns the nickname brackets on and off again", () => {
@@ -291,9 +310,23 @@ describe("AppearanceSheet", () => {
       expect(useAppStore.getState().presentation).toEqual({
         spine: false,
         clock: "24h-seconds",
+        clockSide: "left",
         nickBrackets: true,
+        nickEveryLine: false,
       });
       expect(token("--font-ui")).toBe(token("--font-mono"));
+    });
+
+    /* A preset merges over the settings in force rather than replacing them,
+       which is how it can leave one alone. A reader who put the name in front
+       of every line keeps it through a change of look. */
+    it("keeps the name on every line for a reader who turned it on", () => {
+      open();
+      fireEvent.click(field("Nickname on every line"));
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
+      expect(useAppStore.getState().presentation.nickBrackets).toBe(true);
     });
 
     /** Applying one is a starting point, not a mode. Every setting it wrote is

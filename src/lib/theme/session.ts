@@ -75,8 +75,8 @@ export function selectDensity(id: DensityId): void {
 }
 
 /** One field of the presentation, merged over the rest. There is nothing to
- * paint: none of the three is a token, so the components that draw the spine,
- * the clock and the nickname read them from the store. */
+ * paint: none of them is a token, so the components that draw the spine, the
+ * clock and the nickname read them from the store. */
 export function selectPresentation(change: Partial<Presentation>): void {
   const next = { ...useAppStore.getState().presentation, ...change };
   useAppStore.getState().setPresentation(next);
@@ -96,7 +96,9 @@ export function selectTypography(change: Partial<Typography>): void {
 /** A palette and the layout that goes with it, in one click. Written through
  * the three functions above rather than around them, so a preset remembers
  * itself exactly as the settings it sets do, and every one of them stays the
- * reader's to change afterwards. */
+ * reader's to change afterwards. It is also what lets a preset stay silent
+ * about a setting: `selectPresentation` merges, so a field the preset omits
+ * keeps the value the reader gave it. */
 export function selectPreset(preset: Preset): void {
   selectTheme(preset.theme);
   selectPresentation(preset.presentation);

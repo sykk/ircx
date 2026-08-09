@@ -3,9 +3,10 @@ import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
 import { isHighlight } from "@/store/selectors";
+import { Clock } from "./Clock";
 import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
-import { failureRuns, formatClock, writesOwnNick } from "./rows";
+import { failureRuns, writesOwnNick } from "./rows";
 
 const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
 /** The same ladder with the spine's two columns closed up, for a reader who
@@ -92,24 +93,6 @@ export function Block({
   );
 }
 
-/** The time a block began, set in the same face and size wherever it appears,
- * and nothing at all for a reader who turned the clock off. */
-export function Clock({ at }: { at: string }) {
-  const format = useAppStore((s) => s.presentation.clock);
-  const clock = formatClock(at, format);
-  if (clock === null) return null;
-
-  return (
-    <time
-      dateTime={at}
-      className="shrink-0 font-[family-name:var(--font-mono)] text-[12px] tabular-nums"
-      style={{ color: "var(--text-faint)" }}
-    >
-      {clock}
-    </time>
-  );
-}
-
 interface Props {
   messages: ChatMessage[];
   ownNick: string | null;
@@ -162,6 +145,12 @@ function repeatsQuote(messages: ChatMessage[], at: number): boolean {
  * width from one minute to the next and took the prose with it: five different
  * left edges on one screen of #libera-dev. The name is still written out in
  * full, being the identifier colour only reinforces — once, at the head.
+ *
+ * A reader who wants it on every line can have it, and this head is what goes
+ * when they do: `SenderPrefix` in MessageRow states who and when in front of
+ * each line instead. What does not come back is the column — the prefix is in
+ * the flow of the prose, so the left edge is where the first word is and no
+ * name can move it.
  */
 export function MessageBlock({
   messages,
@@ -178,6 +167,8 @@ export function MessageBlock({
 }: Props) {
   const head = messages[0]!;
   const brackets = useAppStore((s) => s.presentation.nickBrackets);
+  const clockSide = useAppStore((s) => s.presentation.clockSide);
+  const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
   const addressed = messages.some((message) => isHighlight(message, ownNick, present));
   const failures = failureRuns(messages);
   // A rule raises a message to the same loudness a mention has — the badge
@@ -222,16 +213,24 @@ export function MessageBlock({
         </div>
       )}
       {/* An action or a notice writes its own nick into the body, so a header
-          would say the name the first line is about to say again. */}
-      {!writesOwnNick(head.kind) && (
+          would say the name the first line is about to say again. Neither does
+          a reader who asked for the name in front of every line: the rows
+          below are about to state who and when, each for itself. */}
+      {!writesOwnNick(head.kind) && !everyLine && (
         <div className="flex items-baseline gap-2">
+          {/* Whichever of the two the reader put first keeps the left edge the
+              lines beneath start at. The clock is the same width from one run
+              to the next and the name is not, so a clock in front leaves the
+              names in a column and a clock behind leaves the names ragged —
+              which is the choice, and either way the prose is unmoved. */}
+          {clockSide === "left" && <Clock at={head.timestamp} />}
           <span
             className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
             style={{ color: nickColor(head.sender.nick) }}
           >
             {brackets ? `<${head.sender.nick}>` : head.sender.nick}
           </span>
-          <Clock at={head.timestamp} />
+          {clockSide === "right" && <Clock at={head.timestamp} />}
         </div>
       )}
       {messages.map((message, at) => (

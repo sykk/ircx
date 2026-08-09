@@ -11,14 +11,38 @@ import {
 describe("sanitisePresentation", () => {
   it("takes a setting that was written by this app", () => {
     expect(
-      sanitisePresentation({ spine: false, clock: "12h", nickBrackets: true }),
-    ).toEqual({ spine: false, clock: "12h", nickBrackets: true });
+      sanitisePresentation({
+        spine: false,
+        clock: "12h",
+        clockSide: "left",
+        nickBrackets: true,
+        nickEveryLine: true,
+      }),
+    ).toEqual({
+      spine: false,
+      clock: "12h",
+      clockSide: "left",
+      nickBrackets: true,
+      nickEveryLine: true,
+    });
   });
 
   it("keeps the fields it recognises when a neighbour is wrong", () => {
     expect(
-      sanitisePresentation({ spine: false, clock: "half past", nickBrackets: true }),
-    ).toEqual({ spine: false, clock: DEFAULT_PRESENTATION.clock, nickBrackets: true });
+      sanitisePresentation({
+        spine: false,
+        clock: "half past",
+        clockSide: "left",
+        nickBrackets: true,
+        nickEveryLine: true,
+      }),
+    ).toEqual({
+      spine: false,
+      clock: DEFAULT_PRESENTATION.clock,
+      clockSide: "left",
+      nickBrackets: true,
+      nickEveryLine: true,
+    });
   });
 
   it("refuses a value of the wrong type rather than painting it", () => {
@@ -36,8 +60,20 @@ describe("storedPresentation", () => {
   beforeEach(() => localStorage.clear());
 
   it("returns what the last session stored", () => {
-    storePresentation({ spine: false, clock: "off", nickBrackets: true });
-    expect(storedPresentation()).toEqual({ spine: false, clock: "off", nickBrackets: true });
+    storePresentation({
+      spine: false,
+      clock: "off",
+      clockSide: "left",
+      nickBrackets: true,
+      nickEveryLine: true,
+    });
+    expect(storedPresentation()).toEqual({
+      spine: false,
+      clock: "off",
+      clockSide: "left",
+      nickBrackets: true,
+      nickEveryLine: true,
+    });
   });
 
   it("opens on the defaults when nothing was stored", () => {
@@ -67,6 +103,7 @@ describe("CLOCK_FORMATS", () => {
       "24h",
       "24h-seconds",
       "12h",
+      "12h-bare",
       "off",
     ]);
   });

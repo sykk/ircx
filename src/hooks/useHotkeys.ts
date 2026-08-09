@@ -7,6 +7,7 @@ import {
   type ActionId,
   type Binding,
 } from "@/lib/keybindings";
+import { selectPresentation } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
 import type { ActiveTarget, AppState, ViewId } from "@/store/types";
@@ -132,6 +133,10 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       "roster.toggle": () => {
         const { activeViewId, toggleRoster } = useAppStore.getState();
         if (activeViewId) toggleRoster(activeViewId);
+      },
+      "timeline.nickEveryLine": () => {
+        const { nickEveryLine } = useAppStore.getState().presentation;
+        selectPresentation({ nickEveryLine: !nickEveryLine });
       },
       "pane.splitVertical": () => useAppStore.getState().splitActiveView("row"),
       "pane.splitHorizontal": () => useAppStore.getState().splitActiveView("column"),

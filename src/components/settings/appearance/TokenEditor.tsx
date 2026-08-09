@@ -8,18 +8,16 @@ import {
 } from "@/components/onboarding/fields";
 import {
   AA_BODY,
-  applyOverrides,
   contrast,
   COOL_MAX,
   COOL_MIN,
   hue,
-  storeOverrides,
+  selectOverrides,
   SURFACES,
   toHex,
   TOKEN_CATALOGUE,
   TOKEN_GROUPS,
   tokenProblem,
-  type Overrides,
   type Theme,
   type TokenSpec,
 } from "@/lib/theme";
@@ -40,7 +38,6 @@ import { useAppStore } from "@/store";
  */
 export function TokenEditor({ theme, onBack }: { theme: Theme; onBack: () => void }) {
   const overrides = useAppStore((s) => s.overrides);
-  const setOverrides = useAppStore((s) => s.setOverrides);
 
   /* The one thing held locally, and it is not a value: a refused value is never
    * committed, so there is nowhere else for its sentence to live. One at a
@@ -53,12 +50,6 @@ export function TokenEditor({ theme, onBack }: { theme: Theme; onBack: () => voi
    * as they now are, not as the theme's author left them. */
   const merged = { ...theme.tokens, ...edits };
   const changed = Object.keys(edits).length;
-
-  function commit(next: Overrides) {
-    setOverrides(next);
-    applyOverrides(next);
-    storeOverrides(next);
-  }
 
   /* The gates in src/lib/theme/overrides.ts run when the record is read back at
    * the next launch, which is too late for a value typed now: `applyOverrides`
@@ -74,7 +65,7 @@ export function TokenEditor({ theme, onBack }: { theme: Theme; onBack: () => voi
       return;
     }
     setRefused(null);
-    commit({ ...overrides, [theme.id]: { ...edits, [token]: value } });
+    selectOverrides({ ...overrides, [theme.id]: { ...edits, [token]: value } });
   }
 
   /* Deleting the key, never writing "". `setProperty` with an empty string
@@ -86,7 +77,7 @@ export function TokenEditor({ theme, onBack }: { theme: Theme; onBack: () => voi
     const rest = { ...edits };
     delete rest[token];
     setRefused(null);
-    commit({ ...overrides, [theme.id]: rest });
+    selectOverrides({ ...overrides, [theme.id]: rest });
   }
 
   return (
@@ -108,7 +99,7 @@ export function TokenEditor({ theme, onBack }: { theme: Theme; onBack: () => voi
               label={`Reset every token of ${theme.manifest.name}`}
               onClick={() => {
                 setRefused(null);
-                commit({ ...overrides, [theme.id]: {} });
+                selectOverrides({ ...overrides, [theme.id]: {} });
               }}
             >
               Reset all

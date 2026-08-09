@@ -8,9 +8,28 @@ use ircx_ipc::{
     UploadedFile,
 };
 use ircx_store::{in_words, Store, StoreError};
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::state::{describe, App};
+
+/// The label the settings window is built under, and how `open_settings` finds
+/// the one already open.
+pub const SETTINGS_LABEL: &str = "settings";
+
+/// What that window is pointed at.
+///
+/// Both windows are one `index.html` — one bundle, so the settings window
+/// renders the client's own components against the client's own store, which
+/// is what makes the appearance preview the real thing rather than a drawing
+/// of it. The query is how `src/main.tsx` tells which of the two roots to
+/// mount.
+///
+/// The query rather than the window's label, though the label would answer as
+/// well, because the label is only readable inside a Tauri webview: keying on
+/// the URL leaves the page reachable in a plain browser, which is where this
+/// project walks its layouts (`.claude/skills/run-ircx`). jsdom lays nothing
+/// out and cannot be asked.
+pub const SETTINGS_URL: &str = "index.html?settings";
 
 #[tauri::command]
 pub async fn get_snapshot(app: State<'_, App>) -> Result<AppSnapshot, String> {
@@ -236,6 +255,45 @@ pub async fn certificate_fingerprint(path: String) -> Result<String, String> {
     // and which half of it is missing — so there is nothing to translate.
     ircx_net::certificate_fingerprint(std::path::Path::new(&path))
         .map_err(|reason| reason.to_string())
+}
+
+/// Opens the settings window, or brings the open one forward.
+///
+/// A window rather than a sheet over the client. Most of what it holds is the
+/// window's own appearance, and every one of those settings is judged against
+/// a conversation — a sheet is a scrim over the only evidence the reader has.
+/// Two windows also means the theme can be tried while the channel it will be
+/// read in stays on screen beside it.
+///
+/// Undecorated and transparent to match the main window, which draws its own
+/// title bar; `SettingsTitleBar` is the settings window's.
+#[tauri::command]
+pub async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
+        // Minimised and hidden are separate states and either one can be what
+        // "already open" means, so both are undone before the focus. A failure
+        // here is not worth refusing the whole thing over: the window exists,
+        // and the focus below is what the person asked for.
+        let _ = window.unminimize();
+        let _ = window.show();
+        return window.set_focus().map_err(|reason| {
+            format!("The settings window could not be brought forward. {reason}")
+        });
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        SETTINGS_LABEL,
+        tauri::WebviewUrl::App(SETTINGS_URL.into()),
+    )
+    .title("ircx Settings")
+    .inner_size(1180.0, 860.0)
+    .min_inner_size(880.0, 600.0)
+    .decorations(false)
+    .transparent(true)
+    .build()
+    .map_err(|reason| format!("The settings window could not be opened. {reason}"))?;
+    Ok(())
 }
 
 /// The themes directory, read whole. Themes install by being copied in, so

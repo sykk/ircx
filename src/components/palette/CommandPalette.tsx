@@ -187,9 +187,13 @@ function Palette() {
       case "uploads":
         store.toggleUpload(true);
         break;
-      case "appearance":
-        store.toggleAppearance(true);
-        break;
+      case "settings":
+        // Through `attempt` rather than closed outright: this one opens a
+        // second window, which is the only thing here that can fail on the way
+        // to a screen the palette is not on. A failure has to be said
+        // somewhere, and the palette is where the person still is.
+        attempt(ipc.openSettings());
+        return;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;

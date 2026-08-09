@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -71,6 +71,15 @@ export function onFileDrop(handler: (event: FileDrop) => void): Promise<() => vo
 
 const EVENT_CHANNEL = "ircx://event";
 const THEMES_CHANNEL = "ircx://themes";
+const APPEARANCE_CHANNEL = "ircx://appearance";
+
+/** Which window this is, as Tauri labels it — `main` or `settings`. Used only
+ * to stamp an appearance change with who made it; which of the two *pages* is
+ * rendered is a question about the URL, and `isSettingsPage` answers it. A
+ * browser and vitest have no window to ask. */
+function windowLabel(): string | null {
+  return insideTauri() ? getCurrentWebview().label : null;
+}
 
 /** A channel or a nick — something the server will accept as a recipient. */
 function isConversation(target: string): boolean {
@@ -152,6 +161,10 @@ export const ipc = {
     invoke<string | null>("get_draft", { network, target }),
   setDraft: (network: string, target: string, text: string) =>
     invoke<void>("set_draft", { network, target, text }),
+
+  /** Opens the settings window, or brings the open one forward. Nothing comes
+   * back: which window is in front is not a fact this one holds. */
+  openSettings: () => invoke<void>("open_settings"),
 
   listThemes: () => invoke<ThemeSource[]>("list_themes"),
   /** Copies a theme folder in and answers with the id it landed under. The
@@ -283,4 +296,36 @@ export function onIrcxEvent(handler: (events: IrcxEvent[]) => void) {
 /** Fires with the whole themes directory whenever a file in it changes. */
 export function onThemesChanged(handler: (themes: ThemeSource[]) => void) {
   return listen<ThemeSource[]>(THEMES_CHANNEL, (e) => handler(e.payload));
+}
+
+/**
+ * Says an appearance setting changed, so the other window repaints at it.
+ *
+ * No values travel. The settings all live in localStorage and the two windows
+ * are one origin, so both already read the same bytes; sending them again
+ * would be a second copy that could disagree with the first. What the message
+ * carries is which window wrote them, which is the one thing the receiver
+ * cannot look up — a window that repainted on its own echo would fight the
+ * control the reader is still holding.
+ *
+ * Resolves either way. This is an announcement about a setting that has
+ * already been applied and written down; a window that could not make it is
+ * not a reason to fail the change.
+ */
+export async function announceAppearance(): Promise<void> {
+  if (!insideTauri()) return;
+  try {
+    await emit(APPEARANCE_CHANNEL, windowLabel());
+  } catch (reason) {
+    console.warn("ircx could not tell the other window about an appearance change", reason);
+  }
+}
+
+/** Fires when the *other* window changes an appearance setting. Its own are
+ * already on the screen by the time the message goes out. */
+export function onAppearanceChanged(handler: () => void) {
+  const self = windowLabel();
+  return listen<string | null>(APPEARANCE_CHANNEL, (e) => {
+    if (e.payload !== self) handler();
+  });
 }

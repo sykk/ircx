@@ -9,9 +9,16 @@ import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { CommandPalette } from "./CommandPalette";
 
 const { ipcMock } = vi.hoisted(() => ({
-  ipcMock: { submitInput: vi.fn(), connectNetwork: vi.fn(), disconnectNetwork: vi.fn() },
+  ipcMock: {
+    submitInput: vi.fn(),
+    connectNetwork: vi.fn(),
+    disconnectNetwork: vi.fn(),
+    openSettings: vi.fn(() => Promise.resolve()),
+  },
 }));
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock }));
+/* `announceAppearance` is reached by every theme, density and timeline row
+ * here: src/lib/theme/session.ts tells the settings window what changed. */
+vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, announceAppearance: vi.fn() }));
 
 const network: Network = {
   id: "libera",
@@ -181,9 +188,24 @@ describe("CommandPalette", () => {
 
   // #80: "settings" is the word someone types when they want to change a saved
   // password, and it used to match nothing at all.
-  it("finds a network's saved settings under the word settings", () => {
+  /** The word names the window now, and the exact match takes the top of the
+   * list. A network's own settings are a different thing under the same word,
+   * so they stay in the list rather than being renamed out of the way. */
+  it("puts the settings window first under the word settings", () => {
     render(<CommandPalette />);
     type("settings");
+
+    expect(selectedLabel()).toContain("Settings");
+    expect(optionLabels().some((label) => label.includes("Libera.Chat settings"))).toBe(true);
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(ipcMock.openSettings).toHaveBeenCalled();
+  });
+
+  it("still opens a network's saved settings from that list", () => {
+    render(<CommandPalette />);
+    type("Libera.Chat settings");
     expect(selectedLabel()).toContain("Libera.Chat settings");
 
     fireEvent.keyDown(input(), { key: "Enter" });

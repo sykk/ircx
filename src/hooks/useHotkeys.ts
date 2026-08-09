@@ -7,6 +7,7 @@ import {
   type ActionId,
   type Binding,
 } from "@/lib/keybindings";
+import { ipc } from "@/lib/ipc";
 import { selectPresentation } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
@@ -130,6 +131,12 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
     return {
       "palette.toggle": () => useAppStore.getState().togglePalette(),
       "search.open": () => useAppStore.getState().toggleSearch(true),
+      /* A chord has nowhere to show a sentence. The palette entry beside it
+       * does, and reports there; this one is left to the log. */
+      "settings.open": () =>
+        void ipc.openSettings().catch((reason: unknown) => {
+          console.warn("ircx could not open the settings window", reason);
+        }),
       "roster.toggle": () => {
         const { activeViewId, toggleRoster } = useAppStore.getState();
         if (activeViewId) toggleRoster(activeViewId);

@@ -1,14 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
-import { applyOpeningTheme, selectPresentation, selectTheme } from "./session";
+import {
+  adoptAppearance,
+  applyOpeningTheme,
+  selectDensity,
+  selectPresentation,
+  selectPreset,
+  selectTheme,
+} from "./session";
+import { PRESETS } from "./presets";
+import { catalogue } from "./load";
 import { storedPresentation } from "./presentation";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
+const { announceMock, zoomMock } = vi.hoisted(() => ({
+  announceMock: vi.fn(() => Promise.resolve()),
+  zoomMock: vi.fn(() => Promise.resolve()),
+}));
 vi.mock("@/lib/ipc", () => ({
   ipc: { listThemes: () => Promise.resolve([]) },
   onThemesChanged: () => Promise.resolve(() => {}),
-  setWindowZoom: () => Promise.resolve(),
+  onAppearanceChanged: () => Promise.resolve(() => {}),
+  announceAppearance: announceMock,
+  setWindowZoom: zoomMock,
 }));
 
 /** The light theme's own stylesheet under another name, which is exactly how a
@@ -31,6 +46,7 @@ const surface = () => document.documentElement.style.getPropertyValue("--surface
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.style.cssText = "";
+  vi.clearAllMocks();
 });
 afterEach(() => localStorage.clear());
 
@@ -147,5 +163,75 @@ describe("choosing a theme", () => {
     selectTheme("ircx-dark");
 
     expect(rememberedInstalled()).toBeNull();
+  });
+});
+
+/**
+ * The client and the settings window are two webviews on one origin, so both
+ * read the same localStorage and only the one that made a change has it on the
+ * screen. These are the two halves of catching the other one up.
+ */
+describe("the other window's appearance", () => {
+  beforeEach(() => {
+    useAppStore.setState({ themes: catalogue().themes });
+  });
+
+  /* Nothing travels in the message that says a setting changed, so this is
+   * where the receiving half is held to reading every one of them back. */
+  it("paints what the other window wrote, setting by setting", () => {
+    localStorage.setItem("ircx.theme", "ircx-light");
+    localStorage.setItem("ircx.density", "compact");
+    localStorage.setItem("ircx.typography", JSON.stringify({ prose: "georgia", mono: "courier", zoom: 1.25 }));
+    localStorage.setItem("ircx.presentation", JSON.stringify({ ...storedPresentation(), spine: false }));
+    localStorage.setItem(
+      "ircx.theme.overrides",
+      JSON.stringify({ "ircx-light": { "--accent": "#3fb950" } }),
+    );
+
+    adoptAppearance();
+
+    const style = document.documentElement.style;
+    expect(surface()).toBe("#ffffff");
+    expect(style.getPropertyValue("--accent")).toBe("#3fb950");
+    expect(style.getPropertyValue("--timeline-block-gap")).toBe("6px");
+    expect(style.getPropertyValue("--font-ui")).toContain("Georgia");
+    expect(style.getPropertyValue("--font-mono")).toContain("Courier");
+    expect(useAppStore.getState().presentation.spine).toBe(false);
+    expect(zoomMock).toHaveBeenCalledWith(1.25);
+  });
+
+  /** The catalogue is a fact about the disk that each window reads for itself,
+   * and the settings window has usually read more of it. A repaint that also
+   * republished the list would throw away every theme on disk the moment the
+   * client changed a density. */
+  it("leaves the themes it can see alone", () => {
+    const themes = [...useAppStore.getState().themes, { ...catalogue([harbour]).themes.at(-1)! }];
+    useAppStore.setState({ themes });
+
+    adoptAppearance();
+
+    expect(useAppStore.getState().themes).toHaveLength(themes.length);
+  });
+
+  it("says so when a setting changes", () => {
+    selectDensity("read");
+
+    expect(announceMock).toHaveBeenCalledTimes(1);
+  });
+
+  /* A preset writes three settings. Told after each one, the other window
+   * would paint the new theme against the old faces on the way past. */
+  it("says so once for a preset rather than three times", () => {
+    selectPreset(PRESETS[0]!);
+
+    expect(announceMock).toHaveBeenCalledTimes(1);
+  });
+
+  /** Adopting is not a change: the window doing it was told, and answering
+   * would put the two of them in a loop. */
+  it("stays quiet while adopting", () => {
+    adoptAppearance();
+
+    expect(announceMock).not.toHaveBeenCalled();
   });
 });

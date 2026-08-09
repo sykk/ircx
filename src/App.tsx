@@ -4,7 +4,6 @@ import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
 import { ChannelList } from "@/components/channels";
-import { AppearanceSheet } from "@/components/appearance";
 import { PluginSheet } from "@/components/plugins";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { ArchiveSheet } from "@/components/archive/ArchiveSheet";
@@ -17,7 +16,7 @@ import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadPlugins } from "@/lib/plugins";
-import { startThemes } from "@/lib/theme";
+import { startAppearanceSync, startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
 
 /** Onboarding is decided once, when the snapshot lands: saving the first
@@ -31,6 +30,10 @@ export function App() {
 
   useEffect(() => {
     const themes = startThemes();
+    // The settings window is where these are changed, and it is a second
+    // webview: without this the client keeps painting whatever it opened on
+    // while the settings window shows the change it made.
+    const appearance = startAppearanceSync();
     const bridge = startBridge();
     let stopOpening = () => {};
     void loadPlugins();
@@ -62,6 +65,7 @@ export function App() {
       stopOpening();
       void bridge.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
+      void appearance.then((stop) => stop());
     };
   }, []);
 
@@ -77,7 +81,6 @@ export function App() {
       <SearchOverlay />
       <NetworkSetup />
       <PluginSheet />
-      <AppearanceSheet />
       <UploadSheet />
       <ArchiveSheet />
       <DropToUpload />

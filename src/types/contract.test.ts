@@ -16,6 +16,16 @@ function rustConst(file: string, name: string): string {
 const SRC = resolve(process.cwd(), "src");
 const IPC_FILE = join(SRC, "lib", "ipc.ts");
 
+/**
+ * The appearance preview's sample conversation, left out of the scan below.
+ *
+ * It builds `ChatMessage` literals, so it has to name every required field of
+ * one — including the four the window deliberately does not read. Filling a
+ * field in is not reading it, and counting it as one would answer four entries
+ * of `UNREAD_FIELDS` with a file that only ever writes them.
+ */
+const PREVIEW_FIXTURE = join(SRC, "components", "settings", "appearance", "previewChannel.ts");
+
 /** Every file the application is built from. Tests and fixtures are left out on
  * purpose: a command only a test calls is still one no user can reach. */
 function applicationSources(dir = SRC): string[] {
@@ -28,7 +38,8 @@ function applicationSources(dir = SRC): string[] {
       /\.tsx?$/.test(entry.name) &&
       !/\.test\.tsx?$/.test(entry.name) &&
       entry.name !== "fixtures.ts" &&
-      path !== IPC_FILE
+      path !== IPC_FILE &&
+      path !== PREVIEW_FIXTURE
     ) {
       found.push(path);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IconButton } from "@/components/common/IconButton";
-import { insideTauri } from "@/lib/ipc";
+import { insideTauri, ipc } from "@/lib/ipc";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useAppStore } from "@/store";
 import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connection";
@@ -69,6 +69,17 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
       )}
 
       <div className="flex items-center gap-0.5 pl-1">
+        {/* The only affordance for the settings that is not a chord or the
+            palette. Icon-only, as the mockup draws every header action. */}
+        <IconButton
+          icon="settings"
+          label="Settings"
+          onClick={() =>
+            void ipc.openSettings().catch((reason: unknown) => {
+              console.warn("ircx could not open the settings window", reason);
+            })
+          }
+        />
         <IconButton
           icon="minimize"
           label="Minimise"

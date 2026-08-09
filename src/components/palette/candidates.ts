@@ -340,7 +340,7 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
   },
   {
     label: "Appearance",
-    detail: "Change the theme, density, or any colour in them",
+    detail: "Themes and presets, the density, the timeline, the faces",
     action: { type: "appearance" },
   },
 ];

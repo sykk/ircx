@@ -96,6 +96,8 @@ export function ThemeList({
         ))}
       </ul>
 
+      <InstallTheme />
+
       <Group title="Density">
         <ul className="flex flex-col gap-1">
           {DENSITIES.map((option) => (
@@ -118,8 +120,6 @@ export function ThemeList({
           ))}
         </ul>
       </Group>
-
-      <InstallTheme />
 
       <Group title="Start from">
         <ul className="flex flex-col gap-1">

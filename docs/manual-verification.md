@@ -2084,10 +2084,11 @@ follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
   and `setWindowZoom` swallows that deliberately so a browser is not a failure.
   What wants watching is the thing the CSS `zoom` route was rejected for —
   whether every measured placement still lands after a scale change. The
-  tooltips, the pointer menu and the sidebar's hanging menu all read
-  `getBoundingClientRect` against `window.innerWidth`, and the claim is that the
-  webview's own zoom moves both together. **Check the sidebar menu at 125%**,
-  which is where a disagreement would show first.
+  tooltips and the pointer menu both read `getBoundingClientRect` against
+  `window.innerWidth`, and the claim is that the webview's own zoom moves the
+  two together. **Check a tooltip in a bottom corner at 125%**, which is where a
+  disagreement would show first, and anything else placed by measurement that
+  has landed by then.
 - **Installing a theme is covered on both sides and joined in neither.** The
   copy is tested in `src-tauri/src/themes.rs` against real temporary
   directories, and the sheet's buttons in `AppearanceSheet.test.tsx` against a
@@ -2107,11 +2108,19 @@ nick hues in the cool band, each clearing 5:1 against the lightest surface it
 can land on, all of them clear of the connection colours. That is the whole of
 what a test can say about it.
 
-- **It has not been looked at.** The old clients this is named for had sixteen
-  colours and no contrast floor, and the departures are deliberate: mIRC put a
-  nickname on pure red and pure green, which are the two colours this client
-  reserves for connection state. Whether what is left still reads as the old
-  thing is a judgement nobody has made yet.
+- **Seen once, in headless Chrome, on 2026-08-09.** The preset was applied from
+  the sheet against the seeded `#ircx`: black ground, `<sable>` at the head of
+  each run, `08:00:00` on the clock, no spine, and the prose in the mono face.
+  The prose moved 32px left with the spine's two columns, which is the 2px
+  stroke and the 28px gap. A declared group kept its `topic` label above the run
+  that opened it, which is the one thing that carries grouping once the hue is
+  gone.
+
+  What that run could **not** answer: WebKitGTK renders none of it — this was
+  Chrome against Vite. And `document.fonts.check` answered true for Courier New
+  on a machine that resolves it through fontconfig aliasing, so what was drawn
+  may be Liberation Mono wearing the name. On the operator's own machine the
+  face may differ.
 - **`--shadow-overlay` is a border rather than a shadow**, `0 0 0 1px`. Every
   overlay in the app takes it — the palette, the sheets, the emoji picker — and
   none has been seen wearing it. A flat overlay on a black ground may not

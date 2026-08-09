@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
-import { applyOpeningTheme, selectTheme } from "./session";
+import { applyOpeningTheme, selectPresentation, selectTheme } from "./session";
+import { storedPresentation } from "./presentation";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
 vi.mock("@/lib/ipc", () => ({
   ipc: { listThemes: () => Promise.resolve([]) },
   onThemesChanged: () => Promise.resolve(() => {}),
+  setWindowZoom: () => Promise.resolve(),
 }));
 
 /** The light theme's own stylesheet under another name, which is exactly how a
@@ -78,6 +80,38 @@ describe("the theme a window opens on", () => {
     applyOpeningTheme();
 
     expect(document.documentElement.dataset.theme).toBe("ircx-light");
+  });
+});
+
+describe("what the timeline draws", () => {
+  it("opens on what the last session chose", () => {
+    localStorage.setItem(
+      "ircx.presentation",
+      JSON.stringify({ spine: false, clock: "12h", nickBrackets: true }),
+    );
+
+    applyOpeningTheme();
+
+    expect(useAppStore.getState().presentation).toEqual({
+      spine: false,
+      clock: "12h",
+      nickBrackets: true,
+    });
+  });
+
+  /* Held as one blob, so a change that did not merge would reset whichever of
+   * the three was not being set. */
+  it("merges one setting over the two it was not given", () => {
+    useAppStore.setState({ presentation: { spine: false, clock: "12h", nickBrackets: true } });
+
+    selectPresentation({ clock: "off" });
+
+    expect(useAppStore.getState().presentation).toEqual({
+      spine: false,
+      clock: "off",
+      nickBrackets: true,
+    });
+    expect(storedPresentation()).toEqual({ spine: false, clock: "off", nickBrackets: true });
   });
 });
 

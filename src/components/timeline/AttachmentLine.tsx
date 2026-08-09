@@ -4,6 +4,7 @@ import { Icon } from "@/components/common/Icon";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { ipc, openExternal } from "@/lib/ipc";
 import { formatBytes } from "@/lib/bytes";
+import { useAppStore } from "@/store";
 import { formatClock } from "./rows";
 
 export function formatSize(bytes: bigint | null): string | null {
@@ -30,6 +31,8 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
   // and nothing about the message on disk changed when the user asked for it.
   const [preview, setPreview] = useState<AttachmentPreview | null>(attachment.preview);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const clockFormat = useAppStore((s) => s.presentation.clock);
+  const fetchedClock = fetchedAt === null ? null : formatClock(fetchedAt, clockFormat);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,9 +84,9 @@ export function AttachmentLine({ attachment }: { attachment: Attachment }) {
           <LeavesTheClient />
         </button>
         {size && <span className="shrink-0 font-[family-name:var(--font-mono)]">{size}</span>}
-        {fetchedAt && (
+        {fetchedClock && (
           <span className="shrink-0" style={{ color: "var(--text-faint)" }}>
-            · fetched {formatClock(fetchedAt)}
+            · fetched {fetchedClock}
           </span>
         )}
         {!preview && attachment.mime !== null && (

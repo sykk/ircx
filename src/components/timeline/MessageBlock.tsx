@@ -1,12 +1,17 @@
 import type { ReactNode } from "react";
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { useAppStore } from "@/store";
 import { isHighlight } from "@/store/selectors";
 import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
 import { failureRuns, formatClock, writesOwnNick } from "./rows";
 
 const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
+/** The same ladder with the spine's two columns closed up, for a reader who
+ * turned it off: the room a spine would have taken goes back to the prose
+ * rather than standing empty at the rail. */
+const FLAT = "0 0 minmax(0, 1fr)";
 
 interface BlockProps {
   spine: boolean;
@@ -34,11 +39,18 @@ export function Block({
   spineContinues = false,
   children,
 }: BlockProps) {
+  const drawn = useAppStore((s) => s.presentation.spine);
+  // Closing the gap between two blocks of one group is the spine's doing: it is
+  // what spans the gap and says they are one thing. With no spine to span it
+  // the blocks would run together with nothing accounting for it, so the gap
+  // comes back and the group is left to its name and its nick colours.
+  const continues = drawn && spineContinues;
+
   return (
     <div
       className="grid"
       style={{
-        gridTemplateColumns: LADDER,
+        gridTemplateColumns: drawn ? LADDER : FLAT,
         paddingLeft: "var(--timeline-rail-pad)",
         paddingRight: "16px",
         // The gap between blocks moves onto the content column when a group
@@ -46,10 +58,10 @@ export function Block({
         // with nothing between them. Cancelling the padding with a negative
         // margin instead left a hairline of background at every boundary —
         // arithmetic that was one pixel out, on every author, all the way down.
-        paddingTop: spineContinues ? undefined : "var(--timeline-block-gap)",
+        paddingTop: continues ? undefined : "var(--timeline-block-gap)",
       }}
     >
-      {spine && (
+      {spine && drawn && (
         <div
           data-spine="solid"
           style={{
@@ -63,7 +75,7 @@ export function Block({
             // background at some of them and not others — measured on a
             // screenshot, invisible in jsdom, and worse than a clean break
             // because it reads as an accident rather than as a division.
-            marginTop: spineContinues ? "-1px" : undefined,
+            marginTop: continues ? "-1px" : undefined,
           }}
           aria-hidden="true"
         />
@@ -71,7 +83,7 @@ export function Block({
       <div
         style={{
           gridColumn: 3,
-          paddingTop: spineContinues ? "var(--timeline-block-gap)" : undefined,
+          paddingTop: continues ? "var(--timeline-block-gap)" : undefined,
         }}
       >
         {children}
@@ -80,15 +92,20 @@ export function Block({
   );
 }
 
-/** The time a block began, set in the same face and size wherever it appears. */
+/** The time a block began, set in the same face and size wherever it appears,
+ * and nothing at all for a reader who turned the clock off. */
 export function Clock({ at }: { at: string }) {
+  const format = useAppStore((s) => s.presentation.clock);
+  const clock = formatClock(at, format);
+  if (clock === null) return null;
+
   return (
     <time
       dateTime={at}
       className="shrink-0 font-[family-name:var(--font-mono)] text-[12px] tabular-nums"
       style={{ color: "var(--text-faint)" }}
     >
-      {formatClock(at)}
+      {clock}
     </time>
   );
 }
@@ -160,6 +177,7 @@ export function MessageBlock({
   present,
 }: Props) {
   const head = messages[0]!;
+  const brackets = useAppStore((s) => s.presentation.nickBrackets);
   const addressed = messages.some((message) => isHighlight(message, ownNick, present));
   const failures = failureRuns(messages);
   // A rule raises a message to the same loudness a mention has — the badge
@@ -211,7 +229,7 @@ export function MessageBlock({
             className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
             style={{ color: nickColor(head.sender.nick) }}
           >
-            {head.sender.nick}
+            {brackets ? `<${head.sender.nick}>` : head.sender.nick}
           </span>
           <Clock at={head.timestamp} />
         </div>

@@ -1,0 +1,111 @@
+/* A black terminal, the way a client that printed `<nick>` beside every line
+ * looked. The palette is the whole of what this theme is: the layout it goes
+ * with — no spine, seconds on the clock, brackets round the nickname — is three
+ * settings, and the Classic IRC preset in src/lib/theme/presets.ts is what sets
+ * both at once. Choosing this theme on its own changes the colours and nothing
+ * about how the conversation is laid out.
+ *
+ * The old clients had sixteen colours and no contrast floor. This one keeps
+ * their weight and their black ground and gives up their exact values, because
+ * mIRC's palette put a nickname on pure red and pure green — the two colours
+ * this app reserves for connection state. See src/styles/tokens.test.ts, which
+ * holds every theme in this directory to the same constraint. */
+
+:root {
+  /* Black, and then five steps that stay dark enough for the ground to still
+   * read as black rather than as a dark grey. */
+  --surface-base: #000000;
+  --surface-sidebar: #050608;
+  --surface-raised: #0c0d10;
+  --surface-overlay: #121317;
+  --surface-hover: #17191d;
+  --surface-active: #202329;
+
+  --border-subtle: #16181c;
+  --border-default: #24272d;
+  --border-strong: #363a42;
+
+  --text-primary: #d0d0d0;
+  --text-secondary: #a0a4aa;
+  --text-muted: #74787e;
+  --text-faint: #52565c;
+  --text-inverse: #000000;
+
+  --accent: #5599ff;
+  --accent-hover: #7cb0ff;
+  --accent-muted: #5599ff33;
+
+  --success: #5fd75f;
+  --warning: #ffd75f;
+  --danger: #ff5f5f;
+
+  --state-connected: #5fd75f;
+  --state-connecting: #ffd75f;
+  --state-disconnected: #74787e;
+  --state-error: #ff5f5f;
+
+  --badge-bg: #202329;
+  --badge-text: #a0a4aa;
+  --badge-highlight-bg: #5599ff;
+  --badge-highlight-text: #000000;
+
+  --divider-unread: #ff5f5f;
+  --mention-bg: #5599ff1f;
+
+  /* Solved for 5:1 against --surface-active, which is the lightest ground a
+   * nickname lands on, at ten hues evenly spaced across the cool band. The
+   * band is what keeps a nick off the colours that mean error and connected;
+   * the ratio is the floor tokens.test.ts holds every theme to. */
+  --nick-1: #16a0b5;
+  --nick-2: #2698e4;
+  --nick-3: #6390ec;
+  --nick-4: #8188ef;
+  --nick-5: #9881ef;
+  --nick-6: #b077ee;
+  --nick-7: #cb68ec;
+  --nick-8: #e94de7;
+  --nick-9: #ea59c1;
+  --nick-10: #eb609f;
+
+  /* Square, near enough. A terminal had no rounded corners and the 1px left
+   * here keeps a focus ring from reading as a rendering fault. */
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+
+  --disabled-opacity: 0.55;
+  --pending-opacity: 0.6;
+
+  /* Comfortable, as every theme states its own. */
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 14px;
+  --timeline-body-leading: 1.7;
+
+  /* The rail is narrower than the other themes': with the spine off — which is
+   * what the preset does — the gap after it closes to nothing, and the prose
+   * begins one step in from the window edge rather than two. */
+  --timeline-rail-pad: 12px;
+  --timeline-spine-width: 2px;
+  --timeline-spine-gap: 28px;
+  --timeline-rule-gap: 20px;
+  --timeline-measure: 640px;
+  --timeline-actions-col: 60px;
+  --timeline-actions-gap: 16px;
+
+  --timeline-quote-width: 2px;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
+
+  --scrim: rgb(0 0 0 / 0.72);
+
+  /* No lift and no blur: a terminal drew a box with a border or it drew
+   * nothing. The border tokens above are what separates an overlay from what
+   * is behind it. */
+  --shadow-overlay: 0 0 0 1px #24272d;
+
+  --font-smoothing: antialiased;
+}

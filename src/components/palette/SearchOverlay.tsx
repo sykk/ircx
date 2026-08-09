@@ -38,6 +38,7 @@ function Search() {
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   const [selected, setSelected] = useState(0);
+  const clockFormat = useAppStore((s) => s.presentation.clock);
 
   const network = active?.network ?? null;
   const target = active?.target ?? null;
@@ -169,7 +170,9 @@ function Search() {
               <div className="flex items-baseline gap-2 text-[11px] text-[var(--text-muted)]">
                 <span className="text-[var(--text-secondary)]">{hit.message.sender.nick}</span>
                 <span>{hit.message.target}</span>
-                <span className="ml-auto">{formatClock(hit.message.timestamp)}</span>
+                <span className="ml-auto">
+                  {formatClock(hit.message.timestamp, clockFormat)}
+                </span>
               </div>
               <p className="selectable text-[var(--text-primary)]">
                 <Snippet snippet={hit.snippet} />

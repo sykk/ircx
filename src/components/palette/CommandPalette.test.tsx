@@ -384,6 +384,7 @@ describe("CommandPalette", () => {
         expect.stringContaining("Glass"),
         expect.stringContaining("ircx Dark"),
         expect.stringContaining("ircx Light"),
+        expect.stringContaining("Classic IRC"),
         expect.stringContaining("solarized"),
       ]);
       expect(optionLabels()[1]).toContain("in use");

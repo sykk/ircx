@@ -1,10 +1,14 @@
 import { create } from "zustand";
 import {
   DEFAULT_DENSITY,
+  DEFAULT_PRESENTATION,
+  DEFAULT_TYPOGRAPHY,
   FALLBACK_THEME_ID,
   type Catalogue,
   type DensityId,
   type Overrides,
+  type Presentation,
+  type Typography,
 } from "@/lib/theme";
 import {
   SERVER_TARGET,
@@ -140,6 +144,8 @@ export interface AppActions {
   setThemeCatalogue: (catalogue: Catalogue) => void;
   setThemeId: (id: string) => void;
   setDensity: (id: DensityId) => void;
+  setPresentation: (next: Presentation) => void;
+  setTypography: (next: Typography) => void;
   /** The whole record rather than one token, because an edit is committed in
    * three places — the window, localStorage and here — and the three have to
    * be given the same thing. */
@@ -186,6 +192,8 @@ const initialState: AppState = {
   brokenThemes: [],
   themeId: FALLBACK_THEME_ID,
   density: DEFAULT_DENSITY,
+  presentation: DEFAULT_PRESENTATION,
+  typography: DEFAULT_TYPOGRAPHY,
   overrides: {},
 };
 
@@ -615,6 +623,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setThemeCatalogue: ({ themes, broken }) => set({ themes, brokenThemes: broken }),
   setThemeId: (id) => set({ themeId: id }),
   setDensity: (id) => set({ density: id }),
+  setPresentation: (next) => set({ presentation: next }),
+  setTypography: (next) => set({ typography: next }),
   setOverrides: (next) => set({ overrides: next }),
 }));
 

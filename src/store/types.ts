@@ -1,4 +1,11 @@
-import type { BrokenTheme, DensityId, Overrides, Theme } from "@/lib/theme";
+import type {
+  BrokenTheme,
+  DensityId,
+  Overrides,
+  Presentation,
+  Theme,
+  Typography,
+} from "@/lib/theme";
 import type {
   Channel,
   ChannelListing,
@@ -214,6 +221,13 @@ export interface AppState {
   /** The timeline's vertical rhythm. Separate from the theme so changing how
    * tightly the conversation is set does not change its palette. */
   density: DensityId;
+  /** The spine, the clock and the nickname: what the timeline draws, as against
+   * what colour it draws it in. Apart from the theme for the density's reason,
+   * and not tokens, so the components read it from here. */
+  presentation: Presentation;
+  /** The two faces and the window scale. The faces are painted as tokens after
+   * the theme, so a theme cannot take back a font the reader chose. */
+  typography: Typography;
   /** What the person changed about each theme, keyed by theme id. Held for
    * every theme rather than only the one in force, so switching away and back
    * returns to the palette they left. */

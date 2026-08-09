@@ -1,3 +1,4 @@
+import { DEFAULT_PRESENTATION, DEFAULT_TYPOGRAPHY } from "@/lib/theme";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import type { Channel, Network, Query } from "@/types";
@@ -125,6 +126,8 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     brokenThemes: [],
     themeId: "ircx-dark",
     density: "comfortable",
+    presentation: DEFAULT_PRESENTATION,
+    typography: DEFAULT_TYPOGRAPHY,
     overrides: {},
     sidebarWidth: 240,
     rosterWidth: null,

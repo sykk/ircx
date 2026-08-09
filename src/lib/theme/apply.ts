@@ -1,5 +1,6 @@
 import { DEFAULT_DENSITY, densityTokens, type DensityId } from "./density";
 import type { Overrides } from "./overrides";
+import { DEFAULT_TYPOGRAPHY, fontTokens, type Typography } from "./typography";
 import type { Theme } from "./types";
 import { applyUiStylesheet } from "./ui-css";
 
@@ -8,14 +9,15 @@ import { applyUiStylesheet } from "./ui-css";
 const STORAGE_KEY = "ircx.theme";
 
 let applied: string[] = [];
-/* A theme, a person's edits to it and a density all state the same tokens —
- * `--timeline-row-pad-y` and its two neighbours are in every one of them — and
- * all three write to the same inline declaration on the root. Painting any one
- * alone would clear the others' values along with its own, so the trio is held
- * here and every change repaints from all three. */
+/* A theme, a person's edits to it, a density and the two faces all write to the
+ * same inline declaration on the root, and the first three state the same
+ * tokens — `--timeline-row-pad-y` and its two neighbours are in every one of
+ * them. Painting any one alone would clear the others' values along with its
+ * own, so all four are held here and every change repaints from all four. */
 let theme: Theme | null = null;
 let overrides: Overrides = {};
 let density: DensityId = DEFAULT_DENSITY;
+let typography: Typography = DEFAULT_TYPOGRAPHY;
 
 /** Writes the theme's tokens onto the root element. `null` removes them,
  * which uncovers the built-in dark theme that global.css imports statically —
@@ -29,6 +31,15 @@ export function applyTheme(next: Theme | null): void {
 /** The density overrides three of the theme's tokens; the rest of it stands. */
 export function applyDensity(next: DensityId): void {
   density = next;
+  paint();
+}
+
+/** The faces prose and identifiers are set in. Painted last, so a theme cannot
+ * take them back: which font the window uses is the reader's, and a theme is a
+ * set of colours. The window scale is not here, being no kind of token —
+ * `selectTypography` sends that to the webview itself. */
+export function applyTypography(next: Typography): void {
+  typography = next;
   paint();
 }
 
@@ -51,7 +62,12 @@ function paint(): void {
    * than with a custom accent painted over it; and an edit made while two
    * themes are in play belongs to exactly one of them. */
   const edits = theme ? overrides[theme.id] : undefined;
-  const tokens = { ...(theme?.tokens ?? {}), ...edits, ...densityTokens(density) };
+  const tokens = {
+    ...(theme?.tokens ?? {}),
+    ...edits,
+    ...densityTokens(density),
+    ...fontTokens(typography),
+  };
 
   for (const name of applied) root.style.removeProperty(name);
   applied = Object.keys(tokens);

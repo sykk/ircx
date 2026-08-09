@@ -1,4 +1,5 @@
 import type { ChatMessage, MessageKind } from "@/types";
+import type { ClockFormat } from "@/lib/theme";
 import { isHighlight } from "@/store/selectors";
 import type { Group } from "./groups";
 
@@ -315,11 +316,27 @@ function measureSeam(
   };
 }
 
-/** `HH:MM` in the viewer's timezone, without locale-dependent separators. */
-export function formatClock(timestamp: string): string {
+/**
+ * The time in the viewer's timezone, in the format they chose, without
+ * locale-dependent separators.
+ *
+ * Null when they chose none, which every caller draws as nothing rather than as
+ * an empty slot: a clock turned off in the timeline and still printed beside a
+ * search hit would be two answers to one question.
+ */
+export function formatClock(timestamp: string, format: ClockFormat): string | null {
+  if (format === "off") return null;
   const at = new Date(timestamp);
   if (Number.isNaN(at.getTime())) return "--:--";
-  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+
+  const minutes = String(at.getMinutes()).padStart(2, "0");
+  if (format === "12h") {
+    return `${at.getHours() % 12 || 12}:${minutes} ${at.getHours() < 12 ? "AM" : "PM"}`;
+  }
+
+  const clock = `${String(at.getHours()).padStart(2, "0")}:${minutes}`;
+  if (format === "24h") return clock;
+  return `${clock}:${String(at.getSeconds()).padStart(2, "0")}`;
 }
 
 function startOfDay(at: Date): number {

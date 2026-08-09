@@ -1,6 +1,8 @@
 import { render, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { nickColor } from "@/lib/nickColor";
+import { DEFAULT_PRESENTATION, type Presentation } from "@/lib/theme";
+import { useAppStore } from "@/store";
 import { makeMessage } from "./fixtures";
 import type { Group } from "./groups";
 import { MessageBlock } from "./MessageBlock";
@@ -129,6 +131,67 @@ describe("what a group says in words", () => {
     // By the opener's name, as the declared-group test asserts presence: the
     // caption is a span, so the old query for a button passed for every grade.
     expect(queryByText(/kade/)).toBeNull();
+  });
+});
+
+describe("what the reader turned off", () => {
+  beforeEach(() => useAppStore.setState({ presentation: DEFAULT_PRESENTATION }));
+
+  function set(change: Partial<Presentation>): void {
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, ...change } });
+  }
+
+  it("draws no spine, and gives the room it took back to the prose", () => {
+    set({ spine: false });
+    const { container } = block({ group: declared(), opensGroup: true });
+    const ladder = container.firstElementChild as HTMLElement;
+
+    expect(container.querySelector("[data-spine]")).toBeNull();
+    expect(ladder.style.gridTemplateColumns).not.toContain("--timeline-spine-gap");
+  });
+
+  /* The spine is what spans that gap and says two blocks are one group. With
+   * nothing spanning it, closing it would leave them running together for no
+   * visible reason. */
+  it("keeps the gap between two blocks of one group when there is no spine", () => {
+    set({ spine: false });
+    const { container } = block({ group: declared(), opensGroup: false });
+    const ladder = container.firstElementChild as HTMLElement;
+
+    expect(ladder.style.paddingTop).toBe("var(--timeline-block-gap)");
+    expect((ladder.lastElementChild as HTMLElement).style.paddingTop).toBe("");
+  });
+
+  it("still names the group it can no longer colour", () => {
+    set({ spine: false });
+    const { getByText } = block({ group: declared(), opensGroup: true });
+
+    expect(getByText("parser")).toBeTruthy();
+  });
+
+  it("prints no clock at all", () => {
+    set({ clock: "off" });
+    const { container } = block();
+
+    expect(container.querySelector("time")).toBeNull();
+  });
+});
+
+describe("the nickname at the head of a run", () => {
+  beforeEach(() => useAppStore.setState({ presentation: DEFAULT_PRESENTATION }));
+
+  it("is written bare by default", () => {
+    const { getByText } = block();
+
+    expect(getByText("phrack")).toBeTruthy();
+  });
+
+  it("wears angle brackets when the reader asked for them", () => {
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, nickBrackets: true } });
+    const { getByText, queryByText } = block();
+
+    expect(getByText("<phrack>")).toBeTruthy();
+    expect(queryByText("phrack")).toBeNull();
   });
 });
 

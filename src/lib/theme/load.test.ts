@@ -128,6 +128,7 @@ describe("catalogue", () => {
       "ircx-dark",
       "ircx-light",
       "ircx-glass",
+      "ircx-classic",
     ]);
     expect(catalogue().broken).toEqual([]);
   });
@@ -135,7 +136,12 @@ describe("catalogue", () => {
   it("keeps a broken theme listed with its reasons", () => {
     const { themes, broken } = catalogue([complete({ manifest: "{" })]);
 
-    expect(themes.map((theme) => theme.id)).toEqual(["ircx-dark", "ircx-light", "ircx-glass"]);
+    expect(themes.map((theme) => theme.id)).toEqual([
+      "ircx-dark",
+      "ircx-light",
+      "ircx-glass",
+      "ircx-classic",
+    ]);
     expect(broken).toEqual([{ id: "nord", problems: [expect.stringContaining("not valid JSON")] }]);
   });
 

@@ -2033,6 +2033,104 @@ Chosen in the palette and remembered in `localStorage`, verified that far on
   before somebody files it: `loadOlder` fills the viewport and stops, which is
   what it is supposed to do.
 
+## The spine, the clock and the nickname, turned off and changed
+
+Three settings in the appearance sheet beside the density, held in
+`localStorage` under `ircx.presentation`. What each one draws is asserted in
+`MessageBlock.test.tsx` against the DOM, and the round trip through storage in
+`session.test.ts`. **None of it has been looked at in a running window.** What
+follows is what a test in jsdom cannot answer, because jsdom lays nothing out.
+
+- **The ladder with no spine.** The two columns close to zero, so the prose
+  moves 30px left — the spine's 2px and the 28px gap after it. Speech and
+  presence share the ladder, so both should move together and a digest should
+  still begin at the same edge as the run above it. Nobody has seen that they
+  do.
+- **A group with no spine to carry it.** The hue is the only thing that says
+  which conversation a block belongs to, so turning the spine off costs it. A
+  declared group keeps its name above the run; an addressed group keeps nothing
+  but the two nick colours. Whether an addressed group is still legible is the
+  open question, and it is a matter of looking at a busy channel rather than of
+  mechanism.
+- **The gap between two blocks of one group.** With the spine off the gap comes
+  back, on the argument that nothing spans it any more. The test asserts the
+  padding moved; what it cannot say is whether a group then reads as several
+  separate runs, which is what closing the gap was for.
+- **`Off` in a block header.** `Clock` returns nothing, so the header is a
+  nickname and a `gap-2` with nothing on the other side of it. Flexbox drops the
+  gap along with the child, so there should be no trailing space — an argument
+  about flexbox rather than a screenshot.
+- **Angle brackets at the head of a run.** `docs/mockup.png` does not draw them,
+  and a bracketed name is wider than a bare one in the same 13px mono. Nothing
+  measures the header, so nothing should reflow, but the header sits above the
+  prose rather than beside it and how `<phrack>` reads there is a matter of
+  looking.
+- **Surviving a restart.** `ircx.density` was read back by hand after a restart
+  on 2026-07-31; `ircx.presentation` has not been. It is written by the same
+  shape of code, which is a reason to expect it and not a reason to record it as
+  seen.
+
+## The faces, the window scale, and a theme installed from a folder
+
+- **Both faces and the scale are unwatched in a real window.** `fontTokens` and
+  its painting order are asserted, and the appearance sheet's controls are
+  driven in jsdom, but which glyphs arrive is a question about the fonts on the
+  machine. Worth looking at: whether **Courier** is present at all on this
+  system — the stack falls through to `monospace`, so a reader who picks it and
+  sees no change has not found a bug — and whether prose set in the mono face
+  still reads as prose at the timeline's 13px.
+- **The window scale has never been seen to scale anything.** It goes to
+  `getCurrentWebview().setZoom`, which no test can call: jsdom has no webview,
+  and `setWindowZoom` swallows that deliberately so a browser is not a failure.
+  What wants watching is the thing the CSS `zoom` route was rejected for —
+  whether every measured placement still lands after a scale change. The
+  tooltips and the pointer menu both read `getBoundingClientRect` against
+  `window.innerWidth`, and the claim is that the webview's own zoom moves the
+  two together. **Check a tooltip in a bottom corner at 125%**, which is where a
+  disagreement would show first, and anything else placed by measurement that
+  has landed by then.
+- **Installing a theme is covered on both sides and joined in neither.** The
+  copy is tested in `src-tauri/src/themes.rs` against real temporary
+  directories, and the sheet's buttons in `AppearanceSheet.test.tsx` against a
+  mocked backend. Nothing has run the actual chain: pick a folder, watch the
+  2-second poll in `themes.rs` notice it, and see the theme appear in the list
+  and paint. The install selects what it copied, so a theme that lands and does
+  not paint means the id it answered with is not the id the catalogue built.
+- **Opening the themes folder** goes through `opener:allow-open-path`, a
+  capability added for it. A capability that is not granted fails at the call,
+  which is exactly what `openUrl` did before somebody clicked an `https://` link
+  — see the note on that in src/lib/ipc.ts.
+
+## Classic IRC, as a preset and as a palette
+
+The palette is held to every constraint in `src/styles/tokens.test.ts` — ten
+nick hues in the cool band, each clearing 5:1 against the lightest surface it
+can land on, all of them clear of the connection colours. That is the whole of
+what a test can say about it.
+
+- **Seen once, in headless Chrome, on 2026-08-09.** The preset was applied from
+  the sheet against the seeded `#ircx`: black ground, `<sable>` at the head of
+  each run, `08:00:00` on the clock, no spine, and the prose in the mono face.
+  The prose moved 32px left with the spine's two columns, which is the 2px
+  stroke and the 28px gap. A declared group kept its `topic` label above the run
+  that opened it, which is the one thing that carries grouping once the hue is
+  gone.
+
+  What that run could **not** answer: WebKitGTK renders none of it — this was
+  Chrome against Vite. And `document.fonts.check` answered true for Courier New
+  on a machine that resolves it through fontconfig aliasing, so what was drawn
+  may be Liberation Mono wearing the name. On the operator's own machine the
+  face may differ.
+- **`--shadow-overlay` is a border rather than a shadow**, `0 0 0 1px`. Every
+  overlay in the app takes it — the palette, the sheets, the emoji picker — and
+  none has been seen wearing it. A flat overlay on a black ground may not
+  separate from what is behind it at all.
+- **The preset writes five settings and then stops existing.** Nothing marks it
+  as in use, by design. What has not been watched is the reverse: applying
+  Classic IRC and then changing one control back should leave the other four
+  alone, which `AppearanceSheet.test.tsx` asserts through the store and nobody
+  has seen on screen.
+
 ## Unread counts
 
 `mark_read` is the only thing that resets a conversation's unread count, and

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type {
   ArchiveScope,
@@ -154,6 +154,10 @@ export const ipc = {
     invoke<void>("set_draft", { network, target, text }),
 
   listThemes: () => invoke<ThemeSource[]>("list_themes"),
+  /** Copies a theme folder in and answers with the id it landed under. The
+   * directory watcher is what puts it in the catalogue. */
+  installTheme: (source: string) => invoke<string>("install_theme", { source }),
+  themesDirectory: () => invoke<string>("themes_directory"),
 
   listPlugins: () => invoke<InstalledPlugin[]>("list_plugins"),
   /** The plain-terms line each permission is shown as. Written in
@@ -197,6 +201,33 @@ export const ipc = {
  */
 export async function openExternal(url: string): Promise<void> {
   await openUrl(url);
+}
+
+/** Shows a directory in the file manager. `openUrl`'s counterpart for a path,
+ * and wrapped for the same reason. */
+export async function revealFolder(path: string): Promise<void> {
+  await openPath(path);
+}
+
+/**
+ * Scales the whole window, using the webview's own zoom rather than a
+ * stylesheet.
+ *
+ * The app sets its type in px, so a font-size on the root moves nothing, and a
+ * CSS `zoom` there would scale boxes without scaling `window.innerWidth` — the
+ * two would then disagree, and everything the app places by measurement reads
+ * one against the other: the tooltips, the pointer menu, the sidebar's hanging
+ * menu. The webview's zoom scales the coordinate space along with the pixels.
+ *
+ * Resolves either way. A browser has no webview to ask, and a window that
+ * opened at the wrong scale is not worth failing over.
+ */
+export async function setWindowZoom(factor: number): Promise<void> {
+  try {
+    await getCurrentWebview().setZoom(factor);
+  } catch (reason) {
+    console.warn("ircx could not set the window scale", reason);
+  }
 }
 
 /** The native folder picker, or null if it was dismissed. Wrapped here for the

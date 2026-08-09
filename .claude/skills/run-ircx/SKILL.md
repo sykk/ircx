@@ -165,6 +165,7 @@ quit
 | `type <text>` | insert text at the focus, a keystroke at a time |
 | `key <combo>` | `Return`, `Escape`, `ctrl+k`, `shift+Return` |
 | `click <x> <y>` | window coordinates, the window being at the origin |
+| `move <x> <y>` | put the pointer there and press nothing, for anything drawn on hover |
 | `ss <file>` | screenshot the display to `<file>` |
 | `wait <ms>` | |
 | `quit` | stop the app, Vite and Xvfb, and delete the profile |
@@ -193,6 +194,12 @@ is the tauri CLI rather than the cargo profile, and both land on
 `Could not connect to localhost`, and a measurement taken there is a measurement
 of an error page. Nothing can tell them apart from outside — the embedded assets
 are compressed — so the first screenshot is the check.
+
+**A CSS `:hover` rule can only be walked here.** It answers to where the pointer
+is rather than to any event a script can dispatch, and `driver.mjs` has no way
+to place a pointer without also clicking — `dragxy` presses and releases. So
+anything drawn on hover is photographed with `move`, in the window, however much
+easier the rest of the question would be in Chrome.
 
 **Two things it cannot do**, and both bite quietly:
 

@@ -389,24 +389,53 @@ The image keeps its proportions when the cap bites — 263×175 for a 900×600
 source, a ratio of 1.500 — which is not free: `w-auto` with a `max-height` and a
 `height` attribute is the shape that squashes one.
 
-**What is not walked:**
+**The pointer was not walked in Chrome, and could not be.** The row is lifted by
+`hover:z-10` and `focus-within:z-10`; only the second is reachable there.
+`:hover` is a CSS pseudo-class answering to where the pointer is, and
+`driver.mjs` can only place one through `dragxy`, which presses and releases —
+on this control that opens the URL in a browser. The peek was opened by
+dispatching `pointerover`, which React's enter/leave plugin answers and CSS does
+not see.
 
-- **The pointer.** The row is lifted by `hover:z-10` and `focus-within:z-10`,
-  and only the second was ever exercised. `:hover` is a CSS pseudo-class and
-  wants a real pointer over the row; `driver.mjs` can only produce one through
-  `dragxy`, which presses and releases, and on this control that opens the URL
-  in a browser. The peek itself was opened by dispatching `pointerover`, which
-  React's enter/leave plugin does answer — but no CSS in this walk ever saw a
-  pointer. So the stacking fix is verified through the keyboard trigger and
-  inferred for the pointer one, which is the commoner of the two.
+**So it was walked in the window instead, on 2026-08-08**, against a local
+`ergo` on `127.0.0.1:6667` — the first time the assembled app has drawn a peek.
+`xsend` grew a `move` verb for it: a motion event and no button, which is the
+whole of what a hover is and what the harness had no way to say.
+
+The URL was typed into the composer, sent, and `fetch` clicked — a real 224 KB
+PNG over TLS from `upload.wikimedia.org`, so this is also the preview fetch
+walked end to end in WebKitGTK rather than in Chrome. The line took
+`· fetched 21:17` **and did not grow**, which is the change itself. The pointer
+was then moved onto the filename and left there:
+
+```text
+move 430 540   the peek opens upward, opaque, over the rows above
+move 800 300   the line is one row again
+```
+
+It opens upward because the line sits near the bottom of the scroller, which is
+`peekFit` choosing the roomier side in the engine that ships rather than in the
+one that was measured. Nothing shows through it, so the stacking fix holds for
+the pointer trigger as well as the keyboard one.
+
+**What that leaves:**
+
 - **The keyboard, end to end.** `document.hasFocus()` is false under headless
   Chrome, and Chrome defers focus events on a programmatic `.focus()` until the
   document has focus. The button really was focused — `:focus-within` applied
   and the row measured `z-index: 10` — while React's `onFocus` never fired, so
-  the walk dispatched `focusin` to open the peek. Tabbing to a filename in a
-  window that has focus is therefore untested.
-- **WebKitGTK.** Chrome laid all of this out. The engine that ships has not
-  drawn a peek at all.
+  that walk dispatched `focusin` to open the peek. Tabbing to a filename in a
+  window that has focus is still untested, and `Xvfb` has no window manager to
+  give the window focus with.
+- **The downward peek in WebKitGTK.** The walk's channel was four lines long, so
+  the anchor was never high enough in the scroller for `peekFit` to open
+  downwards. Both sides are measured in Chrome; only the upward one has been
+  drawn in the engine that ships.
+- **A second overlay arrives with it.** `title={attachment.url}` is still on the
+  button, so hovering now draws the peek above the line and GTK's own tooltip
+  with the whole URL below it, a beat later. They do not collide and neither
+  hides the other. Worth knowing before somebody reads the screenshot as one
+  control drawing twice.
 
 ## Assembled-application testing
 

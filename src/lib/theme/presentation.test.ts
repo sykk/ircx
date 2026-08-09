@@ -98,6 +98,35 @@ describe("CLOCK_FORMATS", () => {
     }
   });
 
+  /* The column a leading clock opens is `columns` wide and the prose is set
+   * beside it, so a printing wider than that would run under the name. Every
+   * hour of the day, because that is the one that is not padded. */
+  it("makes room for the widest hour of the day, in every format", () => {
+    for (const { id, columns } of CLOCK_FORMATS) {
+      for (let hour = 0; hour < 24; hour++) {
+        const printed = formatClock(new Date(2026, 0, 5, hour, 32, 7).toISOString(), id);
+        if (printed === null) {
+          expect(columns).toBeNull();
+          continue;
+        }
+        expect(columns).not.toBeNull();
+        expect(printed.length).toBeLessThanOrEqual(columns!);
+      }
+    }
+  });
+
+  /* A column wider than anything the format can print is padding nobody asked
+   * for, so some hour has to reach it. */
+  it("makes room for no more than that", () => {
+    for (const { id, columns } of CLOCK_FORMATS) {
+      if (columns === null) continue;
+      const widest = Array.from({ length: 24 }, (_, hour) =>
+        (formatClock(new Date(2026, 0, 5, hour, 32, 7).toISOString(), id) ?? "").length,
+      );
+      expect(Math.max(...widest)).toBe(columns);
+    }
+  });
+
   it("offers every format formatClock accepts", () => {
     expect(CLOCK_FORMATS.map((format) => format.id)).toEqual([
       "24h",

@@ -125,7 +125,8 @@ deliberately left unset. Linux x86-64, `stat -c%s` on
 `target/release/ircx`.
 
 The 2026-08-01 figure was taken twice: once in the shared `CARGO_TARGET_DIR`
-this repo normally builds in, and once in a fresh empty one. **The two came out
+this repo built in at the time — the practice this file argues against under
+*What a worktree's build costs* — and once in a fresh empty one. **The two came out
 byte-identical**, so the 18 KiB discrepancy the rows below warn about did not
 reproduce, and the absolute figure is trustworthy here as a baseline for the
 next change.
@@ -155,6 +156,39 @@ bytes, measured the same way, back to back. Almost all of it is QuickJS, which
 the spike measured on its own at 793 KiB. The `network-requests` permission
 adds nothing to that: plugins fetch through `ircx-net`, which the binary
 already carried. None of it is touched at launch by a user with no plugins.
+
+## What a worktree's build costs
+
+| | measured | wall | on disk |
+|---|---|---|---|
+| `cargo test --workspace --no-run`, empty target directory | 2026-08-09 | 84.3 s | 7.1 GB |
+
+Measured because a claim built on the opposite number was steering people into
+a real defect. `.claude/skills/run-ircx/SKILL.md` said a fresh worktree
+"rebuilds ~51G of Rust dependencies" and told the reader to point
+`CARGO_TARGET_DIR` at another checkout's `target/` instead. Two checkouts
+sharing one target directory is not safe: on 2026-08-09 `cargo test
+--workspace` in `/home/syk/ircx` ran an `ircx-plugin` test binary another
+worktree had built, which failed on a `CARGO_MANIFEST_DIR` baked at compile
+time and naming a directory that no longer existed. Four tests failed for a
+reason that had nothing to do with the tree being tested. The reverse — a stale
+binary that *passes* — is the same mechanism and says nothing at all.
+
+So the sharing is not worth buying, and at 84 seconds it was never worth much.
+The default target directory is already per-checkout, so the fix is to stop
+overriding it.
+
+**Where the 51G came from:** an accumulated directory rather than a build.
+`/home/syk/ircx/target` was 81 GB when this was measured — 77 GB debug, of
+which 26 GB was `incremental/` grown over months of rebuilds, plus 4.2 GB
+release. That is what a long-lived checkout costs, not what a new one pays.
+
+**Covers:** compile only, `--no-run`, so it excludes running the tests and
+excludes the frontend, which `cargo` does not build. Debug profile, 16 cores,
+warm `~/.cargo/registry` — a cold registry would add the download. `du -sh` on
+the target directory afterwards. Excludes `cargo test --workspace` a second
+time, which is the case the shared directory was trying to make fast and which
+is already seconds once a worktree has built once.
 
 ## Memory
 

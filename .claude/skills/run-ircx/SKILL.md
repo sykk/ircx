@@ -258,10 +258,11 @@ needs a display, and it will refuse to start if another dev server holds port
 
 ```bash
 npm run typecheck && npm run lint && npx vitest run   # 47 files, 806 tests
-CARGO_TARGET_DIR=/home/syk/ircx/target cargo test --workspace
+cargo test --workspace
 ```
 
-The `CARGO_TARGET_DIR` is not optional in a fresh worktree — see Gotchas.
+Do not set `CARGO_TARGET_DIR`. The default is `<checkout>/target`, which is
+already one directory per worktree — see Gotchas for what sharing one costs.
 
 ## Gotchas
 
@@ -295,18 +296,27 @@ The `CARGO_TARGET_DIR` is not optional in a fresh worktree — see Gotchas.
   `pkill -f target/debug/ircx` appears in the `bash -c` wrapper's own command
   line, so it kills the shell before the app. Kill by exact name (`pkill -x
   ircx`) or by the pid you started.
-- **A fresh worktree rebuilds ~51G of Rust dependencies.** Point
-  `CARGO_TARGET_DIR` at an existing checkout's `target/` and `cargo test`
-  finishes in seconds. Cargo locks it, so a concurrent build blocks rather than
-  corrupts.
+- **Two checkouts must not share one target directory.** This entry used to say
+  the opposite — that a fresh worktree rebuilds ~51G, so point
+  `CARGO_TARGET_DIR` at another checkout's `target/`. Both halves were wrong.
 
-  **`window.mjs` needs one more step when you do that**, because the binary in a
-  shared target directory belongs to whichever checkout built it last and
-  `window.mjs` skips its build whenever a binary exists. Run
-  `CARGO_TARGET_DIR=… cargo build --manifest-path src-tauri/Cargo.toml
-  --no-default-features` first — 14 seconds, since the dependencies are the
-  shared part. Skip it and #233 stops the run and names the worktree the binary
-  came from, which reads as a stale dev server and is not one.
+  Sharing is unsafe. Cargo will run a test binary the *other* checkout built:
+  on 2026-08-09 `cargo test --workspace` failed four `ircx-plugin` tests on a
+  `CARGO_MANIFEST_DIR` baked in at compile time, naming a worktree that had
+  since been deleted. That failure at least announced itself. The same
+  mechanism with a binary that still passes tells you a tree is green when
+  nothing in it was tested, and `window.mjs` had a whole extra build step
+  bolted on for the same reason — the app binary belonged to whichever checkout
+  built it last.
+
+  And the 51G was an accumulated directory, not a build. A fresh worktree's
+  full test build is **84 seconds and 7.1 GB** (`docs/measurements.md`); the
+  81 GB in a long-lived checkout is mostly `incremental/` grown over months.
+
+  So build into the default and leave `CARGO_TARGET_DIR` unset. If you do need
+  to name one, put it outside the checkout: `.gitignore` and
+  `eslint.config.js` both ignore `target` by that exact name, so a directory
+  inside the checkout called anything else gets picked up by lint and by git.
 - **Assigning `.value` to an input does nothing React can see.** React installs
   its own setter and listens for the event after it, so a plain assignment
   updates the DOM while React's state keeps the old value — the field looks

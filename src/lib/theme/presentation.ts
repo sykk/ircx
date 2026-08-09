@@ -25,9 +25,9 @@ export interface Presentation {
   spine: boolean;
   clock: ClockFormat;
   /** The head of a run states who and when, and this is the order it states
-   * them in. On the right the name keeps the left edge the prose beneath it
-   * starts at; on the left the time keeps it, as a client with a timestamp
-   * column set it. */
+   * them in. Either way the prose beneath starts under the name: a clock in
+   * front opens a column of its own, and the lines of the run are set beside it
+   * rather than under it, as a client with a timestamp column set them. */
   clockSide: ClockSide;
   /** `<nick>` at the head of a run, as clients that printed the name beside
    * every line wrote it. */
@@ -49,23 +49,32 @@ export const DEFAULT_PRESENTATION: Presentation = {
 };
 
 /**
- * The clock formats offered and what each one prints.
+ * The clock formats offered, what each one prints, and how wide it can print.
  *
  * The example is written out rather than computed because `formatClock` is in
  * the timeline, which is above this module; presentation.test.ts is below both
  * and asserts every example against it, so the two cannot drift.
+ *
+ * `columns` is the widest the format can be, in characters of the mono face it
+ * is set in. It is not the example's length: the 12-hour formats do not pad the
+ * hour, so the example prints a one-digit hour and half the day prints two. A
+ * clock in front of the name opens a column the prose lines up behind, and that
+ * column has to be the same width in every block or the left edge of the
+ * conversation moves whenever the hour rolls over.
  */
 export const CLOCK_FORMATS: readonly {
   id: ClockFormat;
   name: string;
   /** Null for the format that prints nothing. */
   example: string | null;
+  /** Null where there is nothing to make room for. */
+  columns: number | null;
 }[] = [
-  { id: "24h", name: "24-hour", example: "14:32" },
-  { id: "24h-seconds", name: "24-hour with seconds", example: "14:32:07" },
-  { id: "12h", name: "12-hour", example: "2:32 PM" },
-  { id: "12h-bare", name: "12-hour, no suffix", example: "2:32" },
-  { id: "off", name: "Off", example: null },
+  { id: "24h", name: "24-hour", example: "14:32", columns: 5 },
+  { id: "24h-seconds", name: "24-hour with seconds", example: "14:32:07", columns: 8 },
+  { id: "12h", name: "12-hour", example: "2:32 PM", columns: 8 },
+  { id: "12h-bare", name: "12-hour, no suffix", example: "2:32", columns: 5 },
+  { id: "off", name: "Off", example: null, columns: null },
 ];
 
 export const CLOCK_SIDES: readonly { id: ClockSide; name: string }[] = [

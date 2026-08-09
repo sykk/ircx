@@ -168,6 +168,7 @@ export function MessageBlock({
   const head = messages[0]!;
   const brackets = useAppStore((s) => s.presentation.nickBrackets);
   const clockSide = useAppStore((s) => s.presentation.clockSide);
+  const clock = useAppStore((s) => s.presentation.clock);
   const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
   const addressed = messages.some((message) => isHighlight(message, ownNick, present));
   const failures = failureRuns(messages);
@@ -192,6 +193,35 @@ export function MessageBlock({
   const groupTint = group === null ? undefined : nickColor(group.opener);
   const spineTint = groupTint ?? (addressed || raised ? "var(--accent)" : undefined);
 
+  const name =
+    writesOwnNick(head.kind) || everyLine ? null : (
+      <span
+        className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
+        style={{ color: nickColor(head.sender.nick) }}
+      >
+        {brackets ? `<${head.sender.nick}>` : head.sender.nick}
+      </span>
+    );
+  // Nothing to line the prose up behind when the clock prints nothing.
+  const leadingClock = clockSide === "left" && clock !== "off";
+
+  const rows = messages.map((message, at) => (
+    <MessageRow
+      key={message.id}
+      failure={failures[at]!}
+      message={message}
+      quotedAbove={repeatsQuote(messages, at)}
+      ownNick={ownNick}
+      parentOf={parentOf}
+      onJump={onJump}
+      canTag={canTag}
+      onReact={onReact}
+      onReply={onReply}
+      present={present}
+      flashing={message.id === flashId}
+    />
+  ));
+
   return (
     <Block
       spine
@@ -212,43 +242,37 @@ export function MessageBlock({
           you by name
         </div>
       )}
-      {/* An action or a notice writes its own nick into the body, so a header
-          would say the name the first line is about to say again. Neither does
-          a reader who asked for the name in front of every line: the rows
-          below are about to state who and when, each for itself. */}
-      {!writesOwnNick(head.kind) && !everyLine && (
-        <div className="flex items-baseline gap-2">
-          {/* Whichever of the two the reader put first keeps the left edge the
-              lines beneath start at. The clock is the same width from one run
-              to the next and the name is not, so a clock in front leaves the
-              names in a column and a clock behind leaves the names ragged —
-              which is the choice, and either way the prose is unmoved. */}
-          {clockSide === "left" && <Clock at={head.timestamp} />}
-          <span
-            className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
-            style={{ color: nickColor(head.sender.nick) }}
-          >
-            {brackets ? `<${head.sender.nick}>` : head.sender.nick}
-          </span>
-          {clockSide === "right" && <Clock at={head.timestamp} />}
+      {/* The name in front of the clock, the clock in front of the name, or
+          neither: an action and a notice write their own nick into the body,
+          and a reader who asked for the name on every line is about to be told
+          who and when by each row for itself. */}
+      {name === null ? (
+        rows
+      ) : leadingClock ? (
+        /* The clock opens a column and the run is set beside it, so the prose
+           starts under the name exactly as it does with the clock behind it.
+           A grid rather than an indent: the column is as wide as the clock in
+           the mono face the reader chose, which is a width this element cannot
+           name in pixels. `Clock` holds it to the widest the format prints, so
+           the edge does not move when the hour rolls over to two digits. */
+        <div
+          data-ui="clock-column"
+          className="grid items-baseline"
+          style={{ gridTemplateColumns: "max-content minmax(0, 1fr)", columnGap: "8px" }}
+        >
+          <Clock at={head.timestamp} column />
+          {name}
+          <div style={{ gridColumn: 2 }}>{rows}</div>
         </div>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-2">
+            {name}
+            <Clock at={head.timestamp} />
+          </div>
+          {rows}
+        </>
       )}
-      {messages.map((message, at) => (
-        <MessageRow
-          key={message.id}
-          failure={failures[at]!}
-          message={message}
-          quotedAbove={repeatsQuote(messages, at)}
-          ownNick={ownNick}
-          parentOf={parentOf}
-          onJump={onJump}
-          canTag={canTag}
-          onReact={onReact}
-          onReply={onReply}
-          present={present}
-          flashing={message.id === flashId}
-        />
-      ))}
     </Block>
   );
 }

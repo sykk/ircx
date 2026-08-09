@@ -212,8 +212,73 @@ describe("the nickname at the head of a run", () => {
     useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, clockSide: "left" } });
     const { container } = block();
 
-    expect(head(container).firstElementChild!.tagName).toBe("TIME");
-    expect(head(container).lastElementChild!.textContent).toBe("phrack");
+    const [first, second] = head(container).children;
+    expect(first!.tagName).toBe("TIME");
+    expect(second!.textContent).toBe("phrack");
+  });
+});
+
+/* The clock in front used to leave the lines of the run starting at the rail,
+ * under the time rather than under the name. They are set beside it now. */
+describe("the column a leading clock opens", () => {
+  beforeEach(() =>
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, clockSide: "left" },
+    }),
+  );
+
+  function column(container: HTMLElement): HTMLElement | null {
+    return container.querySelector<HTMLElement>("[data-ui='clock-column']");
+  }
+
+  it("puts the lines of the run in the column the name is in", () => {
+    const { container } = block();
+    const rows = container.querySelector<HTMLElement>("[data-ui='message-row']")!;
+
+    expect(column(container)!.style.gridTemplateColumns).toBe("max-content minmax(0, 1fr)");
+    expect(rows.parentElement!.style.gridColumn).toBe("2");
+  });
+
+  /* Half the day prints a two-digit hour in the 12-hour formats, and a column
+   * sized to what this block happens to print would move the whole
+   * conversation's left edge when the hour rolled over. */
+  it("holds the clock to the widest its format prints", () => {
+    const { container, unmount } = block();
+    expect(container.querySelector("time")!.style.minWidth).toBe("5ch");
+
+    unmount();
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, clockSide: "left", clock: "12h" },
+    });
+
+    expect(block().container.querySelector("time")!.style.minWidth).toBe("8ch");
+  });
+
+  it("draws no column when the clock prints nothing", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, clockSide: "left", clock: "off" },
+    });
+    const { container } = block();
+
+    expect(column(container)).toBeNull();
+  });
+
+  /* The name in front keeps the layout it had: the prose already started under
+   * it, and a column would be room reserved for nothing. */
+  it("is not drawn when the name comes first", () => {
+    useAppStore.setState({ presentation: DEFAULT_PRESENTATION });
+    const { container } = block();
+
+    expect(column(container)).toBeNull();
+  });
+
+  it("is not drawn for a run whose lines name their own sender", () => {
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: "phrack", kind: "action", text: "waves" })],
+    });
+
+    expect(column(container)).toBeNull();
+    expect(container.textContent).toContain("* phrack waves");
   });
 });
 

@@ -20,6 +20,11 @@ const PATHS = {
   // Appearance, as a drop of colour. The brush the concept drew reads as a
   // smudge at this size; a drop keeps its silhouette.
   droplet: "M8 2.4c2.4 2.6 3.9 4.6 3.9 6.4a3.9 3.9 0 0 1-7.8 0c0-1.8 1.5-3.8 3.9-6.4",
+  // Privacy: what is kept about you, and for how long.
+  shield: "M8 2.2 3.5 3.9v3.7c0 2.7 1.8 4.7 4.5 6.2 2.7-1.5 4.5-3.5 4.5-6.2V3.9z",
+  // Plugins, as the plug rather than the puzzle piece: a jigsaw tab loses its
+  // notch at 15px and reads as a rounded square.
+  plug: "M6.2 2.3v3M9.8 2.3v3M4.4 5.3h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.3v2.4",
 } as const;
 
 export type IconName = keyof typeof PATHS;

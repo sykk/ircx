@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAppStore } from "@/store";
 import { resetStore } from "@/components/shell/fixtures";
 import type * as Ipc from "@/lib/ipc";
-import { UploadSheet } from "../UploadSheet";
+import { UploadsPage } from "./UploadsPage";
 
 const { ipcMock } = vi.hoisted(() => ({
   ipcMock: {
@@ -28,18 +27,13 @@ beforeEach(() => {
   ipcMock.removeUploadProvider.mockResolvedValue(undefined);
 });
 
+const done = vi.fn();
+
 function open() {
-  useAppStore.getState().toggleUpload(true);
-  render(<UploadSheet />);
+  render(<UploadsPage onDone={done} />);
 }
 
-describe("the upload provider sheet", () => {
-  it("stays out of the way until something opens it", () => {
-    const { container } = render(<UploadSheet />);
-    expect(container.firstChild).toBeNull();
-    expect(ipcMock.getUploadProvider).not.toHaveBeenCalled();
-  });
-
+describe("the uploads page", () => {
   it("saves what was typed", async () => {
     open();
     fireEvent.change(await screen.findByLabelText("Address"), {
@@ -109,7 +103,11 @@ describe("the upload provider sheet", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Remove provider" }));
 
     await waitFor(() => expect(ipcMock.removeUploadProvider).toHaveBeenCalled());
-    await waitFor(() => expect(useAppStore.getState().uploadOpen).toBe(false));
+    /* As a sheet this closed, which was how it said the removal happened. A
+       page in a window that stays open has to say it in words, and the
+       sentence has to be the one that matters: no provider means no files. */
+    expect(await screen.findByText(/ircx will send no files/)).toBeTruthy();
+    expect(done).not.toHaveBeenCalled();
   });
 
   /** An empty address is not "no provider": saving it would leave a provider
@@ -165,7 +163,7 @@ describe("the upload provider sheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("The keyring is locked")).toBeTruthy();
-    expect(useAppStore.getState().uploadOpen).toBe(true);
+    expect(done).not.toHaveBeenCalled();
   });
 });
 

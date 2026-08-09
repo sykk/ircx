@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAppStore } from "@/store";
-import { makeNetwork, oneView } from "@/components/shell/fixtures";
+import { resetStore } from "@/components/shell/fixtures";
 import { formatBytes } from "@/lib/bytes";
 import type * as Ipc from "@/lib/ipc";
-import { ArchiveSheet, describeKept, nowKeeping } from "../ArchiveSheet";
+import type { SettingsScope } from "@/lib/settingsWindow";
+import { PrivacyPage, describeKept, nowKeeping } from "./PrivacyPage";
 
 const summary = vi.fn();
 const setRetention = vi.fn();
@@ -45,12 +45,23 @@ beforeEach(() => {
   exportArchive.mockReset().mockResolvedValue(120n);
   announce.mockReset().mockResolvedValue(undefined);
   save.mockReset().mockResolvedValue(null);
-  useAppStore.setState({
-    ...oneView({ network: "libera", target: "#ctf-ops" }),
-    networks: { libera: makeNetwork("libera", { name: "Libera.Chat" }) },
-    archiveOpen: true,
-  });
+  resetStore();
 });
+
+/** The conversation the client was on when the window was asked for. This page
+ * has no store to read it from — the settings window runs no event bridge — so
+ * it is handed over. */
+const HERE: SettingsScope = {
+  network: "libera",
+  networkName: "Libera.Chat",
+  target: "#ctf-ops",
+};
+
+const done = vi.fn();
+
+function render_(here: SettingsScope | null = HERE) {
+  return render(<PrivacyPage here={here} onDone={done} />);
+}
 
 describe("saying what is kept", () => {
   it("counts messages and weighs the file", () => {
@@ -67,7 +78,7 @@ describe("saying what is kept", () => {
 });
 
 /** #249. Messages still arrive and are still drawn, so a conversation that
- * empties when the app closes reads as a bug unless the sheet says otherwise. */
+ * empties when the app closes reads as a bug unless the page says otherwise. */
 describe("what a window means", () => {
   it("says what keeping nothing does, and what it does not", () => {
     const said = nowKeeping("0");
@@ -84,37 +95,31 @@ describe("what a window means", () => {
   });
 });
 
-describe("the archive sheet", () => {
-  it("draws nothing while it is closed", () => {
-    useAppStore.setState({ archiveOpen: false });
-    const { container } = render(<ArchiveSheet />);
-    expect(container.innerHTML).toBe("");
-  });
-
+describe("the privacy page", () => {
   /** Pruning happens before any console exists, so this screen is where the
    * window's effect is reported at all. */
   it("says what the window took on the way in", async () => {
     summary.mockResolvedValue({ ...KEPT, removedOnLaunch: 1204n });
-    render(<ArchiveSheet />);
+    render_();
 
     expect(await screen.findByText(/1,204 were removed when ircx started/)).toBeTruthy();
   });
 
   it("says nothing about pruning when nothing was pruned", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     expect(screen.queryByText(/were removed when ircx started/)).toBeNull();
   });
 
   it("says how much is kept", async () => {
-    render(<ArchiveSheet />);
+    render_();
     expect(await screen.findByText(/4,812 messages, 3.1 MB on this machine/)).toBeTruthy();
   });
 
   /** The whole point of showing the count beside the setting. */
   it("re-reads what is kept after a window changes", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
     summary.mockClear();
 
@@ -125,7 +130,7 @@ describe("the archive sheet", () => {
   });
 
   it("can be told to keep nothing at all", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.change(screen.getByLabelText(/Everything on Libera.Chat/), {
@@ -137,7 +142,7 @@ describe("the archive sheet", () => {
   });
 
   it("sets a window on the conversation without touching the network's", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.change(screen.getByLabelText(/#ctf-ops, if it should differ/), {
@@ -149,7 +154,7 @@ describe("the archive sheet", () => {
 
   /** Nothing is destroyed on one click. */
   it("asks before deleting, and deletes nothing until it is answered", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Delete everything"));
@@ -161,7 +166,7 @@ describe("the archive sheet", () => {
   });
 
   it("takes no for an answer", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Delete everything"));
@@ -172,7 +177,7 @@ describe("the archive sheet", () => {
   });
 
   it("names the conversation it is about to delete", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Delete #ctf-ops"));
@@ -189,7 +194,7 @@ describe("the archive sheet", () => {
 
   /** A file dialog nobody answers writes nothing. */
   it("writes nothing when the save dialog is dismissed", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Export everything"));
@@ -203,7 +208,7 @@ describe("the archive sheet", () => {
    */
   it("drops the last success when the next export fails", async () => {
     save.mockResolvedValue("/tmp/first.jsonl");
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Export everything"));
@@ -223,7 +228,7 @@ describe("the archive sheet", () => {
   it("drops the last failure when the next export works", async () => {
     save.mockResolvedValue("/read-only/first.jsonl");
     exportArchive.mockRejectedValue("/read-only/first.jsonl could not be written: that disk is read-only");
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Export everything"));
@@ -246,7 +251,7 @@ describe("the archive sheet", () => {
    */
   it("says an export worked, rather than only drawing that it did", async () => {
     save.mockResolvedValue("/tmp/export.jsonl");
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Export everything"));
@@ -260,7 +265,7 @@ describe("the archive sheet", () => {
   /** The one on this sheet that cannot be undone, and the one it most matters
    * to have heard. */
   it("says the archive was deleted", async () => {
-    render(<ArchiveSheet />);
+    render_();
     await screen.findByText(/4,812 messages/);
 
     fireEvent.click(screen.getByText("Delete everything"));

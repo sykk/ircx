@@ -7,7 +7,7 @@ import {
   type ActionId,
   type Binding,
 } from "@/lib/keybindings";
-import { ipc } from "@/lib/ipc";
+import { openSettingsWindow } from "@/lib/settingsWindow";
 import { selectPresentation } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
@@ -134,7 +134,7 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       /* A chord has nowhere to show a sentence. The palette entry beside it
        * does, and reports there; this one is left to the log. */
       "settings.open": () =>
-        void ipc.openSettings().catch((reason: unknown) => {
+        void openSettingsWindow().catch((reason: unknown) => {
           console.warn("ircx could not open the settings window", reason);
         }),
       "roster.toggle": () => {

@@ -22,10 +22,11 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 vi.mock("@/lib/ipc", () => ({
-  ipc: { installTheme: vi.fn(), themesDirectory: vi.fn() },
+  ipc: { installTheme: vi.fn(), themesDirectory: vi.fn(), listPlugins: vi.fn(() => Promise.resolve([])) },
   onThemesChanged: vi.fn(() => Promise.resolve(() => {})),
-  onAppearanceChanged: vi.fn(() => Promise.resolve(() => {})),
-  announceAppearance: vi.fn(() => Promise.resolve()),
+  onSettingsChanged: vi.fn(() => Promise.resolve(() => {})),
+  onSettingsSection: vi.fn(() => Promise.resolve(() => {})),
+  announceSettings: vi.fn(() => Promise.resolve()),
   setWindowZoom: vi.fn(() => Promise.resolve()),
   chooseFolder: vi.fn(),
   revealFolder: vi.fn(),

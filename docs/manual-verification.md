@@ -2177,6 +2177,46 @@ assembled release app on `Xvfb`.
 - **The resize grips.** `WindowFrame` is the client's, mounted in a window it
   was not written for.
 
+### The three sections that moved into it
+
+The upload provider, the archive and the plugin screens were sheets over the
+client, reached only from the palette. They are pages now, and each was walked
+at `/?settings=<section>` in the browser harness: the sidebar lists four, the
+deep link lands on the right one, and switching between them works. Their own
+tests moved with them and still assert what they always did.
+
+**Seen on 2026-08-09, in the release app on `Xvfb`:** opening `Ctrl+,` from a
+joined `#harness` and switching to Privacy, the page named that conversation
+throughout — the per-channel retention row, `Export #harness`, `Delete
+#harness` — and read the archive summary off the backend. That is the scope
+hand-off working with a channel name carrying a `#`, which is the case the URL
+route was rejected for, and it is the settings window's capability grant
+covering a command beyond the theme ones.
+
+What the walks cannot reach:
+
+- **The status bar after a plugin changes.** The plugin screens are in the
+  settings window and the count is in the client's status bar, so installing,
+  removing or re-granting has to cross between them — `announcePlugins`. This
+  is the one place where the thing that would go wrong is silent: the plugin
+  really is installed, and only the number is stale.
+- **The Privacy page with no conversation open at all.** The scoped half is
+  seen; the empty case is not. It should say to open one rather than show
+  controls scoped to nothing, and the whole-archive controls beside it should
+  still work.
+- **The palette's three entries.** Plugins, Uploads and Privacy each open the
+  window on their own section, and each has to work both when the window is
+  shut — the section is in the URL it is built at — and when it is already
+  open, which goes by an event instead. Those are two different code paths for
+  one act.
+- **Escape during a request.** A page with a request in flight refuses to
+  close, which was each sheet's own guard and is now the window's. Save a
+  plugin's permissions against a slow backend and press Escape.
+- **The uploads page after a save.** As a sheet it closed, which was how it
+  said the save happened; a page that stays open says "Saved." instead.
+  Nothing has watched that the notice appears and then goes when the form is
+  edited again.
+
 ## Unread counts
 
 `mark_read` is the only thing that resets a conversation's unread count, and

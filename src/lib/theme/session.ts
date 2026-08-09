@@ -1,7 +1,7 @@
 import {
-  announceAppearance,
+  announceSettings,
   ipc,
-  onAppearanceChanged,
+  onSettingsChanged,
   onThemesChanged,
   setWindowZoom,
 } from "@/lib/ipc";
@@ -80,7 +80,7 @@ export function adoptAppearance(): void {
  */
 export async function startAppearanceSync(): Promise<() => void> {
   try {
-    return await onAppearanceChanged(adoptAppearance);
+    return await onSettingsChanged("appearance", adoptAppearance);
   } catch (reason) {
     console.warn("ircx could not follow the other window's appearance", reason);
     return () => {};
@@ -94,7 +94,7 @@ export async function startAppearanceSync(): Promise<() => void> {
 let bundling = false;
 
 function announce(): void {
-  if (!bundling) void announceAppearance();
+  if (!bundling) void announceSettings("appearance");
 }
 
 /** Puts a theme on the window, remembers it for the next launch and tells the

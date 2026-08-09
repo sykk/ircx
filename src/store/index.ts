@@ -119,12 +119,9 @@ export interface AppActions {
    * a null id. */
   openSetup: (network: string | null) => void;
   closeSetup: () => void;
-  togglePlugins: (open?: boolean) => void;
-  toggleUpload: (open?: boolean) => void;
   /** Hands picked files to the upload confirmation, or clears them once it has
    * them. An empty list is nothing to confirm and clears it too. */
   setUploadRequest: (paths: string[] | null) => void;
-  toggleArchive: (open?: boolean) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
@@ -176,10 +173,7 @@ const initialState: AppState = {
   paletteOpen: false,
   searchOpen: false,
   setup: null,
-  pluginsOpen: false,
-  uploadOpen: false,
   uploadRequest: null,
-  archiveOpen: false,
   channelsOpen: null,
   plugins: [],
   pluginsUnavailable: null,
@@ -574,11 +568,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   openSetup: (network) => set({ setup: { network } }),
   closeSetup: () => set({ setup: null }),
 
-  togglePlugins: (open) => set((s) => ({ pluginsOpen: open ?? !s.pluginsOpen })),
-  toggleUpload: (open) => set((s) => ({ uploadOpen: open ?? !s.uploadOpen })),
   setUploadRequest: (paths) =>
     set({ uploadRequest: paths === null || paths.length === 0 ? null : paths }),
-  toggleArchive: (open) => set((s) => ({ archiveOpen: open ?? !s.archiveOpen })),
   showChannels: (network) => set({ channelsOpen: network }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),

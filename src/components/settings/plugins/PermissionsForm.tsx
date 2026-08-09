@@ -24,7 +24,7 @@ import {
   toggleHost,
   togglePermission,
   unscoped,
-} from "./grants";
+} from "@/components/plugins/grants";
 
 /**
  * What a plugin may do, offered as exactly what its manifest asked for and

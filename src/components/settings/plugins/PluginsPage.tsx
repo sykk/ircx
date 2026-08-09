@@ -1,26 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SecondaryButton } from "@/components/onboarding/fields";
+import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
+import { announcePlugins } from "@/lib/plugins";
 import { useAppStore } from "@/store";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { PermissionsForm } from "./PermissionsForm";
 import { PluginList } from "./PluginList";
 
 /**
- * Everything the user does to a plugin, in one sheet reached from the command
- * palette: what is installed, what each one may do, and the way to add or
- * remove one. The permissions screen is the same whether it opens on an
- * install or on a plugin that has been there for months.
+ * Everything the user does to a plugin: what is installed, what each one may
+ * do, and the way to add or remove one. The permissions screen is the same
+ * whether it opens on an install or on a plugin that has been there for
+ * months.
+ *
+ * Every change here is announced to the client, which has no plugin screen of
+ * its own any more but does count them in its status bar. Installing runs in
+ * the backend, so the client cannot see it happen — nothing would be wrong on
+ * screen except a number that stayed where it was.
  */
-export function PluginSheet() {
-  const open = useAppStore((s) => s.pluginsOpen);
-  return open ? <Sheet /> : null;
-}
-
-function Sheet() {
-  const closeSheet = useAppStore((s) => s.togglePlugins);
+export function PluginsPage({ onDone }: { onDone: () => void }) {
   const plugins = useAppStore((s) => s.plugins);
   const unavailable = useAppStore((s) => s.pluginsUnavailable);
 
@@ -28,21 +28,25 @@ function Sheet() {
    * themselves rather than any one plugin. */
   const [summaries, setSummaries] = useState<PluginPermissionInfo[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyHere] = useState(false);
+  /* The window's Escape is caught on the document, above every page, so a
+     page cannot guard its own way out — it says it is busy instead. */
+  const report = useReportBusy();
+  const setBusy = useCallback(
+    (running: boolean) => {
+      setBusyHere(running);
+      report(running);
+    },
+    [report],
+  );
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
 
-  // Nothing in the sheet takes focus on its own — the list is buttons and the
-  // form starts on a checkbox — so without this the keydown below fires from
-  // wherever focus was left and Escape never reaches the dialog.
-  const dialog = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialog);
-
   /** Closing mid-request loses the answer: an install lands with its
-   * permissions never asked, and a failed save reports into a sheet that has
+   * permissions never asked, and a failed save reports into a page that has
    * gone. */
   function close() {
-    if (!busy) closeSheet(false);
+    if (!busy) onDone();
   }
 
   useEffect(() => {
@@ -78,6 +82,7 @@ function Sheet() {
     try {
       const installed = await ipc.installPlugin(source);
       useAppStore.getState().upsertPlugin(installed);
+      void announcePlugins();
       // Installing grants nothing, so the permissions are what the user is
       // asked about the moment a plugin lands.
       setEditing(installed.id);
@@ -93,6 +98,7 @@ function Sheet() {
     try {
       await ipc.removePlugin(id);
       useAppStore.getState().dropPlugin(id);
+      void announcePlugins();
     } catch (reason) {
       setError(reasonOr(reason, "The plugin could not be removed."));
     }
@@ -104,6 +110,7 @@ function Sheet() {
     setBusy(true);
     try {
       useAppStore.getState().upsertPlugin(await ipc.setPluginGrants(id, grants));
+      void announcePlugins();
       setEditing(null);
     } catch (reason) {
       setError(reasonOr(reason, "The permissions could not be saved."));
@@ -111,53 +118,20 @@ function Sheet() {
     setBusy(false);
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onMouseDown={close}
-    >
-      <div className="absolute inset-0 bg-[var(--scrim)]" />
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Plugins"
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.stopPropagation();
-          close();
-        }}
-        className="relative flex max-h-[88vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] shadow-[var(--shadow-overlay)]"
+  /* The permissions screen replaces the page rather than sitting under it, as
+   * it did in the sheet: it is a question about one plugin and the list behind
+   * it is not part of the answer. */
+  if (editingPlugin !== null) {
+    return (
+      <SettingsPage
+        title={editingPlugin.name}
+        blurb="What this plugin is allowed to do."
+        onDone={close}
       >
-        {editingPlugin === null ? (
-          <>
-            <PluginList
-              plugins={plugins}
-              unavailable={unavailable}
-              busy={busy}
-              onClose={close}
-              onInstall={() => void install()}
-              onPermissions={(id) => {
-                // A failed install or removal belongs to the screen it happened
-                // on. Carried across it would sit exactly where a rejected save
-                // does and read as one.
-                setError(null);
-                setEditing(id);
-              }}
-              onRemove={(id) => void remove(id)}
-            />
-            {error !== null && (
-              <p role="alert" className="px-6 pb-6 text-[12px] text-[var(--danger)]">
-                {error}
-              </p>
-            )}
-          </>
-        ) : summaries === null ? (
+        {summaries === null ? (
           // Without the plain-terms lines the checkboxes would be labelled with
           // permission ids, which is not a question the user can answer.
-          <div className="flex flex-col items-start gap-4 p-6">
+          <div className="flex flex-col items-start gap-4">
             {error === null ? (
               <p className="text-[12px] text-[var(--text-muted)]">
                 Reading what the permissions mean…
@@ -182,8 +156,35 @@ function Sheet() {
             }}
           />
         )}
-      </div>
-    </div>
+      </SettingsPage>
+    );
+  }
+
+  return (
+    <SettingsPage
+      title="Plugins"
+      blurb="A plugin is a folder holding a plugin.json and the script it names. Installing one grants it nothing."
+      onDone={close}
+    >
+      <PluginList
+        plugins={plugins}
+        unavailable={unavailable}
+        busy={busy}
+        onInstall={() => void install()}
+        onPermissions={(id) => {
+          // A failed install or removal belongs to the screen it happened on.
+          // Carried across it would sit exactly where a rejected save does and
+          // read as one.
+          setError(null);
+          setEditing(id);
+        }}
+        onRemove={(id) => void remove(id)}
+      />
+      {error !== null && (
+        <p role="alert" className="text-[12px] text-[var(--danger)]">
+          {error}
+        </p>
+      )}
+    </SettingsPage>
   );
 }
-

@@ -21,8 +21,8 @@ const { announceMock, zoomMock } = vi.hoisted(() => ({
 vi.mock("@/lib/ipc", () => ({
   ipc: { listThemes: () => Promise.resolve([]) },
   onThemesChanged: () => Promise.resolve(() => {}),
-  onAppearanceChanged: () => Promise.resolve(() => {}),
-  announceAppearance: announceMock,
+  onSettingsChanged: () => Promise.resolve(() => {}),
+  announceSettings: announceMock,
   setWindowZoom: zoomMock,
 }));
 

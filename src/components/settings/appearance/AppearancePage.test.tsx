@@ -29,8 +29,8 @@ const { ipcMock, chooseFolderMock, revealFolderMock, setWindowZoomMock, announce
 vi.mock("@/lib/ipc", () => ({
   ipc: ipcMock,
   onThemesChanged: vi.fn(),
-  onAppearanceChanged: vi.fn(),
-  announceAppearance: announceMock,
+  onSettingsChanged: vi.fn(),
+  announceSettings: announceMock,
   setWindowZoom: setWindowZoomMock,
   chooseFolder: chooseFolderMock,
   revealFolder: revealFolderMock,

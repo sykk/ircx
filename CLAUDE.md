@@ -78,18 +78,31 @@ layout the client would not. `previewChannel.ts` is scripted for what
 message in no group, which are the four states a spine has.
 
 Both windows are one `index.html` under one bundle, told apart by the query the
-settings window opens at — `SETTINGS_URL` in `src-tauri/src/commands.rs`. The
-query and not the window's label, though the label identifies the window to
-Rust: a label is only readable inside a Tauri webview, and keying on the URL
-leaves the page reachable at `/?settings` in the browser harness, which is
-where this project walks its layouts. Two webviews on one origin share
-localStorage, so what crosses between them is a bare "something changed" and
-the receiver reads the settings back for itself — `adoptAppearance` in
-`session.ts`. Nothing travels in the payload, because a copy of a value that is
-already written down is a second answer to a question with one. A preset says
-it once rather than three times; told after each of the settings it bundles,
-the other window would paint the new theme against the old faces on the way
-past.
+settings window opens at — `SETTINGS_URL` in `src-tauri/src/commands.rs`, with
+the section after it. The query and not the window's label, though the label
+identifies the window to Rust: a label is only readable inside a Tauri webview,
+and keying on the URL leaves the page reachable at `/?settings` in the browser
+harness, which is where this project walks its layouts.
+
+What crosses between the two is a bare "this changed, go and look", carrying
+only the topic and which window wrote it — `announceSettings`. Nothing else
+travels, because both windows can already read whatever it was: the appearance
+from the localStorage they share, the plugins from the backend they share. A
+copy in the payload would be a second answer to a question with one. A preset
+says it once rather than three times; told after each of the settings it
+bundles, the other window would paint the new theme against the old faces on
+the way past.
+
+The sections are `sections.ts`, and the client keeps only what the settings
+window cannot answer. Networks are the gap, deliberately: configuring one is
+the onboarding flow and its last step watches the connection, which this window
+cannot see. What it does need from the client is the conversation on screen —
+the Privacy page scopes retention and deletion by it — and that is handed over
+through localStorage rather than the URL, because a channel is `#ircx` and a
+`#` in a URL is a fragment (`src/lib/settingsWindow.ts`). A page with a request
+in flight says so, and the window declines to close on Escape while one is:
+closing loses the answer, which is the guard each of these screens had as a
+sheet.
 
 `readability/ircx-live-studies.html` names a third grade, guessed, from timing
 and participants. **It shipped and was taken out again**, and the reason is the

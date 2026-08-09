@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AttachmentLine, formatSize, peekFit } from "./AttachmentLine";
+import { AttachmentLine, formatSize } from "./AttachmentLine";
 import { makeAttachment } from "./fixtures";
 
 const { ipcMock } = vi.hoisted(() => ({ ipcMock: { loadPreview: vi.fn() } }));
@@ -30,51 +30,6 @@ describe("formatSize", () => {
   });
 });
 
-/** The scroller, not the window: it starts under the header and ends at the composer. */
-const SCROLLER = { top: 84, bottom: 597 };
-
-describe("peekFit", () => {
-  it("opens downwards from a line near the top of the scroller", () => {
-    expect(peekFit({ top: 100, bottom: 118 }, SCROLLER).side).toBe("bottom");
-  });
-
-  it("opens upwards from the last line in the scroller", () => {
-    expect(peekFit({ top: 570, bottom: 588 }, SCROLLER).side).toBe("top");
-  });
-
-  /**
-   * The window is not the box. This line has 307px under it in a 713px window
-   * and only 191px inside the scroller, which is less than the 302px above it.
-   */
-  it("does not count room the composer is standing on", () => {
-    expect(peekFit({ top: 386, bottom: 406 }, SCROLLER).side).toBe("top");
-  });
-
-  it("takes its full height where there is room for it", () => {
-    expect(peekFit({ top: 100, bottom: 118 }, SCROLLER).maxHeight).toBe(320);
-  });
-
-  /**
-   * A split pane can be shorter than the image on either side of the line, and
-   * #6 in the walk had the peek 105px through the bottom of the scroller.
-   */
-  it("cuts the peek down to a scroller too short to hold it", () => {
-    expect(peekFit({ top: 241, bottom: 259 }, { top: 84, bottom: 444 })).toEqual({
-      side: "bottom",
-      maxHeight: 169,
-    });
-  });
-
-  it("stops shrinking rather than draw a strip", () => {
-    expect(peekFit({ top: 100, bottom: 118 }, { top: 84, bottom: 150 }).maxHeight).toBe(96);
-  });
-});
-
-/** The peek opens on the span wrapping the filename, which is what hover reaches. */
-function filenameAnchor(name = "burp-req.png") {
-  return screen.getByText(name).parentElement!;
-}
-
 describe("AttachmentLine", () => {
   it("shows the file without touching the network", () => {
     render(<AttachmentLine attachment={makeAttachment()} />);
@@ -93,16 +48,15 @@ describe("AttachmentLine", () => {
 
     fireEvent.click(screen.getByText("fetch"));
 
-    await waitFor(() => expect(screen.getByText(/^· fetched \d\d:\d\d$/)).toBeTruthy());
+    await waitFor(() => expect(document.querySelector("img")).toBeTruthy());
     expect(ipcMock.loadPreview).toHaveBeenCalledWith("https://files.example/burp-req.png");
-
-    fireEvent.pointerEnter(filenameAnchor());
     expect(document.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,AAAA",
     );
+    expect(screen.getByText(/^· fetched \d\d:\d\d$/)).toBeTruthy();
   });
 
-  it("keeps a loaded preview off the line until it is hovered", () => {
+  it("renders an already-loaded preview without a control", () => {
     render(
       <AttachmentLine
         attachment={makeAttachment({
@@ -111,37 +65,8 @@ describe("AttachmentLine", () => {
       />,
     );
 
-    expect(document.querySelector("img")).toBe(null);
-    expect(screen.queryByText("fetch")).toBe(null);
-
-    fireEvent.pointerEnter(filenameAnchor());
-    expect(document.querySelector("img")?.getAttribute("src")).toBe(
-      "data:image/png;base64,BBBB",
-    );
-
-    fireEvent.pointerLeave(filenameAnchor());
-    expect(document.querySelector("img")).toBe(null);
-  });
-
-  /** Tab reaches the filename, so the preview cannot be pointer-only. */
-  it("peeks on focus too", () => {
-    render(
-      <AttachmentLine
-        attachment={makeAttachment({
-          preview: { dataUri: "data:image/png;base64,BBBB", width: 8, height: 8 },
-        })}
-      />,
-    );
-
-    fireEvent.focus(screen.getByText("burp-req.png"));
     expect(document.querySelector("img")).toBeTruthy();
-  });
-
-  it("offers no peek before anything is fetched", () => {
-    render(<AttachmentLine attachment={makeAttachment()} />);
-
-    fireEvent.pointerEnter(filenameAnchor());
-    expect(document.querySelector("img")).toBe(null);
+    expect(screen.queryByText("fetch")).toBe(null);
   });
 
   it("falls back to the last path segment when there is no filename", () => {

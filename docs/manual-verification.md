@@ -354,88 +354,55 @@ across sites or serves something big, which is a third party in a walk and has
 not been done. Worth knowing before somebody spends an hour standing up a local
 server for it, as this run did.
 
-### Where a fetched preview is drawn
+### A fetched preview is drawn under the line
 
-A fetched preview no longer sits under the line. The line stays one row and the
-image is shown by hovering or focusing the filename, so a channel full of
-screenshots reads as a conversation rather than a gallery. What decides where
-that overlay opens is geometry, and jsdom has none: a peek that leaves its
-scroller and a peek that is painted over both look exactly like a correct one to
-`vitest`.
+**It was made a hover peek and taken out again**, and what the attempt found is
+worth more than the design was. For one day the line stayed one row and the
+image was shown by hovering or focusing the filename. It reads worse: an image
+you have already asked for and paid for should be on the screen, and a preview
+you have to keep a pointer on to read is not one. The image is back under the
+line, capped at 220px, exactly as before.
 
-**Walked in Chrome through `driver.mjs` on 2026-08-08**, seeded — nothing in
-`seed.mjs` had an attachment, so it carries one and a `load_preview` handler for
-it now. Two defects, neither reachable from a test.
+Two defects came out of walking it, and both are about this timeline rather than
+about that peek. Neither could fail a `vitest` run — jsdom lays out nothing, so
+an overlay that leaves its scroller and an overlay that is painted over look
+identical to a correct one.
 
-**It measured the wrong box.** The side was chosen against `window.innerHeight`,
-and the timeline scroller ends where the composer starts: `[84, 597]` of a 713px
-window. A line halfway down the pane therefore had 307px below it by that
-arithmetic and 191px of real room, and the peek ran out through the bottom of
-the scroller — 105px past it at 1200×560 with the line scrolled to the top. It
-measures the nearest scrolling ancestor now, and caps its own height to the room
-on the side it picks, because a pane short enough holds it on neither side. The
-same walk reads `peek [259, 444]` inside `scroller [84, 444]`.
+**The window is not the box that clips.** The peek chose its side against
+`window.innerHeight`, and the timeline scroller ends where the composer starts:
+`[84, 597]` of a 713px window. A line halfway down the pane had 191px of real
+room below it against the 307px that arithmetic claimed, and the overlay ran out
+through the bottom of the scroller — 105px past it at 1200x560. Anything drawn
+over the timeline has to measure the scroller, and to cap itself to the room on
+the side it picks, because a pane short enough holds it on neither side.
 
-**Every timeline row is its own stacking context**, which is the one worth
-remembering. `Timeline.tsx` places each virtualised row with
-`transform: translateY(…)`, and a transform makes a stacking context — so the
-peek's `z-50` was scoped to its own row and every row below it painted over the
-top of it. What that looks like is not a z-index bug: it looks like a
-translucent panel, on a theme whose `--surface-overlay` is an opaque `#171c24`.
-The first reading of the screenshot was that the colour was wrong. The row the
-reader is on is lifted now.
+**Every timeline row is its own stacking context.** `Timeline.tsx` places each
+virtualised row with `transform: translateY(...)`, and a transform makes one — so
+an overlay opened inside a row is painted over by every row below it however
+high its own `z-index` goes. `Reactions.tsx` opens its picker the same way and
+has the same exposure; nobody has walked it. Worth knowing what the fault looks
+like, because it does not look like z-index: it looks like a translucent panel
+with other people's messages showing through, on a theme whose
+`--surface-overlay` is an opaque `#171c24`. The fix that worked was
+`hover:z-10 focus-within:z-10` on the row, which went out with the peek and is
+recorded here rather than kept.
 
-The image keeps its proportions when the cap bites — 263×175 for a 900×600
-source, a ratio of 1.500 — which is not free: `w-auto` with a `max-height` and a
-`height` attribute is the shape that squashes one.
+**The fetch itself is walked in the assembled app**, on 2026-08-08 against a
+local `ergo` on `127.0.0.1:6667` — which is worth keeping whatever is drawn
+afterwards, because the entry above only had it verified by the owner in 2026-07.
+A `upload.wikimedia.org` URL was typed into the composer and sent, the line drew
+its `fetch`, and clicking it pulled a real 224 KB PNG over TLS and drew it. So
+the path from a link in a conversation to an image on the screen works in
+WebKitGTK, not only in Chrome.
 
-**The pointer was not walked in Chrome, and could not be.** The row is lifted by
-`hover:z-10` and `focus-within:z-10`; only the second is reachable there.
-`:hover` is a CSS pseudo-class answering to where the pointer is, and
-`driver.mjs` can only place one through `dragxy`, which presses and releases —
-on this control that opens the URL in a browser. The peek was opened by
-dispatching `pointerover`, which React's enter/leave plugin answers and CSS does
-not see.
+`seed.mjs` carries an attachment and a `load_preview` handler now, without which
+none of this was walkable, and `xsend` grew a `move` verb — a motion event and
+no button. `move` was built for the peek's hover and is the only way this
+harness can photograph a CSS `:hover` rule at all, so it stays.
 
-**So it was walked in the window instead, on 2026-08-08**, against a local
-`ergo` on `127.0.0.1:6667` — the first time the assembled app has drawn a peek.
-`xsend` grew a `move` verb for it: a motion event and no button, which is the
-whole of what a hover is and what the harness had no way to say.
-
-The URL was typed into the composer, sent, and `fetch` clicked — a real 224 KB
-PNG over TLS from `upload.wikimedia.org`, so this is also the preview fetch
-walked end to end in WebKitGTK rather than in Chrome. The line took
-`· fetched 21:17` **and did not grow**, which is the change itself. The pointer
-was then moved onto the filename and left there:
-
-```text
-move 430 540   the peek opens upward, opaque, over the rows above
-move 800 300   the line is one row again
-```
-
-It opens upward because the line sits near the bottom of the scroller, which is
-`peekFit` choosing the roomier side in the engine that ships rather than in the
-one that was measured. Nothing shows through it, so the stacking fix holds for
-the pointer trigger as well as the keyboard one.
-
-**What that leaves:**
-
-- **The keyboard, end to end.** `document.hasFocus()` is false under headless
-  Chrome, and Chrome defers focus events on a programmatic `.focus()` until the
-  document has focus. The button really was focused — `:focus-within` applied
-  and the row measured `z-index: 10` — while React's `onFocus` never fired, so
-  that walk dispatched `focusin` to open the peek. Tabbing to a filename in a
-  window that has focus is still untested, and `Xvfb` has no window manager to
-  give the window focus with.
-- **The downward peek in WebKitGTK.** The walk's channel was four lines long, so
-  the anchor was never high enough in the scroller for `peekFit` to open
-  downwards. Both sides are measured in Chrome; only the upward one has been
-  drawn in the engine that ships.
-- **A second overlay arrives with it.** `title={attachment.url}` is still on the
-  button, so hovering now draws the peek above the line and GTK's own tooltip
-  with the whole URL below it, a beat later. They do not collide and neither
-  hides the other. Worth knowing before somebody reads the screenshot as one
-  control drawing twice.
+**Not walked:** whether a very tall image under the line pushes the rest of the
+conversation about as it decodes. The cap is a `max-h`, so the row's height is
+known before the bytes are, and nothing has provoked a reflow at that seam.
 
 ## Assembled-application testing
 

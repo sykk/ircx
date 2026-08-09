@@ -30,16 +30,18 @@ export function useQueriesFor(network: string): Query[] {
   return useAppStore(useShallow((s) => selectQueriesFor(s, network)));
 }
 
+/** Where the focused pane is looking, off a state rather than through a
+ * subscription — for the callers that are not components. */
+export function selectActiveTarget(s: AppState): ActiveTarget | null {
+  const view = s.activeViewId ? s.views[s.activeViewId] : undefined;
+  if (!view || !view.network) return null;
+  return { network: view.network, target: view.target };
+}
+
 /** Where the focused pane is looking. Components that will become pane-aware
  * should take a `ViewId` and use the `…ForView` selectors below instead. */
 export function useActiveTarget(): ActiveTarget | null {
-  return useAppStore(
-    useShallow((s) => {
-      const view = s.activeViewId ? s.views[s.activeViewId] : undefined;
-      if (!view || !view.network) return null;
-      return { network: view.network, target: view.target };
-    }),
-  );
+  return useAppStore(useShallow(selectActiveTarget));
 }
 
 export function useView(id: ViewId | null | undefined): ChatView | undefined {

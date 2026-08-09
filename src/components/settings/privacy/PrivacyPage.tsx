@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Group, PrimaryButton, SecondaryButton, SelectField } from "@/components/onboarding/fields";
+import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { formatBytes } from "@/lib/bytes";
 import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
-import { useAppStore } from "@/store";
-import { useActiveTarget } from "@/store/selectors";
+import type { SettingsScope } from "@/lib/settingsWindow";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 /**
  * What a retention window may be set to.
@@ -39,20 +38,33 @@ export function describeKept(summary: ArchiveSummary): string {
  * archive is one file for the whole client, and because deleting what somebody
  * said is not a connection setting.
  */
-export function ArchiveSheet() {
-  const open = useAppStore((s) => s.archiveOpen);
-  return open ? <Sheet /> : null;
-}
-
 /** What a destructive button is waiting for. Nothing is destroyed on one click. */
 type Pending = { scope: ArchiveScope; what: string } | null;
 
-function Sheet() {
-  const closeSheet = useAppStore((s) => s.toggleArchive);
-  const here = useActiveTarget();
+export function PrivacyPage({
+  here,
+  onDone,
+}: {
+  /** The conversation the client was on when this window was asked for, or
+   * null. Handed over rather than read from the store: this window runs no
+   * event bridge, so it has no conversations of its own — see
+   * src/lib/settingsWindow.ts. */
+  here: SettingsScope | null;
+  onDone: () => void;
+}) {
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
   const [pending, setPending] = useState<Pending>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyHere] = useState(false);
+  /* An export or a delete is a request the window must not be closed out from
+     under, for the reason a plugin save is. */
+  const report = useReportBusy();
+  const setBusy = useCallback(
+    (running: boolean) => {
+      setBusyHere(running);
+      report(running);
+    },
+    [report],
+  );
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   const [said, setSaid] = useState<string | null>(null);
@@ -64,16 +76,9 @@ function Sheet() {
   // other, so only ever one of these two has anything to say.
   useAnnounce(said);
 
-  const dialog = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialog);
-
   const network = here?.network ?? null;
   const target = here?.target ?? null;
-  // The label is for a reader, and a network's id is a hash. Falling back to
-  // the id keeps the row from going blank if the network has gone away.
-  const networkName = useAppStore((s) =>
-    network === null ? null : (s.networks[network]?.name ?? network),
-  );
+  const networkName = here?.networkName ?? null;
 
   function read() {
     void ipc.archiveSummary(network, target).then(
@@ -85,11 +90,11 @@ function Sheet() {
   useEffect(read, [network, target]);
 
   function close() {
-    if (!busy) closeSheet(false);
+    if (!busy) onDone();
   }
 
   /**
-   * The sheet reports what the last thing you did came to, and one thing at a
+   * The page reports what the last thing you did came to, and one thing at a
    * time.
    *
    * A success used to survive every later failure, so an export refused by the
@@ -160,42 +165,31 @@ function Sheet() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onMouseDown={close}>
-      <div className="absolute inset-0 bg-[var(--scrim)]" />
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Archive"
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.stopPropagation();
-          if (pending !== null) setPending(null);
-          else close();
-        }}
-        className="relative flex max-h-[88vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)] shadow-[var(--shadow-overlay)]"
-      >
-        <div className="flex flex-col gap-4 p-5">
-          <div>
-            <h2 className="text-[15px] font-semibold">Archive</h2>
-            <p className="text-[12px] text-[var(--text-muted)]">
-              {summary === null
-                ? "Reading what is kept…"
-                : `${describeKept(summary)} on this machine.`}
+    <SettingsPage
+      title="Privacy"
+      blurb={
+        <>
+          <p>
+            {summary === null
+              ? "Reading what is kept…"
+              : `${describeKept(summary)} on this machine.`}
+          </p>
+          {summary !== null && summary.removedOnLaunch > 0n && (
+            <p>
+              {Number(summary.removedOnLaunch).toLocaleString()} were removed when ircx started,
+              past the window below.
             </p>
-            {summary !== null && summary.removedOnLaunch > 0n && (
-              <p className="text-[12px] text-[var(--text-muted)]">
-                {Number(summary.removedOnLaunch).toLocaleString()} were removed when ircx started,
-                past the window below.
-              </p>
-            )}
-          </div>
+          )}
+        </>
+      }
+      onDone={close}
+    >
+      <div className="flex max-w-[560px] flex-col gap-4">
 
           {network === null ? (
             <p className="text-[12px] text-[var(--text-muted)]">
-              Open a conversation to set how long it is kept.
+              Open a conversation in the client and come back to set how long it is kept.
+              Everything below still applies to the whole archive.
             </p>
           ) : (
             <Group title="How long to keep">
@@ -290,25 +284,18 @@ function Sheet() {
             )}
           </Group>
 
-          {said !== null && (
-            <p className="text-[12px] text-[var(--text-muted)]" role="status">
-              {said}
-            </p>
-          )}
-          {error !== null && (
-            <p className="text-[12px] text-[var(--danger)]" role="alert">
-              {error}
-            </p>
-          )}
-
-          <div className="flex justify-end">
-            <SecondaryButton onClick={close} disabled={busy}>
-              Close
-            </SecondaryButton>
-          </div>
-        </div>
+        {said !== null && (
+          <p className="text-[12px] text-[var(--text-muted)]" role="status">
+            {said}
+          </p>
+        )}
+        {error !== null && (
+          <p className="text-[12px] text-[var(--danger)]" role="alert">
+            {error}
+          </p>
+        )}
       </div>
-    </div>
+    </SettingsPage>
   );
 }
 

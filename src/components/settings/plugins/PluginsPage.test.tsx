@@ -4,7 +4,8 @@ import { resetStore } from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
 import type * as Ipc from "@/lib/ipc";
 import type { InstalledPlugin, PluginPermissionInfo } from "@/types";
-import { PluginSheet } from "../PluginSheet";
+import { SettingsBusy } from "@/components/settings/SettingsPage";
+import { PluginsPage } from "./PluginsPage";
 
 const { ipcMock, chooseFolder } = vi.hoisted(() => ({
   ipcMock: {
@@ -83,10 +84,18 @@ beforeEach(() => {
   );
 });
 
+const done = vi.fn();
+
 async function open(plugins: InstalledPlugin[] = [GREETER]) {
-  useAppStore.setState({ pluginsOpen: true, plugins });
+  useAppStore.setState({ plugins });
   await act(async () => {
-    render(<PluginSheet />);
+    // Inside the provider the window puts it in: a page reports a request in
+    // flight so the window's Escape and its Done both decline while it runs.
+    render(
+      <SettingsBusy>
+        <PluginsPage onDone={done} />
+      </SettingsBusy>,
+    );
   });
 }
 
@@ -113,12 +122,7 @@ const CHANNELS = "Work in the channels you choose, and no others";
 const COMMANDS = "Add slash commands you can type";
 const WEBSITES = "Fetch data from the websites it names";
 
-describe("PluginSheet", () => {
-  it("stays out of the way until something opens it", () => {
-    const { container } = render(<PluginSheet />);
-    expect(container.firstChild).toBeNull();
-  });
-
+describe("the plugins page", () => {
   it("lists what a plugin adds and how much of what it asked for it holds", async () => {
     await open();
 
@@ -428,20 +432,13 @@ describe("PluginSheet", () => {
    * inside. Nothing in the sheet takes focus by itself, so this asserts the
    * sheet takes it — otherwise Escape goes wherever focus was left and the only
    * way out is the mouse. */
-  it("takes focus, so Escape reaches it and closes it", async () => {
-    await open();
-    const dialog = screen.getByRole("dialog");
-    expect(document.activeElement).toBe(dialog);
-
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    expect(useAppStore.getState().pluginsOpen).toBe(false);
-  });
-
+  /* Escape belongs to the window now and is asserted there. What is this
+     page's is Done, which closes it the same way. */
   it("offers a way out that is not a keystroke", async () => {
     await open();
-    fireEvent.click(button("Close plugins"));
+    fireEvent.click(button("Done"));
 
-    expect(useAppStore.getState().pluginsOpen).toBe(false);
+    expect(done).toHaveBeenCalled();
   });
 
   it("stays open while a request it started is still running", async () => {
@@ -456,9 +453,11 @@ describe("PluginSheet", () => {
     fireEvent.click(box(COMMANDS));
     fireEvent.click(button("Save"));
 
-    // Closing here would leave the answer to land on a sheet that is gone.
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(useAppStore.getState().pluginsOpen).toBe(true);
+    // Closing here would leave the answer to land on a page that is gone, so
+    // the way out is refused for as long as the request is running.
+    expect(button("Done").disabled).toBe(true);
+    fireEvent.click(button("Done"));
+    expect(done).not.toHaveBeenCalled();
 
     await act(async () => {
       land({

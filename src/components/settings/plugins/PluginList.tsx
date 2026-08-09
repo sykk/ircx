@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import type { InstalledPlugin } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { grantLine } from "./grants";
+import { grantLine } from "@/components/plugins/grants";
 
 /**
  * What is installed, and the three things that can be done to it: install
@@ -13,7 +13,6 @@ export function PluginList({
   plugins,
   unavailable,
   busy,
-  onClose,
   onInstall,
   onPermissions,
   onRemove,
@@ -22,7 +21,6 @@ export function PluginList({
   /** Why the library could not be read, or null. Different from no plugins. */
   unavailable: string | null;
   busy: boolean;
-  onClose: () => void;
   onInstall: () => void;
   onPermissions: (plugin: string) => void;
   onRemove: (plugin: string) => void;
@@ -31,19 +29,14 @@ export function PluginList({
   const [confirming, setConfirming] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header className="flex items-center justify-between gap-4">
-        <h2 className="text-[15px] font-medium text-[var(--text-primary)]">Plugins</h2>
-        <div className="flex items-center gap-2">
-          <PrimaryButton type="button" disabled={busy} onClick={onInstall}>
-            Install from folder
-          </PrimaryButton>
-          {/* Escape closes the sheet, but only for someone who knows to try it. */}
-          <SecondaryButton label="Close plugins" disabled={busy} onClick={onClose}>
-            Done
-          </SecondaryButton>
-        </div>
-      </header>
+    <div className="flex flex-col gap-4">
+      {/* The page's own heading is above this; what belongs to the list is the
+          way to add to it. */}
+      <div className="flex">
+        <PrimaryButton type="button" disabled={busy} onClick={onInstall}>
+          Install from folder
+        </PrimaryButton>
+      </div>
 
       {unavailable !== null ? (
         <p role="alert" className="text-[12px] text-[var(--warning)]">

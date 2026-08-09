@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDensity, applyTheme, DEFAULT_PRESENTATION } from "@/lib/theme";
 import { catalogue } from "@/lib/theme";
@@ -16,9 +16,9 @@ const { ipcMock } = vi.hoisted(() => ({
     openSettings: vi.fn(() => Promise.resolve()),
   },
 }));
-/* `announceAppearance` is reached by every theme, density and timeline row
- * here: src/lib/theme/session.ts tells the settings window what changed. */
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, announceAppearance: vi.fn() }));
+/* `announceSettings` is reached by every theme, density and timeline row here:
+ * src/lib/theme/session.ts tells the settings window what changed. */
+vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, announceSettings: vi.fn() }));
 
 const network: Network = {
   id: "libera",
@@ -311,13 +311,22 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
-  it("opens the plugins sheet", () => {
+  /** The three sheets these entries opened are sections of the settings window
+   * now, so the entries name a section rather than a sheet. Each still answers
+   * to the word somebody would type for it. */
+  it.each([
+    ["plugins", "plugins"],
+    ["uploads", "uploads"],
+    ["privacy", "privacy"],
+  ])("opens the settings window on %s", async (typed, section) => {
     render(<CommandPalette />);
-    type("plugins");
+    type(typed);
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(useAppStore.getState().pluginsOpen).toBe(true);
-    expect(useAppStore.getState().paletteOpen).toBe(false);
+    expect(ipcMock.openSettings).toHaveBeenCalledWith(section);
+    // The palette stays up until the window is open, so a window that could
+    // not be built reports into the screen the person is still looking at.
+    await waitFor(() => expect(useAppStore.getState().paletteOpen).toBe(false));
   });
 
   it("closes on Escape without letting it reach the global layer", () => {

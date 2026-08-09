@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
+import { openSettingsWindow } from "@/lib/settingsWindow";
 import { displayChord } from "@/lib/keybindings";
 import { runConnectionCommand } from "@/components/composer/commands";
 import { applyTheme, selectDensity, selectPresentation, selectTheme } from "@/lib/theme";
@@ -178,21 +179,12 @@ function Palette() {
       case "openSetup":
         store.openSetup(action.network);
         break;
-      case "plugins":
-        store.togglePlugins(true);
-        break;
-      case "archive":
-        store.toggleArchive(true);
-        break;
-      case "uploads":
-        store.toggleUpload(true);
-        break;
       case "settings":
         // Through `attempt` rather than closed outright: this one opens a
         // second window, which is the only thing here that can fail on the way
         // to a screen the palette is not on. A failure has to be said
         // somewhere, and the palette is where the person still is.
-        attempt(ipc.openSettings());
+        attempt(openSettingsWindow(action.section));
         return;
       case "connect":
         attempt(ipc.connectNetwork(action.network));

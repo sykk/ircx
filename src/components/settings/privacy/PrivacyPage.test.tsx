@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
 import { formatBytes } from "@/lib/bytes";
 import type * as Ipc from "@/lib/ipc";
-import type { SettingsScope } from "@/lib/settingsWindow";
+import type { SettingsScope } from "@/components/settings/scope";
 import { PrivacyPage, describeKept, nowKeeping } from "./PrivacyPage";
 
 const summary = vi.fn();

@@ -1,4 +1,5 @@
 import { prepare, type Haystack } from "@/lib/fuzzy";
+import type { SectionId } from "@/components/settings/sections";
 import { DEFAULT_BINDINGS, displayChord, type ActionId } from "@/lib/keybindings";
 import { COMMANDS } from "@/components/composer/commands";
 import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
@@ -30,7 +31,7 @@ export type CandidateAction =
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
-  | { type: "settings"; section?: string }
+  | { type: "settings"; section?: SectionId }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** Carries what it will leave the setting at rather than reading the store

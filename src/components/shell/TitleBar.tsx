@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IconButton } from "@/components/common/IconButton";
 import { insideTauri } from "@/lib/ipc";
-import { openSettingsWindow } from "@/lib/settingsWindow";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useAppStore } from "@/store";
 import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connection";
@@ -15,6 +14,7 @@ function appWindow() {
 
 export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) | undefined }) {
   const togglePalette = useAppStore((s) => s.togglePalette);
+  const openSettings = useAppStore((s) => s.openSettings);
   const network = useDisplayedNetwork();
   const [maximized, setMaximized] = useState(false);
 
@@ -75,11 +75,7 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
         <IconButton
           icon="settings"
           label="Settings"
-          onClick={() =>
-            void openSettingsWindow().catch((reason: unknown) => {
-              console.warn("ircx could not open the settings window", reason);
-            })
-          }
+          onClick={() => openSettings()}
         />
         <IconButton
           icon="minimize"

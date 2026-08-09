@@ -3,26 +3,18 @@ import { useAppStore } from "@/store";
 import {
   adoptAppearance,
   applyOpeningTheme,
-  selectDensity,
   selectPresentation,
-  selectPreset,
   selectTheme,
 } from "./session";
-import { PRESETS } from "./presets";
 import { catalogue } from "./load";
 import { storedPresentation } from "./presentation";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
-const { announceMock, zoomMock } = vi.hoisted(() => ({
-  announceMock: vi.fn(() => Promise.resolve()),
-  zoomMock: vi.fn(() => Promise.resolve()),
-}));
+const { zoomMock } = vi.hoisted(() => ({ zoomMock: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/ipc", () => ({
   ipc: { listThemes: () => Promise.resolve([]) },
   onThemesChanged: () => Promise.resolve(() => {}),
-  onSettingsChanged: () => Promise.resolve(() => {}),
-  announceSettings: announceMock,
   setWindowZoom: zoomMock,
 }));
 
@@ -171,14 +163,14 @@ describe("choosing a theme", () => {
  * read the same localStorage and only the one that made a change has it on the
  * screen. These are the two halves of catching the other one up.
  */
-describe("the other window's appearance", () => {
+describe("the appearance the last run left", () => {
   beforeEach(() => {
     useAppStore.setState({ themes: catalogue().themes });
   });
 
-  /* Nothing travels in the message that says a setting changed, so this is
-   * where the receiving half is held to reading every one of them back. */
-  it("paints what the other window wrote, setting by setting", () => {
+  /* Every appearance setting comes back from localStorage, so this is where
+   * the opening paint is held to reading each one of them. */
+  it("paints what the last run wrote, setting by setting", () => {
     localStorage.setItem("ircx.theme", "ircx-light");
     localStorage.setItem("ircx.density", "compact");
     localStorage.setItem("ircx.typography", JSON.stringify({ prose: "georgia", mono: "courier", zoom: 1.25 }));
@@ -200,10 +192,9 @@ describe("the other window's appearance", () => {
     expect(zoomMock).toHaveBeenCalledWith(1.25);
   });
 
-  /** The catalogue is a fact about the disk that each window reads for itself,
-   * and the settings window has usually read more of it. A repaint that also
-   * republished the list would throw away every theme on disk the moment the
-   * client changed a density. */
+  /** The catalogue is a fact about the disk, and by the time anything repaints
+   * it has usually read more of it. A repaint that also republished the list
+   * would throw away every theme on disk the moment a density changed. */
   it("leaves the themes it can see alone", () => {
     const themes = [...useAppStore.getState().themes, { ...catalogue([harbour]).themes.at(-1)! }];
     useAppStore.setState({ themes });
@@ -211,27 +202,5 @@ describe("the other window's appearance", () => {
     adoptAppearance();
 
     expect(useAppStore.getState().themes).toHaveLength(themes.length);
-  });
-
-  it("says so when a setting changes", () => {
-    selectDensity("read");
-
-    expect(announceMock).toHaveBeenCalledTimes(1);
-  });
-
-  /* A preset writes three settings. Told after each one, the other window
-   * would paint the new theme against the old faces on the way past. */
-  it("says so once for a preset rather than three times", () => {
-    selectPreset(PRESETS[0]!);
-
-    expect(announceMock).toHaveBeenCalledTimes(1);
-  });
-
-  /** Adopting is not a change: the window doing it was told, and answering
-   * would put the two of them in a loop. */
-  it("stays quiet while adopting", () => {
-    adoptAppearance();
-
-    expect(announceMock).not.toHaveBeenCalled();
   });
 });

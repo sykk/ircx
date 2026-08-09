@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDensity, applyTheme, DEFAULT_PRESENTATION } from "@/lib/theme";
 import { catalogue } from "@/lib/theme";
@@ -13,12 +13,9 @@ const { ipcMock } = vi.hoisted(() => ({
     submitInput: vi.fn(),
     connectNetwork: vi.fn(),
     disconnectNetwork: vi.fn(),
-    openSettings: vi.fn(() => Promise.resolve()),
   },
 }));
-/* `announceSettings` is reached by every theme, density and timeline row here:
- * src/lib/theme/session.ts tells the settings window what changed. */
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, announceSettings: vi.fn() }));
+vi.mock("@/lib/ipc", () => ({ ipc: ipcMock }));
 
 const network: Network = {
   id: "libera",
@@ -189,10 +186,10 @@ describe("CommandPalette", () => {
 
   // #80: "settings" is the word someone types when they want to change a saved
   // password, and it used to match nothing at all.
-  /** The word names the window now, and the exact match takes the top of the
-   * list. A network's own settings are a different thing under the same word,
-   * so they stay in the list rather than being renamed out of the way. */
-  it("puts the settings window first under the word settings", () => {
+  /** The word names the pane, and the exact match takes the top of the list. A
+   * network's own settings are a different thing under the same word, so they
+   * stay in the list rather than being renamed out of the way. */
+  it("puts the settings pane first under the word settings", () => {
     render(<CommandPalette />);
     type("settings");
 
@@ -201,7 +198,7 @@ describe("CommandPalette", () => {
 
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(ipcMock.openSettings).toHaveBeenCalled();
+    expect(useAppStore.getState().settings).not.toBeNull();
   });
 
   it("still opens a network's saved settings from that list", () => {
@@ -312,22 +309,20 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().rosterHidden[focused]).toBe(true);
   });
 
-  /** The three sheets these entries opened are sections of the settings window
+  /** The three sheets these entries opened are sections of the settings pane
    * now, so the entries name a section rather than a sheet. Each still answers
    * to the word somebody would type for it. */
   it.each([
     ["plugins", "plugins"],
     ["uploads", "uploads"],
     ["privacy", "privacy"],
-  ])("opens the settings window on %s", async (typed, section) => {
+  ])("opens the settings pane on %s", (typed, section) => {
     render(<CommandPalette />);
     type(typed);
     fireEvent.keyDown(input(), { key: "Enter" });
 
-    expect(ipcMock.openSettings).toHaveBeenCalledWith(section);
-    // The palette stays up until the window is open, so a window that could
-    // not be built reports into the screen the person is still looking at.
-    await waitFor(() => expect(useAppStore.getState().paletteOpen).toBe(false));
+    expect(useAppStore.getState().settings?.section).toBe(section);
+    expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
   it("closes on Escape without letting it reach the global layer", () => {

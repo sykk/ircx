@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Composer } from "@/components/composer/Composer";
 import { ContextPanel } from "@/components/drawer/ContextPanel";
 import { ChannelHeader } from "@/components/header/ChannelHeader";
+import { SettingsPane } from "@/components/settings/SettingsPane";
 import { Timeline } from "@/components/timeline/Timeline";
 import { useAppStore } from "@/store";
 import { useView } from "@/store/selectors";
@@ -20,6 +21,9 @@ export function ChatPane({ view }: { view: ViewId | null }) {
   // in a shared sidebar deciding which pane to point at. A pane on a console or
   // a query has nobody to list and draws no column at all.
   const hidden = useAppStore((s) => (view ? s.rosterHidden[view] === true : true));
+  // Not in `views` and so not a conversation: `pane` is undefined for it, which
+  // is what keeps every conversation-shaped lookup above off it.
+  const settings = useAppStore((s) => view !== null && s.settings?.view === view);
   const ref = useRef<HTMLElement>(null);
 
   // A pane opened by a split arrives focused, so the caret follows into it.
@@ -39,7 +43,11 @@ export function ChatPane({ view }: { view: ViewId | null }) {
   // The console is a pane on the network rather than on a conversation: no
   // members, no drafts, nobody to report typing to.
   const consoleFor = pane?.network && pane.target === SERVER_TARGET ? pane.network : null;
-  const name = consoleFor ? `${consoleFor} console` : pane?.target || pane?.network || "Empty";
+  const name = settings
+    ? "Settings"
+    : consoleFor
+      ? `${consoleFor} console`
+      : pane?.target || pane?.network || "Empty";
 
   return (
     <section
@@ -62,23 +70,29 @@ export function ChatPane({ view }: { view: ViewId | null }) {
             : "border-t border-transparent"),
       )}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {consoleFor ? (
-          <ServerConsole view={view} network={consoleFor} />
-        ) : (
-          <>
-            <ChannelHeader view={view} />
-            <div className="min-h-0 flex-1">
-              <Timeline view={view} />
-            </div>
-            <Composer view={view} />
-          </>
-        )}
-      </div>
+      {settings ? (
+        <SettingsPane view={view} />
+      ) : (
+        <>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {consoleFor ? (
+              <ServerConsole view={view} network={consoleFor} />
+            ) : (
+              <>
+                <ChannelHeader view={view} />
+                <div className="min-h-0 flex-1">
+                  <Timeline view={view} />
+                </div>
+                <Composer view={view} />
+              </>
+            )}
+          </div>
 
-      {/* Beside the whole column rather than under the header, so the panel's
-          own header lands on the same rule as this pane's. */}
-      {!hidden && !consoleFor && <ContextPanel view={view} />}
+          {/* Beside the whole column rather than under the header, so the
+              panel's own header lands on the same rule as this pane's. */}
+          {!hidden && !consoleFor && <ContextPanel view={view} />}
+        </>
+      )}
     </section>
   );
 }

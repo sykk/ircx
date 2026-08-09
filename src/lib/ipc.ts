@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -72,17 +72,6 @@ export function onFileDrop(handler: (event: FileDrop) => void): Promise<() => vo
 
 const EVENT_CHANNEL = "ircx://event";
 const THEMES_CHANNEL = "ircx://themes";
-const SETTINGS_CHANNEL = "ircx://settings";
-const SECTION_CHANNEL = "ircx://settings-section";
-
-/** Which window this is, as Tauri labels it — `main` or `settings`. Used only
- * to stamp an appearance change with who made it; which of the two *pages* is
- * rendered is a question about the URL, and `isSettingsPage` answers it. A
- * browser and vitest have no window to ask. */
-function windowLabel(): string | null {
-  return insideTauri() ? getCurrentWebview().label : null;
-}
-
 /** A channel or a nick — something the server will accept as a recipient. */
 function isConversation(target: string): boolean {
   return target !== "" && target !== SERVER_TARGET;
@@ -168,12 +157,6 @@ export const ipc = {
     invoke<string | null>("get_draft", { network, target }),
   setDraft: (network: string, target: string, text: string) =>
     invoke<void>("set_draft", { network, target, text }),
-
-  /** Opens the settings window on a section, or brings the open one forward
-   * and moves it there. Nothing comes back: which window is in front is not a
-   * fact this one holds. */
-  openSettings: (section?: string) =>
-    invoke<void>("open_settings", { section: section ?? null }),
 
   listThemes: () => invoke<ThemeSource[]>("list_themes"),
   /** Copies a theme folder in and answers with the id it landed under. The
@@ -307,53 +290,3 @@ export function onThemesChanged(handler: (themes: ThemeSource[]) => void) {
   return listen<ThemeSource[]>(THEMES_CHANNEL, (e) => handler(e.payload));
 }
 
-/**
- * What one window tells the other it has changed.
- *
- * `appearance` is the theme, the density, the timeline and the faces, all of
- * which live in localStorage — so the receiver reads them back for itself and
- * nothing travels here but the fact. `plugins` is the installed list and its
- * grants, which live in the archive rather than in the window, so the receiver
- * asks the backend again. Either way the message says go and look; where to
- * look is the subscriber's business.
- */
-export type SettingsTopic = "appearance" | "plugins" | "notifications";
-
-/**
- * Says a setting changed, so the other window catches up.
- *
- * No values travel. Both windows can already read whatever changed — one from
- * the same localStorage, the other from the same backend — and a copy in the
- * payload would be a second answer to a question that has one. What the
- * message carries is which window wrote it, which is the one thing the
- * receiver cannot look up: a window that acted on its own echo would fight the
- * control the reader is still holding.
- *
- * Resolves either way. This is an announcement about a change that has already
- * been made; a window that could not make it is not a reason to fail it.
- */
-export async function announceSettings(topic: SettingsTopic): Promise<void> {
-  if (!insideTauri()) return;
-  try {
-    await emit(SETTINGS_CHANNEL, { source: windowLabel(), topic });
-  } catch (reason) {
-    console.warn("ircx could not tell the other window about a settings change", reason);
-  }
-}
-
-/** Fires when the *other* window changes this topic. Its own changes are
- * already on the screen by the time the message goes out. */
-export function onSettingsChanged(topic: SettingsTopic, handler: () => void) {
-  const self = windowLabel();
-  return listen<{ source: string | null; topic: SettingsTopic }>(SETTINGS_CHANNEL, (e) => {
-    if (e.payload.topic === topic && e.payload.source !== self) handler();
-  });
-}
-
-/** Fires when the client asks the settings window — already open — for a
- * different section. Sent by `open_settings` rather than by the other window,
- * which is why there is no source to compare: a window that is being told to
- * show something did not ask itself. */
-export function onSettingsSection(handler: (section: string) => void) {
-  return listen<string>(SECTION_CHANNEL, (e) => handler(e.payload));
-}

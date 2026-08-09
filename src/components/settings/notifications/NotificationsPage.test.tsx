@@ -1,19 +1,19 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@/store";
 import { resetStore } from "@/components/shell/fixtures";
 import type * as Ipc from "@/lib/ipc";
-import type { SettingsScope } from "@/lib/settingsWindow";
+import type { SettingsScope } from "@/components/settings/scope";
 import type * as Notifications from "@/lib/notifications";
 import { NotificationsPage } from "./NotificationsPage";
 
-const { ipcMock, announceMock, allowedMock } = vi.hoisted(() => ({
+const { ipcMock, allowedMock } = vi.hoisted(() => ({
   ipcMock: {
     highlightWords: vi.fn(),
     setHighlightWords: vi.fn(),
     mutedConversations: vi.fn(),
     setMuted: vi.fn(),
   },
-  announceMock: vi.fn(),
   allowedMock: vi.fn(),
 }));
 
@@ -22,8 +22,6 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
   ipc: ipcMock,
   onIrcxEvent: vi.fn(),
 }));
-
-vi.mock("@/lib/highlights", () => ({ announceHighlightWords: announceMock }));
 
 vi.mock("@/lib/notifications", async (importOriginal) => ({
   ...(await importOriginal<typeof Notifications>()),
@@ -39,14 +37,13 @@ beforeEach(() => {
   ipcMock.setHighlightWords.mockResolvedValue(undefined);
   ipcMock.mutedConversations.mockResolvedValue([]);
   ipcMock.setMuted.mockResolvedValue(undefined);
-  announceMock.mockResolvedValue(undefined);
   allowedMock.mockResolvedValue(true);
   localStorage.clear();
 });
 
 const done = vi.fn();
 
-/** Where the client was when the window opened, as `readScope` hands it over. */
+/** The conversation the pane is scoped to, as `useSettingsScope` reads it. */
 const HERE = { network: "libera", networkName: "Libera.Chat", target: "#ircx" };
 
 function open(here: SettingsScope | null = HERE) {
@@ -67,14 +64,15 @@ describe("the notifications page", () => {
     expect(await screen.findByRole("button", { name: "Remove deploy" })).toBeTruthy();
   });
 
-  /** The client is drawing a conversation against the old list until it hears,
-   * and it is a second webview with no way to know otherwise. */
-  it("tells the other window", async () => {
+  /** The timeline tints a line against the store's copy, which is still the
+   * list from before the word was added until the page puts the new one there. */
+  it("puts the new list where the timeline reads it", async () => {
     open();
     await type("deploy");
+    ipcMock.highlightWords.mockResolvedValue(["deploy"]);
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
-    await waitFor(() => expect(announceMock).toHaveBeenCalled());
+    await waitFor(() => expect(useAppStore.getState().highlightWords).toEqual(["deploy"]));
   });
 
   it("keeps the order the words were added in", async () => {

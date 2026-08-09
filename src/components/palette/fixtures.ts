@@ -111,6 +111,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     viewOrder: [],
     activeViewId: null,
     layout: null,
+    settings: null,
     recent: [],
     rosterHidden: {},
     paletteOpen: false,

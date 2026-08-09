@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import { EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
+import { chatPane, EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
 import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
@@ -30,16 +30,19 @@ export function useQueriesFor(network: string): Query[] {
   return useAppStore(useShallow((s) => selectQueriesFor(s, network)));
 }
 
-/** Where the focused pane is looking, off a state rather than through a
- * subscription — for the callers that are not components. */
+/** Where the reader is looking, off a state rather than through a
+ * subscription — for the callers that are not components. `chatPane` rather
+ * than the focused pane, so this still answers while settings holds the
+ * focus. */
 export function selectActiveTarget(s: AppState): ActiveTarget | null {
-  const view = s.activeViewId ? s.views[s.activeViewId] : undefined;
+  const id = chatPane(s);
+  const view = id ? s.views[id] : undefined;
   if (!view || !view.network) return null;
   return { network: view.network, target: view.target };
 }
 
-/** Where the focused pane is looking. Components that will become pane-aware
- * should take a `ViewId` and use the `…ForView` selectors below instead. */
+/** Where the reader is looking. Components that will become pane-aware should
+ * take a `ViewId` and use the `…ForView` selectors below instead. */
 export function useActiveTarget(): ActiveTarget | null {
   return useAppStore(useShallow(selectActiveTarget));
 }

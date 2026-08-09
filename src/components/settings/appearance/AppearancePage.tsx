@@ -68,11 +68,13 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
         <SecondaryButton onClick={onDone}>Done</SecondaryButton>
       </header>
 
-      {/* The rail goes beside the preview from 1024px, which is under the
-          880px floor plus the room the two columns need — the window opens at
-          1180 and the concept is the two side by side. Below that it stacks
-          rather than squeezing the sample. */}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_290px]">
+      {/* The rail goes beside the preview where there is room for both, and
+          stacks under it rather than squeezing the sample where there is not.
+          Measured against the pane rather than the window: this page is a pane
+          of the client's layout now, and a viewport breakpoint kept the rail
+          beside a 476px pane in a 1200px window, which is where the row of
+          accents was found running off the edge. */}
+      <div className="grid items-start gap-6 @3xl:grid-cols-[minmax(0,1fr)_290px]">
         <div className="flex min-w-0 flex-col gap-5">
           <Preview />
 

@@ -42,7 +42,6 @@ export {
   selectPreset,
   selectTheme,
   selectTypography,
-  startAppearanceSync,
   startThemes,
 } from "./session";
 export { TOKEN_CATALOGUE, TOKEN_GROUPS } from "./tokens";

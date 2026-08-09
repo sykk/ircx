@@ -12,10 +12,10 @@ import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
-import { loadHighlightWords, startHighlightSync } from "@/lib/highlights";
+import { loadHighlightWords } from "@/lib/highlights";
 import { startNotifications } from "@/lib/notifications";
-import { loadPlugins, startPluginSync } from "@/lib/plugins";
-import { startAppearanceSync, startThemes } from "@/lib/theme";
+import { loadPlugins } from "@/lib/plugins";
+import { startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
 
 /** Onboarding is decided once, when the snapshot lands: saving the first
@@ -29,23 +29,15 @@ export function App() {
 
   useEffect(() => {
     const themes = startThemes();
-    // The settings window is where these are changed, and it is a second
-    // webview: without this the client keeps painting whatever it opened on
-    // while the settings window shows the change it made.
-    const appearance = startAppearanceSync();
     const bridge = startBridge();
     let stopOpening = () => {};
-    // The timeline tints a line against these, and the settings window is
-    // where they are written.
+    // The timeline tints a line against these; the Notifications page writes
+    // them and re-reads them in the same call.
     void loadHighlightWords();
-    const highlightSync = startHighlightSync();
     // Follows whether the window has focus, which is what keeps a notification
     // from arriving for the line somebody just watched appear.
     const notifications = startNotifications();
     void loadPlugins();
-    // The plugin screens are in the settings window now; the count in the
-    // status bar is here, and nothing else would tell it an install happened.
-    const pluginSync = startPluginSync();
     bridge.then(
       () => {
         const state = useAppStore.getState();
@@ -74,9 +66,6 @@ export function App() {
       stopOpening();
       void bridge.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
-      void appearance.then((stop) => stop());
-      void pluginSync.then((stop) => stop());
-      void highlightSync.then((stop) => stop());
       void notifications.then((stop) => stop());
     };
   }, []);

@@ -2834,10 +2834,59 @@ What that leaves:
   their own; whether they cancel is not. #475 says what to measure.
 - **A release build.** Both walks are debug against Vite, so `StrictMode`. The
   shipped path is the unwalked one.
-- **A live message arriving while the reader is scrolled back.** Everything in
-  run 12 lands above the viewport; `mergeByTime` is what would land one below it.
 - **Two panes on one conversation**, one at the live edge and one scrolled back.
   The anchor shares a component with #307's restore and no walk has opened both.
+
+### A message arriving while the reader is scrolled back
+
+**Walked on 2026-08-10 (#484), and it is the first of these against a release
+build.** `npm run tauri build -- --no-bundle`, three minutes, driven by
+`window.mjs --release` — so WebKitGTK rather than Chrome, and no `StrictMode`.
+The server is ergo 2.19 on `127.0.0.1:6667`; a second client floods 250 lines
+into `#anchor`, ircx joins and pulls them, and the walk parks the reader in the
+middle of them at `backfill line 0108`, about 108 messages down and 118 to go.
+
+Sixteen frames two seconds apart, with one `PRIVMSG` from the second client
+between the eighth and the ninth. The arrival is fired off the eighth frame
+appearing rather than off a guess at how long startup takes.
+
+Every consecutive pair, counted by region:
+
+| region | pairs 1-7, 9-15 | the pair the message lands in |
+|---|---|---|
+| the conversation | 0 px | 0 px |
+| the sidebar | 0 px | 248 px |
+| the scrollbar | 0 px | 42 px |
+
+The reader does not move by a pixel. What the 248 is, is the unread badge
+arriving on the channel row; what the 42 is, is the thumb shortening because the
+document got taller. Both are the client saying a message came, which is the
+point.
+
+Two controls, because a still pane is also what a walk that tested nothing
+returns. `MARK-SIX` is at the live edge under **Live from here** in the last
+shot, so it arrived; and the roster still holds `phrack`, so it arrived from
+somebody who was there. **Two earlier runs failed exactly this way.** The second
+client answered no `PING` and ergo dropped it, and the run photographed sixteen
+identical frames of a channel nothing had been said in. Ergo also destroys an
+unregistered channel and its history when the last client leaves, so a run that
+kills the flooder between attempts comes back to an empty `#anchor` and a pane
+with nothing to scroll in.
+
+What that leaves:
+
+- **A message sorting in above the reader.** This is the case #484 fixed and it
+  is not the one walked: ergo stamps `server-time` itself, so a client cannot
+  backdate a line, and the merge that puts a message in front of the reader is
+  staged in `Timeline.test.tsx` rather than on a socket. The route to it live is
+  a `CHATHISTORY` batch landing behind a message that arrived while it was in
+  flight, which is a race a walk would have to win rather than ask for.
+- **The window at its cap.** The other half of #484 needs 10,000 messages held
+  and the reader scrolled back inside them. 250 is what this run flooded.
+- **A notch is about 69 px here**, not the third of a message the skill's note
+  suggests, so 78 of them put the reader at the top of the history rather than
+  inside it. Two runs measured the least sensitive position before that was
+  noticed. Check the parked frame before believing the frames after it.
 
 ## The archive's own controls
 

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, Reaction } from "@/types";
-import { useAppStore } from "@/store";
+import { TIMELINE_CAP, useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { member } from "@/components/drawer/fixtures";
@@ -731,6 +731,103 @@ describe("Timeline", () => {
     const grew = scroller.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(scroller.scrollTop).toBe(100 + grew);
+  });
+
+  /**
+   * Every walk behind #475 and #477 pages history in above the reader. A
+   * message arriving live is the other direction, and the anchor has no term
+   * for it: `isPrepend` is false on an append, so nothing puts the pane back.
+   * What holds the reader still is that the growth is below them — which is
+   * true of an append and is not true of every arrival.
+   */
+  describe("a message arriving while the reader is scrolled back", () => {
+    const base = Date.parse("2026-07-29T02:00:00.000Z");
+    const stamp = (ms: number) => new Date(base + ms).toISOString();
+    /** Wider than `RUN_MS`, so every message is a row of its own and the offset
+     * a message is drawn at is the offset its row is drawn at. */
+    const GAP_MS = 6 * 60 * 1000;
+    const line = (id: string, at: number) =>
+      makeMessage({ id, nick: "sable", text: `line ${id}`, timestamp: stamp(at) });
+
+    /** How far below the top of the viewport a message is drawn. Rows are laid
+     * out inside the sizer, which starts below the head, so the head has to be
+     * added back before `scrollTop` can be taken off. */
+    function eyeLine(scroller: HTMLElement, msgid: string): number {
+      const row = document
+        .querySelector(`[data-msgid="${msgid}"]`)
+        ?.closest<HTMLElement>("[data-index]");
+      if (!row) throw new Error(`${msgid} is not rendered`);
+      const head = scroller.querySelector<HTMLElement>('[data-testid="timeline-head"]');
+      const top = Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, ""));
+      return top + (head?.offsetHeight ?? 0) - scroller.scrollTop;
+    }
+
+    /** A pane the reader has scrolled back in, far enough from the top that the
+     * scroll does not also ask for a page of history. */
+    function readBack(messages: ChatMessage[], to: number) {
+      seed(messages);
+      render(<Timeline view={TEST_VIEW} />);
+      const scroller = screen.getByTestId("timeline-scroller");
+      scroller.scrollTop = to;
+      fireEvent.scroll(scroller);
+      return scroller;
+    }
+
+    const arrive = (messages: ChatMessage[]) =>
+      act(() => {
+        useAppStore
+          .getState()
+          .applyEvent({ type: "messagesAppended", network: "libera", target: "#ctf-ops", messages });
+      });
+
+    it("leaves the reader where they were when it lands below them", () => {
+      const scroller = readBack(
+        Array.from({ length: 400 }, (_, i) => line(`m${i}`, i * GAP_MS)),
+        5_000,
+      );
+      const before = eyeLine(scroller, "m110");
+
+      arrive([line("live", 400 * GAP_MS)]);
+
+      expect(eyeLine(scroller, "m110")).toBe(before);
+    });
+
+    it("leaves the reader where they were when it sorts in above them", () => {
+      // `mergeByTime`: a server that stamps a message behind what is already
+      // held puts it at its own time rather than at the bottom. The reader is
+      // below the insertion point, so everything under their eyes moves.
+      const scroller = readBack(
+        Array.from({ length: 400 }, (_, i) => line(`m${i}`, i * GAP_MS)),
+        5_000,
+      );
+      const before = eyeLine(scroller, "m110");
+
+      arrive([
+        makeMessage({
+          id: "late",
+          nick: "phrack",
+          text: "late line",
+          timestamp: stamp(20 * GAP_MS + 60_000),
+        }),
+      ]);
+
+      expect(eyeLine(scroller, "m110")).toBe(before);
+    });
+
+    it("leaves the reader where they were when the window drops its oldest", () => {
+      // A pane already holding `TIMELINE_CAP` loses a message off the front for
+      // every one that arrives, which takes a row out from above the reader.
+      const scroller = readBack(
+        Array.from({ length: TIMELINE_CAP }, (_, i) => line(`m${i}`, i * GAP_MS)),
+        5_000,
+      );
+      const before = eyeLine(scroller, "m110");
+
+      arrive([line("live", TIMELINE_CAP * GAP_MS)]);
+
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(TIMELINE_CAP);
+      expect(eyeLine(scroller, "m110")).toBe(before);
+    });
   });
 
   it("anchors each pane on its own position when two show the same channel", async () => {

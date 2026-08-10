@@ -2,31 +2,31 @@ import { useLayoutEffect, useRef } from "react";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Head, Offsets } from "./scrollAnchor";
-import { isPrepend, usePrependAnchor } from "./scrollAnchor";
+import { movedInList, usePrependAnchor } from "./scrollAnchor";
 
 function ids(...values: string[]) {
   return values.map((id) => ({ id }));
 }
 
-describe("isPrepend", () => {
-  it("is true when the old first row moved down the list", () => {
-    expect(isPrepend({ firstId: "b" }, ids("a", "b", "c"))).toBe(true);
+describe("movedInList", () => {
+  it("is true when a page arrived in front of the reader's message", () => {
+    expect(movedInList(ids("a", "b", "c"), { id: "b", index: 0 })).toBe(true);
+  });
+
+  it("is true when the window dropped its oldest to make room", () => {
+    expect(movedInList(ids("b", "c"), { id: "c", index: 2 })).toBe(true);
   });
 
   it("is false when nothing changed", () => {
-    expect(isPrepend({ firstId: "a" }, ids("a", "b"))).toBe(false);
+    expect(movedInList(ids("a", "b"), { id: "a", index: 0 })).toBe(false);
   });
 
-  it("is false when messages were only appended", () => {
-    expect(isPrepend({ firstId: "a" }, ids("a", "b", "c"))).toBe(false);
+  it("is false when messages were only appended behind them", () => {
+    expect(movedInList(ids("a", "b", "c"), { id: "a", index: 0 })).toBe(false);
   });
 
   it("is false for a whole-list swap, which is what a target switch looks like", () => {
-    expect(isPrepend({ firstId: "a" }, ids("x", "y"))).toBe(false);
-  });
-
-  it("is false on the first commit", () => {
-    expect(isPrepend(null, ids("a"))).toBe(false);
+    expect(movedInList(ids("x", "y"), { id: "a", index: 0 })).toBe(false);
   });
 });
 

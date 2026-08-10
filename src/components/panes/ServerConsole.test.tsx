@@ -15,6 +15,7 @@ const { ipcMock } = vi.hoisted(() => ({
     setDraft: vi.fn(),
     setTyping: vi.fn(),
     loadHistory: vi.fn(),
+    pageBack: vi.fn(),
     submitInput: vi.fn(),
   },
 }));
@@ -67,6 +68,9 @@ beforeEach(() => {
   resetStore();
   vi.clearAllMocks();
   ipcMock.loadHistory.mockResolvedValue([]);
+  // The real module answers this without a request for a pane that is not a
+  // conversation, which is what the console is.
+  ipcMock.pageBack.mockResolvedValue(false);
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
 
   useAppStore.setState({

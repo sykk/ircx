@@ -155,6 +155,26 @@ pub async fn load_history(
     app.store().load_history(&req).map_err(describe)
 }
 
+/// The page behind what the archive holds, from the server. Answers whether
+/// another may be behind it; the messages arrive as `messagesAppended` on their
+/// way through the archive, the same as any other history.
+#[tauri::command]
+pub async fn page_back(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: TargetName,
+    from: String,
+    msgid: Option<String>,
+) -> Result<bool, String> {
+    app.ask(&network, |reply| SessionCommand::PageBack {
+        target,
+        from,
+        msgid,
+        reply,
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn search_history(
     app: State<'_, App>,

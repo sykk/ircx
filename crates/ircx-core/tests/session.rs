@@ -64,6 +64,9 @@ struct Harness {
     /// Stands in for the archive's `open_targets` table, which is where these
     /// actions land in the running app.
     open: Vec<OpenTarget>,
+    /// What each reader waiting on a page of history was told, by the label
+    /// their request went out with.
+    paged_back: Vec<(String, bool)>,
     closed: bool,
 }
 
@@ -75,6 +78,7 @@ impl Harness {
             queued: 0,
             events: Vec::new(),
             open: Vec::new(),
+            paged_back: Vec::new(),
             closed: false,
         }
     }
@@ -99,6 +103,7 @@ impl Harness {
                 // Nothing here drives plugins, so a batch on its way to a
                 // rule is not something this harness can act on.
                 Action::Notify { .. } => {}
+                Action::PagedBack { label, more } => self.paged_back.push((label, more)),
                 Action::Close => self.closed = true,
             }
         }
@@ -3724,6 +3729,192 @@ mod what_a_backfill_counts {
             session.sent_starting("CHATHISTORY"),
             ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T08:00:00.000Z 200"]
         );
+    }
+}
+
+/// #472. A reader who has read to the start of the archive is not at the start
+/// of the history: the server is holding what is behind it.
+mod paging_back_through_the_server {
+    use super::*;
+
+    /// `CHATHISTORY=2` so a page is two messages, which is what makes a full one
+    /// and a short one cheap to write.
+    fn reading(caps: &str) -> Harness {
+        let mut session = registered(caps);
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=2 :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session.events.clear();
+        session
+    }
+
+    /// The oldest message a window holds, which is what the frontend asks from.
+    fn scroll_back(session: &mut Harness) -> Option<String> {
+        let (label, actions) = session
+            .state
+            .page_back("#ircx", "2026-07-31T09:00:00.000Z", None);
+        session.apply(actions);
+        label
+    }
+
+    fn asked(session: &Harness) -> Vec<String> {
+        session
+            .sent_starting("@label=")
+            .into_iter()
+            .filter(|line| line.contains("CHATHISTORY BEFORE"))
+            .collect()
+    }
+
+    fn older(session: &mut Harness, label: &str, lines: &[&str]) {
+        session.feed(&format!(
+            "@label={label} :ergo.test BATCH +h chathistory #ircx"
+        ));
+        for line in lines {
+            session.feed(line);
+        }
+        session.feed(":ergo.test BATCH -h");
+    }
+
+    fn unread(session: &Harness) -> u32 {
+        session
+            .state
+            .channels()
+            .iter()
+            .find(|channel| channel.name == "#ircx")
+            .map_or(0, |channel| channel.unread)
+    }
+
+    #[test]
+    fn the_request_asks_from_the_oldest_message_the_reader_holds() {
+        let mut session = reading("draft/chathistory labeled-response");
+
+        let label = scroll_back(&mut session).expect("the request goes out");
+
+        assert_eq!(label, "ircx-1");
+        assert_eq!(
+            asked(&session),
+            ["@label=ircx-1 CHATHISTORY BEFORE #ircx timestamp=2026-07-31T09:00:00.000Z 2"]
+        );
+    }
+
+    #[test]
+    fn a_full_page_says_there_is_another_behind_it() {
+        let mut session = reading("draft/chathistory labeled-response");
+        let label = scroll_back(&mut session).expect("the request goes out");
+
+        older(
+            &mut session,
+            &label,
+            &[
+                "@batch=h;time=2026-07-31T08:00:00.000Z :phrack!p@h PRIVMSG #ircx :earlier",
+                "@batch=h;time=2026-07-31T08:01:00.000Z :phrack!p@h PRIVMSG #ircx :and before",
+            ],
+        );
+
+        assert_eq!(session.paged_back, [("ircx-1".to_string(), true)]);
+    }
+
+    /// The case the sentence at the top of the pane was wrong about. An empty
+    /// batch is an answer, and it arrives because the label says which request
+    /// it answers — nothing else about it names the conversation at all.
+    #[test]
+    fn an_empty_page_is_the_history_running_out() {
+        let mut session = reading("draft/chathistory labeled-response");
+        let label = scroll_back(&mut session).expect("the request goes out");
+
+        older(&mut session, &label, &[]);
+
+        assert_eq!(session.paged_back, [("ircx-1".to_string(), false)]);
+    }
+
+    /// What a reader scrolled back to was said before anything they have read,
+    /// so it is not unread, and it is not the near end of a gap to keep walking
+    /// forward through either. Both were true of a gap fill and neither is true
+    /// here, which is the whole reason the two have to be told apart.
+    #[test]
+    fn a_page_scrolled_back_to_is_neither_unread_nor_a_gap() {
+        let mut session = registered_holding("#ircx", "2026-07-31T09:00:00.000Z");
+        session.feed(":irc.libera.chat CAP * LS :labeled-response");
+        session.feed(":irc.libera.chat CAP * ACK :labeled-response");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :sykk phrack");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+        // The gap the join asked for is still outstanding, which is the case a
+        // page back has to survive: a reconnect fills forward while somebody
+        // reads backward.
+        assert_eq!(
+            session.sent_starting("CHATHISTORY"),
+            ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:00:00.000Z 200"]
+        );
+        session.sent();
+        let label = scroll_back(&mut session).expect("the request goes out");
+
+        older(
+            &mut session,
+            &label,
+            &[
+                "@batch=h;time=2026-07-31T08:00:00.000Z :phrack!p@h PRIVMSG #ircx :earlier",
+                "@batch=h;time=2026-07-31T08:01:00.000Z :phrack!p@h PRIVMSG #ircx :and before",
+            ],
+        );
+
+        assert_eq!(
+            unread(&session),
+            0,
+            "read before the reader stopped reading"
+        );
+        assert!(
+            session.sent_starting("CHATHISTORY AFTER").is_empty(),
+            "the gap is not walked forward from a page behind it"
+        );
+    }
+
+    /// Both capabilities or nothing. Without a label on the answer, the batch
+    /// above is indistinguishable from the gap fill outstanding beside it.
+    #[test]
+    fn a_server_that_cannot_label_its_answer_is_not_asked() {
+        let mut session = reading("draft/chathistory");
+
+        assert!(scroll_back(&mut session).is_none());
+        assert!(asked(&session).is_empty());
+    }
+
+    #[test]
+    fn a_server_without_the_history_capability_is_not_asked() {
+        let mut session = reading("labeled-response");
+
+        assert!(scroll_back(&mut session).is_none());
+        assert!(asked(&session).is_empty());
+    }
+
+    /// A refusal is an answer. `FAIL CHATHISTORY` is what a selector the server
+    /// cannot resolve comes back as, and the reader waiting on it would
+    /// otherwise wait for a batch that is never sent.
+    #[test]
+    fn a_refusal_answers_the_reader_waiting_on_it() {
+        let mut session = reading("draft/chathistory labeled-response");
+        let label = scroll_back(&mut session).expect("the request goes out");
+
+        session.feed(&format!(
+            "@label={label} :irc.libera.chat FAIL CHATHISTORY \
+             INVALID_PARAMS :Invalid parameters"
+        ));
+
+        assert_eq!(session.paged_back, [("ircx-1".to_string(), false)]);
+    }
+
+    /// A dropped connection abandons the batch, and the next one answers nothing
+    /// under the old label. Wrong by one page and the pane pages again; left
+    /// waiting, that conversation never pages again at all.
+    #[test]
+    fn a_dropped_connection_answers_everyone_still_waiting() {
+        let mut session = reading("draft/chathistory labeled-response");
+        scroll_back(&mut session).expect("the request goes out");
+
+        let actions = session.state.on_disconnected("the socket closed");
+        session.apply(actions);
+
+        assert_eq!(session.paged_back, [("ircx-1".to_string(), false)]);
     }
 }
 

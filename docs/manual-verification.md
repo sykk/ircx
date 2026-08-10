@@ -2786,6 +2786,41 @@ What is left:
   the archive stays the whole history. That is the degrade working, and it also
   means no Libera run can exercise any of this.
 
+### Reading back past the archive
+
+**Verified against a local `ergo` on 2026-08-10**, in the same driver. #472.
+
+```text
+> @label=ircx-2 CHATHISTORY BEFORE #ircx-drive msgid=_eths9je6j3jj8g3zpswvwe4hva 200
+```
+
+The label is the whole reason the run exists. A gap fill and a reader scrolling
+back are both `chathistory` batches naming the same conversation, and both can
+be in flight at once, so ircx matches the answer to the request on the label it
+went out with — and whether a server echoes one on the `BATCH` line is the
+server's decision, which no fake server can settle. **Ergo echoes it**, the
+request was answered, and a message older than the one asked from came back as
+`ServerHistory`. Had it not, the reply would never have resolved and every pane
+would say it had reached the beginning of history — the same bug as before,
+silently and for a different reason.
+
+`page_back` therefore requires `labeled-response` as well as
+`draft/chathistory`, and asks nothing without both. It is the one place in this
+client where a missing capability costs a feature rather than changing how one
+works.
+
+**What this leaves:**
+
+- **Libera again**, for the reason above: no history capability, so nothing is
+  ever asked and nothing can be walked there.
+- **A pane a person actually scrolls.** The wire is verified here and the pane's
+  own decision — ask only where the archive came back short, not where the
+  window filled — is `Timeline.test.tsx`. What no test covers is the two
+  together in the running app: a channel with more than a page behind it, read
+  to the top by hand, and the rows arriving above the reader without moving
+  them. The anchor that has to hold it is #307's and is walked; this is a
+  conversation longer than any walk has used.
+
 ## The archive's own controls
 
 Built and walked on 2026-08-01 (#241). Everything in `ircx-store` for this

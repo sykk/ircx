@@ -120,6 +120,7 @@ async fn against_ergo() {
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
     a_rule_raises_what_it_was_asked_about(&mut report, &mut live, &mut bot).await;
     a_backfill_fills_the_gap(&mut report, &mut live, &mut other).await;
+    a_reader_reads_back_past_the_archive(&mut report, &mut live).await;
     a_dropped_hook_comes_back(
         &mut report,
         &mut live,
@@ -557,6 +558,80 @@ async fn a_backfill_fills_the_gap(report: &mut Report, live: &mut Live, other: &
             &format!("it arrived as {:?} rather than history", message.source),
         ),
         None => report.fail("backfill", "what was said in the gap never came back"),
+    }
+}
+
+/// #472. Reading back past the archive, into what the server still holds.
+///
+/// The one assumption in that feature no fake server can check: ircx matches the
+/// answer to the request on the `label` it went out with, and only a real server
+/// decides whether it echoes one on the batch. Without it the reply never
+/// resolves and every pane says it has reached the beginning of history — which
+/// is the bug, silently and for a different reason.
+///
+/// Asked from the newest message in the channel rather than the oldest, so
+/// there is something behind it for ergo to answer with. What comes back is a
+/// replay of lines this client already holds; that it comes back at all under
+/// this label is the finding.
+async fn a_reader_reads_back_past_the_archive(report: &mut Report, live: &mut Live) {
+    let Some(newest) = live.seen_message(|message| message.target == CHANNEL) else {
+        report.fail(
+            "page back",
+            "nothing was said in the channel to read back from",
+        );
+        return;
+    };
+
+    let (reply, answer) = tokio::sync::oneshot::channel();
+    live.send(SessionCommand::PageBack {
+        target: CHANNEL.into(),
+        from: newest.timestamp.clone(),
+        msgid: (!newest.id_is_local).then(|| newest.id.clone()),
+        reply,
+    })
+    .await;
+
+    match live
+        .sent(PATIENCE, |line| line.contains("CHATHISTORY BEFORE"))
+        .await
+    {
+        Some(line) => report.pass("page back request", &line),
+        None => {
+            report.fail("page back request", "no CHATHISTORY BEFORE line went out");
+            return;
+        }
+    }
+
+    match timeout(PATIENCE, answer).await {
+        Ok(Ok(more)) => report.pass("page back answered", &format!("more={more}")),
+        Ok(Err(_)) => report.fail("page back answered", "the session dropped the request"),
+        Err(_) => {
+            report.fail(
+                "page back answered",
+                "no batch came back under the label the request carried",
+            );
+            return;
+        }
+    }
+
+    let behind = |message: &ChatMessage| {
+        message.target == CHANNEL
+            && message.source == MessageSource::ServerHistory
+            && message.timestamp < newest.timestamp
+    };
+    // The messages are emitted before the answer is, so they may already be
+    // recorded by the time the answer arrives — and `said` only watches for what
+    // has not been read yet.
+    let mut older = live.seen_message(behind);
+    if older.is_none() {
+        older = live.said(PATIENCE, behind).await;
+    }
+    match older {
+        Some(message) => report.pass(
+            "page back",
+            &format!("{} came back from behind the newest line", message.text),
+        ),
+        None => report.fail("page back", "nothing older than that line came back"),
     }
 }
 

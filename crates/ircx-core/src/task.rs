@@ -174,6 +174,20 @@ pub enum SessionCommand {
         channel: TargetName,
         reply: oneshot::Sender<Vec<Member>>,
     },
+    /// A reader has run out of archive and wants what is behind it. `from` and
+    /// `msgid` name the oldest message they hold; the msgid is `None` for one
+    /// this client minted, which names nothing a server can resolve.
+    ///
+    /// The reply says whether another page may be behind the one that arrives,
+    /// and waits for the server rather than for the send — so it is answered
+    /// from `Action::PagedBack`, a round trip later, and is `false` where
+    /// nothing could be asked at all.
+    PageBack {
+        target: TargetName,
+        from: String,
+        msgid: Option<String>,
+        reply: oneshot::Sender<bool>,
+    },
     Snapshot {
         reply: oneshot::Sender<(Network, Vec<Channel>, Vec<Query>)>,
     },
@@ -379,6 +393,7 @@ async fn run(
         plugins,
         strikes: Arc::default(),
         own_inbox,
+        page_backs: Mutex::default(),
     };
 
     drive(endpoint, client_certificate, session, inbox, &context).await;
@@ -609,6 +624,25 @@ async fn apply(
             let _ = reply.send(session.members(&channel));
             Vec::new()
         }
+        SessionCommand::PageBack {
+            target,
+            from,
+            msgid,
+            reply,
+        } => {
+            let (label, actions) = session.page_back(&target, &from, msgid.as_deref());
+            match label {
+                Some(label) => {
+                    context.waiting_readers().insert(label, reply);
+                }
+                // Nothing went out, so nothing will answer. Saying so now is
+                // what stops the pane waiting for a page it will never be sent.
+                None => {
+                    let _ = reply.send(false);
+                }
+            }
+            actions
+        }
         SessionCommand::Snapshot { reply } => {
             let _ = reply.send((session.snapshot(), session.channels(), session.queries()));
             Vec::new()
@@ -654,6 +688,11 @@ struct Context {
     /// Messages an annotator has not caught up with, and which conversations
     /// already have a worker on them. See `annotate`. #406.
     waiting: Arc<Waiting>,
+    /// Readers waiting on a page of history from the server, by the label their
+    /// request went out with. Held here rather than in the session because a
+    /// oneshot is the Tauri layer's half of the call and `SessionState` is a
+    /// state machine with no channels in it.
+    page_backs: Mutex<HashMap<String, oneshot::Sender<bool>>>,
 }
 
 /// How late a hook may run and still be worth running. A note about a message
@@ -703,6 +742,12 @@ impl Waiting {
 }
 
 impl Context {
+    fn waiting_readers(&self) -> std::sync::MutexGuard<'_, HashMap<String, oneshot::Sender<bool>>> {
+        self.page_backs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// The plugin command this input names, with the conversation's recent
     /// messages attached if the plugin was granted them. The archive is not
     /// read at all otherwise.
@@ -824,6 +869,11 @@ impl Context {
                     self.archive.forget(self.network.clone(), target).await;
                 }
                 Action::Notify { target, messages } => self.notify(target, messages),
+                Action::PagedBack { label, more } => {
+                    if let Some(reply) = self.waiting_readers().remove(&label) {
+                        let _ = reply.send(more);
+                    }
+                }
                 Action::Close => close = true,
             }
         }
@@ -1371,6 +1421,7 @@ mod tests {
             strikes: Arc::new(strikes),
             own_inbox: inbox.downgrade(),
             waiting: Arc::new(Waiting::default()),
+            page_backs: Mutex::default(),
         }
     }
 

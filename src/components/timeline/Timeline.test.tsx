@@ -20,6 +20,7 @@ const { ipcMock, openExternalMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn().mockResolvedValue(undefined),
   ipcMock: {
     loadHistory: vi.fn(),
+    pageBack: vi.fn(),
     loadPreview: vi.fn(),
     submitInput: vi.fn(),
     react: vi.fn(),
@@ -136,6 +137,9 @@ beforeEach(() => {
   // Opening a pane reads the archive, so every render below starts one. Left
   // in flight by default: a test that cares about the answer says what it is.
   ipcMock.loadHistory.mockReturnValue(new Promise(() => {}));
+  // A server with nothing behind the archive, which is the answer that leaves
+  // the reads below reading only what is on disk.
+  ipcMock.pageBack.mockResolvedValue(false);
   ipcMock.react.mockResolvedValue({ kind: "handled" });
   useAppStore.setState({ ...oneView(null), networks: {}, timelines: {}, typing: {} });
 });
@@ -586,6 +590,92 @@ describe("Timeline", () => {
       // Long enough for a page to have been asked for, had it been.
       await act(() => new Promise((done) => setTimeout(done, 50)));
       expect(ipcMock.loadHistory).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * #472. The archive running out is not the history running out. What is behind
+   * it is on the server, and the pane used to say "Beginning of history" over a
+   * server still holding it.
+   */
+  describe("reaching past the archive", () => {
+    const older = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        makeMessage({
+          id: `old-${i}`,
+          nick: "phrack",
+          text: `older ${i}`,
+          timestamp: new Date(Date.parse("2026-07-28T00:00:00.000Z") + i * 30_000).toISOString(),
+        }),
+      );
+
+    /** A conversation with a page and a bit on disk, scrolled to the top of it. */
+    const readToTheStart = async (page: ChatMessage[]) => {
+      ipcMock.loadHistory.mockResolvedValue(page);
+      seed(makeConversation({ count: 400, seed: 3 }));
+      render(<Timeline view={TEST_VIEW} />);
+
+      const scroller = screen.getByTestId("timeline-scroller");
+      scroller.scrollTop = 100;
+      fireEvent.scroll(scroller);
+      await waitFor(() => expect(ipcMock.loadHistory).toHaveBeenCalled());
+    };
+
+    it("asks the server for what is behind a short page, from the oldest message it holds", async () => {
+      const page = older(60);
+      await readToTheStart(page);
+
+      await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      expect(ipcMock.pageBack).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        page[0]!.timestamp,
+        page[0]!.id,
+      );
+    });
+
+    it("leaves the server alone while the archive still has a full page to give", async () => {
+      await readToTheStart(older(200));
+
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+      );
+      expect(ipcMock.pageBack).not.toHaveBeenCalled();
+      expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+    });
+
+    it("keeps paging while the server says there is more behind it", async () => {
+      ipcMock.pageBack.mockResolvedValue(true);
+      await readToTheStart(older(60));
+
+      await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+    });
+
+    it("is the beginning of history once the server has none either", async () => {
+      await readToTheStart(older(60));
+
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false),
+      );
+      expect(screen.getByText("Beginning of history")).toBeTruthy();
+    });
+
+    /** A locally minted id names nothing a server can resolve, so only the
+     * timestamp goes with it. */
+    it("sends no msgid for a message this client named itself", async () => {
+      const page = older(60).map((message, i) =>
+        i === 0 ? { ...message, idIsLocal: true } : message,
+      );
+      await readToTheStart(page);
+
+      await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      expect(ipcMock.pageBack).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        page[0]!.timestamp,
+        null,
+      );
     });
   });
 

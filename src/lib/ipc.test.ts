@@ -32,3 +32,29 @@ describe("setTyping", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
+
+describe("pageBack", () => {
+  it("asks for what is behind the oldest message of a conversation", async () => {
+    invoke.mockResolvedValue(true);
+
+    await expect(
+      ipc.pageBack("libera", "#ctf-ops", "2026-07-31T09:00:00.000Z", "abc"),
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("page_back", {
+      network: "libera",
+      target: "#ctf-ops",
+      from: "2026-07-31T09:00:00.000Z",
+      msgid: "abc",
+    });
+  });
+
+  // No server keeps history for a pane. The console's archive is the whole of
+  // what it has, so there is nothing behind it to ask for.
+  it("answers for the server console without asking", async () => {
+    await expect(
+      ipc.pageBack("libera", SERVER_TARGET, "2026-07-31T09:00:00.000Z", null),
+    ).resolves.toBe(false);
+
+    expect(invoke).not.toHaveBeenCalled();
+  });
+});

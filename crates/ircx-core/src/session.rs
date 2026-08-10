@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use ircx_ipc::{
@@ -54,6 +54,11 @@ pub enum Action {
         target: TargetName,
         messages: Vec<ArrivedMessage>,
     },
+    /// The answer to one reader's `page_back` arrived. `more` is whether the
+    /// page came back full, which is the server saying there is another behind
+    /// it; the messages themselves went out as `MessagesAppended` and are
+    /// already drawn and archived by the time this is read.
+    PagedBack { label: String, more: bool },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -160,6 +165,10 @@ pub(crate) struct QueryState {
 #[derive(Debug)]
 pub(crate) struct BatchState {
     pub(crate) source: MessageSource,
+    /// The `label` of the request this batch answers, where the server sent one.
+    /// It is how a page a reader is waiting for is told from a gap fill of the
+    /// same conversation.
+    pub(crate) label: Option<String>,
     pub(crate) messages: Vec<ChatMessage>,
 }
 
@@ -245,6 +254,10 @@ pub struct SessionState {
     /// back was missed rather than merely never seen, which is the whole of
     /// the difference to the unread count.
     pub(crate) gap_fills: HashMap<String, u32>,
+    /// The labels of the page-back requests still waiting for a batch. Labels
+    /// rather than conversations, because two panes on one channel can be
+    /// scrolled back at once and each is waiting for its own answer.
+    pub(crate) page_backs: HashSet<String>,
 }
 
 impl SessionState {
@@ -284,6 +297,7 @@ impl SessionState {
             archived: HashMap::new(),
             away_since: None,
             gap_fills: HashMap::new(),
+            page_backs: HashSet::new(),
         }
     }
 
@@ -1092,6 +1106,56 @@ impl SessionState {
         self.isupport
             .chathistory
             .map_or(history::PAGE, |max| max.min(history::PAGE))
+    }
+
+    /// Asks for the page behind the oldest message a reader is holding, and
+    /// answers with the label that will name it.
+    ///
+    /// `None` where nothing went out: a server that granted neither capability,
+    /// one that said it would answer with nothing, or a message whose timestamp
+    /// will not parse. The caller tells the reader there is no more to reach,
+    /// which for every one of those is what it means here.
+    ///
+    /// `labeled-response` is required as well as `draft/chathistory`, and this
+    /// is the one place in the client where a missing capability costs a
+    /// feature rather than changing how it works. A gap fill and a page back
+    /// are both `chathistory` batches naming the same conversation, and without
+    /// a label on the answer the client cannot say which of the two arrived —
+    /// which would leave it walking forwards through history the reader
+    /// already has, counting it as unread. Asking nothing is the honest
+    /// degrade. Every server with `draft/chathistory` this project has met
+    /// grants both.
+    pub fn page_back(
+        &mut self,
+        target: &str,
+        from: &str,
+        msgid: Option<&str>,
+    ) -> (Option<String>, Vec<Action>) {
+        (self.ask_for_page_back(target, from, msgid), self.drain())
+    }
+
+    fn ask_for_page_back(
+        &mut self,
+        target: &str,
+        from: &str,
+        msgid: Option<&str>,
+    ) -> Option<String> {
+        if !self.caps.is_enabled("draft/chathistory") || !self.caps.is_enabled("labeled-response") {
+            return None;
+        }
+        let limit = self.page_limit();
+        if limit == 0 {
+            return None;
+        }
+        let label = self.next_label();
+        let resume = history::Resume {
+            timestamp: from,
+            msgid,
+        };
+        let line = history::before(target, resume, limit, &label)?;
+        self.page_backs.insert(label.clone());
+        self.send_line(line);
+        Some(label)
     }
 
     /// Asks for the next page of a gap that has not been closed yet.
@@ -2259,7 +2323,8 @@ impl SessionState {
         // is the server's to send, and slicing it would panic the task.
         if let Some(reference) = reference.strip_prefix('+') {
             let kind = message.param(1).unwrap_or_default().to_string();
-            self.open_batch(reference, &kind);
+            let label = message.tag("label").map(str::to_string);
+            self.open_batch(reference, &kind, label);
         } else if let Some(reference) = reference.strip_prefix('-') {
             self.close_batch(reference);
         }
@@ -2478,6 +2543,19 @@ impl SessionState {
     /// this — throws away the one sentence a server wrote to explain itself,
     /// and leaves a command that did nothing with no reason attached.
     fn handle_standard_reply(&mut self, kind: &str, message: &Message) {
+        // A refusal is an answer. Without this the reader waits for a batch the
+        // server has already said it will not send — `FAIL CHATHISTORY` is what
+        // an unknown msgid or a selector it cannot resolve comes back as.
+        if kind == "FAIL" {
+            if let Some(label) = message.tag("label") {
+                if self.page_backs.remove(label) {
+                    self.actions.push(Action::PagedBack {
+                        label: label.to_string(),
+                        more: false,
+                    });
+                }
+            }
+        }
         let severity = match kind {
             "FAIL" => Severity::Error,
             "WARN" => Severity::Warning,
@@ -2541,6 +2619,13 @@ impl SessionState {
         self.host = None;
         self.account = None;
         self.batches.clear();
+        // A batch abandoned above is a page somebody is still waiting for, and
+        // the next connection will answer nothing under the old label. Telling
+        // them there is no more to reach is wrong by one page and unsticks the
+        // pane; leaving it would stop that conversation ever paging again.
+        for label in self.page_backs.drain() {
+            self.actions.push(Action::PagedBack { label, more: false });
+        }
         self.abandon_unwritten();
         self.ping = None;
         self.lag_ms = None;

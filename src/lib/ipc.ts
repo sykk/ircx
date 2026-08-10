@@ -141,6 +141,20 @@ export const ipc = {
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
 
   loadHistory: (req: HistoryRequest) => invoke<ChatMessage[]>("load_history", { req }),
+  /** What the server holds behind the archive, asked for once the archive has
+   * run out. `from` and `msgid` name the oldest message the window holds, and
+   * the msgid is the server's own — a locally minted one names nothing it can
+   * resolve, the same rule as `react`. Answers whether another page may be
+   * behind this one; the messages arrive as `messagesAppended`, written to the
+   * archive on the way, so nothing is returned here.
+   *
+   * The console is not a conversation and no server keeps history for it, the
+   * same reason `setTyping` is silent there. Its archive is the whole of what
+   * it has, so `false` is the true answer rather than a refusal to ask. */
+  pageBack: (network: string, target: string, from: string, msgid: string | null) =>
+    isConversation(target)
+      ? invoke<boolean>("page_back", { network, target, from, msgid })
+      : Promise.resolve(false),
   searchHistory: (req: SearchRequest) => invoke<SearchHit[]>("search_history", { req }),
   markRead: (network: string, target: string) =>
     invoke<void>("mark_read", { network, target }),

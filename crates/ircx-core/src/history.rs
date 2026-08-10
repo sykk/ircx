@@ -5,6 +5,7 @@
 //! already labels a `chathistory` batch `ServerHistory` and keeps it out of the
 //! unread counts.
 
+use ircx_proto::MessageBuilder;
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::session::build;
@@ -71,6 +72,31 @@ pub(crate) fn request(target: &str, since: Option<Resume<'_>>, limit: u32) -> Op
     }
 }
 
+/// The page behind what a reader already holds, which is the other direction
+/// from `request`: `AFTER` fills forward from the archive's newest message and
+/// this reaches back past its oldest.
+///
+/// `label` names the request on the batch that answers it. Nothing else can:
+/// a gap fill and a page back are both `chathistory` batches for the same
+/// conversation, and the answer to this one is a page nobody was waiting for
+/// unless it can be matched to the reader who asked.
+///
+/// No fallback to `LATEST` where the selector will not build, unlike `request`.
+/// The reader is asking for what is behind a particular message, and the most
+/// recent page is what they are already looking at.
+pub(crate) fn before(target: &str, from: Resume<'_>, limit: u32, label: &str) -> Option<String> {
+    let selector = selector(from)?;
+    MessageBuilder::new("CHATHISTORY")
+        .tag("label", Some(label.to_string()))
+        .param("BEFORE")
+        .param(target)
+        .param(selector)
+        .param(limit.to_string())
+        .build()
+        .ok()
+        .map(|message| message.to_line())
+}
+
 /// The msgid where there is one to use, and the timestamp otherwise.
 ///
 /// A msgid is a tag value and unescaping turns `\s` into a space, so one can
@@ -88,9 +114,14 @@ fn selector(from: Resume<'_>) -> Option<String> {
 /// `time` tag said or this machine's clock at nanosecond precision, so the
 /// value is reformatted rather than passed through.
 ///
-/// Truncating the sub-second part moves the bound earlier, which at worst asks
-/// again for a message already held — the archive refuses the duplicate.
-/// Rounding up would step over one.
+/// Truncating the sub-second part moves the bound earlier, which for `AFTER` at
+/// worst asks again for a message already held — the archive refuses the
+/// duplicate. Rounding up would step over one.
+///
+/// For `BEFORE` the same truncation asks for slightly less, so a message
+/// sharing that millisecond and older than the one named can be missed. It is
+/// the sliver a server that sends no msgid costs; with one, `selector` never
+/// comes here.
 ///
 /// A timestamp that will not parse comes from a server-set tag rather than from
 /// an impossibility. Asking for the latest page instead loses nothing.
@@ -125,6 +156,45 @@ mod tests {
     fn an_empty_archive_asks_for_the_most_recent_page() {
         assert_eq!(
             request("#ircx", None, 200).as_deref(),
+            Some("CHATHISTORY LATEST #ircx * 200")
+        );
+    }
+
+    #[test]
+    fn a_reader_scrolling_back_asks_for_the_page_behind_what_they_hold() {
+        assert_eq!(
+            before(
+                "#ircx",
+                at_only("2026-07-31T09:15:04.123456789Z"),
+                200,
+                "ircx-1"
+            )
+            .as_deref(),
+            Some("@label=ircx-1 CHATHISTORY BEFORE #ircx timestamp=2026-07-31T09:15:04.123Z 200")
+        );
+    }
+
+    #[test]
+    fn a_page_back_prefers_the_msgid_the_server_gave() {
+        let from = Resume {
+            timestamp: "2026-07-31T09:15:04.123Z",
+            msgid: Some("pqpmmxnsetcinv4abh5jmxn3gs"),
+        };
+
+        assert_eq!(
+            before("#ircx", from, 200, "ircx-7").as_deref(),
+            Some("@label=ircx-7 CHATHISTORY BEFORE #ircx msgid=pqpmmxnsetcinv4abh5jmxn3gs 200")
+        );
+    }
+
+    /// Where `request` falls back to the latest page, this asks for nothing. The
+    /// reader wants what is behind one particular message, and the latest page
+    /// is what they are already looking at.
+    #[test]
+    fn a_page_back_from_a_timestamp_that_will_not_parse_asks_for_nothing() {
+        assert!(before("#ircx", at_only("the other day"), 200, "ircx-1").is_none());
+        assert_eq!(
+            request("#ircx", Some(at_only("the other day")), 200).as_deref(),
             Some("CHATHISTORY LATEST #ircx * 200")
         );
     }

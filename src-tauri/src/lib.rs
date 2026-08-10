@@ -185,6 +185,7 @@ pub fn run() {
             commands::submit_input,
             commands::list_members,
             commands::load_history,
+            commands::page_back,
             commands::search_history,
             commands::mark_read,
             commands::set_typing,

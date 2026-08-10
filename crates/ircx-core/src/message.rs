@@ -218,7 +218,7 @@ impl SessionState {
         });
     }
 
-    pub(crate) fn open_batch(&mut self, reference: &str, kind: &str) {
+    pub(crate) fn open_batch(&mut self, reference: &str, kind: &str, label: Option<String>) {
         let source = match kind {
             "chathistory" | "draft/chathistory" => MessageSource::ServerHistory,
             _ => MessageSource::Live,
@@ -227,6 +227,7 @@ impl SessionState {
             reference.to_string(),
             BatchState {
                 source,
+                label,
                 messages: Vec::new(),
             },
         );
@@ -240,6 +241,19 @@ impl SessionState {
         };
         let mut run: Vec<ChatMessage> = Vec::new();
         let live = batch.source == MessageSource::Live;
+        // A page a reader scrolled back for rather than a gap the client is
+        // filling forward. The label is the only thing that tells them apart:
+        // both are `chathistory` batches naming the same conversation, and both
+        // can be in flight at once — a reconnect backfills a channel while
+        // somebody is reading up through it.
+        let paged_back = batch
+            .label
+            .as_ref()
+            .filter(|label| self.page_backs.contains(*label))
+            .cloned();
+        // Every message in such a batch belongs to that one answer, so how much
+        // of it arrived is the batch's own size.
+        let paged_arrived = batch.messages.len() as u32;
         // Every conversation this batch touched and how much of it arrived, so
         // each gap is closed once rather than per message — and a page that came
         // back full is a page with more behind it.
@@ -261,7 +275,11 @@ impl SessionState {
             // user has only just met, and none of it was theirs to miss. What
             // fills a gap is the opposite — it is what they were not here for,
             // which is what unread means. #223.
-            let missed = !live && self.fills_a_gap(&message.target);
+            //
+            // A page somebody scrolled back to is neither. It is older than
+            // everything they have already read, so it can neither be unread
+            // nor be the start of a gap to keep walking forward through.
+            let missed = !live && paged_back.is_none() && self.fills_a_gap(&message.target);
             // In a replay, only somebody in the conversation adds to what there
             // is to read — the same sentence the mention gate uses, and for the
             // same case. Ergo narrates the reader's own comings and goings as
@@ -316,6 +334,16 @@ impl SessionState {
                     self.gap_fills.remove(&key);
                 }
             }
+        }
+        if let Some(label) = paged_back {
+            self.page_backs.remove(&label);
+            // The same reading a gap's page gets: short of the limit is the
+            // server's history running out, and a full page has another behind
+            // it. An empty batch is the answer to the only question the reader
+            // asked — there is nothing older — and it arrives here rather than
+            // leaving them waiting, which is what the label bought.
+            let more = paged_arrived >= limit;
+            self.actions.push(Action::PagedBack { label, more });
         }
     }
 

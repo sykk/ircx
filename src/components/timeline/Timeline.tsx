@@ -188,7 +188,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         limit: PAGE_SIZE,
       });
       setLoadError(null);
-      useAppStore.getState().prependHistory(key, older, older.length === PAGE_SIZE);
+      // A full page leaves more on disk, so the archive is still the answer to
+      // the next scroll and the server is not asked at all. A short one is the
+      // archive running out, which is not the same as the history running out:
+      // what is behind it is on the server, and #472 is that this used to be
+      // where the pane gave up and said so.
+      const more =
+        older.length === PAGE_SIZE ||
+        (await pageBack(network, target, older[0] ?? current.messages[0]));
+      useAppStore.getState().prependHistory(key, older, more);
       return "read";
     } catch (e) {
       setLoadError(String(e));
@@ -364,10 +372,30 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 }
 
 /**
+ * Asks the server for the page behind `oldest`, and answers whether another may
+ * be behind that one.
+ *
+ * No message to ask from means an empty conversation, where the page a join asks
+ * for is what fills it and there is nothing to reach back past. A msgid is sent
+ * only where the server minted it — the same rule as a reaction's — because a
+ * local id names nothing it can resolve, and the timestamp beside it is what
+ * every server can answer.
+ */
+async function pageBack(
+  network: string,
+  target: string,
+  oldest: ChatMessage | undefined,
+): Promise<boolean> {
+  if (!oldest) return false;
+  return ipc.pageBack(network, target, oldest.timestamp, oldest.idIsLocal ? null : oldest.id);
+}
+
+/**
  * What the head of the scrolled content says about the history above it. It is
  * a line of the timeline rather than a layer over one: "Beginning of history"
- * is permanent for every conversation short enough to hold its whole archive,
- * and being scrolled to the top is exactly when a layer would cover something.
+ * is permanent for every conversation whose archive and whose server have both
+ * run out, and being scrolled to the top is exactly when a layer would cover
+ * something.
  */
 function historyHead(timeline: TimelineState, loadError: string | null): string | null {
   if (loadError !== null) return loadError;

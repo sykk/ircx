@@ -172,6 +172,15 @@ function Palette() {
       case "toggleRoster":
         if (store.activeViewId) store.toggleRoster(store.activeViewId);
         break;
+      case "filterMembers":
+        // Shown as well as opened: the filter draws inside the roster, so on a
+        // pane whose roster is hidden this would otherwise put the caret
+        // somewhere nothing is on screen.
+        if (store.activeViewId) {
+          store.toggleRoster(store.activeViewId, true);
+          store.setMemberFilter(store.activeViewId, "");
+        }
+        break;
       case "search":
         store.toggleSearch(true);
         break;

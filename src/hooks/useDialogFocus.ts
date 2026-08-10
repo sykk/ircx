@@ -118,6 +118,17 @@ export function useDialogFocus(dialog: RefObject<HTMLElement | null>): void {
        * run. A real close leaves it at zero. */
       queueMicrotask(() => {
         if (openDialogs > 0) return;
+        /* And skipped if something has already taken focus. Closing this dialog
+         * can be what puts a control on screen — running the palette's "Filter
+         * members" opens the roster's filter, which claims the caret as it
+         * mounts — and that happens in the commit the palette unmounts in,
+         * before this microtask. Restoring over it would take the caret
+         * straight back to the row the palette was opened from.
+         *
+         * A dialog closing with nothing to succeed it leaves focus on `body`,
+         * which is the case this still answers. */
+        const active = document.activeElement;
+        if (active !== null && active !== document.body) return;
         if (back instanceof HTMLElement && back.isConnected) back.focus();
       });
     };

@@ -651,6 +651,41 @@ is whether it looks like one conversation or like two things sharing a box.
   once, each re-rendering as members come and go. Both end-to-end runs split
   panes on quiet channels, so nothing has drawn two busy rosters together.
 
+### Narrowing the roster
+
+**Walked 2026-08-10 in the browser harness**, `driver.mjs --seeded` against
+`#ircx`, whose six members include `walker` and `wallabywombat` — so `wa`
+narrows to two rather than to one, and a filter that had quietly stopped
+filtering would still read as working on one match.
+
+- **The band is empty until the filter is used.** At rest the roster is the one
+  `docs/mockup.png` draws: no input in the DOM at all, and the rule under the
+  channel header carrying across it unbroken.
+- **The palette entry opens it with the caret in it.** `Filter members`, Return,
+  and `document.activeElement` is the field.
+- **Typing narrows it.** `wa` left `walker` and `wallabywombat`, under a heading
+  reading `Members — 2` — the matches rather than the channel.
+- **Escape clears it and hands focus back to the column**, and a second Escape
+  then closes the roster. Those two keystrokes are what the handback is for.
+- **A key with the list up opens the filter carrying that character.** `m` from
+  the column drew `marrow` and `wallabywombat`.
+
+**Found by walking it**, and not this page's own doing: the palette restored
+focus to whatever opened it even when something else had already taken it, so
+the entry above opened a filter and then put the caret back on the sidebar row
+the palette was opened from. `useDialogFocus` now declines the restore unless
+focus is still on `body`. Nothing had reached it before, because closing a
+dialog had never been what put a control on screen.
+
+**Still unseen:**
+
+- **The ceiling on a filtered column.** `rosterWidth` measures every member
+  rather than the ones drawn, so a filter does not narrow the column — that is
+  deliberate, a column resizing on every keystroke being worse, but nothing has
+  photographed a filter over a roster sitting at its 13rem ceiling.
+- **WebKitGTK.** This is Chrome against Vite. The focus handback is the part
+  worth repeating in the window, being the half jsdom cannot see either.
+
 ## Where a pane is reading, across a split
 
 A pane is rebuilt whenever the layout changes shape (#308), so the position only

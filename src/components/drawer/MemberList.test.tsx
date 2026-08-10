@@ -23,8 +23,10 @@ afterAll(() => {
   }
 });
 
-function show(members = CTF_OPS_MEMBERS) {
-  return render(<MemberList members={members} selected={null} onSelect={vi.fn()} />);
+function show(members = CTF_OPS_MEMBERS, filter = "") {
+  return render(
+    <MemberList members={members} selected={null} onSelect={vi.fn()} filter={filter} />,
+  );
 }
 
 function memberButtons() {
@@ -149,5 +151,53 @@ describe("MemberList", () => {
 
     expect(memberButtons().length).toBeLessThan(100);
     expect(memberButtons().length).toBeGreaterThan(0);
+  });
+});
+
+/** #482. The roster draws ten members and `… and n more`, so the filter is the
+ * only way to see the other 390 without scrolling all of them. */
+describe("a filtered MemberList", () => {
+  it("draws only the names carrying the filter", () => {
+    show(CTF_OPS_MEMBERS, "ra");
+
+    expect(screen.getByRole("button", { name: /phrack/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /spiral/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /marrow/ })).toBeNull();
+  });
+
+  it("counts the matches in the group heading, not the channel", () => {
+    show(CTF_OPS_MEMBERS, "ra");
+
+    expect(screen.getByRole("heading", { name: "Members — 2" })).toBeTruthy();
+  });
+
+  /* The whole of it: a filter reading only the ten members already on screen
+   * would answer for those ten and not for the channel.
+   *
+   * `nick39` matches eleven — itself and `nick390` through `nick399` — which is
+   * one more than `MEMBERS_PREVIEW`, so the truncation has something to hide.
+   * A filter matching ten or fewer would pass whether or not it was bypassed. */
+  it("reaches past the truncation without being expanded", () => {
+    show(plain(400), "nick39");
+
+    expect(screen.getAllByRole("button", { name: /^nick39/ })).toHaveLength(11);
+    expect(screen.getByRole("button", { name: "nick399" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+  });
+
+  it("puts the truncation back when the filter is emptied", () => {
+    const { rerender } = show(plain(15), "nick1");
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+
+    rerender(<MemberList members={plain(15)} selected={null} onSelect={vi.fn()} filter="" />);
+
+    expect(screen.getByRole("button", { name: "… and 5 more" })).toBeTruthy();
+  });
+
+  it("says who was looked for when nobody matches", () => {
+    show(CTF_OPS_MEMBERS, "zzz");
+
+    expect(screen.getByText("Nobody matching zzz")).toBeTruthy();
+    expect(screen.queryByText("No members")).toBeNull();
   });
 });

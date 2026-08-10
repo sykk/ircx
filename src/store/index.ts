@@ -121,6 +121,9 @@ export interface AppActions {
 
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
+  /** Narrows one pane's roster, or closes the filter with null. `""` opens an
+   * empty one. */
+  setMemberFilter: (view: ViewId, text: string | null) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
   /** Opens settings on the Networks page, showing one network's form — or a
@@ -184,6 +187,7 @@ const initialState: AppState = {
   settings: null,
   recent: [],
   rosterHidden: {},
+  memberFilter: {},
   paletteOpen: false,
   searchOpen: false,
   setup: null,
@@ -430,6 +434,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // Otherwise a later pane handed the same id would open with the closed
       // pane's roster hidden.
       const { [view]: _hidden, ...rosterHidden } = s.rosterHidden;
+      const { [view]: _narrowed, ...memberFilter } = s.memberFilter;
       const { [view]: _typed, ...consoleInput } = s.consoleInput;
       const { [view]: _line, ...rawAnchor } = s.rawAnchor;
       const { [view]: _refusal, ...composerError } = s.composerError;
@@ -449,6 +454,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         views,
         viewAnchor,
         rosterHidden,
+        memberFilter,
         consoleInput,
         rawAnchor,
         composerError,
@@ -591,6 +597,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       };
     }),
 
+  setMemberFilter: (view, text) =>
+    set((s) => {
+      if (text === null) {
+        if (!(view in s.memberFilter)) return {};
+        const { [view]: _cleared, ...memberFilter } = s.memberFilter;
+        return { memberFilter };
+      }
+      if (s.memberFilter[view] === text) return {};
+      return { memberFilter: { ...s.memberFilter, [view]: text } };
+    }),
+
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
   toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),
 
@@ -686,6 +703,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   const views = { ...s.views };
   const viewAnchor = { ...s.viewAnchor };
   const rosterHidden = { ...s.rosterHidden };
+  const memberFilter = { ...s.memberFilter };
   const consoleInput = { ...s.consoleInput };
   const rawAnchor = { ...s.rawAnchor };
   const composerError = { ...s.composerError };
@@ -699,6 +717,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     delete views[id];
     delete viewAnchor[id];
     delete rosterHidden[id];
+    delete memberFilter[id];
     delete consoleInput[id];
     delete rawAnchor[id];
     delete composerError[id];
@@ -708,6 +727,10 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
   if (survivor !== undefined && kept !== undefined) {
     views[survivor] = { ...kept, network: "", target: "", selectedUser: null, raw: false };
     viewAnchor[survivor] = null;
+    // Not `rosterHidden`, which the pane above keeps: whether a pane draws a
+    // roster is its own, while what a roster is narrowed to belongs to the
+    // channel that was being narrowed.
+    delete memberFilter[survivor];
     delete consoleInput[survivor];
     delete rawAnchor[survivor];
     delete composerError[survivor];
@@ -719,6 +742,7 @@ function dropPanesOn(s: AppState, network: string, target: string): Partial<AppS
     views,
     viewAnchor,
     rosterHidden,
+    memberFilter,
     consoleInput,
     rawAnchor,
     composerError,
@@ -783,7 +807,10 @@ function newView(network: string, target: string): ChatView {
  * any half-typed command belonged to the conversation it was showing, not to
  * the pane. */
 function retarget(
-  s: Pick<AppState, "views" | "viewAnchor" | "consoleInput" | "rawAnchor" | "composerError">,
+  s: Pick<
+    AppState,
+    "views" | "viewAnchor" | "memberFilter" | "consoleInput" | "rawAnchor" | "composerError"
+  >,
   id: ViewId,
   network: string,
   target: string,
@@ -791,6 +818,7 @@ function retarget(
   const view = s.views[id];
   if (!view) return {};
   if (view.network === network && view.target === target) return {};
+  const { [id]: _narrowed, ...memberFilter } = s.memberFilter;
   const { [id]: _typed, ...consoleInput } = s.consoleInput;
   const { [id]: _line, ...rawAnchor } = s.rawAnchor;
   const { [id]: _refusal, ...composerError } = s.composerError;
@@ -800,6 +828,7 @@ function retarget(
       [id]: { ...view, network, target, selectedUser: null, raw: false },
     },
     viewAnchor: { ...s.viewAnchor, [id]: null },
+    memberFilter,
     consoleInput,
     rawAnchor,
     composerError,

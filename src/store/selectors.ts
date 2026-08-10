@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
-import { chatPane, EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
+import { EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
 import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
@@ -31,12 +31,9 @@ export function useQueriesFor(network: string): Query[] {
 }
 
 /** Where the reader is looking, off a state rather than through a
- * subscription — for the callers that are not components. `chatPane` rather
- * than the focused pane, so this still answers while settings holds the
- * focus. */
+ * subscription — for the callers that are not components. */
 export function selectActiveTarget(s: AppState): ActiveTarget | null {
-  const id = chatPane(s);
-  const view = id ? s.views[id] : undefined;
+  const view = s.activeViewId ? s.views[s.activeViewId] : undefined;
   if (!view || !view.network) return null;
   return { network: view.network, target: view.target };
 }

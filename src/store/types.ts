@@ -171,20 +171,14 @@ export interface AppState {
   /** Null until the first view opens. */
   layout: Layout | null;
   /**
-   * The settings pane: which leaf of `layout` it is, and the section it is on.
+   * The section settings is open on, or null while it is closed.
    *
-   * A leaf whose id is deliberately not in `views`. Settings is not a
-   * conversation, and everything that walks the panes looking for one — the
-   * pane already showing a target, the panes a closed conversation takes with
-   * it, what `toStored` writes down — asks `views` and gets nothing back, which
-   * is the answer each of them wants. What the pane does need is `layout`'s own
-   * machinery: a split, a divider, a close, a place in `viewOrder`.
-   *
-   * Not written down. The tree survives a restart as the conversations its
-   * panes hold, and this is not one; `toStored` drops the leaf and its split
-   * collapses the way a closed conversation's does.
+   * The whole of the state, because settings is drawn over the layout rather
+   * than inside it: no leaf, no id, no place in `viewOrder`, and nothing that
+   * walks the panes has to be told to pass over it. Not written down either —
+   * a run comes back to the conversations it left, not to a dialog.
    */
-  settings: { view: ViewId; section: SectionId } | null;
+  settings: SectionId | null;
 
   // Chrome.
   /** Panes whose member list the user has hidden. A roster belongs to the

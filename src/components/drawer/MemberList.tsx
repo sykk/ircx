@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Member } from "@/types";
 import { MemberRow } from "./MemberRow";
-import { GROUP_LABEL, groupMembers, toRows } from "./members";
+import { GROUP_LABEL, filterMembers, groupMembers, toRows } from "./members";
 
 const HEADER_HEIGHT = 34;
 const ROW_HEIGHT = 26;
@@ -11,14 +11,19 @@ interface MemberListProps {
   members: Member[];
   selected: string | null;
   onSelect: (nick: string) => void;
+  /** What the roster is narrowed to, or "" for a filter open and still empty. */
+  filter: string;
 }
 
-export function MemberList({ members, selected, onSelect }: MemberListProps) {
+export function MemberList({ members, selected, onSelect, filter }: MemberListProps) {
   const [expandMembers, setExpandMembers] = useState(false);
-  const rows = useMemo(
-    () => toRows(groupMembers(members), expandMembers),
-    [members, expandMembers],
-  );
+  const rows = useMemo(() => {
+    const narrowed = filterMembers(members, filter);
+    // A filter that could not see past the tenth member would answer for the
+    // ten it was given rather than for the channel, so `… and n more` is not
+    // drawn over one. An empty filter is not narrowing anything and keeps it.
+    return toRows(groupMembers(narrowed), expandMembers || filter !== "");
+  }, [members, filter, expandMembers]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Nothing the virtualiser returns leaves this component, so the compiler
@@ -35,7 +40,9 @@ export function MemberList({ members, selected, onSelect }: MemberListProps) {
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-3">
       {rows.length === 0 ? (
-        <p className="px-1 py-4 text-[var(--text-muted)]">No members</p>
+        <p className="px-1 py-4 text-[var(--text-muted)]">
+          {filter === "" ? "No members" : `Nobody matching ${filter}`}
+        </p>
       ) : (
         <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {

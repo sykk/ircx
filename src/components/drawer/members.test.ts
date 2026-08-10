@@ -3,11 +3,39 @@ import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
 import {
   MEMBERS_PREVIEW,
   actionsFor,
+  filterMembers,
   groupMembers,
   groupOf,
   rankOf,
   toRows,
 } from "./members";
+
+describe("filterMembers", () => {
+  const nicks = (filter: string) => filterMembers(CTF_OPS_MEMBERS, filter).map((m) => m.nick);
+
+  it("keeps the names carrying the filter anywhere in them", () => {
+    expect(nicks("ra")).toEqual(["phrack", "spiral"]);
+  });
+
+  it("ignores case on both sides", () => {
+    // `Ariel` is the one capitalised nick in the fixture, which is why it is.
+    expect(nicks("ariel")).toEqual(["Ariel"]);
+    expect(nicks("ARIEL")).toEqual(["Ariel"]);
+  });
+
+  it("keeps the roster's order rather than ranking the matches", () => {
+    const filtered = filterMembers(CTF_OPS_MEMBERS, "a");
+    expect(filtered).toEqual(CTF_OPS_MEMBERS.filter((m) => filtered.includes(m)));
+  });
+
+  it("gives everybody back for an empty filter, as the array it was handed", () => {
+    expect(filterMembers(CTF_OPS_MEMBERS, "")).toBe(CTF_OPS_MEMBERS);
+  });
+
+  it("gives nobody back when nothing matches", () => {
+    expect(nicks("zzz")).toEqual([]);
+  });
+});
 
 describe("groupMembers", () => {
   it("splits every prefix a server can send into two groups", () => {

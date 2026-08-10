@@ -1,4 +1,5 @@
-import { useCallback, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { IconButton } from "@/components/common/IconButton";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork, useView } from "@/store/selectors";
@@ -62,6 +63,18 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   const dragged = useAppStore((s) => s.rosterWidth);
   const ref = useRef<HTMLElement>(null);
 
+  // Undefined is no filter and the band above the list stays empty. Cleared by
+  // `retarget` along with the rest of what a pane holds about one conversation,
+  // so a filter cannot follow the pane into the next channel.
+  const filter = useAppStore((s) => (view === null ? undefined : s.memberFilter[view]));
+  const setFilter = useAppStore((s) => s.setMemberFilter);
+  const narrow = useCallback(
+    (text: string | null) => {
+      if (view) setFilter(view, text);
+    },
+    [view, setFilter],
+  );
+
   // The inspector belongs to the pane, not to the panel: retargeting the view
   // clears it in the store, so nothing here has to notice the channel changed.
   const selectedNick = pane?.selectedUser ?? null;
@@ -91,11 +104,35 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         ref={ref}
         aria-label={`${channel.name} members`}
         data-ui="members"
+        tabIndex={-1}
         onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.stopPropagation();
-          if (selectedNick !== null) setSelectedNick(null);
-          else if (view) toggleRoster(view, false);
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            // In the order they are drawn over each other. The inspector still
+            // goes first: it covers the filter rather than replacing it, so a
+            // filter closed from under it would be one the reader never saw go.
+            //
+            // Focus comes back to the column when the filter closes, because
+            // the input it was in is about to unmount, and focus left on `body`
+            // is outside the tree this handler listens in — the next Escape,
+            // the one that closes the roster, would reach nothing.
+            if (selectedNick !== null) setSelectedNick(null);
+            else if (filter !== undefined) {
+              narrow(null);
+              ref.current?.focus();
+            } else if (view) toggleRoster(view, false);
+            return;
+          }
+          // Typing opens the filter on the character that opened it. Only with
+          // the list up — the inspector is a set of fields and one of them
+          // would be what a letter was meant for — and only while there is no
+          // filter already, because then the input has the focus and the
+          // keystroke is its own.
+          if (filter !== undefined || selected !== undefined) return;
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          if (event.key.length !== 1 || event.key === " ") return;
+          event.preventDefault();
+          narrow(event.key);
         }}
         /* Below 440px of pane the roster gives way and the conversation has the
            width. Against the pane rather than the window — `@container` is on
@@ -132,11 +169,33 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         {/* Empty, and the same height and rule as the pane header a few inches to
             the left, so the line under that header carries on into the roster and
             the two read as one conversation. The header already names the channel
-            and counts its members; repeating either here would be dead chrome. */}
-        <div className="h-11 shrink-0 border-b border-[var(--border-default)]" />
+            and counts its members; repeating either here would be dead chrome.
+
+            The filter is the one thing that draws here, and only while it is
+            being used: the band is already the height of a control, so a filter
+            costs the roster no room it was not holding, and the moment it is
+            cleared the band is empty again. */}
+        {filter === undefined || selected !== undefined ? (
+          <div className="h-11 shrink-0 border-b border-[var(--border-default)]" />
+        ) : (
+          <MemberFilter
+            value={filter}
+            channel={channel.name}
+            onChange={narrow}
+            onClear={() => {
+              narrow(null);
+              ref.current?.focus();
+            }}
+          />
+        )}
 
         {selected === undefined ? (
-          <MemberList members={members} selected={selectedNick} onSelect={setSelectedNick} />
+          <MemberList
+            members={members}
+            selected={selectedNick}
+            onSelect={setSelectedNick}
+            filter={filter ?? ""}
+          />
         ) : (
           <UserInspector
             network={channel.network}
@@ -148,6 +207,48 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         )}
       </aside>
     </>
+  );
+}
+
+/**
+ * What the roster is narrowed to, in the band above it.
+ *
+ * Focused on mount rather than by whoever opened it, because both routes in
+ * want it: a typed character has already gone into the store and has to land in
+ * a field that has the caret, and the palette entry opens an empty one from
+ * across the app with no reference to this pane. Mounting is the one moment
+ * both share.
+ *
+ * Escape is not handled here. It belongs to the column, which is where the
+ * order between the filter, the inspector and the roster itself is decided.
+ */
+function MemberFilter({
+  value,
+  channel,
+  onChange,
+  onClear,
+}: {
+  value: string;
+  channel: string;
+  onChange: (text: string) => void;
+  onClear: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+
+  return (
+    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-[var(--border-default)] px-2">
+      <input
+        ref={ref}
+        type="text"
+        value={value}
+        aria-label={`Filter ${channel} members`}
+        placeholder="Filter"
+        onChange={(event) => onChange(event.target.value)}
+        className="min-w-0 flex-1 bg-transparent font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+      />
+      <IconButton icon="close" label="Clear filter" onClick={onClear} />
+    </div>
   );
 }
 

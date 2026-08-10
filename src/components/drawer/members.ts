@@ -26,6 +26,22 @@ export function rankOf(member: Member | undefined): number {
   return top === undefined ? 0 : (PREFIX_RANK[top] ?? 0);
 }
 
+/**
+ * A case-insensitive substring of the nick, and nothing cleverer. The palette
+ * ranks fuzzily because it is choosing one thing out of everything the client
+ * knows; a roster filter narrows a list somebody is already reading, and one
+ * that reordered the names as they typed would be harder to follow than the
+ * list it replaced.
+ *
+ * Plain `toLowerCase` rather than the RFC 1459 folding `sameTarget` does: this
+ * is a substring being typed, not two nicks being judged the same person.
+ */
+export function filterMembers(members: Member[], filter: string): Member[] {
+  const needle = filter.toLowerCase();
+  if (needle === "") return members;
+  return members.filter((member) => member.nick.toLowerCase().includes(needle));
+}
+
 export interface MemberSection {
   group: MemberGroup;
   members: Member[];

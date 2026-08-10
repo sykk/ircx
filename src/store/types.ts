@@ -185,6 +185,13 @@ export interface AppState {
    * conversation it lists, so every pane draws its own and this records the
    * exceptions rather than the rule. */
   rosterHidden: Record<ViewId, boolean>;
+  /**
+   * What each pane's roster is narrowed to. Absent is no filter at all and the
+   * band above the list stays empty, which is the roster the mockup draws; `""`
+   * is an empty filter open and waiting, which is what the palette entry opens
+   * and what a typed character lands in.
+   */
+  memberFilter: Record<ViewId, string>;
   paletteOpen: boolean;
   searchOpen: boolean;
   /**

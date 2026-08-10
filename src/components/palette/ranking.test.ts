@@ -60,6 +60,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     settings: null,
     recent,
     rosterHidden: {},
+    memberFilter: {},
     paletteOpen: false,
     searchOpen: false,
     setup: null,

@@ -25,6 +25,7 @@ export type CandidateAction =
   | { type: "refine"; text: string }
   | { type: "run"; network: string; target: string; input: string }
   | { type: "toggleRoster" }
+  | { type: "filterMembers" }
   | { type: "split"; direction: SplitDirection }
   | { type: "closePane" }
   | { type: "search" }
@@ -342,6 +343,13 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Toggle member list",
     detail: "Show or hide this pane's member list",
     action: { type: "toggleRoster" },
+  },
+  // The only thing that advertises the filter. Typing into the roster opens it,
+  // and nothing on screen says so while the band above the list is empty.
+  {
+    label: "Filter members",
+    detail: "Narrow this pane's member list to a name",
+    action: { type: "filterMembers" },
   },
   {
     label: "Search this conversation",

@@ -10,9 +10,9 @@ import { assignGroups } from "./groups";
 import { MessageBlock } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
-import { buildRows, rowIndexOfMessage, type TimelineRow } from "./rows";
+import { buildRows, rowIndexOfMessage, rowMessages, type TimelineRow } from "./rows";
 
-import { usePrependAnchor } from "./scrollAnchor";
+import { usePrependAnchor, type Offsets } from "./scrollAnchor";
 
 const PAGE_SIZE = 200;
 export const ESTIMATED_ROW_PX = 46;
@@ -128,7 +128,37 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     overscan: 10,
   });
 
-  usePrependAnchor(scrollRef, headRef, messages);
+  // The anchor works in messages, the virtualiser in rows, and this is the
+  // whole of the translation. A row that holds none — a date, a seam — cannot
+  // name the reader's place, so the search runs forward to one that can.
+  const offsets = useMemo<Offsets>(
+    () => ({
+      offsetOfMessage: (id) => {
+        const index = rowIndexOfMessage(rows, id);
+        if (index === -1) return undefined;
+        // For the side effect, and it is the whole reason the anchor works.
+        // `getOffsetForIndex` reads a cache of the measurements rather than the
+        // measurements, and rows measured in this commit's ref callbacks are
+        // not in it yet; `getTotalSize` is the public call that recomputes
+        // them. Without this the offset is the one the estimate gave, which is
+        // the bug the anchor is here to fix (#477).
+        virtualizer.getTotalSize();
+        return virtualizer.getOffsetForIndex(index, "start")?.[0];
+      },
+      messageAtOffset: (offset) => {
+        const from = virtualizer.getVirtualItemForOffset(offset)?.index;
+        if (from === undefined) return undefined;
+        for (let index = from; index < rows.length; index++) {
+          const first = rowMessages(rows[index]!)[0];
+          if (first) return first.id;
+        }
+        return undefined;
+      },
+    }),
+    [rows, virtualizer],
+  );
+
+  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets);
 
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole
@@ -239,6 +269,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    recordAnchor();
     // A pane waiting to be put back is at the top because nothing has moved it
     // yet, not because anybody read their way there. Recording that would
     // overwrite the row it is being put back to, which is how the position used
@@ -261,7 +292,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       .getState()
       .setViewAnchor(view, top === undefined ? null : (rows[top.index]?.id ?? null));
     if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder, view, rows, virtualizer]);
+  }, [loadOlder, view, rows, virtualizer, recordAnchor]);
 
   const jump = useCallback(
     (msgid: string) => {

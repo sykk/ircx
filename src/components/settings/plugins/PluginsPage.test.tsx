@@ -1,6 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetStore } from "@/components/shell/fixtures";
+import {
+  makeChannel,
+  makeNetwork,
+  makeQuery,
+  resetStore,
+  seedStore,
+} from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
 import type * as Ipc from "@/lib/ipc";
 import type { InstalledPlugin, PluginPermissionInfo } from "@/types";
@@ -121,6 +127,7 @@ async function save() {
 const CHANNELS = "Work in the channels you choose, and no others";
 const COMMANDS = "Add slash commands you can type";
 const WEBSITES = "Fetch data from the websites it names";
+const NAME_ONE = "Name one you are not in";
 
 describe("the plugins page", () => {
   it("lists what a plugin adds and how much of what it asked for it holds", async () => {
@@ -201,7 +208,7 @@ describe("the plugins page", () => {
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
-      fireEvent.change(screen.getByLabelText("Name one instead"), {
+      fireEvent.change(screen.getByLabelText(NAME_ONE), {
         target: { value: "#ircx-dev" },
       });
       fireEvent.click(button("Add"));
@@ -224,7 +231,7 @@ describe("the plugins page", () => {
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
-      const field = screen.getByLabelText("Name one instead");
+      const field = screen.getByLabelText(NAME_ONE);
       fireEvent.change(field, { target: { value: "#ircx-dev" } });
       fireEvent.keyDown(field, { key: "Enter" });
 
@@ -251,7 +258,7 @@ describe("the plugins page", () => {
       fireEvent.click(box("Every conversation"));
       expect(button("Save").disabled).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Name one instead"), {
+      fireEvent.change(screen.getByLabelText(NAME_ONE), {
         target: { value: "#replytest" },
       });
 
@@ -265,7 +272,7 @@ describe("the plugins page", () => {
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
-      fireEvent.change(screen.getByLabelText("Name one instead"), {
+      fireEvent.change(screen.getByLabelText(NAME_ONE), {
         target: { value: "#replytest" },
       });
       fireEvent.click(button("Add"));
@@ -284,7 +291,7 @@ describe("the plugins page", () => {
       fireEvent.click(box(CHANNELS));
       fireEvent.click(box("Every conversation"));
 
-      const field = screen.getByLabelText("Name one instead");
+      const field = screen.getByLabelText(NAME_ONE);
       fireEvent.change(field, { target: { value: "#replytest" } });
       fireEvent.change(field, { target: { value: "  " } });
 
@@ -300,7 +307,67 @@ describe("the plugins page", () => {
       await permissionsFor("Greeter");
       fireEvent.click(box(CHANNELS));
 
-      expect(screen.queryByLabelText("Name one instead")).toBeNull();
+      expect(screen.queryByLabelText(NAME_ONE)).toBeNull();
+    });
+
+    /** The gap `docs/plugins.md` recorded: the form offered what the manifest
+     * named and a box to type into, and neither was the list of conversations
+     * the reader is in — so narrowing an eager plugin was spelling rather than
+     * picking. The page can ask now because settings is a dialog inside the
+     * client and reads the store the sidebar reads. */
+    it("offers the conversations the reader is in", async () => {
+      seedStore(
+        [makeNetwork("libera")],
+        [makeChannel("libera", "#ircx"), makeChannel("libera", "#rust")],
+        [makeQuery("libera", "phrack")],
+      );
+      await open([EAGER]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+      fireEvent.click(box("#rust"));
+
+      expect(box("#ircx").checked).toBe(false);
+      expect(box("phrack").checked).toBe(false);
+
+      await save();
+      expect(ipcMock.setPluginGrants).toHaveBeenCalledWith(
+        "greeter",
+        expect.objectContaining({ channels: ["#rust"] }),
+      );
+    });
+
+    /** A manifest that listed its channels has said which ones, and
+     * `Grants::within` refuses anything outside that list. Offering the
+     * reader's own would draw a row whose save the backend rejects. */
+    it("offers none of them where the manifest listed the channels itself", async () => {
+      seedStore([makeNetwork("libera")], [makeChannel("libera", "#rust")]);
+      const listed: InstalledPlugin = {
+        ...GREETER,
+        requests: { ...GREETER.requests, channels: ["#ircx"] },
+      };
+      await open([listed]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+
+      expect(box("#ircx")).toBeTruthy();
+      expect(screen.queryByLabelText("#rust")).toBeNull();
+    });
+
+    /** A conversation the reader is not in has no row, and a plugin can still
+     * be given one — the channel it will be joined to next week. */
+    it("still takes a conversation that has no row", async () => {
+      seedStore([makeNetwork("libera")], [makeChannel("libera", "#ircx")]);
+      await open([EAGER]);
+      await permissionsFor("Greeter");
+      fireEvent.click(box(CHANNELS));
+
+      fireEvent.change(screen.getByLabelText(NAME_ONE), {
+        target: { value: "#ircx-dev" },
+      });
+      fireEvent.click(button("Add"));
+
+      expect(box("#ircx-dev").checked).toBe(true);
+      expect(box("#ircx").checked).toBe(false);
     });
 
     it("asks for a website before a plugin may make requests", async () => {

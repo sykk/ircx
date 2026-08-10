@@ -151,6 +151,34 @@ export function selectQueriesFor(s: AppState, network: string): Query[] {
 }
 
 /**
+ * Every conversation the reader has, by name, for the plugin grant that asks
+ * which ones a plugin may work in.
+ *
+ * Names and no networks, because a grant holds no network either: `Grants::within`
+ * (`crates/ircx-plugin/src/manifest.rs`) compares a channel name alone, so the
+ * same name on two networks is one row here and one grant there.
+ *
+ * Channels before queries and both by name, which is the sidebar's order with
+ * the networks taken out of it — there is no network left in the answer to
+ * group by.
+ *
+ * Every row rather than the joined ones. A dropped connection leaves its
+ * channels unjoined until it comes back, and a list that emptied while a
+ * network reconnected would refuse to grant a channel the sidebar is still
+ * drawing.
+ */
+export function selectConversationNames(s: Pick<AppState, "channels" | "queries">): string[] {
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+  const channels = Object.values(s.channels)
+    .map((c) => c.name)
+    .sort(byName);
+  const queries = Object.values(s.queries)
+    .map((q) => q.nick)
+    .sort(byName);
+  return [...new Set([...channels, ...queries])];
+}
+
+/**
  * The conversation at the top of the sidebar, which is the one an empty window
  * opens.
  *

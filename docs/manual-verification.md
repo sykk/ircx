@@ -2199,6 +2199,68 @@ lands on "That network is no longer configured":
 - **Connect, Disconnect and Remove succeeding.** Only their refusals have been
   driven; the seed answers none of the three.
 
+**All three were then walked**, below.
+
+#### The same page against a real server
+
+**Walked 2026-08-10 in the assembled app**, `window.mjs` on `Xvfb` at 1200x800
+against `ergo` 2.19 on `127.0.0.1:6667`, with a second client sitting in
+`#walk` reading the wire and the server's own log beside it. Every command here
+reached the Rust side and a socket, which is what the seeded run could not do.
+
+- **The row is the connection.** The seeded network drew `walk Connected` and
+  `127.0.0.1:6667 · no TLS · walker`, off the store the sidebar reads.
+- **Settings on a saved row opens the form filled in.** `Network settings` came
+  up on the advanced step carrying the name, address, port, TLS box and
+  nickname that `list_network_configs` holds — the screen that answered "That
+  network is no longer configured" under the seed.
+- **Escape from that form returns to the list, and a second Escape closes
+  settings.** Driven from focus inside a text field, which is where both
+  defects the browser walk found bit.
+- **Disconnect is a QUIT; Connect dials again.** The watcher saw
+  `walker QUIT :Quit: ircx` at 07:08:11 and `walker JOIN #walk` at 07:08:15 —
+  the button's own quit message rather than a dropped socket. In between the
+  row, the sidebar dot and the status bar all said so.
+- **Add a network saves it and connects it.** Show every setting, TLS off, port
+  6667, nickname `walker2`, Return from the port field: 900 ms later the list
+  carried a second row reading `Connected`, the sidebar carried it too, and
+  ergo logged `Client connected [walker2]`. Both networks were still there
+  after a restart.
+- **Remove disconnects the one removed and nothing else.** `walk` left the
+  list, the sidebar and the server at 11:12:47 while `walker2` stayed
+  registered until the app itself was stopped two seconds later. The pane
+  behind, which was on `#walk`, went blank rather than closing — the store's
+  answer for a view pointing at a network that is gone.
+- **An edit is saved.** The port changed to 6699 and Return: reopening the form
+  read 6699 back, and the next launch dialled it.
+
+**Found by walking it**, neither a defect of this page and both worth knowing:
+
+- **A live connection is not restarted by an edit, and nothing says so.** After
+  saving 6699 the row went on reading `127.0.0.1:6667 · Connected`, because the
+  list describes the connection while the form describes the configuration.
+  They disagree until the network reconnects, and the page offers no reading of
+  that except the two numbers differing.
+- **The list's order is whichever server answers first.** `networkOrder` is
+  built as `networkUpdated` arrives, so two networks dialling at once race:
+  ergo registered them 1 ms apart and the order came out reversed between one
+  launch and the next. The sidebar has always ordered them this way; a settings
+  list that rearranges itself between launches is a louder place for it.
+
+**Still unseen:**
+
+- **The failure line on a row.** A port nothing listens on is `Reconnecting`
+  with a countdown, not `Failed` — the reconnect loop owns it. The red reason
+  under a row wants what core treats as fatal: a rejected SASL, a certificate
+  it will not accept, a nick it cannot resolve.
+- **`Connecting` itself, drawn.** The save above connected before the first
+  screenshot 900 ms later, so what is verified is the connection and not the
+  screen that was supposed to be watching it. Loopback is the wrong network to
+  photograph it on.
+- **The other three routes to the form.** Only the row's own Settings button
+  was walked; the network row's menu, the channel header's `⋮` and the palette
+  entry call the same `openSetup(id)` and none of them has been driven here.
+
 ### The second window this replaced
 
 Kept because the walks below are what the shape was chosen against, not because

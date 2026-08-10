@@ -37,6 +37,7 @@ import {
 export function PermissionsForm({
   plugin,
   summaries,
+  conversations,
   error,
   busy,
   onSave,
@@ -44,6 +45,10 @@ export function PermissionsForm({
 }: {
   plugin: InstalledPlugin;
   summaries: readonly PluginPermissionInfo[];
+  /** The ones the reader is in, drawn as rows to tick where the manifest asked
+   * for every conversation. Without them, narrowing such a plugin meant
+   * spelling a name correctly into a box. */
+  conversations: readonly string[];
   error: string | null;
   busy: boolean;
   onSave: (grants: PluginGrants) => void;
@@ -104,7 +109,7 @@ export function PermissionsForm({
                     legend="Conversations"
                     empty="This plugin names no conversation it could work in."
                     missing="Choose at least one conversation."
-                    offered={offeredChannels(asked.channels, draft.channels)}
+                    offered={offeredChannels(asked.channels, draft.channels, conversations)}
                     chosen={draft.channels}
                     nameOf={(channel) =>
                       channel === EVERY_CONVERSATION ? "Every conversation" : channel
@@ -149,9 +154,9 @@ export function PermissionsForm({
   );
 }
 
-/** The channels or hosts a scoped permission may reach, offered as the manifest
- * listed them. `*` is one of the entries and is checked like any other, so
- * every conversation is a thing the user ticks rather than a default. */
+/** The channels or hosts a scoped permission may reach. `*` is one of the
+ * entries and is checked like any other, so every conversation is a thing the
+ * user ticks rather than a default. */
 function Scope({
   legend,
   empty,
@@ -211,7 +216,8 @@ function Scope({
 }
 
 /**
- * Naming one conversation instead of taking every one.
+ * Naming a conversation that has no row above — one the reader is not in yet,
+ * which the picker cannot know about and a plugin can still be given.
  *
  * Enter has to be caught here. A lone text input inside a form submits it,
  * which would save the grant without the channel that was just typed — and
@@ -247,13 +253,13 @@ function NameOne({
         }}
       >
         <TextField
-          label="Name one instead"
+          label="Name one you are not in"
           value={typed}
           onChange={onTyped}
           placeholder="#channel or nick"
           hint={
             typed.trim() === ""
-              ? `${legend} you name here are the only ones it reaches.`
+              ? `${legend} you tick or name here are the only ones it reaches.`
               : `Add ${typed.trim()} or clear it — it is not granted until you do.`
           }
         />

@@ -58,16 +58,26 @@ export function allowsNaming(asked: readonly string[]): boolean {
   return asked.includes(EVERY_CONVERSATION);
 }
 
-/** The rows the conversations scope draws: what the manifest listed, plus
- * anything the user has named that it did not. */
+/**
+ * The rows the conversations scope draws: what the manifest listed, then the
+ * conversations the reader is in, then anything they have named that is in
+ * neither.
+ *
+ * The reader's own are offered only where naming is allowed. A manifest that
+ * listed its channels has already said which ones, and a row outside that list
+ * is one `Grants::within` refuses — offering it would be offering a save that
+ * cannot happen.
+ */
 export function offeredChannels(
   asked: readonly string[],
   chosen: readonly string[],
+  present: readonly string[],
 ): string[] {
-  const named = chosen.filter(
-    (channel) => channel !== EVERY_CONVERSATION && !asked.includes(channel),
-  );
-  return [...asked, ...named];
+  const rows = [...asked];
+  for (const channel of allowsNaming(asked) ? [...present, ...chosen] : chosen) {
+    if (channel !== EVERY_CONVERSATION && !rows.includes(channel)) rows.push(channel);
+  }
+  return rows;
 }
 
 export function toggleHost(grants: PluginGrants, host: string): PluginGrants {

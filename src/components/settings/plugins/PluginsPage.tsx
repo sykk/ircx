@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SecondaryButton } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { chooseFolder, ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import { selectConversationNames } from "@/store/selectors";
 import type { PluginGrants, PluginPermissionInfo } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { PermissionsForm } from "./PermissionsForm";
@@ -22,6 +23,17 @@ import { PluginList } from "./PluginList";
 export function PluginsPage({ onDone }: { onDone: () => void }) {
   const plugins = useAppStore((s) => s.plugins);
   const unavailable = useAppStore((s) => s.pluginsUnavailable);
+
+  /* The conversations to offer a plugin, which this page can ask for because it
+   * is a dialog inside the client rather than the window settings used to be:
+   * the store is the one the sidebar reads. Derived rather than selected, so a
+   * fresh array is built when the maps change and not on every render. */
+  const channels = useAppStore((s) => s.channels);
+  const queries = useAppStore((s) => s.queries);
+  const conversations = useMemo(
+    () => selectConversationNames({ channels, queries }),
+    [channels, queries],
+  );
 
   /** The plain-terms lines, read once: they describe the permissions
    * themselves rather than any one plugin. */
@@ -143,6 +155,7 @@ export function PluginsPage({ onDone }: { onDone: () => void }) {
           <PermissionsForm
             plugin={editingPlugin}
             summaries={summaries}
+            conversations={conversations}
             error={error}
             busy={busy}
             onSave={(grants) => void save(editingPlugin.id, grants)}

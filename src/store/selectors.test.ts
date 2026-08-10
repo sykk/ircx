@@ -8,6 +8,7 @@ import {
   useNetworks,
   useQueriesFor,
   isHighlight,
+  selectConversationNames,
   selectQueued,
   matchesHighlight,
   splitOnHighlight,
@@ -17,7 +18,7 @@ import {
 } from "./selectors";
 import { makeMessage } from "@/components/timeline/fixtures";
 import type { ChatView } from "./types";
-import type { Channel, ChatMessage, Network } from "@/types";
+import type { Channel, ChatMessage, Network, Query } from "@/types";
 
 function network(id: string): Network {
   return {
@@ -46,6 +47,10 @@ function channel(net: string, name: string): Channel {
     highlights: 0,
     muted: false,
   };
+}
+
+function query(net: string, nick: string): Query {
+  return { network: net, nick, account: null, unread: 0, online: true, muted: false };
 }
 
 function view(id: string, network: string, target: string): ChatView {
@@ -510,5 +515,37 @@ describe("what is still waiting to send", () => {
       ours("c", { state: "pending" }),
     );
     expect(count()).toBe(1);
+  });
+});
+
+describe("the conversations a plugin can be handed", () => {
+  function names(channels: Channel[], queries: Query[] = []): string[] {
+    return selectConversationNames({
+      channels: Object.fromEntries(channels.map((c) => [targetKey(c.network, c.name), c])),
+      queries: Object.fromEntries(queries.map((q) => [targetKey(q.network, q.nick), q])),
+    });
+  }
+
+  it("puts the channels before the queries and sorts each by name", () => {
+    expect(
+      names(
+        [channel("libera", "#rust"), channel("libera", "#ircx")],
+        [query("libera", "sable"), query("libera", "phrack")],
+      ),
+    ).toEqual(["#ircx", "#rust", "phrack", "sable"]);
+  });
+
+  /** A grant holds a name and no network, so two networks with the same channel
+   * are one row to tick and one grant reaching both. A second row would be a
+   * tick that changed nothing. */
+  it("draws one row for a name that is on two networks", () => {
+    expect(names([channel("libera", "#ircx"), channel("oftc", "#ircx")])).toEqual(["#ircx"]);
+  });
+
+  /** A reconnect leaves every channel unjoined until it comes back. Offering
+   * only the joined ones would empty this list while the sidebar still drew
+   * them, and refuse a grant for a reason nobody could see. */
+  it("offers a channel whose network is still coming back", () => {
+    expect(names([{ ...channel("libera", "#ircx"), joined: false }])).toEqual(["#ircx"]);
   });
 });

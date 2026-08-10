@@ -64,6 +64,17 @@ reaches nothing — a scope left empty, or sending and reading without a
 conversation to do it in. That rule is the dialogue's; the library's floor is
 `Grants::within`, which refuses anything the manifest never asked for.
 
+**A plugin that asked for `*` is narrowed by picking rather than by spelling.**
+The conversations scope draws what the manifest named, then the conversations
+the reader is in — every channel and query in the client, out of the store the
+sidebar reads. The box beside them covers the one case a picker cannot: a
+conversation the reader is not in yet and means to hand over anyway. Only a
+manifest asking for every conversation gets either, because one that listed its
+channels has already said which ones and `Grants::within` refuses the rest.
+
+A row is a name and never a network, which is what a grant holds: `#ircx` on two
+networks is one row to tick and one grant reaching both.
+
 **The two scopes do not spell "any" the same way, and only one of them can.**
 `"channels": ["*"]` means every conversation, which is what the shipped examples
 ask for and what `Grants::reaches` reads. `"hosts": ["*"]` means nothing:
@@ -507,9 +518,5 @@ more than the message in front of it, such as the third failure this hour.
 
 - **The other two extension points' shapes.** Providers and protocol adapters
   are still only described.
-- **Which channels a plugin may reach, chosen from the ones it is in.** The
-  install dialogue offers the channels the manifest named, and lets the user
-  type one when the manifest asked for `*`. Neither is a list of the channels
-  they are actually in, so naming one is spelling rather than picking.
 - **A second plugin's marginal cost.** Every figure in `docs/measurements.md` is
   one plugin.

@@ -2813,13 +2813,31 @@ works.
 
 - **Libera again**, for the reason above: no history capability, so nothing is
   ever asked and nothing can be walked there.
-- **A pane a person actually scrolls.** The wire is verified here and the pane's
-  own decision — ask only where the archive came back short, not where the
-  window filled — is `Timeline.test.tsx`. What no test covers is the two
-  together in the running app: a channel with more than a page behind it, read
-  to the top by hand, and the rows arriving above the reader without moving
-  them. The anchor that has to hold it is #307's and is walked; this is a
-  conversation longer than any walk has used.
+**A pane a person actually scrolls was walked on 2026-08-10**, over a
+900-message channel on a local `ergo`, from the live edge to line 0001.
+`docs/end-to-end-run-12.md` is the run.
+
+The paging is right: five labelled `CHATHISTORY BEFORE` requests, in order, none
+repeated, and **Beginning of history** drawn after the fifth came back short and
+not before. That is #472 holding in a pane rather than on a socket.
+
+**The reader is not.** A page landing moves the timeline under them — 24 px in
+one walk, 29 px in another, measured between two frames with nothing sent
+between them. The head that says "Loading older messages" grows the scroller
+above the list on a commit where nothing was prepended, so `usePrependAnchor`
+ignores its height. #475, with the arithmetic and a Chrome measurement that puts
+the displacement and the head at the same 24.5 px.
+
+What that leaves:
+
+- **The whole cycle.** The head's arrival and its departure are each measured on
+  their own; whether they cancel is not. #475 says what to measure.
+- **A release build.** Both walks are debug against Vite, so `StrictMode`. The
+  shipped path is the unwalked one.
+- **A live message arriving while the reader is scrolled back.** Everything in
+  run 12 lands above the viewport; `mergeByTime` is what would land one below it.
+- **Two panes on one conversation**, one at the live edge and one scrolled back.
+  The anchor shares a component with #307's restore and no walk has opened both.
 
 ## The archive's own controls
 

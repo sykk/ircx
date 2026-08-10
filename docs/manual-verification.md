@@ -2246,6 +2246,9 @@ reached the Rust side and a socket, which is what the seeded run could not do.
   ergo registered them 1 ms apart and the order came out reversed between one
   launch and the next. The sidebar has always ordered them this way; a settings
   list that rearranges itself between launches is a louder place for it.
+  Answered by #480: the order is the names now, and the id settles two of them
+  sharing one. Not walked again — the reordering is the store's, and
+  `index.test.ts` reproduces the race by applying the events out of order.
 
 **Still unseen:**
 

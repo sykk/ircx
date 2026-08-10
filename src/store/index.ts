@@ -927,13 +927,8 @@ function holdMessages(
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
   switch (event.type) {
     case "networkUpdated": {
-      const id = event.network.id;
-      return {
-        networks: { ...s.networks, [id]: event.network },
-        networkOrder: s.networkOrder.includes(id)
-          ? s.networkOrder
-          : [...s.networkOrder, id],
-      };
+      const networks = { ...s.networks, [event.network.id]: event.network };
+      return { networks, networkOrder: orderNetworks(networks) };
     }
 
     case "networkRemoved": {
@@ -1347,6 +1342,22 @@ function patchNetwork(
   const current = s.networks[id];
   if (!current) return {};
   return { networks: { ...s.networks, [id]: { ...current, ...patch } } };
+}
+
+/**
+ * The names, rather than the order the servers answered in. Each network is a
+ * lane of its own in the event pump and one `NetworkUpdated` supersedes another
+ * inside a lane, so arrival order is the order they connected in: two dialling
+ * at once came out reversed between one launch and the next (#480). Recomputed
+ * on every update because a rename arrives as one, and the id breaks a tie
+ * because nothing makes a name unique.
+ */
+function orderNetworks(networks: AppState["networks"]): string[] {
+  return Object.keys(networks).sort(
+    (a, b) =>
+      networks[a]!.name.localeCompare(networks[b]!.name, undefined, { sensitivity: "base" }) ||
+      a.localeCompare(b),
+  );
 }
 
 function dropByNetwork<T>(map: Record<string, T>, network: string): Record<string, T> {

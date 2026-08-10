@@ -187,8 +187,16 @@ export interface AppState {
   rosterHidden: Record<ViewId, boolean>;
   paletteOpen: boolean;
   searchOpen: boolean;
-  /** The network setup sheet: null while it is closed, otherwise the id of the
-   * network it is editing, or null inside for one that does not exist yet. */
+  /**
+   * Which screen the Networks page is on: null for the list, otherwise the id
+   * of the network whose form is open — or null inside, for one that does not
+   * exist yet.
+   *
+   * In the store rather than in the page because the entry points are not the
+   * page. The sidebar's `+`, a network row's menu, the channel header's `⋮` and
+   * the palette each mean "configure this one", and `openSetup` opens settings
+   * on Networks and says which one in the same write.
+   */
   setup: { network: string | null } | null;
   /** Paths the composer's attach button picked, waiting for the confirmation a
    * drop gets. Here because the dialog that asks the question is mounted with

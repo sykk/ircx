@@ -101,9 +101,27 @@ layout the client would not, and it is scripted for what `groups.ts` makes of
 it: a run, an addressed pair, a declared topic and a message in no group, which
 are the four states a spine has.
 
-The sections are `sections.ts`. Networks are still the gap, though no longer
-for the reason they were — the dialog is inside the client's event bridge and
-could watch a connection; moving the onboarding flow into it is its own change.
+The sections are `sections.ts`, and Networks is no longer the gap among them.
+It was one for as long as settings was a window of its own: configuring a
+network is the onboarding flow, its last step watches the connection it
+started, and that window ran no event bridge to watch it with. A dialog inside
+the client does, so `Connecting` reads the store the sidebar reads.
+
+The flow moved whole rather than being written again — `NetworksPage` draws the
+same `Onboarding` the first launch does, on a `start` that skips the chooser.
+Which screen the page is on is `AppState.setup`, in the store rather than in the
+component, because the entry points are not the component: the sidebar's `+`, a
+network row's menu, the channel header's `⋮` and the palette each mean
+"configure this one", and `openSetup` opens settings on Networks and names the
+network in one write. Nothing else edits a network, which is what the
+standalone dialog had become.
+
+That form is the one screen in settings that claims Escape. The dialog declines
+Escape from inside a field, so that a value being typed is what the key
+abandons, and this form opens with a field focused — which left the key doing
+nothing at all on a screen that used to close with it. It goes back to the
+list, and focus goes back to the dialog with it: a field that unmounts leaves
+focus on `body`, outside the React tree the dialog's own handler listens in.
 
 A page that lays out against the window rather than against what holds it will
 clip; the Appearance rail was found doing exactly that, and asks its container

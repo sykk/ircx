@@ -2165,6 +2165,40 @@ off.
   `SettingsBusy` is set — the guard each of these pages had as a sheet — and
   neither has been driven against a slow backend.
 
+### The Networks page
+
+**Walked 2026-08-10 in the browser harness**, same run conditions:
+
+- **The list is the page**, drawn off the store rather than off
+  `list_network_configs`: the seeded network's row named its address, its
+  nickname and `Connected`, and `list_network_configs` was never called.
+- **The sidebar's `+` lands here.** Settings opened with Networks selected and
+  the blank server form up, which is the route the standalone dialog used to
+  own.
+- **Escape from the form goes back to the list, and a second Escape closes
+  settings.** Both halves were defects the walk found and the code now answers.
+  The form opens with its address field focused, so the dialog's `isTextEntry`
+  guard declined the key outright — the screen a dialog of its own used to
+  close had no Escape at all. And returning to the list left focus on `body`,
+  outside the React tree the dialog's handler listens in, so the *next* Escape
+  reached nothing either.
+- **A refused command is reported on the row's own page.** Disconnect against
+  the seed, which has no handler for it, put "the seed has no handler for
+  disconnect_network" under the heading rather than into the console.
+
+**Still unseen**, and the seed is why for most of it — `list_network_configs`
+answers `[]` there, so every route that opens the form on an *existing* network
+lands on "That network is no longer configured":
+
+- **Editing a saved network anywhere but jsdom.** The row's Settings button, a
+  network row's menu, the channel header's `⋮` and the palette's
+  "<Network> settings" all call `openSetup(id)` and all want a real backend.
+- **Saving, and the connect step under it.** The whole reason this section
+  could exist here is that `Connecting` can watch a connection from inside the
+  dialog. Nothing has watched it do so.
+- **Connect, Disconnect and Remove succeeding.** Only their refusals have been
+  driven; the seed answers none of the three.
+
 ### The second window this replaced
 
 Kept because the walks below are what the shape was chosen against, not because

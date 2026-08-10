@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { NetworkSetup } from "@/components/onboarding/NetworkSetup";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
@@ -86,7 +85,6 @@ export function App() {
       <SettingsOverlay />
       <CommandPalette />
       <SearchOverlay />
-      <NetworkSetup />
       <DropToUpload />
       <ChannelList />
 

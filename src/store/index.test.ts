@@ -926,6 +926,51 @@ describe("what a console pane holds", () => {
   });
 });
 
+/** The sidebar, the Networks page and which conversation the app opens on all
+ * read `networkOrder`, and it used to be the order the events arrived in. Each
+ * network is a lane of its own in the pump, so that was the order they
+ * connected in: two dialling at once came out reversed between one launch and
+ * the next. See #480. */
+describe("the order the networks are in", () => {
+  const store = () => useAppStore.getState();
+
+  const arrives = (id: string, name: string) =>
+    store().applyEvent({ type: "networkUpdated", network: makeNetwork(id, { name }) });
+
+  it("is the names, whichever of them answered first", () => {
+    arrives("n1", "Zulu");
+    arrives("n2", "Alpha");
+
+    expect(store().networkOrder).toEqual(["n2", "n1"]);
+  });
+
+  it("does not depend on the case they were typed in", () => {
+    arrives("n1", "Beta");
+    arrives("n2", "alpha");
+
+    expect(store().networkOrder).toEqual(["n2", "n1"]);
+  });
+
+  it("moves a network that was renamed", () => {
+    arrives("n1", "Alpha");
+    arrives("n2", "Beta");
+    expect(store().networkOrder).toEqual(["n1", "n2"]);
+
+    arrives("n1", "Zulu");
+
+    expect(store().networkOrder).toEqual(["n2", "n1"]);
+  });
+
+  // Nothing makes a name unique, and a stable sort would leave the pair in
+  // whichever order they arrived — which is the race, kept inside the tie.
+  it("settles two of the same name on their ids", () => {
+    arrives("n2", "Libera");
+    arrives("n1", "Libera");
+
+    expect(store().networkOrder).toEqual(["n1", "n2"]);
+  });
+});
+
 /** A removed network dropped its channels, queries, timelines and members —
  * and left everything else it keyed: typing expiries, reply targets, input
  * history, up to 2,000 raw-log lines and a whole /list answer, forever. A

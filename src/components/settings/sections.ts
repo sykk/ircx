@@ -1,6 +1,12 @@
 import type { IconName } from "@/components/common/Icon";
 
-export type SectionId = "appearance" | "notifications" | "uploads" | "privacy" | "plugins";
+export type SectionId =
+  | "appearance"
+  | "notifications"
+  | "uploads"
+  | "privacy"
+  | "plugins"
+  | "networks";
 
 export interface Section {
   id: SectionId;
@@ -9,18 +15,21 @@ export interface Section {
 }
 
 /**
- * The settings window's sections, in the order the sidebar lists them.
+ * The sections, in the order the sidebar lists them.
  *
  * The order is how far each one reaches: what the window looks like, then what
  * is allowed to interrupt you, then where files go, then what is written down
- * about you, then what other people's code is allowed to do.
+ * about you, then what other people's code is allowed to do, and last the
+ * machines this client talks to — the only one of the six that reaches off
+ * this computer.
  *
- * Networks are not here, and that is the one deliberate gap. Configuring a
- * network is the onboarding flow — pick, fill in, connect — and its last step
- * watches the connection, which this window cannot see: it runs no event
- * bridge, on purpose. Adding a network ends in connecting, and connecting is
- * the client's. So the sidebar's `+` and the channel header's `⋮` still open
- * that form where the conversation is.
+ * Networks was the deliberate gap while settings was a window of its own:
+ * configuring a network is the onboarding flow, its last step watches the
+ * connection, and that window ran no event bridge to watch it with. A dialog
+ * inside the client does, so the gap closed with the window.
+ *
+ * Appearance stays first, and so stays what `openSettings` lands on when
+ * nobody named a section.
  */
 export const SECTIONS: readonly Section[] = [
   { id: "appearance", name: "Appearance", icon: "droplet" },
@@ -28,6 +37,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "uploads", name: "Uploads", icon: "paperclip" },
   { id: "privacy", name: "Privacy", icon: "shield" },
   { id: "plugins", name: "Plugins", icon: "plug" },
+  { id: "networks", name: "Networks", icon: "globe" },
 ];
 
 /** Whether a string names a section. The query a window opens at is a URL the

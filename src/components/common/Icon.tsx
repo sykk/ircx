@@ -34,6 +34,10 @@ const PATHS = {
   // Plugins, as the plug rather than the puzzle piece: a jigsaw tab loses its
   // notch at 15px and reads as a rounded square.
   plug: "M6.2 2.3v3M9.8 2.3v3M4.4 5.3h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.3v2.4",
+  // Networks, as the globe: the servers this client dials are somewhere else.
+  // Equator and meridian both — a bare circle at 15px is a bare circle.
+  globe:
+    "M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M2.5 8h11M8 2.5c1.5 1.7 2.3 3.5 2.3 5.5S9.5 11.8 8 13.5C6.5 11.8 5.7 10 5.7 8S6.5 4.2 8 2.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

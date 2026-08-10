@@ -4,6 +4,7 @@ import { isTextEntry } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
 import { AppearancePage } from "./appearance/AppearancePage";
 import { PluginsPage } from "./plugins/PluginsPage";
+import { NetworksPage } from "./networks/NetworksPage";
 import { NotificationsPage } from "./notifications/NotificationsPage";
 import { PrivacyPage } from "./privacy/PrivacyPage";
 import { UploadsPage } from "./uploads/UploadsPage";
@@ -101,6 +102,7 @@ function Dialog({ section }: { section: SectionId }) {
           {section === "uploads" && <UploadsPage onDone={close} />}
           {section === "privacy" && <PrivacyPage here={scope} onDone={close} />}
           {section === "plugins" && <PluginsPage onDone={close} />}
+          {section === "networks" && <NetworksPage onDone={close} />}
         </main>
       </div>
     </div>

@@ -123,9 +123,10 @@ export interface AppActions {
   toggleRoster: (view: ViewId, shown?: boolean) => void;
   togglePalette: (open?: boolean) => void;
   toggleSearch: (open?: boolean) => void;
-  /** Opens the network setup form on an existing network, or on a new one for
-   * a null id. */
+  /** Opens settings on the Networks page, showing one network's form — or a
+   * blank one for a null id. */
   openSetup: (network: string | null) => void;
+  /** Back to the list of networks, which is the form's way out. */
   closeSetup: () => void;
   /** Hands picked files to the upload confirmation, or clears them once it has
    * them. An empty list is nothing to confirm and clears it too. */
@@ -468,9 +469,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // for free — it is one or nothing.
   openSettings: (section) => set((s) => ({ settings: section ?? s.settings ?? SECTIONS[0]!.id })),
 
-  closeSettings: () => set((s) => (s.settings ? { settings: null } : {})),
+  // `setup` goes with both: it is a screen of the Networks page, so leaving the
+  // page leaves it. Coming back to a half-filled form somebody walked away from
+  // is not what reopening settings means.
+  closeSettings: () => set((s) => (s.settings ? { settings: null, setup: null } : {})),
 
-  setSettingsSection: (section) => set((s) => (s.settings ? { settings: section } : {})),
+  setSettingsSection: (section) =>
+    set((s) => (s.settings ? { settings: section, setup: null } : {})),
 
   setSplitRatio: (path, ratio) =>
     set((s) => {
@@ -589,7 +594,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
   toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),
 
-  openSetup: (network) => set({ setup: { network } }),
+  openSetup: (network) => set({ setup: { network }, settings: "networks" }),
   closeSetup: () => set({ setup: null }),
 
   setUploadRequest: (paths) =>

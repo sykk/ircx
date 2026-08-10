@@ -117,7 +117,7 @@ export function Onboarding({
   const back = start ? onDone : () => setStep("choose");
 
   return (
-    <div className="flex h-full min-h-0 items-center-safe justify-center overflow-y-auto bg-[var(--surface-base)] px-6 py-12">
+    <div className="flex h-full min-h-0 items-center-safe justify-center overflow-y-auto px-6 py-12">
       <div className="w-full max-w-[480px]">
         {step === "choose" && (
           <Chooser

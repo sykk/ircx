@@ -65,15 +65,32 @@ beforeAll(() => {
     },
   });
   // jsdom reports scrollHeight as zero. For the scroller it is the height of
-  // the virtualiser's sizer, which does carry a real inline height. The sizer
-  // is found by name rather than by position: the history head is a sibling
-  // above it and would otherwise be measured instead.
+  // the virtualiser's sizer, which does carry a real inline height, plus the
+  // head above it: both are inside the scroller, so both are part of what there
+  // is to scroll. Each is found by name rather than by position.
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
     get(this: HTMLElement) {
       const sizer = this.querySelector<HTMLElement>('[data-testid="timeline-sizer"]');
       const declared = sizer?.style.height;
-      return declared ? Number.parseFloat(declared) : this.offsetHeight;
+      if (!declared) return this.offsetHeight;
+      const head = this.querySelector<HTMLElement>('[data-testid="timeline-head"]');
+      return Number.parseFloat(declared) + (head?.offsetHeight ?? 0);
+    },
+  });
+  // jsdom keeps scrollTop as a plain number and lets anything be written to it.
+  // A browser will not scroll past what there is to scroll, and a pane holding
+  // less than a screenful cannot be scrolled at all — which is the difference
+  // between a correction that lands and one no reader ever sees.
+  const offsets = new WeakMap<HTMLElement, number>();
+  Object.defineProperty(HTMLElement.prototype, "scrollTop", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return offsets.get(this) ?? 0;
+    },
+    set(this: HTMLElement, value: number) {
+      const furthest = Math.max(0, this.scrollHeight - this.clientHeight);
+      offsets.set(this, Math.min(Math.max(0, value), furthest));
     },
   });
 });
@@ -443,7 +460,11 @@ describe("Timeline", () => {
 
     const scroller = screen.getByTestId("timeline-scroller");
     letItScroll(scroller);
-    expect(scroller.scrollTop).toBe(0);
+    // A pane holding less than a screenful primes itself with a read, so the
+    // head is already up and the anchor has already paid for it (#475). Nothing
+    // has scrolled: this is the whole of the distance, and the append below is
+    // measured from it.
+    expect(scroller.scrollTop).toBe(HEAD_PX);
 
     act(() => {
       useAppStore.getState().applyEvent({

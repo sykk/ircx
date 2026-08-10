@@ -128,7 +128,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     overscan: 10,
   });
 
-  usePrependAnchor(scrollRef, messages);
+  usePrependAnchor(scrollRef, headRef, messages);
 
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole

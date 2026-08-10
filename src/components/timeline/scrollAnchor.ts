@@ -7,9 +7,15 @@ export interface Scroller {
   readonly scrollHeight: number;
 }
 
+/** The part of the head element this module reads. */
+export interface Head {
+  readonly offsetHeight: number;
+}
+
 interface Committed {
   firstId: string | null;
   scrollHeight: number;
+  headPx: number;
 }
 
 /**
@@ -21,7 +27,7 @@ interface Committed {
  * at the top, which changes that row's identity but not any message's.
  */
 export function isPrepend(
-  previous: Committed | null,
+  previous: Pick<Committed, "firstId"> | null,
   messages: readonly { id: string }[],
 ): boolean {
   if (!previous || previous.firstId === null) return false;
@@ -46,11 +52,26 @@ export function anchorScrollTop(scroller: Scroller, heightBefore: number): void 
 }
 
 /**
- * Holds the viewport still when older history is prepended. Runs on every
- * commit so the recorded height is always the one from before the next change.
+ * Holds the viewport still when older history is prepended, and when the head
+ * above the list comes and goes. Runs on every commit so the recorded height is
+ * always the one from before the next change.
+ *
+ * The head is inside the scroller, so it displaces every row below it when it
+ * arrives — and it arrives on a commit that prepends nothing, where `isPrepend`
+ * is false and the growth above the viewport is nobody's business (#475). Its
+ * departure needs no term of its own: it leaves on the commit that prepends the
+ * page, where its height is inside the `scrollHeight` difference on both sides.
+ *
+ * Measured off the element rather than taken from the height Timeline keeps in
+ * state for the virtualiser's `scrollMargin`: that state is a commit behind the
+ * DOM, and this runs on the commit the head lands in.
+ *
+ * Only where the top of the list held still, because a target switch swaps it
+ * and the pane is put back to a remembered row rather than held where it was.
  */
 export function usePrependAnchor(
   ref: RefObject<HTMLElement | null>,
+  head: RefObject<Head | null>,
   messages: readonly { id: string }[],
 ): void {
   const committed = useRef<Committed | null>(null);
@@ -59,9 +80,13 @@ export function usePrependAnchor(
     const el = ref.current;
     if (!el) return;
     const previous = committed.current;
+    const first = messages[0]?.id ?? null;
+    const headPx = head.current?.offsetHeight ?? 0;
     if (previous && isPrepend(previous, messages)) {
       anchorScrollTop(el, previous.scrollHeight);
+    } else if (previous && previous.firstId === first && headPx !== previous.headPx) {
+      el.scrollTop = el.scrollTop + (headPx - previous.headPx);
     }
-    committed.current = { firstId: messages[0]?.id ?? null, scrollHeight: el.scrollHeight };
+    committed.current = { firstId: first, scrollHeight: el.scrollHeight, headPx };
   });
 }

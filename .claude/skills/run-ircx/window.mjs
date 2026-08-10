@@ -18,6 +18,7 @@
 //   type <text>          insert text at the focus, a keystroke at a time
 //   key <combo>          Return, Escape, ctrl+k, shift+Return
 //   click <x> <y>        window coordinates, the window being at the origin
+//   wheel <x> <y> <n>    scroll there, n notches, up when negative
 //   ss <file>            screenshot the display to <file> (PNG)
 //   wait <ms>
 //   quit
@@ -266,6 +267,10 @@ async function command(line) {
       xsend("move", rest[0], rest[1]);
       await sleep(250);
       return "ok moved";
+    case "wheel":
+      xsend("wheel", rest[0], rest[1], rest[2]);
+      await sleep(250);
+      return "ok scrolled";
     case "ss": {
       const shot = spawnSync("import", ["-window", "root", argument], {
         env: { ...process.env, DISPLAY },

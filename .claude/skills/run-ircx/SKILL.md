@@ -166,6 +166,7 @@ quit
 | `key <combo>` | `Return`, `Escape`, `ctrl+k`, `shift+Return` |
 | `click <x> <y>` | window coordinates, the window being at the origin |
 | `move <x> <y>` | put the pointer there and press nothing, for anything drawn on hover |
+| `wheel <x> <y> <n>` | scroll there, `n` notches, up when negative |
 | `ss <file>` | screenshot the display to `<file>` |
 | `wait <ms>` | |
 | `quit` | stop the app, Vite and Xvfb, and delete the profile |
@@ -200,6 +201,19 @@ is rather than to any event a script can dispatch, and `driver.mjs` has no way
 to place a pointer without also clicking — `dragxy` presses and releases. So
 anything drawn on hover is photographed with `move`, in the window, however much
 easier the rest of the question would be in Chrome.
+
+**A timeline can only be scrolled with `wheel`.** The scroller is a `div`
+nothing focuses, so no key sent to the window moves it, and `click` lands on a
+message rather than dragging a bar. A notch is about a third of a message in
+WebKitGTK, which is worth knowing before asking for 900 of them.
+
+**Two frames with nothing between them is how the app is caught moving on its
+own.** Send an input, photograph, wait, photograph again — any difference is the
+app rather than you, and `md5sum` on the pair is the whole test, since a still
+pane is byte-identical. Run 12 measured a scroll defect that way: 78 of 80 pairs
+identical, and the two that were not are where a page of history landed. What
+the difference *is* takes a real measurement — `shift.py` slides a band of one
+frame over the other and answers in pixels.
 
 **Two things it cannot do**, and both bite quietly:
 

@@ -4,6 +4,11 @@
  *   xsend key <name>      a keysym by name, with ctrl+/shift+/alt+ prefixes
  *   xsend click <x> <y>   move the pointer there and click button 1
  *   xsend move <x> <y>    move the pointer there and press nothing
+ *   xsend wheel <x> <y> <n>  scroll there, n notches, up when negative
+ *
+ * `wheel` is buttons 4 and 5, which is what X11 calls a wheel. It is the only
+ * way to reach the top of a timeline: the scroller is a div nothing focuses, so
+ * no key sent to the window moves it.
  *
  * `move` is what a hover is: a CSS :hover rule answers to where the pointer is
  * rather than to any event a script can dispatch, so anything drawn on hover
@@ -27,6 +32,9 @@ static Display *dpy;
  * at 20, where 9 of 9 came through whole. WebKit's textarea took 247 characters
  * at either. Measured on the second walk; see docs/manual-verification.md. */
 static const useconds_t GAP_US = 20000;
+
+/* Between wheel notches, so a run of them reads as a gesture rather than a jump. */
+static const useconds_t WHEEL_GAP_US = 16000;
 
 /* Whether this keysym sits on the shifted level of the keycode it maps to. */
 static int needs_shift(KeyCode code, KeySym want) {
@@ -62,7 +70,7 @@ static int tap(KeySym sym, unsigned mods) {
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "usage: xsend type <text> | key <name> | click <x> <y> | move <x> <y>\n");
+    fprintf(stderr, "usage: xsend type <text> | key <name> | click <x> <y> | move <x> <y> | wheel <x> <y> <n>\n");
     return 2;
   }
   dpy = XOpenDisplay(NULL);
@@ -107,6 +115,20 @@ int main(int argc, char **argv) {
     if (argc < 4) { fprintf(stderr, "move needs x and y\n"); return 2; }
     XTestFakeMotionEvent(dpy, -1, atoi(argv[2]), atoi(argv[3]), 0);
     XFlush(dpy);
+  } else if (!strcmp(argv[1], "wheel")) {
+    if (argc < 5) { fprintf(stderr, "wheel needs x, y and a notch count\n"); return 2; }
+    int notches = atoi(argv[4]);
+    unsigned button = notches < 0 ? 4 : 5;
+    if (notches < 0) notches = -notches;
+    XTestFakeMotionEvent(dpy, -1, atoi(argv[2]), atoi(argv[3]), 0);
+    XFlush(dpy);
+    usleep(60000);
+    for (int n = 0; n < notches; n++) {
+      XTestFakeButtonEvent(dpy, button, True, 0);
+      XTestFakeButtonEvent(dpy, button, False, 0);
+      XFlush(dpy);
+      usleep(WHEEL_GAP_US);
+    }
   } else {
     fprintf(stderr, "unknown command %s\n", argv[1]);
     return 2;

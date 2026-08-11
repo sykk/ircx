@@ -218,7 +218,13 @@ impl SessionState {
         });
     }
 
-    pub(crate) fn open_batch(&mut self, reference: &str, kind: &str, label: Option<String>) {
+    pub(crate) fn open_batch(
+        &mut self,
+        reference: &str,
+        kind: &str,
+        target: Option<String>,
+        label: Option<String>,
+    ) {
         let source = match kind {
             "chathistory" | "draft/chathistory" => MessageSource::ServerHistory,
             _ => MessageSource::Live,
@@ -228,6 +234,7 @@ impl SessionState {
             BatchState {
                 source,
                 label,
+                target,
                 messages: Vec::new(),
             },
         );
@@ -241,6 +248,16 @@ impl SessionState {
         };
         let mut run: Vec<ChatMessage> = Vec::new();
         let live = batch.source == MessageSource::Live;
+        // Off the batch's own parameter rather than off what came inside it: a
+        // conversation the server has no history for answers with an empty
+        // batch, and that is exactly the case where the reader must not be left
+        // waiting on a first page that already came back (#486).
+        if !live {
+            if let Some(target) = batch.target.as_deref() {
+                let key = self.fold(target);
+                self.first_pages.remove(&key);
+            }
+        }
         // A page a reader scrolled back for rather than a gap the client is
         // filling forward. The label is the only thing that tells them apart:
         // both are `chathistory` batches naming the same conversation, and both

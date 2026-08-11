@@ -4,7 +4,7 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use ircx_core::{Action, Restored, SaslCredentials, SessionConfig, SessionState};
+use ircx_core::{Action, PageBack, Restored, SaslCredentials, SessionConfig, SessionState};
 use ircx_ipc::{
     ChatMessage, CommandOutcome, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
     MessageSource, SaslMechanism, SaslStatus, Severity,
@@ -3743,18 +3743,32 @@ mod paging_back_through_the_server {
         let mut session = registered(caps);
         session.feed(":irc.libera.chat 005 sykk CHATHISTORY=2 :are supported by this server");
         session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        // The join asks for the most recent page, and a reader's own ask is
+        // declined until it answers (#486). Everything here is about what
+        // happens afterwards, so it answers — with nothing, this channel's
+        // history being whatever each test feeds it.
+        session.feed(":ergo.test BATCH +first chathistory #ircx");
+        session.feed(":ergo.test BATCH -first");
         session.sent();
         session.events.clear();
         session
     }
 
     /// The oldest message a window holds, which is what the frontend asks from.
-    fn scroll_back(session: &mut Harness) -> Option<String> {
-        let (label, actions) = session
+    fn scroll_back(session: &mut Harness) -> PageBack {
+        let (asked, actions) = session
             .state
             .page_back("#ircx", "2026-07-31T09:00:00.000Z", None);
         session.apply(actions);
-        label
+        asked
+    }
+
+    /// The label the request went out under, for the tests that answer it.
+    fn label_of(asked: PageBack) -> String {
+        match asked {
+            PageBack::Asked(label) => label,
+            other => panic!("the request goes out, not {other:?}"),
+        }
     }
 
     fn asked(session: &Harness) -> Vec<String> {
@@ -3788,7 +3802,7 @@ mod paging_back_through_the_server {
     fn the_request_asks_from_the_oldest_message_the_reader_holds() {
         let mut session = reading("draft/chathistory labeled-response");
 
-        let label = scroll_back(&mut session).expect("the request goes out");
+        let label = label_of(scroll_back(&mut session));
 
         assert_eq!(label, "ircx-1");
         assert_eq!(
@@ -3800,7 +3814,7 @@ mod paging_back_through_the_server {
     #[test]
     fn a_full_page_says_there_is_another_behind_it() {
         let mut session = reading("draft/chathistory labeled-response");
-        let label = scroll_back(&mut session).expect("the request goes out");
+        let label = label_of(scroll_back(&mut session));
 
         older(
             &mut session,
@@ -3820,7 +3834,7 @@ mod paging_back_through_the_server {
     #[test]
     fn an_empty_page_is_the_history_running_out() {
         let mut session = reading("draft/chathistory labeled-response");
-        let label = scroll_back(&mut session).expect("the request goes out");
+        let label = label_of(scroll_back(&mut session));
 
         older(&mut session, &label, &[]);
 
@@ -3847,7 +3861,7 @@ mod paging_back_through_the_server {
             ["CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:00:00.000Z 200"]
         );
         session.sent();
-        let label = scroll_back(&mut session).expect("the request goes out");
+        let label = label_of(scroll_back(&mut session));
 
         older(
             &mut session,
@@ -3875,7 +3889,7 @@ mod paging_back_through_the_server {
     fn a_server_that_cannot_label_its_answer_is_not_asked() {
         let mut session = reading("draft/chathistory");
 
-        assert!(scroll_back(&mut session).is_none());
+        assert_eq!(scroll_back(&mut session), PageBack::Refused);
         assert!(asked(&session).is_empty());
     }
 
@@ -3883,7 +3897,7 @@ mod paging_back_through_the_server {
     fn a_server_without_the_history_capability_is_not_asked() {
         let mut session = reading("labeled-response");
 
-        assert!(scroll_back(&mut session).is_none());
+        assert_eq!(scroll_back(&mut session), PageBack::Refused);
         assert!(asked(&session).is_empty());
     }
 
@@ -3893,7 +3907,7 @@ mod paging_back_through_the_server {
     #[test]
     fn a_refusal_answers_the_reader_waiting_on_it() {
         let mut session = reading("draft/chathistory labeled-response");
-        let label = scroll_back(&mut session).expect("the request goes out");
+        let label = label_of(scroll_back(&mut session));
 
         session.feed(&format!(
             "@label={label} :irc.libera.chat FAIL CHATHISTORY \
@@ -3909,12 +3923,157 @@ mod paging_back_through_the_server {
     #[test]
     fn a_dropped_connection_answers_everyone_still_waiting() {
         let mut session = reading("draft/chathistory labeled-response");
-        scroll_back(&mut session).expect("the request goes out");
+        label_of(scroll_back(&mut session));
 
         let actions = session.state.on_disconnected("the socket closed");
         session.apply(actions);
 
         assert_eq!(session.paged_back, [("ircx-1".to_string(), false)]);
+    }
+}
+
+/// #486. Joining a channel asks the server for its most recent page, and the
+/// pane that opens on it holds nothing but what this client wrote on the way
+/// in — its own join line and the two notices behind it, archived within the
+/// same second. Reading those back is a page shorter than one, so the pane asks
+/// for what is behind the oldest of them: the page already on its way. Seven
+/// walks of a live channel, seven duplicate pages, every open on every network.
+mod the_page_a_join_already_asked_for {
+    use super::*;
+
+    /// Joined, with the most recent page asked for and not answered yet.
+    fn joining() -> Harness {
+        let mut session = registered("draft/chathistory labeled-response");
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=2 :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session.events.clear();
+        session
+    }
+
+    fn scroll_back(session: &mut Harness, target: &str) -> PageBack {
+        let (asked, actions) = session
+            .state
+            .page_back(target, "2026-07-31T09:00:00.000Z", None);
+        session.apply(actions);
+        asked
+    }
+
+    fn requests(session: &Harness) -> Vec<String> {
+        session
+            .sent_starting("@label=")
+            .into_iter()
+            .filter(|line| line.contains("CHATHISTORY BEFORE"))
+            .collect()
+    }
+
+    /// The archived join line the pane asks from resolves to a real message
+    /// with a real msgid, so nothing about the request looks wrong from where
+    /// it is made. Only the session knows the page is already coming.
+    #[test]
+    fn is_not_asked_for_a_second_time() {
+        let mut session = joining();
+
+        assert_eq!(scroll_back(&mut session, "#ircx"), PageBack::Deferred);
+        assert!(requests(&session).is_empty());
+    }
+
+    /// Declining to ask is not an answer about the history. Saying there is no
+    /// more would head the pane with "Beginning of history" over a server
+    /// holding all of it, and that verdict is written once and never lifted.
+    #[test]
+    fn leaves_the_reader_able_to_ask_again() {
+        let mut session = joining();
+        assert_eq!(scroll_back(&mut session, "#ircx"), PageBack::Deferred);
+
+        session.feed(":ergo.test BATCH +first chathistory #ircx");
+        session.feed(":ergo.test BATCH -first");
+
+        assert_eq!(
+            scroll_back(&mut session, "#ircx"),
+            PageBack::Asked("ircx-1".to_string())
+        );
+    }
+
+    /// A server with no history for the channel answers with an empty batch,
+    /// which names the conversation in its own parameter and nowhere else.
+    /// Cleared off the messages instead, this is the case that never clears:
+    /// that channel would decline its reader for the rest of the session.
+    #[test]
+    fn a_first_page_that_answers_with_nothing_still_answers() {
+        let mut session = joining();
+
+        session.feed(":ergo.test BATCH +first chathistory #ircx");
+        session.feed(":ergo.test BATCH -first");
+
+        assert!(matches!(
+            scroll_back(&mut session, "#ircx"),
+            PageBack::Asked(_)
+        ));
+    }
+
+    /// One conversation waiting says nothing about another.
+    #[test]
+    fn holds_only_the_conversation_that_is_waiting() {
+        let mut session = joining();
+        session.feed(":sykk!~sykk@user/sykk JOIN #rust");
+        session.feed(":ergo.test BATCH +first chathistory #rust");
+        session.feed(":ergo.test BATCH -first");
+
+        assert_eq!(scroll_back(&mut session, "#ircx"), PageBack::Deferred);
+        assert!(matches!(
+            scroll_back(&mut session, "#rust"),
+            PageBack::Asked(_)
+        ));
+    }
+
+    /// The batch that would have cleared it is abandoned with the connection,
+    /// and nothing on the next one answers under the old request. A channel
+    /// that comes back unjoined — which is how every one of them comes back —
+    /// has a pane a reader can still scroll, and the deferral left standing
+    /// would decline them with nothing on its way to answer instead.
+    #[test]
+    fn a_dropped_connection_stops_deferring() {
+        let mut session = joining();
+        assert_eq!(scroll_back(&mut session, "#ircx"), PageBack::Deferred);
+
+        let actions = session.state.on_disconnected("the socket closed");
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory labeled-response");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory labeled-response");
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=2 :are supported by this server");
+
+        assert!(matches!(
+            scroll_back(&mut session, "#ircx"),
+            PageBack::Asked(_)
+        ));
+    }
+
+    /// A gap fill reaches forward from the archive's newest message; what a
+    /// reader pages back for is behind its oldest. They cannot be the same
+    /// page, so one is no reason to decline the other.
+    #[test]
+    fn a_gap_fill_is_not_a_first_page() {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Channel("#ircx".into()),
+            newest: Some("2026-07-31T08:00:00.000Z".into()),
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :draft/chathistory labeled-response");
+        session.feed(":irc.libera.chat CAP * ACK :draft/chathistory labeled-response");
+        session.feed(":irc.libera.chat 001 sykk :Welcome");
+        session.feed(":irc.libera.chat 005 sykk CHATHISTORY=2 :are supported by this server");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+
+        assert!(matches!(
+            scroll_back(&mut session, "#ircx"),
+            PageBack::Asked(_)
+        ));
     }
 }
 

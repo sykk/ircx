@@ -55,6 +55,7 @@ const EMPTY_TIMELINE: TimelineState = {
   unreadFrom: null,
   hasMore: true,
   loadingOlder: false,
+  askedBehind: null,
 };
 
 /** Sequential rather than random so a test can name the view it just opened. */
@@ -81,6 +82,9 @@ export interface AppActions {
   openConsole: (network: string, raw?: boolean) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
+  /** Records the message the server has been asked for the page behind, so the
+   * next scroll can tell its own request from the one already out (#487). */
+  setAskedBehind: (key: TargetKey, msgid: string | null) => void;
   clearUnreadMarker: (key: TargetKey) => void;
 
   setViewAnchor: (view: ViewId, row: string | null) => void;
@@ -554,6 +558,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       },
     })),
 
+  setAskedBehind: (key, msgid) =>
+    set((s) => ({
+      timelines: {
+        ...s.timelines,
+        [key]: { ...(s.timelines[key] ?? EMPTY_TIMELINE), askedBehind: msgid },
+      },
+    })),
+
   clearUnreadMarker: (key) =>
     set((s) => {
       const timeline = s.timelines[key];
@@ -1017,8 +1029,15 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       };
     }
 
-    case "connectionChanged":
-      return patchNetwork(s, event.network, { status: event.status });
+    case "connectionChanged": {
+      const patch = patchNetwork(s, event.network, { status: event.status });
+      if (event.status.state === "connected") return patch;
+      // The session abandons the page-backs it was waiting on when the
+      // connection goes, so what was asked for is not coming and the
+      // conversation may ask afresh rather than hold a name nothing will
+      // answer for the rest of the run (#487).
+      return { ...patch, timelines: forgetPageBacks(s.timelines, event.network) };
+    }
 
     case "saslChanged":
       return patchNetwork(s, event.network, { sasl: event.status });
@@ -1387,6 +1406,25 @@ function orderNetworks(networks: AppState["networks"]): string[] {
       networks[a]!.name.localeCompare(networks[b]!.name, undefined, { sensitivity: "base" }) ||
       a.localeCompare(b),
   );
+}
+
+/** Every conversation on a network forgets what it asked the server for. The
+ * same object back where none had asked, so a connection reporting itself does
+ * not rebuild a timeline that has not changed. */
+function forgetPageBacks(
+  timelines: Record<TargetKey, TimelineState>,
+  network: string,
+): Record<TargetKey, TimelineState> {
+  const prefix = networkPrefix(network);
+  const next = { ...timelines };
+  let forgot = false;
+  for (const key of Object.keys(next) as TargetKey[]) {
+    const timeline = next[key]!;
+    if (!key.startsWith(prefix) || timeline.askedBehind === null) continue;
+    next[key] = { ...timeline, askedBehind: null };
+    forgot = true;
+  }
+  return forgot ? next : timelines;
 }
 
 function dropByNetwork<T>(map: Record<string, T>, network: string): Record<string, T> {

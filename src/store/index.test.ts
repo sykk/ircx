@@ -136,7 +136,7 @@ describe("paging backwards", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true },
+        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null },
       },
     }));
 
@@ -158,6 +158,42 @@ describe("paging backwards", () => {
       .prependHistory(KEY, [makeMessage({ id: "old" })], true);
 
     expect(timeline()!.hasMore).toBe(true);
+  });
+
+  /** #487. What the server was asked for the page behind is what tells the next
+   * scroll's request from the one already out, and the session abandons its
+   * page-backs when the connection goes: a conversation still naming one would
+   * decline to ask again for the rest of the run. */
+  describe("what the server was asked for", () => {
+    const asked = () => {
+      useAppStore.getState().setAskedBehind(KEY, "msg-1");
+      expect(timeline()!.askedBehind).toBe("msg-1");
+    };
+    const connection = (
+      state: "connected" | "disconnected",
+      network = "libera",
+    ): IrcxEvent => ({ type: "connectionChanged", network, status: { state } });
+
+    it("is forgotten when the connection goes", () => {
+      asked();
+      useAppStore.getState().applyEvents([connection("disconnected")]);
+
+      expect(timeline()!.askedBehind).toBeNull();
+    });
+
+    it("stands while the connection does", () => {
+      asked();
+      useAppStore.getState().applyEvents([connection("connected")]);
+
+      expect(timeline()!.askedBehind).toBe("msg-1");
+    });
+
+    it("is left alone on another network's connection", () => {
+      asked();
+      useAppStore.getState().applyEvents([connection("disconnected", "oftc")]);
+
+      expect(timeline()!.askedBehind).toBe("msg-1");
+    });
   });
 });
 
@@ -305,7 +341,7 @@ describe("showing a target", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false },
+        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null },
       },
     }));
   }
@@ -433,7 +469,7 @@ describe("a message a notification rule raised", () => {
           messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
           unreadFrom: null,
           hasMore: true,
-          loadingOlder: false,
+          loadingOlder: false, askedBehind: null
         },
       },
     }));
@@ -585,7 +621,7 @@ describe("a query whose other end renames", () => {
           messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false,
+          loadingOlder: false, askedBehind: null
         },
       },
       replyTo: { [OLD]: "msgid-1" },
@@ -1140,7 +1176,7 @@ describe("deleting a network", () => {
           messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false,
+          loadingOlder: false, askedBehind: null
         },
       },
     });

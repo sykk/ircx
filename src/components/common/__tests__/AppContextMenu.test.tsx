@@ -65,7 +65,15 @@ describe("buildContextMenuItems", () => {
     const message = makeMessage({ id: "msg-42", text: "flag in **env**" });
     const key = targetKey("libera", "#ctf-ops");
     useAppStore.setState({
-      timelines: { [key]: { messages: [message], hasMore: false, loadingOlder: false, unreadFrom: null } },
+      timelines: {
+        [key]: {
+          messages: [message],
+          hasMore: false,
+          loadingOlder: false,
+          unreadFrom: null,
+          askedBehind: null,
+        },
+      },
       networks: {
         libera: makeNetwork("libera", { capsEnabled: ["message-tags"] }),
       },

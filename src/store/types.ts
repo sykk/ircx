@@ -92,6 +92,22 @@ export interface TimelineState {
   /** False once the backend reports no older messages remain. */
   hasMore: boolean;
   loadingOlder: boolean;
+  /**
+   * The message the server was last asked for the page behind, and null before
+   * it has been asked anything.
+   *
+   * A page does not arrive down the call that asks for it: the request goes
+   * out, and the messages come back as their own event. Until they do, the
+   * oldest message the conversation holds is still the one it asked about, so
+   * every scroll event that reaches the top computes the very same request —
+   * and the release build sent one per event, 40ms apart, for 200 duplicate
+   * messages a page (#487).
+   *
+   * Held here rather than in the pane that asked, because the pane is not what
+   * a page-back belongs to: two panes on one conversation share the messages
+   * and would otherwise each ask, and a pane rebuilt by a split would forget.
+   */
+  askedBehind: string | null;
 }
 
 /**

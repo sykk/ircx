@@ -132,7 +132,7 @@ function seedTimelines(timelines: AppState["timelines"]) {
 }
 
 function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
-  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false } });
+  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null } });
 }
 
 /** A second pane on the same channel, as a split would open. `anchor` is the
@@ -486,7 +486,7 @@ describe("Timeline", () => {
         messages: makeConversation({ count: 20, seed: 6 }),
         unreadFrom: null,
         hasMore: false,
-        loadingOlder: false,
+        loadingOlder: false, askedBehind: null
       },
     });
     render(<Timeline view={TEST_VIEW} />);
@@ -680,6 +680,172 @@ describe("Timeline", () => {
         expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false),
       );
       expect(screen.getByText("Beginning of history")).toBeTruthy();
+    });
+
+    /**
+     * #487. A page asked of the server does not arrive down the call that asked
+     * for it: the request goes out and the messages come back as their own
+     * event. So the oldest message a pane holds is still the one it just asked
+     * about, and every scroll event of the same wheel burst computed the very
+     * same request — the same msgid 40ms behind the first, and the release
+     * build sent every one of them.
+     */
+    describe("while the page it asked for is still coming", () => {
+      const scrollAgain = async () => {
+        const scroller = screen.getByTestId("timeline-scroller");
+        scroller.scrollTop = 80;
+        fireEvent.scroll(scroller);
+        // Long enough for a second read to have gone out, had it been asked for.
+        await act(() => new Promise((done) => setTimeout(done, 50)));
+      };
+
+      /** The page, arriving the way the server's history does: in front of the
+       * oldest message the pane holds. */
+      const land = (before: ChatMessage, count = 200) => {
+        const messages = Array.from({ length: count }, (_, i) =>
+          makeMessage({
+            id: `landed-${i}`,
+            nick: "phrack",
+            text: `landed ${i}`,
+            timestamp: new Date(
+              Date.parse(before.timestamp) - (count - i) * 30_000,
+            ).toISOString(),
+          }),
+        );
+        act(() => {
+          useAppStore
+            .getState()
+            .applyEvents([
+              { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages },
+            ]);
+        });
+        return messages;
+      };
+
+      it("asks for it once, however many scroll events reach the top", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        await readToTheStart(older(60));
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        await scrollAgain();
+        await scrollAgain();
+
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(1);
+        expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
+      });
+
+      /** There may be more behind a page already on its way, which is what the
+       * reader is told rather than that this is where history stops. */
+      it("does not read as the beginning of history", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        await readToTheStart(older(60));
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        await scrollAgain();
+
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+        expect(screen.queryByText("Beginning of history")).toBeNull();
+      });
+
+      /**
+       * The answer to a page-back cannot be recognised from here, which is what
+       * ruled out holding the pane loading until one arrived. #486 is a channel
+       * opening by asking for the page `CHATHISTORY LATEST` is already
+       * delivering: that batch lands carrying nothing the pane does not hold,
+       * so a pane waiting to see messages arrive would wait for the rest of the
+       * run. It waits on its own oldest message instead, and that one moved.
+       */
+      it("keeps paging when the answer carried nothing new", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        const page = older(60);
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        // The same messages again, which is what a duplicated page is.
+        act(() => {
+          useAppStore
+            .getState()
+            .applyEvents([
+              { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages: page },
+            ]);
+        });
+        const landed = land(page[0]!);
+        ipcMock.loadHistory.mockResolvedValue([]);
+        await scrollAgain();
+
+        expect(ipcMock.pageBack).toHaveBeenLastCalledWith(
+          "libera",
+          "#ctf-ops",
+          landed[0]!.timestamp,
+          landed[0]!.id,
+        );
+      });
+
+      it("asks for the next one once it has landed", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        const page = older(60);
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        const landed = land(page[0]!);
+        // The archive is behind the pane once a page has landed in front of it:
+        // what came off the server is already held, and there is nothing on
+        // disk older than it. Every landing in the walk that found #487 read
+        // exactly this.
+        ipcMock.loadHistory.mockResolvedValue([]);
+        await scrollAgain();
+
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
+        expect(ipcMock.pageBack).toHaveBeenLastCalledWith(
+          "libera",
+          "#ctf-ops",
+          landed[0]!.timestamp,
+          landed[0]!.id,
+        );
+      });
+
+      /** A channel does not go quiet because somebody is paging through it, and
+       * a line arriving at the live edge is not the page they are waiting for. */
+      it("is not satisfied by a message arriving at the other end", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        await readToTheStart(older(60));
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              network: "libera",
+              target: "#ctf-ops",
+              messages: [makeMessage({ id: "live", timestamp: "2026-08-01T00:00:00.000Z" })],
+            },
+          ]);
+        });
+
+        await scrollAgain();
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(1);
+      });
+
+      /** The session abandons its page-backs when the connection goes, so a
+       * pane still waiting for one would wait for the rest of the run. */
+      it("stops waiting when the connection does", async () => {
+        ipcMock.pageBack.mockResolvedValue(true);
+        await readToTheStart(older(60));
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "connectionChanged",
+              network: "libera",
+              status: { state: "reconnecting", detail: { inSeconds: 5 } },
+            },
+          ]);
+        });
+
+        await scrollAgain();
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
+      });
     });
 
     /** A locally minted id names nothing a server can resolve, so only the

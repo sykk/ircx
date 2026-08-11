@@ -208,6 +208,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     // is filed under it, and that is exactly the pane with an archive to read.
     const current = store.timelines[key] ?? EMPTY_TIMELINE;
     if (!current.hasMore || current.loadingOlder) return "skipped";
+    // Nothing has moved since the server was asked for the page behind this
+    // very message, so the archive can only answer what it answered then and
+    // the request would come out identical (#487).
+    if (current.messages[0]?.id === current.askedBehind) return "skipped";
 
     store.setLoadingOlder(key, true);
     try {
@@ -223,9 +227,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       // archive running out, which is not the same as the history running out:
       // what is behind it is on the server, and #472 is that this used to be
       // where the pane gave up and said so.
-      const more =
-        older.length === PAGE_SIZE ||
-        (await pageBack(network, target, older[0] ?? current.messages[0]));
+      const oldest = older[0] ?? current.messages[0];
+      let more = older.length === PAGE_SIZE;
+      if (!more) {
+        // Named before the request goes out, and it is the conversation's own
+        // oldest message once this page is filed: what the guard above compares
+        // against on every scroll event until the page lands.
+        store.setAskedBehind(key, oldest?.id ?? null);
+        more = await pageBack(network, target, oldest);
+      }
       useAppStore.getState().prependHistory(key, older, more);
       return "read";
     } catch (e) {

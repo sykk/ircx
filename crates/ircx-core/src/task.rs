@@ -18,7 +18,7 @@ use tracing::warn;
 
 use crate::archive::Archive;
 use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
-use crate::session::{Action, Restored, SessionConfig, SessionState};
+use crate::session::{Action, PageBack, Restored, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
 
@@ -180,8 +180,10 @@ pub enum SessionCommand {
     ///
     /// The reply says whether another page may be behind the one that arrives,
     /// and waits for the server rather than for the send — so it is answered
-    /// from `Action::PagedBack`, a round trip later, and is `false` where
-    /// nothing could be asked at all.
+    /// from `Action::PagedBack`, a round trip later. It is `false` where
+    /// nothing could be asked at all, and `true` without a round trip where
+    /// the conversation's own first page is already coming and is what was
+    /// being asked for.
     PageBack {
         target: TargetName,
         from: String,
@@ -630,15 +632,23 @@ async fn apply(
             msgid,
             reply,
         } => {
-            let (label, actions) = session.page_back(&target, &from, msgid.as_deref());
-            match label {
-                Some(label) => {
+            let (asked, actions) = session.page_back(&target, &from, msgid.as_deref());
+            match asked {
+                PageBack::Asked(label) => {
                     context.waiting_readers().insert(label, reply);
                 }
                 // Nothing went out, so nothing will answer. Saying so now is
                 // what stops the pane waiting for a page it will never be sent.
-                None => {
+                PageBack::Refused => {
                     let _ = reply.send(false);
+                }
+                // Nothing went out because the conversation's first page is
+                // already on its way and is what the reader is asking for. It
+                // arrives as history like any other, so the pane is answered
+                // by it rather than by this; `true` is what leaves the pane
+                // able to ask again once it has landed.
+                PageBack::Deferred => {
+                    let _ = reply.send(true);
                 }
             }
             actions

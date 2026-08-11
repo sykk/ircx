@@ -35,7 +35,9 @@ pub use plugins::{
     chosen_grants, describe_permissions, describe_plugin, network_for_plugins, run_plugin, spoken,
     PluginCall,
 };
-pub use session::{Action, Restored, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET};
+pub use session::{
+    Action, PageBack, Restored, SaslCredentials, SessionConfig, SessionState, SERVER_TARGET,
+};
 pub use task::{
     spawn_network, spawn_network_with_plugins, ArchiveWrites, NetworkHandle, SessionCommand,
 };

@@ -162,6 +162,26 @@ pub(crate) struct QueryState {
     pub(crate) online: bool,
 }
 
+/// What became of a reader's ask for the page behind what they hold.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PageBack {
+    /// It went out under this label, and the batch carrying that label is the
+    /// answer.
+    Asked(String),
+    /// Nothing went out and nothing will: a server that granted neither
+    /// capability, one that said it would answer with nothing, or a message
+    /// whose timestamp will not parse. There is no more to reach, which for
+    /// every one of those is what it means here.
+    Refused,
+    /// Nothing went out because the conversation's own first page is already
+    /// coming. That page is behind what the reader holds — it is the whole of
+    /// what they hold — so asking again would fetch it twice. Whether anything
+    /// is behind *it* is not known yet, and the reader is told there may be:
+    /// the alternative is a pane that says the history has run out on the
+    /// evidence of a request it declined to make.
+    Deferred,
+}
+
 #[derive(Debug)]
 pub(crate) struct BatchState {
     pub(crate) source: MessageSource,
@@ -169,6 +189,11 @@ pub(crate) struct BatchState {
     /// It is how a page a reader is waiting for is told from a gap fill of the
     /// same conversation.
     pub(crate) label: Option<String>,
+    /// The conversation the batch names, taken from its own parameter rather
+    /// than from what arrives inside it. A `chathistory` batch that answers
+    /// with nothing still says which conversation it answered for, and that is
+    /// the one case where the messages cannot say it.
+    pub(crate) target: Option<String>,
     pub(crate) messages: Vec<ChatMessage>,
 }
 
@@ -258,6 +283,16 @@ pub struct SessionState {
     /// rather than conversations, because two panes on one channel can be
     /// scrolled back at once and each is waiting for its own answer.
     pub(crate) page_backs: HashSet<String>,
+    /// Conversations whose first page of history has been asked for and not
+    /// answered yet, folded.
+    ///
+    /// A join asks for the most recent page, and until it comes back the only
+    /// thing a pane holds is what this client wrote on the way in — its own
+    /// join line and the two notices behind it, archived within the same
+    /// second. A reader's pane reads those back, finds a page shorter than
+    /// one, and asks the server for what is behind the oldest of them: the
+    /// most recent page, which is the one already on its way. #486.
+    pub(crate) first_pages: HashSet<String>,
 }
 
 impl SessionState {
@@ -298,6 +333,7 @@ impl SessionState {
             away_since: None,
             gap_fills: HashMap::new(),
             page_backs: HashSet::new(),
+            first_pages: HashSet::new(),
         }
     }
 
@@ -1111,11 +1147,6 @@ impl SessionState {
     /// Asks for the page behind the oldest message a reader is holding, and
     /// answers with the label that will name it.
     ///
-    /// `None` where nothing went out: a server that granted neither capability,
-    /// one that said it would answer with nothing, or a message whose timestamp
-    /// will not parse. The caller tells the reader there is no more to reach,
-    /// which for every one of those is what it means here.
-    ///
     /// `labeled-response` is required as well as `draft/chathistory`, and this
     /// is the one place in the client where a missing capability costs a
     /// feature rather than changing how it works. A gap fill and a page back
@@ -1130,32 +1161,34 @@ impl SessionState {
         target: &str,
         from: &str,
         msgid: Option<&str>,
-    ) -> (Option<String>, Vec<Action>) {
+    ) -> (PageBack, Vec<Action>) {
         (self.ask_for_page_back(target, from, msgid), self.drain())
     }
 
-    fn ask_for_page_back(
-        &mut self,
-        target: &str,
-        from: &str,
-        msgid: Option<&str>,
-    ) -> Option<String> {
+    fn ask_for_page_back(&mut self, target: &str, from: &str, msgid: Option<&str>) -> PageBack {
         if !self.caps.is_enabled("draft/chathistory") || !self.caps.is_enabled("labeled-response") {
-            return None;
+            return PageBack::Refused;
         }
         let limit = self.page_limit();
         if limit == 0 {
-            return None;
+            return PageBack::Refused;
+        }
+        // The conversation's own first page is still coming and is the answer
+        // to this. #486.
+        if self.first_pages.contains(&self.fold(target)) {
+            return PageBack::Deferred;
         }
         let label = self.next_label();
         let resume = history::Resume {
             timestamp: from,
             msgid,
         };
-        let line = history::before(target, resume, limit, &label)?;
+        let Some(line) = history::before(target, resume, limit, &label) else {
+            return PageBack::Refused;
+        };
         self.page_backs.insert(label.clone());
         self.send_line(line);
-        Some(label)
+        PageBack::Asked(label)
     }
 
     /// Asks for the next page of a gap that has not been closed yet.
@@ -1953,8 +1986,15 @@ impl SessionState {
             Some(_) => {
                 self.gap_fills.entry(key).or_insert(0);
             }
+            // The most recent page, which is what a conversation seen for the
+            // first time has to show. Until it answers, everything behind what
+            // the pane holds is what it is bringing, so a reader's own ask for
+            // that is declined rather than sent (#486). A gap fill is not
+            // tracked here: it reaches forward from the archive's newest, and
+            // what a reader pages back for is behind its oldest.
             None => {
                 self.gap_fills.remove(&key);
+                self.first_pages.insert(key);
             }
         }
         self.send_line(line);
@@ -2323,8 +2363,9 @@ impl SessionState {
         // is the server's to send, and slicing it would panic the task.
         if let Some(reference) = reference.strip_prefix('+') {
             let kind = message.param(1).unwrap_or_default().to_string();
+            let target = message.param(2).map(str::to_string);
             let label = message.tag("label").map(str::to_string);
-            self.open_batch(reference, &kind, label);
+            self.open_batch(reference, &kind, target, label);
         } else if let Some(reference) = reference.strip_prefix('-') {
             self.close_batch(reference);
         }
@@ -2626,6 +2667,11 @@ impl SessionState {
         for label in self.page_backs.drain() {
             self.actions.push(Action::PagedBack { label, more: false });
         }
+        // The batches that would have cleared these are among the ones
+        // abandoned above, and the next connection rejoins and asks again. Left
+        // standing, a first page nobody will answer would decline every reader's
+        // ask in that conversation for the rest of the session.
+        self.first_pages.clear();
         self.abandon_unwritten();
         self.ping = None;
         self.lag_ms = None;

@@ -1,0 +1,310 @@
+  10.791 - session opened to 127.0.0.1:6677
+  10.791 > CAP LS 302
+  10.791 > NICK walker
+  10.791 > USER walker 0 * walker
+  10.792 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+  10.792 > CAP END
+  11.288 > JOIN #scrollback
+  11.788 > MODE #scrollback
+  12.288 > CHATHISTORY LATEST #scrollback * 200
+  12.288 < @time=2026-08-11T12:16:28.505Z;batch=1;msgid=pxwzbup65idgzzmdjmittzrdfw :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+  12.288 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+  12.288 < @msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+  12.288 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+  12.288 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+  12.288 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+  12.289 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+  12.289 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+  12.289 < @msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+  12.289 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+  28.944 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=pxwzbup65idgzzmdjmittzrdfw 200
+  28.944 < @batch=2;msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+  28.944 < @msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+  28.945 < @time=2026-08-11T12:15:41.441Z;batch=2;msgid=g94g2cdt6pgc78yyp2qdcgkcaw :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+  28.945 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+  39.328 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=t9dtr4crzb4z8qyahxq35483vs 200
+  51.946 - session opened to 127.0.0.1:6677
+  51.946 > CAP LS 302
+  51.946 > NICK walker
+  51.946 > USER walker 0 * walker
+  51.947 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+  51.947 > CAP END
+  52.448 > JOIN #scrollback
+  52.947 > MODE #scrollback
+  53.448 > CHATHISTORY LATEST #scrollback * 200
+  53.450 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+  53.450 < @msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+  53.450 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+  53.450 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+  53.450 < @time=2026-08-11T12:16:31.009Z;batch=1;msgid=46uj4uqb8sxz6jxzxq9cf27sbi :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+  53.450 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+  53.450 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+  53.450 < @batch=1;msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+  53.450 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+  70.257 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=dieqd57sebzrbbkraq6vk3tc32 200
+  70.257 < @msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+  70.258 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+  70.258 < @time=2026-08-11T12:15:39.938Z;batch=2;msgid=9t3kusuypnqn8zakrh8j75puze :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+  70.258 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+  70.258 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+  70.258 < @batch=2;msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+  70.258 < @time=2026-08-11T12:15:41.940Z;batch=2;msgid=ntcdkrhdm7nsgen8nhug4z4qe2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+  70.258 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+  70.258 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+  70.260 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+  80.955 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=r6i6hu7kxauw3v5dnbue4abjvs 200
+  80.957 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+  93.118 - session opened to 127.0.0.1:6677
+  93.118 > CAP LS 302
+  93.118 > NICK walker
+  93.118 > USER walker 0 * walker
+  93.118 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+  93.119 > CAP END
+  93.618 > JOIN #scrollback
+  94.119 > MODE #scrollback
+  94.618 > CHATHISTORY LATEST #scrollback * 200
+  94.619 < @time=2026-08-11T12:16:29.507Z;batch=1;msgid=w83a9mqmbft6cn8fs682uw8zss :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+  94.619 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+  94.619 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+  94.619 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+  94.619 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+  94.619 < @time=2026-08-11T12:16:32.011Z;batch=1;msgid=ecwbfzax3iazibtfkjiyr4kan6 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+  94.619 < @time=2026-08-11T12:16:32.512Z;batch=1;msgid=mzxabp8vnpdikhvdu3uqccsjjs :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+  94.619 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 111.406 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=w83a9mqmbft6cn8fs682uw8zss 200
+ 111.406 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 111.406 < @batch=2;msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 111.406 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 111.406 < @batch=2;msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 111.407 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 111.407 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 111.407 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 111.407 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 111.409 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 111.409 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 121.288 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=s298fem3qwmd353yfspmkx6etn 200
+ 121.290 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 121.290 < @time=2026-08-11T12:15:38.937Z;batch=3;msgid=r6i6hu7kxauw3v5dnbue4abjvs :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 134.283 - session opened to 127.0.0.1:6677
+ 134.283 > CAP LS 302
+ 134.283 > NICK walker
+ 134.283 > USER walker 0 * walker
+ 134.283 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 134.284 > CAP END
+ 134.785 > JOIN #scrollback
+ 135.284 > MODE #scrollback
+ 135.784 > CHATHISTORY LATEST #scrollback * 200
+ 135.785 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 135.785 < @time=2026-08-11T12:16:30.508Z;batch=1;msgid=89p6bz3ad85zj8ekjvcjj5rte2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 135.785 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 135.785 < @batch=1;msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 135.785 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 135.785 < @msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 135.785 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 151.442 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=ja3mbeaivjdmzjjckqy2e57iya 200
+ 151.442 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 151.442 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 151.442 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 151.442 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 151.442 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 151.442 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 151.442 < @batch=2;msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 151.444 < @time=2026-08-11T12:16:28.505Z;batch=2;msgid=pxwzbup65idgzzmdjmittzrdfw :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 151.444 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 151.444 < @msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 161.823 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=9t3kusuypnqn8zakrh8j75puze 200
+ 161.825 < @time=2026-08-11T12:15:38.436Z;batch=3;msgid=t9dtr4crzb4z8qyahxq35483vs :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 161.825 < @batch=3;msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 161.826 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 175.454 - session opened to 127.0.0.1:6677
+ 175.455 > CAP LS 302
+ 175.455 > NICK walker
+ 175.455 > USER walker 0 * walker
+ 175.455 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 175.455 > CAP END
+ 175.956 > JOIN #scrollback
+ 176.455 > MODE #scrollback
+ 176.956 > CHATHISTORY LATEST #scrollback * 200
+ 176.957 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 176.957 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 176.957 < @time=2026-08-11T12:16:31.510Z;batch=1;msgid=zxsywfk89ji3rdfwv9e4g4qayi :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 176.957 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 176.957 < @msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 176.957 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 192.912 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=89p6bz3ad85zj8ekjvcjj5rte2 200
+ 192.912 < @time=2026-08-11T12:15:40.439Z;batch=2;msgid=bbdn846xrh9wn4cwvbjmwurf4n :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 192.912 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 192.912 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 192.912 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 192.912 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 192.912 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 192.914 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 192.914 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 192.914 < @batch=2;msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 192.914 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 203.029 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=bbdn846xrh9wn4cwvbjmwurf4n 200
+ 203.031 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 203.031 < @msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 203.031 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 203.031 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 216.626 - session opened to 127.0.0.1:6677
+ 216.626 > CAP LS 302
+ 216.626 > NICK walker
+ 216.626 > USER walker 0 * walker
+ 216.626 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 216.626 > CAP END
+ 217.127 > JOIN #scrollback
+ 217.628 > MODE #scrollback
+ 218.127 > CHATHISTORY LATEST #scrollback * 200
+ 218.129 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 218.129 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 218.129 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 218.129 < @batch=1;msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 218.129 < @batch=1;msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 233.566 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=46uj4uqb8sxz6jxzxq9cf27sbi 200
+ 233.567 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 233.567 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 233.567 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 233.567 < @batch=2;msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 233.567 < @batch=2;msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 233.569 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 233.569 < @time=2026-08-11T12:16:29.006Z;batch=2;msgid=dieqd57sebzrbbkraq6vk3tc32 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 233.569 < @time=2026-08-11T12:16:29.507Z;batch=2;msgid=w83a9mqmbft6cn8fs682uw8zss :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 233.569 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 233.569 < @time=2026-08-11T12:16:30.508Z;batch=2;msgid=89p6bz3ad85zj8ekjvcjj5rte2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 243.868 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=ame5pz9bqe9h2a78dz72i5jz4i 200
+ 243.870 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 243.870 < @time=2026-08-11T12:15:38.937Z;batch=3;msgid=r6i6hu7kxauw3v5dnbue4abjvs :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 243.870 < @batch=3;msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 243.870 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 243.870 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 257.796 - session opened to 127.0.0.1:6677
+ 257.796 > CAP LS 302
+ 257.796 > NICK walker
+ 257.796 > USER walker 0 * walker
+ 257.797 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 257.797 > CAP END
+ 258.298 > JOIN #scrollback
+ 258.797 > MODE #scrollback
+ 259.297 > CHATHISTORY LATEST #scrollback * 200
+ 259.298 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 259.298 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 259.298 < @time=2026-08-11T12:16:32.512Z;batch=1;msgid=mzxabp8vnpdikhvdu3uqccsjjs :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 259.298 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 274.720 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=zxsywfk89ji3rdfwv9e4g4qayi 200
+ 274.721 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 274.721 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 274.721 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 274.721 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 274.723 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 274.723 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 274.723 < @msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 274.723 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 274.723 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 274.723 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 284.953 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=g94g2cdt6pgc78yyp2qdcgkcaw 200
+ 284.955 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 284.955 < @time=2026-08-11T12:15:38.937Z;batch=3;msgid=r6i6hu7kxauw3v5dnbue4abjvs :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 284.955 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 284.955 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 284.955 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 284.955 < @batch=3;msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 298.965 - session opened to 127.0.0.1:6677
+ 298.965 > CAP LS 302
+ 298.965 > NICK walker
+ 298.965 > USER walker 0 * walker
+ 298.966 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 298.966 > CAP END
+ 299.467 > JOIN #scrollback
+ 299.967 > MODE #scrollback
+ 300.467 > CHATHISTORY LATEST #scrollback * 200
+ 300.468 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 300.468 < @msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z;batch=1 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 300.468 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 315.772 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=ecwbfzax3iazibtfkjiyr4kan6 200
+ 315.772 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 315.772 < @msgid=xzwfrfbp6kzfd9xzss8px4kp6n;time=2026-08-11T12:15:42.441Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 315.772 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 315.774 < @batch=2;msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 315.774 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 315.774 < @batch=2;msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 315.774 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 315.774 < @time=2026-08-11T12:16:30.508Z;batch=2;msgid=89p6bz3ad85zj8ekjvcjj5rte2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 315.774 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 315.774 < @batch=2;msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 326.506 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=ntcdkrhdm7nsgen8nhug4z4qe2 200
+ 326.508 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 326.508 < @batch=3;msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 326.508 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 326.508 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 326.508 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 326.508 < @time=2026-08-11T12:15:40.939Z;batch=3;msgid=ame5pz9bqe9h2a78dz72i5jz4i :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 326.508 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 340.133 - session opened to 127.0.0.1:6677
+ 340.133 > CAP LS 302
+ 340.133 > NICK walker
+ 340.133 > USER walker 0 * walker
+ 340.133 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 340.133 > CAP END
+ 340.634 > JOIN #scrollback
+ 341.134 > MODE #scrollback
+ 341.634 > CHATHISTORY LATEST #scrollback * 200
+ 341.635 < @batch=1;msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 341.635 < @batch=1;msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 356.455 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=mzxabp8vnpdikhvdu3uqccsjjs 200
+ 356.455 < @time=2026-08-11T12:15:42.441Z;batch=2;msgid=xzwfrfbp6kzfd9xzss8px4kp6n :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there
+ 356.455 < @batch=2;msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 356.457 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 356.457 < @msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 356.458 < @time=2026-08-11T12:16:29.507Z;batch=2;msgid=w83a9mqmbft6cn8fs682uw8zss :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 356.458 < @msgid=ja3mbeaivjdmzjjckqy2e57iya;time=2026-08-11T12:16:30.007Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 356.458 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 356.458 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 356.458 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 356.458 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 366.921 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=xzwfrfbp6kzfd9xzss8px4kp6n 200
+ 366.923 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 366.923 < @time=2026-08-11T12:15:39.938Z;batch=3;msgid=9t3kusuypnqn8zakrh8j75puze :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 366.923 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 381.296 - session opened to 127.0.0.1:6677
+ 381.296 > CAP LS 302
+ 381.296 > NICK walker
+ 381.296 > USER walker 0 * walker
+ 381.297 > CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join invite-notify labeled-response message-tags multi-prefix sasl server-time userhost-in-names
+ 381.297 > CAP END
+ 381.797 > JOIN #scrollback
+ 382.297 > MODE #scrollback
+ 382.797 > CHATHISTORY LATEST #scrollback * 200
+ 382.797 < @msgid=5i8h98kv43i66wcw7h8a5zfi9n;time=2026-08-11T12:16:33.012Z;batch=1 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0795 ack
+ 398.907 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=5i8h98kv43i66wcw7h8a5zfi9n 200
+ 398.907 < @msgid=cve5yjakjjphz8ing69ue2yzew;time=2026-08-11T12:15:42.942Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0596 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=pxwzbup65idgzzmdjmittzrdfw;time=2026-08-11T12:16:28.505Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0778 the reader is somewhere above this line and should stay there
+ 398.909 < @batch=2;msgid=dieqd57sebzrbbkraq6vk3tc32;time=2026-08-11T12:16:29.006Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0779 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=w83a9mqmbft6cn8fs682uw8zss;time=2026-08-11T12:16:29.507Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0782 a longer line, wrapping over more than one row, so the page that lands above the viewport is not a stack of rows the virtualiser can size from its estimate alone and the arithmetic has something to be wrong about
+ 398.909 < @time=2026-08-11T12:16:30.007Z;batch=2;msgid=ja3mbeaivjdmzjjckqy2e57iya :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0784 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=89p6bz3ad85zj8ekjvcjj5rte2;time=2026-08-11T12:16:30.508Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0785 ack
+ 398.909 < @msgid=46uj4uqb8sxz6jxzxq9cf27sbi;time=2026-08-11T12:16:31.009Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0788 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=zxsywfk89ji3rdfwv9e4g4qayi;time=2026-08-11T12:16:31.510Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0789 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=ecwbfzax3iazibtfkjiyr4kan6;time=2026-08-11T12:16:32.011Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0792 the reader is somewhere above this line and should stay there
+ 398.909 < @msgid=mzxabp8vnpdikhvdu3uqccsjjs;time=2026-08-11T12:16:32.512Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0794 the reader is somewhere above this line and should stay there
+ 409.521 > @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=cve5yjakjjphz8ing69ue2yzew 200
+ 409.524 < @msgid=t9dtr4crzb4z8qyahxq35483vs;time=2026-08-11T12:15:38.436Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0577 the reader is somewhere above this line and should stay there
+ 409.524 < @msgid=r6i6hu7kxauw3v5dnbue4abjvs;time=2026-08-11T12:15:38.937Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0579 the reader is somewhere above this line and should stay there
+ 409.524 < @msgid=s298fem3qwmd353yfspmkx6etn;time=2026-08-11T12:15:39.438Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0581 the reader is somewhere above this line and should stay there
+ 409.524 < @msgid=9t3kusuypnqn8zakrh8j75puze;time=2026-08-11T12:15:39.938Z;batch=3 :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0583 the reader is somewhere above this line and should stay there
+ 409.524 < @batch=3;msgid=bbdn846xrh9wn4cwvbjmwurf4n;time=2026-08-11T12:15:40.439Z :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0586 the reader is somewhere above this line and should stay there
+ 409.524 < @msgid=ame5pz9bqe9h2a78dz72i5jz4i;time=2026-08-11T12:15:40.939Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0588 the reader is somewhere above this line and should stay there
+ 409.524 < @batch=3;msgid=g94g2cdt6pgc78yyp2qdcgkcaw;time=2026-08-11T12:15:41.441Z :archivist!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0589 the reader is somewhere above this line and should stay there
+ 409.524 < @msgid=ntcdkrhdm7nsgen8nhug4z4qe2;time=2026-08-11T12:15:41.940Z;batch=3 :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0592 the reader is somewhere above this line and should stay there
+ 409.524 < @time=2026-08-11T12:15:42.441Z;batch=3;msgid=xzwfrfbp6kzfd9xzss8px4kp6n :historian!~u@f6u3beryjfghu.irc PRIVMSG #scrollback :line 0594 the reader is somewhere above this line and should stay there

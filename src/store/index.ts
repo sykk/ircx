@@ -537,12 +537,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // contiguous; a page that had to be cut ends the paging.
       const room = Math.max(0, TIMELINE_CAP - timeline.messages.length);
       const kept = fresh.slice(Math.max(0, fresh.length - room));
+      // A page is almost always wholly behind the window, which is a concat.
+      // It is not guaranteed to be: the read is asked with the oldest message
+      // on screen and awaited, and an empty timeline asks with `before` null,
+      // which `load_history` answers with the newest page it holds rather than
+      // with a page behind anything. Either way the server's own history can
+      // land while the archive is being read, and filing today's rows in front
+      // of yesterday's is what the reader sees.
+      const head = timeline.messages[0];
+      const newest = kept[kept.length - 1];
+      const ordered =
+        !head || !newest || Date.parse(newest.timestamp) <= Date.parse(head.timestamp)
+          ? [...kept, ...timeline.messages]
+          : mergeByTime(timeline.messages, kept);
       return {
         timelines: {
           ...s.timelines,
           [key]: {
             ...timeline,
-            messages: [...kept, ...timeline.messages],
+            messages: ordered,
             hasMore: kept.length < fresh.length ? false : hasMore,
             loadingOlder: false,
           },

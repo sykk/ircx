@@ -71,7 +71,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // deadline with no answer. The request is still out and the page may still
   // arrive — and when it does, the conversation's oldest message is no longer
   // this one, which is what takes the line back off the head (#491).
-  const [overdueBehind, setOverdueBehind] = useState<string | null>(null);
+  const [waitingBehind, setWaitingBehind] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Read once: from the restore onwards the scroller owns the position, and
   // reading it as a subscription would fight every scroll event with a stale
@@ -111,8 +111,8 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     return map;
   }, [messages]);
 
-  const overdue = overdueBehind !== null && messages[0]?.id === overdueBehind;
-  const head = rows.length === 0 ? null : historyHead(timeline, loadError, overdue);
+  const waiting = waitingBehind !== null && messages[0]?.id === waitingBehind;
+  const head = rows.length === 0 ? null : historyHead(timeline, loadError, waiting);
   const headRef = useRef<HTMLDivElement>(null);
   // The head is the first thing in the scroller, so the list starts that far
   // down it. The virtualiser needs the offset to place rows and to scroll to
@@ -235,20 +235,19 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       // where the pane gave up and said so.
       const oldest = older[0] ?? current.messages[0];
       let more = older.length === PAGE_SIZE;
-      let waiting = false;
+      let outcome: PageBackOutcome | null = null;
       if (!more) {
         // Named before the request goes out, and it is the conversation's own
         // oldest message once this page is filed: what the guard above compares
         // against on every scroll event until the page lands.
         store.setAskedBehind(key, oldest?.id ?? null);
-        const outcome = await pageBack(network, target, oldest);
+        outcome = await pageBack(network, target, oldest);
         // A server that has not answered yet has not said the history ends
         // here either, so the pane keeps both the page it is owed and the one
         // that may be behind it.
         more = outcome !== "end";
-        waiting = outcome === "waiting";
       }
-      setOverdueBehind(waiting ? (oldest?.id ?? null) : null);
+      setWaitingBehind(outcome === "waiting" ? (oldest?.id ?? null) : null);
       useAppStore.getState().prependHistory(key, older, more);
       return "read";
     } catch (e) {
@@ -454,7 +453,7 @@ async function pageBack(
 function historyHead(
   timeline: TimelineState,
   loadError: string | null,
-  overdue: boolean,
+  waiting: boolean,
 ): string | null {
   if (loadError !== null) return loadError;
   if (timeline.loadingOlder) return "Loading older messages";
@@ -462,7 +461,7 @@ function historyHead(
   // is taking its time over is not a failure to report: it arrives and draws,
   // and this line goes when it does. Reporting it as one is what told the
   // reader to reconnect a network that was answering (#491).
-  if (overdue) return "The server has not sent this page yet";
+  if (waiting) return "The server has not sent this page yet";
   return timeline.hasMore ? null : "Beginning of history";
 }
 

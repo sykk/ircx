@@ -115,6 +115,22 @@ pub struct HistoryRequest {
     pub limit: u32,
 }
 
+/// What asking the server for the page behind the archive came back as.
+///
+/// `More` and `End` are the server's answer, and what separates them is whether
+/// another page may be behind the one just asked for. `Waiting` is not an
+/// answer at all: the request is still out and its page may still arrive, which
+/// is why it is an outcome here rather than an error. The messages themselves
+/// arrive as their own event in every case, so none of the three carries them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum PageBackOutcome {
+    More,
+    End,
+    Waiting,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]

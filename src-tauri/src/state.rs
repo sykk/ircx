@@ -20,6 +20,16 @@ use tracing::warn;
 /// as unresponsive. Long enough to cover a busy archive write, short enough
 /// that the UI does not appear to hang.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long a command whose answer is the server's may go unanswered before the
+/// window stops waiting on it.
+///
+/// A backstop rather than a service level: a request the server refuses is
+/// answered by `FAIL`, and one it will never answer because the connection went
+/// is answered when the session drops its readers. What is left for this to
+/// catch is a connected server that has gone quiet, so it is set long enough
+/// that a link merely slow — 45 seconds a page, in the run that found #491 —
+/// answers well inside it.
+const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(60);
 /// Ceiling on how long closing the app waits for QUIT to reach the servers.
 const SHUTDOWN_GRACE: Duration = Duration::from_millis(1_500);
 const DEFAULT_QUIT: &str = "ircx";
@@ -268,6 +278,52 @@ impl App {
         match timeout(REPLY_TIMEOUT, asked).await {
             Ok(outcome) => outcome,
             Err(_) => Err(self.stopped_responding(network)),
+        }
+    }
+
+    /// The same, for a command the session cannot answer on its own: it puts
+    /// the request on the wire and parks the reply until the server's own
+    /// answer comes back.
+    ///
+    /// Two deadlines rather than `ask`'s one, because the halves are deadlines
+    /// on different things. The enqueue is the session taking the command and
+    /// keeps `REPLY_TIMEOUT`; the answer is a network round trip, and holding
+    /// it to five seconds is what reported a slow server as a session that had
+    /// stopped taking commands (#491). Passing the round trip's deadline is
+    /// `None` rather than an error: nothing failed, and the answer may still
+    /// arrive.
+    pub async fn ask_server<T, F>(
+        &self,
+        network: &NetworkId,
+        command: F,
+    ) -> Result<Option<T>, String>
+    where
+        F: FnOnce(oneshot::Sender<T>) -> SessionCommand,
+    {
+        let sender = self.require(network)?;
+        let (reply, answer) = oneshot::channel();
+        match timeout(REPLY_TIMEOUT, sender.send(command(reply))).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => return Err(self.not_connected(network)),
+            Err(_) => return Err(self.stopped_responding(network)),
+        }
+        self.answered_in_time(network, answer).await
+    }
+
+    /// The waiting half of `ask_server`, apart from the asking half so that a
+    /// test can hold the other end: the session only parks a reply for a
+    /// request that reached a server, and there is no server in a unit test.
+    async fn answered_in_time<T>(
+        &self,
+        network: &NetworkId,
+        answer: oneshot::Receiver<T>,
+    ) -> Result<Option<T>, String> {
+        match timeout(ROUND_TRIP_TIMEOUT, answer).await {
+            Ok(Ok(value)) => Ok(Some(value)),
+            // The session dropped the reply rather than answering it, which is
+            // the session gone and not the server being slow.
+            Ok(Err(_)) => Err(self.stopped_responding(network)),
+            Err(_) => Ok(None),
         }
     }
 
@@ -670,6 +726,53 @@ mod tests {
         )
         .expect("write the code");
         directory
+    }
+
+    /// #491. The page arrived 45 seconds after it was asked for, and the five
+    /// seconds `ask` allows had already reported the network as having stopped
+    /// responding — a sentence about a session that will not take a command,
+    /// over a server that was answering.
+    #[tokio::test(start_paused = true)]
+    async fn a_page_the_server_is_slow_with_is_not_a_network_that_has_stopped() {
+        let app = app();
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        let (_reply, answer) = oneshot::channel::<bool>();
+
+        let waited = app.answered_in_time(&id, answer).await.unwrap();
+
+        assert_eq!(waited, None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_server_answering_inside_the_deadline_is_the_answer() {
+        let app = app();
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        let (reply, answer) = oneshot::channel();
+        tokio::spawn(async move {
+            tokio::time::sleep(ROUND_TRIP_TIMEOUT / 2).await;
+            let _ = reply.send(true);
+        });
+
+        let answered = app.answered_in_time(&id, answer).await.unwrap();
+
+        assert_eq!(answered, Some(true));
+    }
+
+    /// A session that dropped the reply is gone, which is the one case here
+    /// that is the network and not the server.
+    #[tokio::test(start_paused = true)]
+    async fn a_reply_dropped_without_an_answer_names_the_network() {
+        let app = app();
+        let id = app.save_network(dead_config("Libera.Chat")).await.unwrap();
+        let (reply, answer) = oneshot::channel::<bool>();
+        drop(reply);
+
+        let error = app.answered_in_time(&id, answer).await.unwrap_err();
+
+        assert_eq!(
+            error,
+            "Libera.Chat stopped responding — reconnect it and try again"
+        );
     }
 
     #[tokio::test]

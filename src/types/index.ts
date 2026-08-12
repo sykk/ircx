@@ -31,6 +31,7 @@ export type { MessageSource } from "./generated/MessageSource";
 export type { MutedConversation } from "./generated/MutedConversation";
 export type { Network } from "./generated/Network";
 export type { NetworkConfig } from "./generated/NetworkConfig";
+export type { PageBackOutcome } from "./generated/PageBackOutcome";
 export type { PluginCommand } from "./generated/PluginCommand";
 export type { PluginGrants } from "./generated/PluginGrants";
 export type { FileToUpload } from "./generated/FileToUpload";

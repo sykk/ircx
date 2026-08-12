@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
 import { targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
@@ -67,6 +67,11 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   );
   const [flashId, setFlashId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // The message the server was asked the page behind, when that ask passed its
+  // deadline with no answer. The request is still out and the page may still
+  // arrive — and when it does, the conversation's oldest message is no longer
+  // this one, which is what takes the line back off the head (#491).
+  const [overdueBehind, setOverdueBehind] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Read once: from the restore onwards the scroller owns the position, and
   // reading it as a subscription would fight every scroll event with a stale
@@ -106,7 +111,8 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     return map;
   }, [messages]);
 
-  const head = rows.length === 0 ? null : historyHead(timeline, loadError);
+  const overdue = overdueBehind !== null && messages[0]?.id === overdueBehind;
+  const head = rows.length === 0 ? null : historyHead(timeline, loadError, overdue);
   const headRef = useRef<HTMLDivElement>(null);
   // The head is the first thing in the scroller, so the list starts that far
   // down it. The virtualiser needs the offset to place rows and to scroll to
@@ -229,13 +235,20 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       // where the pane gave up and said so.
       const oldest = older[0] ?? current.messages[0];
       let more = older.length === PAGE_SIZE;
+      let waiting = false;
       if (!more) {
         // Named before the request goes out, and it is the conversation's own
         // oldest message once this page is filed: what the guard above compares
         // against on every scroll event until the page lands.
         store.setAskedBehind(key, oldest?.id ?? null);
-        more = await pageBack(network, target, oldest);
+        const outcome = await pageBack(network, target, oldest);
+        // A server that has not answered yet has not said the history ends
+        // here either, so the pane keeps both the page it is owed and the one
+        // that may be behind it.
+        more = outcome !== "end";
+        waiting = outcome === "waiting";
       }
+      setOverdueBehind(waiting ? (oldest?.id ?? null) : null);
       useAppStore.getState().prependHistory(key, older, more);
       return "read";
     } catch (e) {
@@ -414,7 +427,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
 /**
  * Asks the server for the page behind `oldest`, and answers whether another may
- * be behind that one.
+ * be behind that one — or that the server has not said yet.
  *
  * No message to ask from means an empty conversation, where the page a join asks
  * for is what fills it and there is nothing to reach back past. A msgid is sent
@@ -426,8 +439,8 @@ async function pageBack(
   network: string,
   target: string,
   oldest: ChatMessage | undefined,
-): Promise<boolean> {
-  if (!oldest) return false;
+): Promise<PageBackOutcome> {
+  if (!oldest) return "end";
   return ipc.pageBack(network, target, oldest.timestamp, oldest.idIsLocal ? null : oldest.id);
 }
 
@@ -438,9 +451,18 @@ async function pageBack(
  * run out, and being scrolled to the top is exactly when a layer would cover
  * something.
  */
-function historyHead(timeline: TimelineState, loadError: string | null): string | null {
+function historyHead(
+  timeline: TimelineState,
+  loadError: string | null,
+  overdue: boolean,
+): string | null {
   if (loadError !== null) return loadError;
   if (timeline.loadingOlder) return "Loading older messages";
+  // Said in the faint colour the rest of these are, because a page the server
+  // is taking its time over is not a failure to report: it arrives and draws,
+  // and this line goes when it does. Reporting it as one is what told the
+  // reader to reconnect a network that was answering (#491).
+  if (overdue) return "The server has not sent this page yet";
   return timeline.hasMore ? null : "Beginning of history";
 }
 

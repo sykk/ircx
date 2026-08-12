@@ -167,6 +167,25 @@ for the empty pane it recorded, and less than a mechanism; it is here so the
 next run knows the shape to watch for and which four explanations not to spend
 an hour on.
 
+**Settled after the run, by reading the store rather than the window** (#494).
+The fifth explanation was `prependHistory`, which filed an archive page in
+front of the window without comparing a single timestamp. A pane that opens on
+an empty timeline asks the archive with `before` null, and `load_history` reads
+that as "the newest page you hold" rather than as a page behind anything; the
+read is then awaited, so the server's own `CHATHISTORY LATEST` can land while
+it is in flight. Today's rows are filed in front of yesterday's, which is the
+shape in `07-` and `08-`. It is a race between two reads, which is why it was
+two in ten walks rather than ten. The list is merged by time now, and the
+ordinary page — wholly behind the window — is still the concat it was.
+
+One thing to carry forward from the hunt. Run 15 put three fractional-second
+widths through `/usr/libexec/webkit2gtk-4.1/jsc`; a kept archive holds five (3,
+6, 7, 8 and 9 digits), and `time`'s RFC 3339 formatter trims trailing zeros, so
+it can emit any width from 0 to 9. All ten parse there to the millisecond V8
+gives. `Date.parse` returning NaN is ruled out for every stamp this client can
+write, rather than for the three that were sampled — which matters because a
+NaN anywhere in `mergeByTime` degrades it to exactly the shape above.
+
 **The empty pane** run 14 recorded did not happen again, in ten walks.
 
 **A machine under load** is still unasked, and still the obvious way run 14's

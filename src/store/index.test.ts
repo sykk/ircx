@@ -160,6 +160,37 @@ describe("paging backwards", () => {
     expect(timeline()!.hasMore).toBe(true);
   });
 
+  /** A pane that opens on an empty timeline asks the archive with `before`
+   * null, and `load_history` reads that as "the newest page you hold" rather
+   * than as a page behind anything. The read is awaited, so by the time it
+   * lands the server's own `CHATHISTORY LATEST` can already be on screen —
+   * and then the archive's newest, today's, is filed in front of yesterday. */
+  it("orders a page that is not older than what arrived while it was read", () => {
+    const yesterday = Array.from({ length: 3 }, (_, i) =>
+      makeMessage({ id: `history-${i}`, timestamp: `2026-08-11T09:0${i}:00.000Z` }),
+    );
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: yesterday,
+    });
+
+    const today = [
+      makeMessage({ id: "joined", timestamp: "2026-08-12T12:06:19.829Z" }),
+      makeMessage({ id: "created", timestamp: "2026-08-12T12:06:19.831Z" }),
+    ];
+    useAppStore.getState().prependHistory(KEY, today, true);
+
+    expect(timeline()!.messages.map((m) => m.id)).toEqual([
+      "history-0",
+      "history-1",
+      "history-2",
+      "joined",
+      "created",
+    ]);
+  });
+
   /** #487. What the server was asked for the page behind is what tells the next
    * scroll's request from the one already out, and the session abandons its
    * page-backs when the connection goes: a conversation still naming one would

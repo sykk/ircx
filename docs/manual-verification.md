@@ -2946,6 +2946,52 @@ What a run needs to reach either: an archive that is not empty when the pane
 mounts, which is the second launch on one profile, and which takes
 `CHATHISTORY AFTER` rather than `LATEST` — a path no run before 16 had walked.
 
+**Run 17 walked it under load and both are still unverified.** Forty
+fresh-profile walks and fifteen two-launch runs against each build, with
+thirty-two spin loops on sixteen cores — the contention that stretches
+`load_history`, which is where the race #494 describes is won or lost, the
+profile being on a tmpfs and ergo a local socket. Zero sightings of either
+defect on the build that has both in it. The load level was enough to change
+what the app does and not enough to reproduce either; above it the walks stop
+completing, and where that ceiling is has not been measured.
+
+The #496 count is worth less than its fourteen runs suggest. A duplicate needs
+two asks to be one, and the old build makes exactly two per run where run 16's
+duplicate-bearing run made five — so fourteen runs bought about the same 25 asks
+that run 16's four bought. `#scrollback` has drifted: a hundred-odd sessions of
+join and quit noise have pushed run 15's seeded lines back, the walk reaches the
+end of what it can see sooner, and asks less on the way. **A count of #496 needs
+the channel re-seeded first**, so that a run makes a dozen asks rather than two.
+
+Three readings of that run said a defect was there before the fourth said it was
+not, and the third is the one to know about, because it is a property of tapping
+a socket rather than a mistake in one script. **A tap sees bytes before the
+client has filed them.** An ask that goes out while a page is arriving looks
+exactly like an ask from the wrong end of a list — and eighty walks produced
+sixteen of those, eight on each build, which reads as a fix that does nothing.
+Every one had a gap between 1 and 13 ms. `docs/end-to-end-17/ahead.py` discounts
+an ask that crossed a page in flight and reports how many it discounted; a run
+where that number is large and the count is zero has shown nothing about the
+order of anybody's list.
+
+So run 16's argument holds with a clause attached: a client that asks the server
+questions will tell you what it thinks it holds, **about the rows it has had time
+to file**. Anything else read off a tap is a statement about the socket.
+
+**The one difference the two builds showed in the app is worth a walk of its
+own.** The fixed build asks the server for a page far more often on identical
+walks — 121 against 69 over forty fresh-profile walks, and 89 over fifteen
+two-launch runs against 25 over fourteen. Six asks a run against two, and the
+old build's two is consistent enough to look like a wall rather than a race.
+
+The candidate is the `#487` guard, `current.messages[0]?.id === current.askedBehind`:
+a window whose head is not its oldest row can match `askedBehind` where a
+correctly ordered one would not, and skip the ask. If that is what does it, the
+symptom on the old build is a reader who **stops short of their own history**
+rather than one who sees it out of order — which is not what either issue claims
+and is worse than what #494 describes. Unverified: it is an observation over 69
+walks with a mechanism nobody has yet shown.
+
 ## The archive's own controls
 
 Built and walked on 2026-08-01 (#241). Everything in `ircx-store` for this

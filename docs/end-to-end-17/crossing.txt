@@ -1,0 +1,14 @@
+# Control walk 3, the ask ahead.py flagged before it had a settle window.
+# The page lands across 99.602-99.609 and the ask goes out at 99.609, in the
+# same millisecond as the batch close. The client's head before the batch was
+# 12:16:57, which is what it asked from and what was correct when it decided
+# to. The batch carrying 12:16:07 crossed the ask on the wire.
+
+  99.602 < @label=ircx-1;time=2026-08-12T19:07:32.288Z :ergo.test BATCH +2 chathistory #scrollback
+  99.602 < @msgid=47wzgp25spnpe9jhk6t89pvc76;time=2026-08-11T12:16:07.475Z;batch=2 :archivist!~u@f6u3beryjfghu.irc PRI
+  99.602 < @time=2026-08-11T12:16:07.475Z;batch=2;msgid=ytz6wum32mcqrampdiuzejyc2w :historian!~u@f6u3beryjfghu.irc PRI
+  99.602 < @msgid=pjya5ziqc2ue3umdwmxcubbkbe;time=2026-08-11T12:16:07.976Z;batch=2 :historian!~u@f6u3beryjfghu.irc PRI
+   …  (196 more rows of batch 2, all stamped 99.602)
+  99.609 < @batch=2;msgid=8ga548cvfggzgcudfw4z4uw9ta;time=2026-08-11T12:16:57.035Z :historian!~u@f6u3beryjfghu.irc PRI
+  99.609 < @time=2026-08-12T19:07:32.288Z :ergo.test BATCH -2
+  99.609 > @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=smtxp5yzd4h8yd6vwdyfj9b5de 200

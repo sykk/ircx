@@ -212,9 +212,55 @@ if (!REUSE) {
    * again. Onboarding is on screen for those few seconds and is never answered. */
   const first = startApp();
   await waitForWindow("the app to create its profile");
+  await waitForSchema();
   first.kill();
-  await sleep(1500);
-  seedNetwork();
+  await seedWhenUnlocked();
+}
+
+/* The app does not drop its SQLite lock the instant it is killed, and the seed
+ * is the next thing that wants the file. The 1500ms this replaced was covering
+ * that as well as the migration, so shortening it to a schema check moved the
+ * failure rather than fixing it: `database is locked`, one run in ten, under
+ * load. Both halves are conditions now and neither is a duration. */
+async function seedWhenUnlocked() {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      seedNetwork();
+      return;
+    } catch (e) {
+      if (!/locked|busy/i.test(String(e)) || Date.now() > deadline) throw e;
+      await sleep(250);
+    }
+  }
+}
+
+/* The window is up before the archive is migrated, so the wait above does not
+ * say the table is there. A fixed 1500ms stood in for it and held on an idle
+ * machine; under sixteen spinners every walk died on `no such table: networks`
+ * before it reached the server, which reads as the app failing under load and
+ * is the harness guessing. Waiting for the table rather than for a duration is
+ * what makes a loaded walk mean anything.
+ *
+ * It waits with the app still up, which is the whole of it: the app is what
+ * writes the table, so a wait after the kill is a wait on nothing and times out
+ * however long it is given. */
+async function waitForSchema() {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      const db = new DatabaseSync(ARCHIVE);
+      const [table] = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'networks'")
+        .all();
+      db.close();
+      if (table) return;
+    } catch {
+      /* The file is not there yet, or is mid-migration. Both are "not ready". */
+    }
+    if (Date.now() > deadline) throw new Error(`no networks table in ${ARCHIVE} after 30s`);
+    await sleep(250);
+  }
 }
 
 function seedNetwork() {

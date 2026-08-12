@@ -2926,6 +2926,26 @@ What that leaves:
   inside it. Two runs measured the least sensitive position before that was
   noticed. Check the parked frame before believing the frames after it.
 
+**#494 and #496 are fixed in a test and unverified in the app.** Run 16 built
+the instrument that ought to settle them — `pageBack` sends the oldest message
+the window holds, so a tap on the socket reads the frontend's own head without
+anybody judging a screenshot — and then could not make either defect happen
+often enough to conclude from. Twenty walks, ten against the fix and ten
+against the build before it, came out identical: the fresh-profile walk does
+not reproduce #494 even in the build that has it, because the pane's priming
+read finds the archive still empty and an empty archive puts nothing in front
+of anything.
+
+#496's duplicate page-back *was* seen once, on the old build, in the shape the
+issue predicted — the same msgid asked twice 37 ms apart — and not on the new
+one. One in four runs against none in four is a reason to walk it again, not a
+verdict. `docs/end-to-end-16/dupes.sh` is the counter; it wants dozens of runs
+rather than the three it was given.
+
+What a run needs to reach either: an archive that is not empty when the pane
+mounts, which is the second launch on one profile, and which takes
+`CHATHISTORY AFTER` rather than `LATEST` — a path no run before 16 had walked.
+
 ## The archive's own controls
 
 Built and walked on 2026-08-01 (#241). Everything in `ircx-store` for this

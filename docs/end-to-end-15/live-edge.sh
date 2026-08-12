@@ -20,10 +20,12 @@
 # an ergo on 127.0.0.1:6677 — or the channel reads empty and the walk measures
 # a still pane with nothing in it.
 #
-# A step of 45s is longer than the 5s `REPLY_TIMEOUT` in src-tauri/src/state.rs,
-# so the walk also draws "walk stopped responding — reconnect it and try again"
-# across the head of the timeline. That is #491 and not this walk failing: the
-# page still arrives, and is still the thing being measured.
+# A step of 45s used to be longer than the deadline the page was asked under —
+# the 5s `REPLY_TIMEOUT` in src-tauri/src/state.rs — so the walk also drew
+# "walk stopped responding — reconnect it and try again" across the head of the
+# timeline. That was #491, and the head now reads "Loading older messages" for
+# the length of the hold. A step past `ROUND_TRIP_TIMEOUT` says instead that the
+# server has not sent the page yet, and stops saying it when the page lands.
 set -euo pipefail
 
 OUT=${1:?output directory}

@@ -4,8 +4,8 @@ use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
     FileToUpload, HistoryRequest, InstalledPlugin, Member, MutedConversation, NetworkConfig,
-    NetworkId, PluginGrants, PluginPermissionInfo, Query, SearchHit, SearchRequest, TargetName,
-    ThemeSource, UploadProvider, UploadedFile,
+    NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query, SearchHit,
+    SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -156,8 +156,9 @@ pub async fn load_history(
 }
 
 /// The page behind what the archive holds, from the server. Answers whether
-/// another may be behind it; the messages arrive as `messagesAppended` on their
-/// way through the archive, the same as any other history.
+/// another may be behind it, or that the server has not said yet; the messages
+/// arrive as `messagesAppended` on their way through the archive, the same as
+/// any other history.
 #[tauri::command]
 pub async fn page_back(
     app: State<'_, App>,
@@ -165,14 +166,20 @@ pub async fn page_back(
     target: TargetName,
     from: String,
     msgid: Option<String>,
-) -> Result<bool, String> {
-    app.ask(&network, |reply| SessionCommand::PageBack {
-        target,
-        from,
-        msgid,
-        reply,
+) -> Result<PageBackOutcome, String> {
+    let answer = app
+        .ask_server(&network, |reply| SessionCommand::PageBack {
+            target,
+            from,
+            msgid,
+            reply,
+        })
+        .await?;
+    Ok(match answer {
+        Some(true) => PageBackOutcome::More,
+        Some(false) => PageBackOutcome::End,
+        None => PageBackOutcome::Waiting,
     })
-    .await
 }
 
 #[tauri::command]

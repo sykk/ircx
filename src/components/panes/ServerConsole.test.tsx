@@ -70,7 +70,7 @@ beforeEach(() => {
   ipcMock.loadHistory.mockResolvedValue([]);
   // The real module answers this without a request for a pane that is not a
   // conversation, which is what the console is.
-  ipcMock.pageBack.mockResolvedValue(false);
+  ipcMock.pageBack.mockResolvedValue("end");
   ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
 
   useAppStore.setState({

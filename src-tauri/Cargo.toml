@@ -38,3 +38,6 @@ gtk = "0.18"
 [dev-dependencies]
 serde_json.workspace = true
 tempfile = "3"
+# `start_paused`, so a test can let the round-trip deadline pass without
+# spending a minute of the suite on it.
+tokio = { workspace = true, features = ["test-util"] }

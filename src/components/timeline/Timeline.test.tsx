@@ -156,7 +156,7 @@ beforeEach(() => {
   ipcMock.loadHistory.mockReturnValue(new Promise(() => {}));
   // A server with nothing behind the archive, which is the answer that leaves
   // the reads below reading only what is on disk.
-  ipcMock.pageBack.mockResolvedValue(false);
+  ipcMock.pageBack.mockResolvedValue("end");
   ipcMock.react.mockResolvedValue({ kind: "handled" });
   useAppStore.setState({ ...oneView(null), networks: {}, timelines: {}, typing: {} });
 });
@@ -666,7 +666,7 @@ describe("Timeline", () => {
     });
 
     it("keeps paging while the server says there is more behind it", async () => {
-      ipcMock.pageBack.mockResolvedValue(true);
+      ipcMock.pageBack.mockResolvedValue("more");
       await readToTheStart(older(60));
 
       await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
@@ -723,7 +723,7 @@ describe("Timeline", () => {
       };
 
       it("asks for it once, however many scroll events reach the top", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         await readToTheStart(older(60));
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
 
@@ -737,7 +737,7 @@ describe("Timeline", () => {
       /** There may be more behind a page already on its way, which is what the
        * reader is told rather than that this is where history stops. */
       it("does not read as the beginning of history", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         await readToTheStart(older(60));
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
 
@@ -756,7 +756,7 @@ describe("Timeline", () => {
        * run. It waits on its own oldest message instead, and that one moved.
        */
       it("keeps paging when the answer carried nothing new", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         const page = older(60);
         await readToTheStart(page);
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
@@ -782,7 +782,7 @@ describe("Timeline", () => {
       });
 
       it("asks for the next one once it has landed", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         const page = older(60);
         await readToTheStart(page);
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
@@ -807,7 +807,7 @@ describe("Timeline", () => {
       /** A channel does not go quiet because somebody is paging through it, and
        * a line arriving at the live edge is not the page they are waiting for. */
       it("is not satisfied by a message arriving at the other end", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         await readToTheStart(older(60));
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
 
@@ -829,7 +829,7 @@ describe("Timeline", () => {
       /** The session abandons its page-backs when the connection goes, so a
        * pane still waiting for one would wait for the rest of the run. */
       it("stops waiting when the connection does", async () => {
-        ipcMock.pageBack.mockResolvedValue(true);
+        ipcMock.pageBack.mockResolvedValue("more");
         await readToTheStart(older(60));
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
 
@@ -845,6 +845,66 @@ describe("Timeline", () => {
 
         await scrollAgain();
         expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    /**
+     * #491. A page slower than the deadline on the ask used to be reported as
+     * the network having stopped responding, in the danger colour, advising a
+     * reconnect — and then the page arrived and drew correctly underneath it.
+     * The run that found it took the page 45 seconds later.
+     */
+    describe("when the server has not answered yet", () => {
+      const waited = async () => {
+        ipcMock.pageBack.mockResolvedValue("waiting");
+        await readToTheStart(older(60));
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      };
+
+      it("says so, without calling it a failure", async () => {
+        await waited();
+
+        const head = await screen.findByTestId("timeline-head");
+        expect(head.textContent).toBe("The server has not sent this page yet");
+        expect(head.style.color).toBe("var(--text-faint)");
+      });
+
+      /** The history has not been said to end here, so the pane is still owed
+       * a page and may still ask for what is behind it. */
+      it("is not the beginning of history", async () => {
+        await waited();
+
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+        expect(screen.queryByText("Beginning of history")).toBeNull();
+      });
+
+      it("takes the line back off when the page arrives", async () => {
+        const page = older(60);
+        ipcMock.pageBack.mockResolvedValue("waiting");
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              network: "libera",
+              target: "#ctf-ops",
+              messages: [
+                makeMessage({
+                  id: "landed",
+                  nick: "phrack",
+                  text: "landed",
+                  timestamp: new Date(Date.parse(page[0]!.timestamp) - 30_000).toISOString(),
+                }),
+              ],
+            },
+          ]);
+        });
+
+        await waitFor(() =>
+          expect(screen.queryByText("The server has not sent this page yet")).toBeNull(),
+        );
       });
     });
 

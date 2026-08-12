@@ -35,11 +35,11 @@ describe("setTyping", () => {
 
 describe("pageBack", () => {
   it("asks for what is behind the oldest message of a conversation", async () => {
-    invoke.mockResolvedValue(true);
+    invoke.mockResolvedValue("more");
 
     await expect(
       ipc.pageBack("libera", "#ctf-ops", "2026-07-31T09:00:00.000Z", "abc"),
-    ).resolves.toBe(true);
+    ).resolves.toBe("more");
     expect(invoke).toHaveBeenCalledWith("page_back", {
       network: "libera",
       target: "#ctf-ops",
@@ -53,7 +53,7 @@ describe("pageBack", () => {
   it("answers for the server console without asking", async () => {
     await expect(
       ipc.pageBack("libera", SERVER_TARGET, "2026-07-31T09:00:00.000Z", null),
-    ).resolves.toBe(false);
+    ).resolves.toBe("end");
 
     expect(invoke).not.toHaveBeenCalled();
   });

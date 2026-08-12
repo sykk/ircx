@@ -655,6 +655,60 @@ describe("Timeline", () => {
       );
     });
 
+    /** #496, the other half of #494. A pane opening on an empty timeline has no
+     * message to ask the archive from, so it asks with `before` null — which
+     * `load_history` answers with the newest page it holds rather than with a
+     * page behind anything. The read is awaited, and the server's own
+     * `CHATHISTORY LATEST` lands while it is in flight. `older[0]` then names
+     * a row from today, and asking the server for what is behind *that* asks
+     * again for the page it has already sent. */
+    it("asks from the oldest message the window will hold, not the page's own first row", async () => {
+      let answer: (page: ChatMessage[]) => void = () => {};
+      ipcMock.loadHistory.mockReturnValue(
+        new Promise<ChatMessage[]>((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      seed([]);
+      render(<Timeline view={TEST_VIEW} />);
+      await waitFor(() => expect(ipcMock.loadHistory).toHaveBeenCalled());
+      // Asked with nothing to ask from, which is the whole of the case.
+      expect(ipcMock.loadHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ before: null }),
+      );
+
+      // The server's page, landing while the archive is still being read.
+      const history = older(3);
+      act(() => {
+        useAppStore.getState().applyEvent({
+          type: "messagesAppended",
+          network: "libera",
+          target: "#ctf-ops",
+          messages: history,
+        });
+      });
+
+      // The archive's newest page: today's rows, which are not behind anything.
+      const today = makeMessage({
+        id: "joined",
+        text: "sable joined",
+        timestamp: "2026-08-12T12:06:19.829Z",
+      });
+      await act(async () => {
+        answer([today]);
+      });
+
+      await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      expect(ipcMock.pageBack).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        history[0]!.timestamp,
+        history[0]!.id,
+      );
+      expect(useAppStore.getState().timelines[KEY]!.askedBehind).toBe(history[0]!.id);
+    });
+
     it("leaves the server alone while the archive still has a full page to give", async () => {
       await readToTheStart(older(200));
 

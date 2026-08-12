@@ -233,7 +233,16 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       // archive running out, which is not the same as the history running out:
       // what is behind it is on the server, and #472 is that this used to be
       // where the pane gave up and said so.
-      const oldest = older[0] ?? current.messages[0];
+      // The oldest of the window and the page together, read after the await
+      // rather than from the snapshot taken before it. `older[0]` is the
+      // conversation's oldest only while the page is behind the window, and a
+      // pane opening on an empty timeline has no message to ask the archive
+      // from — so it asks with `before` null, which is answered with the newest
+      // page the archive holds. The server's own history lands while that read
+      // is in flight, and asking from today's row asks again for the page that
+      // just arrived (#496).
+      const live = useAppStore.getState().timelines[key]?.messages ?? current.messages;
+      const oldest = olderOf(older[0], live[0]);
       let more = older.length === PAGE_SIZE;
       let outcome: PageBackOutcome | null = null;
       if (!more) {
@@ -422,6 +431,20 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       <TypingIndicator network={network} target={target} />
     </div>
   );
+}
+
+/**
+ * Whichever of two messages the conversation reached first, either of them
+ * possibly being absent. A stamp that will not parse loses, which sends the
+ * server the one that will.
+ */
+function olderOf(
+  a: ChatMessage | undefined,
+  b: ChatMessage | undefined,
+): ChatMessage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(a.timestamp) <= Date.parse(b.timestamp) ? a : b;
 }
 
 /**

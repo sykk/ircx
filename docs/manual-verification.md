@@ -2989,8 +2989,22 @@ a window whose head is not its oldest row can match `askedBehind` where a
 correctly ordered one would not, and skip the ask. If that is what does it, the
 symptom on the old build is a reader who **stops short of their own history**
 rather than one who sees it out of order — which is not what either issue claims
-and is worse than what #494 describes. Unverified: it is an observation over 69
-walks with a mechanism nobody has yet shown.
+and is worse than what #494 describes.
+
+**Run 18 walked it, and the guard does wedge.** `askedBehind` is armed before
+the ask and disarmed by nothing but the page landing or a reconnect, so a page
+that never lands — dropped, answered empty, or answered with only what the pane
+already holds — leaves every later scroll refused for the rest of the run, on a
+conversation still saying it has more. `docs/end-to-end-18/holdpage.py` swallows
+the batch answering a `CHATHISTORY BEFORE` and passes everything else, so the
+session stays up and only the page is missing; three walks a build separate 1
+ask from 2, 3/3, the retry naming the same msgid ninety-three seconds later.
+Fixed by disarming on the `waiting` outcome, which is the round trip already
+spent. `docs/end-to-end-run-18.md`.
+
+What that leaves: the empty-batch and duplicate-batch routes are argued from the
+code rather than walked, and how often a live network takes sixty seconds over a
+page is not measured — #491's origin took 45.
 
 ## The archive's own controls
 

@@ -709,6 +709,64 @@ describe("Timeline", () => {
       expect(useAppStore.getState().timelines[KEY]!.askedBehind).toBe(history[0]!.id);
     });
 
+    /**
+     * The same read, on the archive a first launch has: empty. `older` comes
+     * back with nothing and the snapshot taken before the await held nothing
+     * either, so the only message this conversation has ever seen is the one
+     * the server delivered *while the read was in flight*.
+     *
+     * Taking the oldest from the snapshot answers `undefined` there, and
+     * `pageBack` reads that as a conversation with nothing behind it — `"end"`,
+     * `hasMore` false, "Beginning of history" drawn over a server holding
+     * thousands. A pane that opens on a fresh profile and loses this race can
+     * never be scrolled into its own history for the rest of the run.
+     *
+     * Reading the head after the await is what sees the page that landed.
+     */
+    it("asks from the page that landed while the empty archive was being read", async () => {
+      let answer: (page: ChatMessage[]) => void = () => {};
+      ipcMock.loadHistory.mockReturnValue(
+        new Promise<ChatMessage[]>((resolve) => {
+          answer = resolve;
+        }),
+      );
+      // A server that does hold more, so that what the pane decides about its
+      // own history is the pane's decision rather than the server's answer.
+      ipcMock.pageBack.mockResolvedValue("more");
+
+      seed([]);
+      render(<Timeline view={TEST_VIEW} />);
+      await waitFor(() => expect(ipcMock.loadHistory).toHaveBeenCalled());
+
+      // The server's own page, landing while the archive read is in flight.
+      const history = older(3);
+      act(() => {
+        useAppStore.getState().applyEvent({
+          type: "messagesAppended",
+          network: "libera",
+          target: "#ctf-ops",
+          messages: history,
+        });
+      });
+
+      // The archive had nothing to give: a first launch has written none of
+      // this down yet.
+      await act(async () => {
+        answer([]);
+      });
+
+      await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
+      expect(ipcMock.pageBack).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        history[0]!.timestamp,
+        history[0]!.id,
+      );
+      // The history did not end here, and the pane may still be read back.
+      expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+      expect(screen.queryByText("Beginning of history")).toBeNull();
+    });
+
     it("leaves the server alone while the archive still has a full page to give", async () => {
       await readToTheStart(older(200));
 

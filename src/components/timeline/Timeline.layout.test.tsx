@@ -6,7 +6,9 @@ import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
-import { makeConversation } from "./fixtures";
+import { makeConversation, makeMessage } from "./fixtures";
+import { assignGroups } from "./groups";
+import { buildRows } from "./rows";
 import { flushLayout, installLayout } from "./layoutHarness";
 
 /**
@@ -109,6 +111,40 @@ function olderPage(seedNumber: number): ChatMessage[] {
     seed: seedNumber,
     startedAt: Date.parse("2026-07-28T00:00:00.000Z"),
   }).map((m) => ({ ...m, id: `old-${m.id}` }));
+}
+
+/**
+ * The channel run 22 walked, which is not the channel this file's other tests
+ * draw. `seed.py` picked its shape to keep `groups.ts` out of the measurement:
+ * two people alternating every line, nothing opening with `[` or with `nick:`,
+ * three body lengths and the lot sent back to back. So no run is longer than a
+ * message, no group is ever assigned, and every row is one line or two.
+ *
+ * `source` is what the restore leaves behind it: the archive it read, then what
+ * the server replayed on top, then what the session heard live — which is where
+ * the two history rules in the window come from.
+ */
+function walkedChannel(
+  count: number,
+  from: number,
+  startedAt: number,
+  source: (index: number) => ChatMessage["source"],
+): ChatMessage[] {
+  const nicks = ["historian", "archivist"];
+  const long =
+    "the template loader will happily read /proc/self/environ and the credentials are right there in it";
+  return Array.from({ length: count }, (_, i) => {
+    const n = from + i;
+    const body = n % 17 === 0 ? long : n % 5 === 0 ? "ack" : "heap layout after the second free";
+    return makeMessage({
+      id: `line${n}`,
+      nick: nicks[n % 2]!,
+      text: `line ${String(n).padStart(4, "0")} ${body}`,
+      // 90ms apart, which is the rate the seeder sent them at.
+      timestamp: new Date(startedAt + i * 90).toISOString(),
+      source: source(i),
+    });
+  });
 }
 
 beforeEach(() => {
@@ -246,5 +282,106 @@ describe("two panes on one channel, one of them parked", () => {
     flushLayout();
 
     expect(eyeLine(parked, watching)).toBe(before);
+  });
+});
+
+/**
+ * #508's own conditions on #508's own channel. Run 22 measured five landings in
+ * eighteen moving a parked pane by exactly one line of text, and this is what
+ * it drove: a restored layout with both panes on the channel, the right one
+ * wheeled up the archive and then left alone while the left one pages twice.
+ *
+ * The pane does not move here, and the negative is the useful part. Whatever
+ * displaces it in the release app, it is not the head arriving or leaving, not
+ * the anchor's placement, not the restore's `scrollToIndex` still reconciling,
+ * and not a history rule landing above the reader — all four are in this test
+ * and the pane holds through them.
+ *
+ * What this channel has not got is a row whose height can change after it is
+ * drawn. `seed.py` chose that shape deliberately, to keep `groups.ts` out of
+ * the measurement, and it keeps out more than it meant to: with no group ever
+ * assigned and no run longer than a message, a page landing cannot alter a row
+ * that is already on the screen.
+ */
+describe("the channel run 22 walked", () => {
+  const ARCHIVE = Date.parse("2026-07-29T00:00:00.000Z");
+
+  /** The two panes as a restore brings them back, each aimed at the row its
+   * reader was left on. */
+  function restoredPanes(messages: ChatMessage[]) {
+    seed(messages);
+    const second = openSecondView();
+    const rows = buildRows(
+      messages,
+      null,
+      { nick: "sable", words: [] },
+      assignGroups(messages, []),
+      new Set<string>(),
+    );
+    useAppStore.setState({
+      viewAnchor: {
+        [TEST_VIEW]: rows[Math.floor(rows.length * 0.8)]!.id,
+        [second]: rows[Math.floor(rows.length * 0.55)]!.id,
+      },
+    });
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [reading, parked] = screen.getAllByTestId("timeline-scroller");
+    // The wheel is what hands a pane to its reader, and it is how run 22 parked
+    // the right one: from here neither is being put back.
+    fireEvent.wheel(reading!);
+    fireEvent.wheel(parked!);
+    parked!.scrollTop = 4_000;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    return { reading: reading!, parked: parked! };
+  }
+
+  it("leaves the parked pane where it was across two landings", async () => {
+    const { reading, parked } = restoredPanes(
+      walkedChannel(400, 1_000, ARCHIVE, (i) =>
+        i < 200 ? "localArchive" : i < 350 ? "serverHistory" : "live",
+      ),
+    );
+
+    for (const page of [0, 1]) {
+      const held = useAppStore.getState().timelines[KEY]!.messages.length;
+      let land = () => {};
+      ipcMock.loadHistory.mockReturnValue(
+        new Promise<ChatMessage[]>((resolve) => {
+          // Half of it the archive's and half the server's, which is what a
+          // page-back reaching past the archive comes back as.
+          land = () =>
+            resolve(
+              walkedChannel(
+                200,
+                1_000 - 200 * (page + 1),
+                ARCHIVE - (page + 1) * 3_600_000,
+                (i) => (i < 100 ? "localArchive" : "serverHistory"),
+              ),
+            );
+        }),
+      );
+
+      reading.scrollTop = 100 + page;
+      fireEvent.scroll(reading);
+      flushLayout();
+
+      const watching = atTheFold(parked);
+      const before = eyeLine(parked, watching);
+      land();
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(held + 200),
+      );
+      flushLayout();
+
+      expect(eyeLine(parked, watching)).toBe(before);
+    }
   });
 });

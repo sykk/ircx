@@ -2963,6 +2963,29 @@ join and quit noise have pushed run 15's seeded lines back, the walk reaches the
 end of what it can see sooner, and asks less on the way. **A count of #496 needs
 the channel re-seeded first**, so that a run makes a dozen asks rather than two.
 
+**Run 19 re-seeded it and ran the count.** `#scrollback` is 2400 fresh lines,
+ergo's buffer (`channel-length: 2048`) is seeded history again, and ten pages sit
+behind the landing page — so a two-launch run makes ten asks where run 17's made
+two. Twelve runs a build: **120 asks each, zero duplicates on both**, with the
+page-backs stepping a uniform full page on either build. Run 16's one-in-twenty
+would predict about six in 120 and gives odds of roughly two in a thousand on
+seeing none, so the duplicate run 16 photographed was not a one-in-twenty event
+and exposure is no longer the explanation for a zero. `docs/end-to-end-run-19.md`.
+
+Two instrument notes from it. **`ahead` is not a meaningful column for a
+two-launch arm** — `ahead.py` assumes a fresh profile so that "oldest delivered"
+can stand in for "oldest held", and on a second launch most of the window came
+off disk and never crossed the tap; `repeated` is wire-only and stays valid.
+And **`seed_history.py` printing "seeded" means the socket took the lines**, not
+the server: `fakelag` allows five commands then two a second per client, so 2400
+lines take ten minutes to land and a walk started on the success line walks a
+channel mid-write.
+
+What that leaves: #496 is unreproduced in the app after four runs, and the next
+attempt should **manufacture its precondition** — messages injected between the
+two launches, so the second launch's archive is genuinely behind a server that
+has moved on — rather than walk for it again.
+
 Three readings of that run said a defect was there before the fourth said it was
 not, and the third is the one to know about, because it is a property of tapping
 a socket rather than a mistake in one script. **A tap sees bytes before the

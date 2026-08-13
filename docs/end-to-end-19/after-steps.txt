@@ -1,0 +1,4 @@
+-to-end-19/after/run1/wire.log  10 asks  steps:  49.5  49.6  50.1  50.1  50.1  50.1  50.1  50.1  50.1
+-to-end-19/after/run5/wire.log  10 asks  steps:  49.1  49.6  50.1  50.1  50.1  50.1  50.1  50.1  50.1
+-to-end-19/after/run9/wire.log  10 asks  steps:  49.1  49.6  50.0  50.1  50.1  50.1  50.1  50.1  50.1
+to-end-19/after/run12/wire.log  10 asks  steps:  49.1  50.1  49.6  50.1  50.1  50.1  50.1  50.1  50.1

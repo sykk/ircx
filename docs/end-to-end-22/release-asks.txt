@@ -1,0 +1,18 @@
+run1/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:827xzhsu BEFORE:yba8wmuf BEFORE:vuphyu8f BEFORE:nmk2qb98
+run2/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:jcawg75x BEFORE:pdbdujcy BEFORE:3c2p4zzw BEFORE:mpvznk74
+run3/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:2ymn4phx BEFORE:qithhjcd BEFORE:dyjerxwu BEFORE:pswuvh9p
+run4/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:wmpfwfwm BEFORE:fgzuda5m BEFORE:h7imbap2 BEFORE:8y342mae
+run5/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:a4i24xs7 BEFORE:yhxt2tz7 BEFORE:4tqpjn7h BEFORE:3e7tumhq
+run6/wire.log
+  session 1:  1 asks  LATEST:*
+  session 2:  6 asks  TARGETS:2026-08- AFTER:2026-08- BEFORE:8gjkaa2u BEFORE:kuwuti4h BEFORE:gkrn24se BEFORE:k5wyu2ue

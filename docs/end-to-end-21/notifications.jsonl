@@ -1,0 +1,63 @@
+{"call": "ready", "name": "org.freedesktop.Notifications", "t": 0.0}
+{"call": "notify", "id": 1, "app": "probe", "summary": "phrack in #harness", "body": "the instrument works", "actions": [], "t": 9.56}
+{"call": "mark", "what": "focused-watching"}
+{"call": "mark", "what": "blurred"}
+{"call": "notify", "id": 2, "app": "ircx", "summary": "phrack in #harness", "body": "walker: and this one lands while you are not", "actions": [], "t": 329.336}
+{"call": "mark", "what": "refocused"}
+{"call": "mark", "what": "focused-watching"}
+{"call": "mark", "what": "blurred"}
+{"call": "notify", "id": 3, "app": "ircx", "summary": "phrack in #harness", "body": "walker: and this one lands while you are not", "actions": [], "t": 434.241}
+{"call": "mark", "what": "refocused"}
+{"call": "mark", "what": "burst"}
+{"call": "notify", "id": 4, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 01", "actions": [], "t": 447.236}
+{"call": "notify", "id": 5, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 03", "actions": [], "t": 447.236}
+{"call": "notify", "id": 6, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 02", "actions": [], "t": 447.236}
+{"call": "notify", "id": 7, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 04", "actions": [], "t": 447.237}
+{"call": "notify", "id": 8, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 05", "actions": [], "t": 447.237}
+{"call": "notify", "id": 9, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 06", "actions": [], "t": 447.736}
+{"call": "notify", "id": 10, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 07", "actions": [], "t": 448.233}
+{"call": "notify", "id": 11, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 08", "actions": [], "t": 448.736}
+{"call": "notify", "id": 12, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 09", "actions": [], "t": 449.237}
+{"call": "notify", "id": 13, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 10", "actions": [], "t": 449.738}
+{"call": "notify", "id": 14, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 11", "actions": [], "t": 450.239}
+{"call": "notify", "id": 15, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 12", "actions": [], "t": 450.74}
+{"call": "notify", "id": 16, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 13", "actions": [], "t": 451.241}
+{"call": "notify", "id": 17, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 14", "actions": [], "t": 451.741}
+{"call": "notify", "id": 18, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 15", "actions": [], "t": 452.24}
+{"call": "notify", "id": 19, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 16", "actions": [], "t": 452.739}
+{"call": "notify", "id": 20, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 17", "actions": [], "t": 453.242}
+{"call": "notify", "id": 21, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 18", "actions": [], "t": 453.742}
+{"call": "notify", "id": 22, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 19", "actions": [], "t": 454.244}
+{"call": "notify", "id": 23, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 20", "actions": [], "t": 454.744}
+{"call": "mark", "what": "query"}
+{"call": "notify", "id": 24, "app": "ircx", "summary": "phrack", "body": "a line with nobody else in it", "actions": [], "t": 458.252}
+{"call": "mark", "what": "done"}
+{"call": "mark", "what": "walk-start on :103 against 127.0.0.1:6712"}
+{"call": "mark", "what": "focused-watching"}
+{"call": "mark", "what": "blurred"}
+{"call": "notify", "id": 25, "app": "ircx", "summary": "phrack in #harness", "body": "walker: and this one lands while you are not", "actions": [], "t": 704.46}
+{"call": "mark", "what": "refocused"}
+{"call": "mark", "what": "burst"}
+{"call": "notify", "id": 26, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 02", "actions": [], "t": 717.495}
+{"call": "notify", "id": 27, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 01", "actions": [], "t": 717.495}
+{"call": "notify", "id": 28, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 03", "actions": [], "t": 717.496}
+{"call": "notify", "id": 29, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 04", "actions": [], "t": 717.496}
+{"call": "notify", "id": 30, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 06", "actions": [], "t": 717.498}
+{"call": "notify", "id": 31, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 07", "actions": [], "t": 717.498}
+{"call": "notify", "id": 32, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 05", "actions": [], "t": 717.498}
+{"call": "notify", "id": 33, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 08", "actions": [], "t": 717.498}
+{"call": "notify", "id": 34, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 09", "actions": [], "t": 717.498}
+{"call": "notify", "id": 35, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 10", "actions": [], "t": 717.498}
+{"call": "notify", "id": 36, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 17", "actions": [], "t": 717.5}
+{"call": "notify", "id": 37, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 18", "actions": [], "t": 717.5}
+{"call": "notify", "id": 38, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 19", "actions": [], "t": 717.5}
+{"call": "notify", "id": 39, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 20", "actions": [], "t": 717.5}
+{"call": "notify", "id": 40, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 16", "actions": [], "t": 717.502}
+{"call": "notify", "id": 41, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 15", "actions": [], "t": 717.502}
+{"call": "notify", "id": 42, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 11", "actions": [], "t": 717.502}
+{"call": "notify", "id": 43, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 12", "actions": [], "t": 717.502}
+{"call": "notify", "id": 44, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 14", "actions": [], "t": 717.502}
+{"call": "notify", "id": 45, "app": "ircx", "summary": "phrack in #harness", "body": "walker: burst 13", "actions": [], "t": 717.503}
+{"call": "mark", "what": "query"}
+{"call": "notify", "id": 46, "app": "ircx", "summary": "phrack", "body": "a line with nobody else in it", "actions": [], "t": 728.518}
+{"call": "mark", "what": "done"}

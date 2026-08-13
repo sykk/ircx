@@ -4041,25 +4041,45 @@ first:
 
 Nothing in the suite raises one. `worthNotifying` is tested for every reason it
 stays quiet — muted, watched, replayed, the reader's own line, each switch on
-its own — and that is the whole of the decision. What is unverified is
-everything after it: `sendNotification` reaching a notification daemon, the
-permission prompt, and what the desktop does with a notification once it has
-one.
+its own — and that is the whole of the decision. What was unverified is
+everything after it.
 
-**What needs a person, on each desktop:**
+**Most of it is now walked, on Linux** (`docs/end-to-end-run-21.md`, 2026-08-12,
+release app against `ergo` 2.19). The entry used to say this needed a person
+because a notification ends up on somebody's screen. It does not need one to
+answer whether the call was made and what it carried, because a notification is
+a D-Bus method call first: `notifyd.py` owns `org.freedesktop.Notifications` and
+records every `Notify` the client sends down the path a desktop's own daemon
+sits on.
 
-- A notification appears at all, and carries the conversation in its title.
-  `phrack in #ircx` for a channel, the sender's nick alone for a query.
-- The permission prompt. On macOS the first `requestPermission` is a system
-  dialog; on Linux there is usually nothing to grant and it answers straight
-  away. A refusal has to leave the switch off — the page says so, and the page
-  is tested against a mocked refusal, but not against a real one.
-- Nothing arrives for the conversation on screen while the window has focus,
-  and something does the moment the window loses it. The focus half comes from
-  `onFocusChanged`, which no test can drive.
-- A burst. Twenty highlights in a second is twenty notifications; whether the
-  desktop coalesces them is the desktop's business, and worth watching before
-  deciding ircx should.
+What that run settled:
+
+- **The call is made, and it carries the conversation.** `app` is `ircx`,
+  `summary` is `phrack in #harness` for a channel and `phrack` alone for a
+  query.
+- **The focus rule, in both directions.** The same line from the same client
+  raises nothing while the window has focus and one notification when it does
+  not, one `XSetInputFocus` apart and nothing else changed.
+- **Twenty at once are twenty notifications**, inside eight milliseconds, none
+  dropped and none coalesced by the client.
+- **On Linux there is nothing to grant.** No dialogue between the click and the
+  notification.
+
+**They arrive out of order**, and this is the path's rather than the client's:
+`sendNotification` returns `void`, so there is nothing to await and no handle on
+the ordering. Twenty sent in sequence reached the bus as `2, 1, 3, 4, 6, 7, 5,
+…` while the timeline held them in order. Ordering them means notifying outside
+the plugin, per platform — the same larger thing the click target needs, below.
+
+**What still needs a person:**
+
+- **What a desktop does with one.** `notifyd.py` draws nothing, so how a real
+  daemon renders a notification, how long it stays up, and whether it coalesces
+  twenty are all unwatched.
+- **macOS.** The first `requestPermission` there is a system dialog, and run 21
+  was Linux.
+- **A real refusal.** The page is tested against a mocked one and there was
+  nothing on this desktop to refuse with.
 
 **What cannot be made to work, and is not a bug here:** clicking a notification
 does not open the conversation. `tauri-plugin-notification`'s desktop path is

@@ -1,0 +1,100 @@
+run1 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run1 b-one-page->c-two-pages  0px
+run2 a-parked->b-one-page  0px
+run2 b-one-page->c-two-pages  0px
+run3 a-parked->b-one-page  0px
+run3 b-one-page->c-two-pages  0px
+run4 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.00)
+run4 b-one-page->c-two-pages  0px
+run5 a-parked->b-one-page  0px
+run5 b-one-page->c-two-pages  0px
+run6 a-parked->b-one-page  0px
+run6 b-one-page->c-two-pages  0px
+run7 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run7 b-one-page->c-two-pages  0px
+run8 a-parked->b-one-page  0px
+run8 b-one-page->c-two-pages  0px
+run9 a-parked->b-one-page  0px
+run9 b-one-page->c-two-pages  0px
+run10 a-parked->b-one-page  0px
+run10 b-one-page->c-two-pages  0px
+run11 a-parked->b-one-page  0px
+run11 b-one-page->c-two-pages  0px
+run12 a-parked->b-one-page  0px
+run12 b-one-page->c-two-pages  0px
+run13 a-parked->b-one-page  0px
+run13 b-one-page->c-two-pages  0px
+run14 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.00)
+run14 b-one-page->c-two-pages  0px
+run15 a-parked->b-one-page  0px
+run15 b-one-page->c-two-pages  differs  right pane  b-one-page.png -> c-two-pages.png: shift +0px (residual 0.00)
+run16 a-parked->b-one-page  0px
+run16 b-one-page->c-two-pages  0px
+run17 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.00)
+run17 b-one-page->c-two-pages  0px
+run18 a-parked->b-one-page  0px
+run18 b-one-page->c-two-pages  0px
+run19 a-parked->b-one-page  0px
+run19 b-one-page->c-two-pages  0px
+run20 a-parked->b-one-page  0px
+run20 b-one-page->c-two-pages  0px
+run21 a-parked->b-one-page  0px
+run21 b-one-page->c-two-pages  0px
+run22 a-parked->b-one-page  0px
+run22 b-one-page->c-two-pages  0px
+run23 a-parked->b-one-page  0px
+run23 b-one-page->c-two-pages  0px
+run24 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.90)
+run24 b-one-page->c-two-pages  0px
+run25 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run25 b-one-page->c-two-pages  0px
+run26 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run26 b-one-page->c-two-pages  0px
+run27 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run27 b-one-page->c-two-pages  0px
+run28 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run28 b-one-page->c-two-pages  0px
+run29 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run29 b-one-page->c-two-pages  0px
+run30 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run30 b-one-page->c-two-pages  0px
+run31 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run31 b-one-page->c-two-pages  0px
+run32 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.00)
+run32 b-one-page->c-two-pages  0px
+run33 a-parked->b-one-page  0px
+run33 b-one-page->c-two-pages  0px
+run34 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.01)
+run34 b-one-page->c-two-pages  0px
+run35 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run35 b-one-page->c-two-pages  0px
+run36 a-parked->b-one-page  0px
+run36 b-one-page->c-two-pages  0px
+run37 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift +0px (residual 0.00)
+run37 b-one-page->c-two-pages  0px
+run38 a-parked->b-one-page  0px
+run38 b-one-page->c-two-pages  0px
+run39 a-parked->b-one-page  0px
+run39 b-one-page->c-two-pages  0px
+run40 a-parked->b-one-page  0px
+run40 b-one-page->c-two-pages  0px
+run41 a-parked->b-one-page  0px
+run41 b-one-page->c-two-pages  0px
+run42 a-parked->b-one-page  0px
+run42 b-one-page->c-two-pages  0px
+run43 a-parked->b-one-page  0px
+run43 b-one-page->c-two-pages  0px
+run44 a-parked->b-one-page  0px
+run44 b-one-page->c-two-pages  0px
+run45 a-parked->b-one-page  0px
+run45 b-one-page->c-two-pages  0px
+run46 a-parked->b-one-page  0px
+run46 b-one-page->c-two-pages  0px
+run47 a-parked->b-one-page  0px
+run47 b-one-page->c-two-pages  0px
+run48 a-parked->b-one-page  0px
+run48 b-one-page->c-two-pages  0px
+run49 a-parked->b-one-page  0px
+run49 b-one-page->c-two-pages  0px
+run50 a-parked->b-one-page  differs  right pane  a-parked.png -> b-one-page.png: shift -24px (residual 0.00)
+run50 b-one-page->c-two-pages  0px

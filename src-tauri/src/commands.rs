@@ -265,6 +265,35 @@ pub async fn certificate_fingerprint(path: String) -> Result<String, String> {
         .map_err(|reason| reason.to_string())
 }
 
+/// Appends the window's instrument lines to the file `IRCX_PROBE` names.
+///
+/// The one command in this file whose error is not written for a user: nothing
+/// user-facing reaches it. `src/lib/probe.ts` is compiled out of a build that
+/// did not ask for it, so in the app anybody runs this is never called, and a
+/// build that does ask and is run without the variable gets the refusal below
+/// once and stops.
+///
+/// A file rather than stdout because WebKitGTK writes no console message
+/// anywhere this process can see: `enable-write-console-messages-to-stdout` is
+/// off and wry never turns it on, so a release window has no other way to say
+/// anything. #508.
+#[tauri::command]
+pub async fn probe(lines: Vec<String>) -> Result<(), String> {
+    let path = std::env::var("IRCX_PROBE").map_err(|_| "IRCX_PROBE names no file".to_string())?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|reason| format!("{path}: {reason}"))?;
+    let mut out = String::new();
+    for line in lines {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    std::io::Write::write_all(&mut file, out.as_bytes())
+        .map_err(|reason| format!("{path}: {reason}"))
+}
+
 /// The themes directory, read whole. Themes install by being copied in, so
 /// there is nothing to register and nothing to keep in sync.
 #[tauri::command]

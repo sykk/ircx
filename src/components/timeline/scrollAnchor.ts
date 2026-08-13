@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { RefObject } from "react";
+import { probe } from "@/lib/probe";
 
 /** The part of the head element this module reads. */
 export interface Head {
@@ -117,6 +118,9 @@ export function movedInList(
  * to call: the page lands a round trip after the scroll that asked for it, so a
  * position recorded on the last commit is however far the reader has read
  * since.
+ *
+ * `view` names the pane in the records `@/lib/probe` writes, which are nothing
+ * in a build that did not ask for them.
  */
 export function usePrependAnchor(
   ref: RefObject<HTMLElement | null>,
@@ -124,6 +128,7 @@ export function usePrependAnchor(
   messages: readonly { id: string }[],
   offsets: Offsets,
   margin: number,
+  view: string,
 ): () => void {
   const committed = useRef<Committed | null>(null);
   const anchor = useRef<Anchor | null>(null);
@@ -167,20 +172,45 @@ export function usePrependAnchor(
       return start === undefined ? undefined : start + lag.current;
     };
     const reader = anchor.current;
+    const before = el.scrollTop;
+    let branch = "none";
     if (previous && reader !== null && movedInList(messages, reader)) {
+      branch = "moved";
       const start = drawnAt(reader.id);
       if (start !== undefined) el.scrollTop = start - reader.delta;
       pending.current = { ...reader, at: el.scrollTop };
     } else if (pending.current !== null) {
+      branch = "second";
       const held = pending.current;
       pending.current = null;
       const start = drawnAt(held.id);
       if (start !== undefined && el.scrollTop === held.at) el.scrollTop = start - held.delta;
     } else if (previous && previous.firstId === first && headPx !== previous.headPx) {
+      branch = "head";
       el.scrollTop = el.scrollTop + (headPx - previous.headPx);
     }
     committed.current = { firstId: first, headPx };
     record();
+    // After `record`, so `now` is the message under the reader's eyes on the
+    // frame this commit paints and `held` is the one it was before. Where they
+    // are the same message and its `delta` has changed, the pane moved without
+    // anything here writing to it — which is the half of #508 a screenshot
+    // cannot tell from the other.
+    probe("commit", {
+      view,
+      msgs: messages.length,
+      first,
+      branch,
+      headPx,
+      margin,
+      before,
+      top: el.scrollTop,
+      sh: el.scrollHeight,
+      ch: el.clientHeight,
+      held: reader,
+      drawn: reader === null ? null : (drawnAt(reader.id) ?? null),
+      now: anchor.current,
+    });
   });
 
   return record;

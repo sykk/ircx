@@ -210,6 +210,7 @@ pub fn run() {
             commands::delete_archive,
             commands::announce,
             commands::certificate_fingerprint,
+            commands::probe,
         ])
         .setup(|app| {
             let store = match open_store(app.handle()) {

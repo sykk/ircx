@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
+import { probe } from "@/lib/probe";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
 import { targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
@@ -167,16 +168,17 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // `headPx` and not the head itself: it is the margin the offsets above were
   // measured against, and the anchor needs both to tell one from the other on
   // the commit they disagree.
-  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets, headPx);
+  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets, headPx, view);
 
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole
   // content is the kind of row that merges.
   useLayoutEffect(() => {
     if (followingRef.current && rows.length > 0) {
+      probe("follow", { view, rows: rows.length });
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
     }
-  }, [messages, rows.length, virtualizer]);
+  }, [messages, rows.length, virtualizer, view]);
 
   // Through the virtualiser rather than by assigning `scrollTop`: an offset is
   // only a place at the width it was measured at, and a rebuilt pane is a
@@ -196,6 +198,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     if (index === -1) return;
     const target = virtualizer.getOffsetForIndex(index, "start")?.[0];
     if (target !== undefined && Math.abs(el.scrollTop - target) <= 1) return;
+    probe("restore", { view, index, target: target ?? null, top: el.scrollTop });
     virtualizer.scrollToIndex(index, { align: "start" });
   });
 
@@ -312,6 +315,11 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // Every write to `scrollTop` raises one of these, whoever made it — the
+    // reader's wheel, the anchor, and the virtualiser correcting for a row it
+    // has just measured. A pane that moves with nothing in this trace moved
+    // because its content did.
+    probe("scroll", { view, top: el.scrollTop, sh: el.scrollHeight, ch: el.clientHeight });
     recordAnchor();
     // A pane waiting to be put back is at the top because nothing has moved it
     // yet, not because anybody read their way there. Recording that would

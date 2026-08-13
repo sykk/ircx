@@ -10,6 +10,13 @@
 # of -202px, residual 0.00, over a pane that had not moved at all.
 #
 # Two landings a run, which is the unit #511 says to count in.
+#
+# `differs` is not `moved`. The head that says a page is loading is drawn in
+# both panes, because `loadingOlder` belongs to the conversation rather than to
+# the pane that asked — so a parked pane whose rows have not moved at all still
+# has a line at the top of it that was not there before. That is #475 working,
+# and it is why every landing that differs is handed to `paneshift.py` rather
+# than counted as a shift.
 set -euo pipefail
 
 TREE=${1:?tree}

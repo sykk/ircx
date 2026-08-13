@@ -2,7 +2,13 @@
 
     still.py <left|right> before.png after.png
 
-Prints `still` or the count of pixels that differ.
+Prints `still` or `differs`.
+
+**Zero or not zero is the whole of what `AE` is read for here.** The name says
+absolute error count and the number does not behave like one — 1200x800 of this
+app's own frames scores 5.5e8, which is 569 per pixel — so the magnitude is
+uninterpretable and reporting it as pixels would be inventing a figure. It is
+zero for identical images, which is the question.
 
 This is the guard `paneshift.py` needs and cannot be. It slides an 80px band and
 takes the best-scoring offset, so it always answers with an offset — and over a
@@ -43,5 +49,5 @@ result = subprocess.run(
 if result.returncode > 1:
     sys.exit(f"compare failed: {result.stderr.strip()}")
 
-differing = result.stderr.strip().split()[0]
-print("still" if differing in ("0", "0.0") else f"{differing} pixels differ")
+score = result.stderr.strip().split()[0]
+print("still" if float(score) == 0 else "differs")

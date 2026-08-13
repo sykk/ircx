@@ -119,7 +119,7 @@ interface Props {
  */
 function GroupName({ name, tint }: { name: string; tint: string }) {
   return (
-    <div className="flex items-baseline gap-2 text-[11px]">
+    <div data-ui="group-name" className="flex items-baseline gap-2 text-[11px]">
       <span className="font-[family-name:var(--font-mono)] font-medium" style={{ color: tint }}>
         {name}
       </span>

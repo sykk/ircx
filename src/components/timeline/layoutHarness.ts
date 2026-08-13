@@ -33,6 +33,10 @@ export const LINE_PX = 24;
 /** The name and the clock over the head of a run: a line of its own, and the
  * one a page merging into that run takes away. */
 export const NAME_PX = LINE_PX;
+/** What a group's name costs the block that opens it — a line above the run,
+ * and the one a landing page can add to a row already drawn: a topic declared
+ * in the page reaches forward into the window and moves where the group opens. */
+export const GROUP_NAME_PX = LINE_PX;
 /** A date, an unread seam, the line at the head of the history. */
 export const DIVIDER_PX = 24;
 /** The history head, at the height it has in the release app. */
@@ -69,8 +73,9 @@ function rowPx(row: HTMLElement): number {
   const names = [...row.querySelectorAll("time")].filter(
     (clock) => clock.closest("[data-msgid]") === null,
   ).length;
+  const topics = row.querySelectorAll('[data-ui="group-name"]').length;
   if (lines === 0 && names === 0) return DIVIDER_PX;
-  return lines * LINE_PX + names * NAME_PX + FRAME_PX;
+  return lines * LINE_PX + names * NAME_PX + topics * GROUP_NAME_PX + FRAME_PX;
 }
 
 function heightOf(el: HTMLElement): number {

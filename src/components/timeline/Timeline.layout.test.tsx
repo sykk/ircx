@@ -385,3 +385,102 @@ describe("the channel run 22 walked", () => {
     }
   });
 });
+
+/**
+ * The case the channel above cannot express: a row that changes height after it
+ * has been drawn.
+ *
+ * A declared group runs forward from the message that named it until the
+ * conversation stops for `DECLARED_GAP_MS`, and the same name said again
+ * rejoins the group rather than opening a second one. So a page-back landing
+ * against the window — the page's last message seconds before the window's
+ * first, which is what paging back through a busy channel gives — can carry the
+ * same topic somebody declared inside the window. The group is then already
+ * open by the time the window's own declaration is reached, and the block that
+ * was drawing the topic's name stops drawing it.
+ *
+ * That block is above a parked reader, and it loses a line of text where it
+ * stands. Nobody scrolled and nothing was inserted: a row already on the screen
+ * is one line shorter than it was.
+ */
+describe("a page that regroups the window it lands above", () => {
+  const WINDOW_AT = Date.parse("2026-07-29T00:00:00.000Z");
+  const TOPIC = "[heap] chunk is on the tcache list twice";
+
+  /** Ten seconds a line, two people, and one of them naming a topic. */
+  function talk(count: number, from: number, startedAt: number, declaresAt: number) {
+    const nicks = ["historian", "archivist"];
+    return Array.from({ length: count }, (_, i) =>
+      makeMessage({
+        id: `line${from + i}`,
+        nick: nicks[(from + i) % 2]!,
+        text: i === declaresAt ? TOPIC : `line ${from + i} heap layout after the second free`,
+        timestamp: new Date(startedAt + i * 10_000).toISOString(),
+      }),
+    );
+  }
+
+  /** Where the block holding a message is drawn inside its pane. */
+  function rowOf(scroller: HTMLElement, msgid: string): HTMLElement {
+    const row = scroller
+      .querySelector(`[data-msgid="${msgid}"]`)
+      ?.closest<HTMLElement>("[data-index]");
+    if (!row) throw new Error(`${msgid} is not drawn in this pane`);
+    return row;
+  }
+
+  it("holds the parked reader while the window's topic stops opening", async () => {
+    // The parked reader sits a few rows under the block that declared the
+    // topic — close enough that it is still drawn, because a row nobody has
+    // mounted is never measured and cannot change height under anybody.
+    seed(talk(400, 1_000, WINDOW_AT, 100));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [reading, parked] = screen.getAllByTestId("timeline-scroller");
+    // Both panes open at the live edge, so the pane is walked back to the block
+    // that declared the topic and then parked a few rows under it.
+    parked!.scrollTop = 100 * ESTIMATED_ROW_PX;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    parked!.scrollTop = topOf(rowOf(parked!, "line1100")) + 300;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    // The precondition, asserted rather than assumed: the block that declared
+    // the topic is drawn, it is above the reader, and it is drawing the name.
+    const declaring = rowOf(parked!, "line1100");
+    expect(topOf(declaring)).toBeLessThan(parked!.scrollTop);
+    expect(declaring.querySelectorAll('[data-ui="group-name"]')).toHaveLength(1);
+
+    let land = () => {};
+    ipcMock.loadHistory.mockReturnValue(
+      new Promise<ChatMessage[]>((resolve) => {
+        // Ends ten seconds before the window starts, and names the same topic.
+        land = () => resolve(talk(200, 800, WINDOW_AT - 200 * 10_000, 190));
+      }),
+    );
+
+    reading!.scrollTop = 100;
+    fireEvent.scroll(reading!);
+    flushLayout();
+
+    const watching = atTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+    land();
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+    flushLayout();
+
+    // The row above the reader gave the name up, which is the line it lost.
+    expect(rowOf(parked!, "line1100").querySelectorAll('[data-ui="group-name"]')).toHaveLength(0);
+    expect(eyeLine(parked!, watching)).toBe(before);
+  });
+});

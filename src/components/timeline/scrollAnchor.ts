@@ -198,6 +198,9 @@ export function usePrependAnchor(
     // cannot tell from the other.
     probe("commit", {
       view,
+      // Which pane this is, in the only terms a screenshot shares: a view id is
+      // arbitrary and the walk knows the panes by where they are.
+      x: Math.round(el.getBoundingClientRect().left),
       msgs: messages.length,
       first,
       branch,

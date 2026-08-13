@@ -2986,6 +2986,30 @@ attempt should **manufacture its precondition** — messages injected between th
 two launches, so the second launch's archive is genuinely behind a server that
 has moved on — rather than walk for it again.
 
+**Run 20 manufactured it, and the app cannot enter the state at channel open.**
+The fix reads the head after the archive read rather than from the snapshot
+before it, so the two differ only when the timeline changed during the await.
+Where `older` is empty *and* the snapshot is empty, the old build computes
+`undefined`, `pageBack` reads that as nothing behind the conversation and
+returns `"end"` without sending anything, and the pane draws "Beginning of
+history" over a server holding thousands — a worse symptom than the wasted round
+trip, now covered by a test that fails on `b75edf2` with `pageBack` never called
+at all.
+
+`docs/end-to-end-20/holdlatest.py` holds the batch answering the join's
+`CHATHISTORY LATEST` and passes every other byte. Held at 0, 100, 800 and
+8000 ms on the build with the defect: two page-backs sent at every point. The
+frame taken inside the hold says why — the pane already holds its join digest
+and the channel's system rows, so the snapshot is never empty, and the shape
+needs a pane with no messages whatsoever. A joined channel never has one.
+`docs/end-to-end-run-20.md`.
+
+What that leaves is one narrow path nobody has walked: a pane **restored from
+the layout before its join completes** has no digest yet, so its snapshot can be
+empty while its archive is. It is a startup window, it needs three conditions at
+once, and the symptom is already covered by a test — so it is recorded here
+rather than recommended.
+
 Three readings of that run said a defect was there before the fourth said it was
 not, and the third is the one to know about, because it is a property of tapping
 a socket rather than a mistake in one script. **A tap sees bytes before the

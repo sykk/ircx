@@ -164,7 +164,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     [rows, virtualizer],
   );
 
-  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets);
+  // `headPx` and not the head itself: it is the margin the offsets above were
+  // measured against, and the anchor needs both to tell one from the other on
+  // the commit they disagree.
+  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets, headPx);
 
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole

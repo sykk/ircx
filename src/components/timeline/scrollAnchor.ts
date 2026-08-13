@@ -8,7 +8,10 @@ export interface Head {
 
 /**
  * What the virtualiser is asked. Both answers are in the scroller's own
- * coordinates, the head included, so they compare with `scrollTop` directly.
+ * coordinates — but with the head counted at the `margin` below rather than at
+ * the height it has, which is the same number on every commit except the one it
+ * arrives or leaves in. Comparing either with `scrollTop` means going through
+ * that difference.
  */
 export interface Offsets {
   /** Where the row holding a message starts, or undefined if it is not there. */
@@ -101,6 +104,15 @@ export function movedInList(
  * state for the virtualiser's `scrollMargin`: that state is a commit behind the
  * DOM, and this runs on the commit the head lands in.
  *
+ * Which is why `margin` is asked for as well as the element. The offsets are
+ * measured from the top of the scroller with that margin standing in for the
+ * head, so on the one commit where the head is in the DOM and the margin does
+ * not know it yet — or the other way round, which is where a page lands — the
+ * answers are a head's height from where the rows are drawn. Everything here
+ * reads them through that difference, which is zero on every other commit. The
+ * pass below corrected it a commit later and only while nothing else moved the
+ * pane; #508 is the landings where something did.
+ *
  * Returns the recorder for the reader's position, which the scroll handler has
  * to call: the page lands a round trip after the scroll that asked for it, so a
  * position recorded on the last commit is however far the reader has read
@@ -111,6 +123,7 @@ export function usePrependAnchor(
   head: RefObject<Head | null>,
   messages: readonly { id: string }[],
   offsets: Offsets,
+  margin: number,
 ): () => void {
   const committed = useRef<Committed | null>(null);
   const anchor = useRef<Anchor | null>(null);
@@ -120,18 +133,21 @@ export function usePrependAnchor(
   // assign it.
   const latest = useRef(offsets);
   const rendered = useRef(messages);
+  // What an offset is out by, which is the head the DOM has less the head the
+  // offsets were measured against.
+  const lag = useRef(0);
 
   const record = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const id = latest.current.messageAtOffset(el.scrollTop);
+    const id = latest.current.messageAtOffset(el.scrollTop - lag.current);
     const start = id === undefined ? undefined : latest.current.offsetOfMessage(id);
     anchor.current =
       id === undefined || start === undefined
         ? null
         : {
             id,
-            delta: start - el.scrollTop,
+            delta: start + lag.current - el.scrollTop,
             index: rendered.current.findIndex((message) => message.id === id),
           };
   }, [ref]);
@@ -144,15 +160,21 @@ export function usePrependAnchor(
     const previous = committed.current;
     const first = messages[0]?.id ?? null;
     const headPx = head.current?.offsetHeight ?? 0;
+    lag.current = headPx - margin;
+    /** Where a message is drawn, from an offset measured against the margin. */
+    const drawnAt = (id: string) => {
+      const start = offsets.offsetOfMessage(id);
+      return start === undefined ? undefined : start + lag.current;
+    };
     const reader = anchor.current;
     if (previous && reader !== null && movedInList(messages, reader)) {
-      const start = offsets.offsetOfMessage(reader.id);
+      const start = drawnAt(reader.id);
       if (start !== undefined) el.scrollTop = start - reader.delta;
       pending.current = { ...reader, at: el.scrollTop };
     } else if (pending.current !== null) {
       const held = pending.current;
       pending.current = null;
-      const start = offsets.offsetOfMessage(held.id);
+      const start = drawnAt(held.id);
       if (start !== undefined && el.scrollTop === held.at) el.scrollTop = start - held.delta;
     } else if (previous && previous.firstId === first && headPx !== previous.headPx) {
       el.scrollTop = el.scrollTop + (headPx - previous.headPx);

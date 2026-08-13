@@ -59,22 +59,29 @@ function offsetsFor(layout: Row[]): Offsets {
  * Set in a layout effect declared before the hook, so it holds the height the
  * commit brought by the time the hook reads it — which is where the real head
  * is, being in the DOM before any effect runs.
+ *
+ * `margin` is the head's height as the offsets count it, which is not always
+ * the head's height: Timeline hands the virtualiser a `scrollMargin` out of
+ * state, so on the commit the head arrives or leaves the two disagree. It
+ * defaults to agreeing, which every commit but that one does.
  */
 function Scroller({
   messages,
   layout,
   head = null,
+  margin = head ?? 0,
 }: {
   messages: { id: string }[];
   layout: Row[];
   head?: number | null;
+  margin?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const headRef = useRef<Head | null>(null);
   useLayoutEffect(() => {
     headRef.current = head === null ? null : { offsetHeight: head };
   });
-  const record = usePrependAnchor(ref, headRef, messages, offsetsFor(layout));
+  const record = usePrependAnchor(ref, headRef, messages, offsetsFor(layout), margin);
   return <div ref={ref} data-testid="scroller" onScroll={record} />;
 }
 
@@ -235,22 +242,41 @@ describe("usePrependAnchor", () => {
     expect(el.scrollTop).toBe(500);
   });
 
+  /**
+   * #508, and the shape of it is the whole finding. On the commit a page lands
+   * in, the head the read put up is already out of the DOM and the offsets are
+   * still measured as though it were there: the margin they carry is Timeline's
+   * `headPx`, which is state, and reaches the virtualiser a commit later.
+   *
+   * This test asserted the opposite until it was measured — `after` was the
+   * offsets already caught up, which is a commit the app does not have. Both
+   * halves are here now, the landing and the one behind it, because a pane put
+   * wrong by the first and right by the second reads as still from the outside
+   * and is what nine live runs found five times in eighteen.
+   */
   it("counts the head once when it leaves on the commit that prepends", () => {
     const before = evenly(24, 1_000, "c", "d");
-    // The head has gone, so every row starts 24px higher than it would have.
-    const after = evenly(0, 1_000, "a", "b", "c", "d");
+    // The head has gone from the DOM. The offsets still count the margin it
+    // held, so every row is answered 24px lower than it is drawn.
+    const landed = evenly(24, 1_000, "a", "b", "c", "d");
+    // And the commit after, where the margin has caught up with the DOM.
+    const settled = evenly(0, 1_000, "a", "b", "c", "d");
     const { getByTestId, rerender } = render(
-      <Scroller messages={ids("c", "d")} layout={before} head={24} />,
+      <Scroller messages={ids("c", "d")} layout={before} head={24} margin={24} />,
     );
     const el = getByTestId("scroller");
 
-    rerender(<Scroller messages={ids("c", "d")} layout={before} head={24} />);
+    rerender(<Scroller messages={ids("c", "d")} layout={before} head={24} margin={24} />);
     scrollTo(el, 1_224);
 
-    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={after} />);
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} margin={24} />);
 
-    // "d" opened 200px above the fold, and the head's 24px is inside the
-    // offsets on both sides rather than a term of its own.
+    // "d" opened 200px above the fold and is drawn at 3_000, the head's 24px
+    // having left the list above it.
+    expect(el.scrollTop).toBe(3_200);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={settled} margin={0} />);
+
     expect(el.scrollTop).toBe(3_200);
   });
 

@@ -915,6 +915,15 @@ describe("Timeline", () => {
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalled());
       };
 
+      /** Back to the top, and long enough after for a read to have gone out
+       * had one been asked for. */
+      const scrollTo = async (top: number) => {
+        const scroller = screen.getByTestId("timeline-scroller");
+        scroller.scrollTop = top;
+        fireEvent.scroll(scroller);
+        await act(() => new Promise((done) => setTimeout(done, 50)));
+      };
+
       it("says so, without calling it a failure", async () => {
         await waited();
 
@@ -959,6 +968,44 @@ describe("Timeline", () => {
         await waitFor(() =>
           expect(screen.queryByText("The server has not sent this page yet")).toBeNull(),
         );
+      });
+
+      /**
+       * The page that never lands. A batch the server answers empty — or one
+       * carrying only what the pane already holds — moves nothing, so the
+       * oldest message is still the one the #487 guard was armed with, and
+       * every later scroll is refused for a page that is no longer coming.
+       * Nothing but a reconnect clears `askedBehind`, which left the reader
+       * scrolling at the top of a conversation that says it has more and
+       * cannot be made to go and look.
+       *
+       * The outcome is what settles it: `waiting` is returned when the round
+       * trip has *already* been spent, so the ask the guard names has outlived
+       * its own deadline by the time the answer gets here. Asking once more
+       * after a minute of silence is a retry, not the burst #487 was.
+       */
+      it("asks again for a page whose round trip has already been spent", async () => {
+        await waited();
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(1);
+
+        await scrollTo(80);
+
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(2));
+      });
+
+      /** Which is not a licence to ask once per scroll event. The retry holds
+       * `loadingOlder` for as long as its own round trip, and that is the
+       * guard a burst meets. */
+      it("holds the retry to one ask, however many scroll events reach the top", async () => {
+        await waited();
+        ipcMock.pageBack.mockReturnValue(new Promise(() => {}));
+
+        await scrollTo(80);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(2));
+        await scrollTo(60);
+        await scrollTo(40);
+
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
       });
     });
 

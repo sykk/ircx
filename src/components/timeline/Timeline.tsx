@@ -255,6 +255,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         // here either, so the pane keeps both the page it is owed and the one
         // that may be behind it.
         more = outcome !== "end";
+        // And the guard comes back off, because `waiting` is the round trip
+        // already spent: the ask it names outlived its own deadline before
+        // this answer got here. Held, it refuses every later scroll for a page
+        // that may never land — an empty batch, or one carrying only what the
+        // pane already holds, moves the oldest message not at all, and nothing
+        // short of a reconnect would let the reader ask again. The retry costs
+        // no burst: it is a whole round trip later, and `loadingOlder` is what
+        // a scroll meets for the length of the next one.
+        if (outcome === "waiting") store.setAskedBehind(key, null);
       }
       setWaitingBehind(outcome === "waiting" ? (oldest?.id ?? null) : null);
       useAppStore.getState().prependHistory(key, older, more);

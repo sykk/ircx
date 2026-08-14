@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::plugins;
-use crate::session::{Action, BatchState, SessionState};
+use crate::session::{Action, BatchState, GapPage, SessionState};
 use crate::text;
 
 impl SessionState {
@@ -186,6 +186,19 @@ impl SessionState {
         self.append(message);
     }
 
+    /// Client output that belongs at a point in the conversation rather than at
+    /// the end of it. The timeline and the archive both file a message by its
+    /// timestamp, so this is the whole of what puts a row inside history.
+    ///
+    /// The stamp stays a local one: it is taken from a message the server sent
+    /// rather than read off this machine's clock, but nobody on the network said
+    /// this and a watermark must not be taken from it.
+    pub(crate) fn note_at(&mut self, target: &str, kind: MessageKind, text: String, at: String) {
+        let mut message = self.local_message(target, kind, text);
+        message.timestamp = at;
+        self.append(message);
+    }
+
     /// Client output of more than one line. The timeline draws a message as a
     /// line, so each line is its own message; they arrive together.
     pub(crate) fn note_block(&mut self, target: &str, text: &str) {
@@ -271,10 +284,11 @@ impl SessionState {
         // Every message in such a batch belongs to that one answer, so how much
         // of it arrived is the batch's own size.
         let paged_arrived = batch.messages.len() as u32;
-        // Every conversation this batch touched and how much of it arrived, so
-        // each gap is closed once rather than per message — and a page that came
-        // back full is a page with more behind it.
-        let mut filled: Vec<(String, u32, String, Option<String>)> = Vec::new();
+        // Every conversation this batch touched, how much of it arrived and
+        // where the page's two ends are, so each gap is closed once rather than
+        // per message — and a page that came back full is a page with more
+        // behind it.
+        let mut filled: Vec<(String, u32, GapPage)> = Vec::new();
         // What each conversation already held when this batch began, kept
         // because the loop below moves the mark forward as it goes and the
         // question is about the mark before any of it arrived. See `was_missed`.
@@ -318,17 +332,31 @@ impl SessionState {
                     .iter_mut()
                     .find(|(target, ..)| target == &message.target)
                 {
-                    Some((_, arrived, newest, last)) => {
+                    Some((_, arrived, page)) => {
                         *arrived += 1;
-                        // `>=`, because several messages can share a millisecond
-                        // and the one to carry on from is the last of them.
-                        if message.timestamp >= *newest {
-                            newest.clone_from(&message.timestamp);
-                            *last = msgid;
+                        // `>=` and `<=`, because several messages can share a
+                        // millisecond and the one to carry on from is the last
+                        // of them at whichever end.
+                        if message.timestamp >= page.newest {
+                            page.newest.clone_from(&message.timestamp);
+                            page.newest_msgid.clone_from(&msgid);
+                        }
+                        if message.timestamp <= page.oldest {
+                            page.oldest.clone_from(&message.timestamp);
+                            page.oldest_msgid = msgid;
                         }
                     }
                     None => {
-                        filled.push((message.target.clone(), 1, message.timestamp.clone(), msgid));
+                        filled.push((
+                            message.target.clone(),
+                            1,
+                            GapPage {
+                                newest: message.timestamp.clone(),
+                                newest_msgid: msgid.clone(),
+                                oldest: message.timestamp.clone(),
+                                oldest_msgid: msgid,
+                            },
+                        ));
                     }
                 }
             }
@@ -340,14 +368,17 @@ impl SessionState {
         }
         self.flush_run(&mut run, live);
         let limit = self.page_limit();
-        for (target, arrived, newest, msgid) in filled {
-            let key = self.fold(&target);
-            let pages = self.gap_fills.get(&key).copied().unwrap_or(0) + 1;
+        for (target, arrived, page) in filled {
             // Short of the limit is the end of the gap. Exactly the limit is the
             // start of one that did not fit. #239.
+            //
+            // Either way round: a page short of the limit going backwards is a
+            // server that has run out of history to give, which is the end of
+            // what can be fetched as much as reaching the archive's watermark is.
             match arrived >= limit {
-                true => self.continue_gap(&target, pages, &newest, msgid.as_deref()),
+                true => self.continue_gap(&target, &page),
                 false => {
+                    let key = self.fold(&target);
                     self.gap_fills.remove(&key);
                 }
             }

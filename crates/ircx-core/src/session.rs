@@ -182,6 +182,33 @@ pub enum PageBack {
     Deferred,
 }
 
+/// How far one conversation's gap fill has got, and which way it is walking.
+///
+/// The walk runs forward from the archive's watermark until half the budget is
+/// spent, then turns round and works back from now. `frontier` is what it
+/// fetched last on the way out: a page whose oldest message is no newer than
+/// that has met the forward half, and there is no hole between them. #520.
+#[derive(Debug, Default)]
+pub(crate) struct GapFill {
+    pages: u32,
+    /// `None` while the walk is still going forward.
+    frontier: Option<String>,
+}
+
+/// The two ends of a page of a gap, which is what decides the next request:
+/// walking forward carries on from the newest of it, walking back from the
+/// oldest.
+///
+/// A msgid beside each because `AFTER` and `BEFORE` are both exclusive and a
+/// millisecond is not a unique key, so a timestamp steps over everything
+/// sharing it. #253.
+pub(crate) struct GapPage {
+    pub(crate) newest: String,
+    pub(crate) newest_msgid: Option<String>,
+    pub(crate) oldest: String,
+    pub(crate) oldest_msgid: Option<String>,
+}
+
 #[derive(Debug)]
 pub(crate) struct BatchState {
     pub(crate) source: MessageSource,
@@ -274,11 +301,11 @@ pub struct SessionState {
     /// for the whole session — a window that only grows, against a `TARGETS`
     /// limit that does not. #246.
     away_since: Option<String>,
-    /// Conversations with an outstanding gap request, and how many pages of it
-    /// have come back. A page that arrives full has more behind it; what comes
-    /// back was missed rather than merely never seen, which is the whole of
-    /// the difference to the unread count.
-    pub(crate) gap_fills: HashMap<String, u32>,
+    /// Conversations with an outstanding gap request, and how far each has got.
+    /// A page that arrives full has more behind it; what comes back was missed
+    /// rather than merely never seen, which is the whole of the difference to
+    /// the unread count.
+    pub(crate) gap_fills: HashMap<String, GapFill>,
     /// The labels of the page-back requests still waiting for a batch. Labels
     /// rather than conversations, because two panes on one channel can be
     /// scrolled back at once and each is waiting for its own answer.
@@ -1132,7 +1159,7 @@ impl SessionState {
         // a first page of a conversation you were told you missed is not a
         // conversation you have only just met.
         if self.backfill(&target) {
-            self.gap_fills.entry(key).or_insert(0);
+            self.gap_fills.entry(key).or_default();
         }
     }
 
@@ -1183,7 +1210,7 @@ impl SessionState {
             timestamp: from,
             msgid,
         };
-        let Some(line) = history::before(target, resume, limit, &label) else {
+        let Some(line) = history::before(target, resume, limit, Some(&label)) else {
             return PageBack::Refused;
         };
         self.page_backs.insert(label.clone());
@@ -1191,53 +1218,102 @@ impl SessionState {
         PageBack::Asked(label)
     }
 
-    /// Asks for the next page of a gap that has not been closed yet.
+    /// Asks for the next page of a gap that has not been closed yet, and turns
+    /// the walk round half way through the budget.
     ///
-    /// `AFTER` answers oldest-first, so a full page is the *start* of what was
-    /// missed and the rest is still out there. #239.
+    /// Forward first, from the archive's watermark, because that is what
+    /// continues where the reader stopped reading and because nearly every gap
+    /// closes inside one page. `AFTER` answers oldest-first, so a full page is
+    /// the *start* of what was missed and the rest is still out there. #239.
     ///
-    /// `from` and `msgid` are the last message in the page that just arrived,
-    /// and it has to be: the conversation's watermark moves with every message
-    /// including the live ones, and a channel that says anything while a page is
-    /// in flight pushes it to now — which asks for the gap from after the end of
-    /// it and silently skips the rest. Found against a real server, where the
-    /// second request went out stamped later than the whole backlog it was
-    /// chasing.
-    pub(crate) fn continue_gap(
-        &mut self,
-        target: &str,
-        pages: u32,
-        from: &str,
-        msgid: Option<&str>,
-    ) {
+    /// Pages still coming back full at `GAP_FORWARD` are a gap too wide to fetch
+    /// whole, and the walk turns round: it asks for the newest page the
+    /// conversation has and works back until it meets what the forward half
+    /// already fetched. What the cap costs is then the middle of the gap rather
+    /// than the stretch running up to the conversation happening now. #520.
+    ///
+    /// Each request resumes from an end of the page that just arrived and never
+    /// from the conversation's watermark: that moves with every message
+    /// including the live ones, so a channel that says anything mid-flight
+    /// pushes it to now — which asks for the gap from after the end of it and
+    /// silently skips the rest. Found against a real server, where the second
+    /// request went out stamped later than the whole backlog it was chasing.
+    pub(crate) fn continue_gap(&mut self, target: &str, page: &GapPage) {
         let key = self.fold(target);
-        if pages >= history::GAP_PAGES {
-            self.gap_fills.remove(&key);
-            // The one case where the client knows it is behind. Saying nothing
-            // would leave the reader with the oldest of what they missed and no
-            // reason to doubt it is all of it.
-            self.note(
-                target,
-                MessageKind::Client,
-                format!(
-                    "This conversation moved faster than ircx caught up with: \
-                     {} messages of it were fetched and there is more that was not.",
-                    pages * self.page_limit()
-                ),
-            );
+        let walked = self.gap_fills.remove(&key).unwrap_or_default();
+        let pages = walked.pages + 1;
+        // The two halves have met. Everything from where the reader stopped
+        // reading to now is held, there is no hole to say anything about, and
+        // whatever budget is left goes unspent.
+        if walked
+            .frontier
+            .as_deref()
+            .is_some_and(|frontier| page.oldest.as_str() <= frontier)
+        {
             return;
         }
         let limit = self.page_limit();
-        let resume = history::Resume {
-            timestamp: from,
-            msgid,
+        let line = match &walked.frontier {
+            None if pages < history::GAP_FORWARD => history::request(
+                target,
+                Some(history::Resume {
+                    timestamp: &page.newest,
+                    msgid: page.newest_msgid.as_deref(),
+                }),
+                limit,
+            ),
+            // Half the budget gone and the pages still full. The near end of the
+            // gap is wherever the conversation is now, and the most recent page
+            // is the only way to ask for that: there is no selector for "now"
+            // and the client cannot name a message it has never been sent.
+            None => history::request(target, None, limit),
+            Some(_) if pages >= history::GAP_PAGES => {
+                self.note_gap(target, pages * limit, &page.oldest);
+                return;
+            }
+            Some(_) => history::before(
+                target,
+                history::Resume {
+                    timestamp: &page.oldest,
+                    msgid: page.oldest_msgid.as_deref(),
+                },
+                limit,
+                None,
+            ),
         };
-        let Some(line) = history::request(target, Some(resume), limit) else {
-            self.gap_fills.remove(&key);
+        let Some(line) = line else {
             return;
         };
-        self.gap_fills.insert(key, pages);
+        // Named as the walk turns round: the newest message the forward half
+        // fetched, which is the far side of the hole and what the backward half
+        // is closing towards.
+        let frontier = walked
+            .frontier
+            .or_else(|| (pages >= history::GAP_FORWARD).then(|| page.newest.clone()));
+        self.gap_fills.insert(key, GapFill { pages, frontier });
         self.send_line(line);
+    }
+
+    /// The one case where the client knows it is behind, said where it is
+    /// behind.
+    ///
+    /// Stamped a millisecond ahead of the oldest message the walk brought back
+    /// from the near end, so the row is drawn at the hole. Said at the bottom of
+    /// the conversation instead — which is where `note` puts it, on the clock —
+    /// it explains a discontinuity the reader meets a screen or two above it and
+    /// reads across as if the conversation ran on.
+    fn note_gap(&mut self, target: &str, fetched: u32, below: &str) {
+        let at = history::just_before(below).unwrap_or_else(crate::message::now);
+        self.note_at(
+            target,
+            MessageKind::Client,
+            format!(
+                "This conversation moved faster than ircx caught up with: \
+                 {fetched} messages of it were fetched, and what was said \
+                 between here and the message above was not."
+            ),
+            at,
+        );
     }
 
     /// The network's `autojoin`, then whatever the user had joined by hand when
@@ -1984,7 +2060,7 @@ impl SessionState {
             // `or_insert` rather than `insert`: a second page of the same gap
             // keeps the count of what has already come back.
             Some(_) => {
-                self.gap_fills.entry(key).or_insert(0);
+                self.gap_fills.entry(key).or_default();
             }
             // The most recent page, which is what a conversation seen for the
             // first time has to show. Until it answers, everything behind what

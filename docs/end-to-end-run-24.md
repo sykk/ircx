@@ -29,8 +29,11 @@ turns it on — so a release window has no other way to say anything.
 `src/lib/probe.ts` buffers and flushes every 100ms, off the layout path the
 records come from, and **is compiled out unless the build asked for it**:
 `VITE_PROBE=1` at build time, or `ON` is a false constant and the calls are
-branches the minifier drops. The app anybody runs carries no probe and calls no
-command.
+branches the minifier drops. Checked rather than assumed — a build without it
+carries no record, no queue and no call site, and what survives is the one line
+of `ipc.ts` that would make the call, unreferenced, because it is a member of an
+object the rest of the app uses. So the app anybody runs raises no record and
+calls no command.
 
 Which means the build measured here is not the build that ships, and that is the
 first thing this run checks rather than asserts.

@@ -720,6 +720,34 @@ settling never happens there and no test can reproduce the race. What the tests
 hold is that the row is recorded and comes back; that it *stays* has only been
 watched.
 
+## The scroll event the anchor sends itself
+
+`usePrependAnchor` moves a pane by assigning `scrollTop` and then raises the
+`scroll` event for it, rather than waiting for the browser's own a frame later.
+The virtualiser refreshes its copy of the position only in that listener and
+computes every correction from the copy, so a correction landing in the window
+between the assignment and the event is added to where the pane was before and
+discards what the anchor wrote. #508, and the head's 24px is what it discarded.
+
+**No test covers the race, and two sweeps say why.** `layoutHarness.ts` settles
+the layout between actions, so a first measurement of a row above the fold never
+straddles a head arrival there. 134 parked positions on an arrival and 51 more
+on the shape a second landing has, with every write to the parked scroller
+recorded, produced **exactly one write in all 185** — the anchor's — where the
+release app makes two. The same shape as the restore above: jsdom measures
+nothing, so the settling that causes this never happens in a test.
+
+What the tests hold is that the pane being put back does not read as the reader
+taking it over — the events are held in a `WeakSet` and `Timeline`'s own handler
+stands down for them, which `follows the tail when new lines merge into the row
+that is already open` is what catches. What the tests cannot hold is the race
+itself.
+
+**What was watched instead**, in `docs/end-to-end-run-24.md`: 100 landings
+either side of the fix on the same walk, machine and server. 6 moved before and
+0 after, and the write that did the damage went from 6 of 151 head arrivals to
+0 of 149.
+
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom

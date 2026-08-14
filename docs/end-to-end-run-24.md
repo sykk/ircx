@@ -163,25 +163,57 @@ correction at all: `resizeItem` compensates an item whose top is above the fold
 only on its **first** measurement, or on a re-measurement of one lying entirely
 above it. A landing measures rows the pane has never drawn.
 
+## The arm with the fix
+
+The anchor now sends the scroll event itself, at the moment it assigns
+`scrollTop`, rather than leaving the virtualiser to hear about the move a frame
+later. Same build, same walk, same machine, same server, run straight after the
+control (`fixed-shifts.txt`, `fixed-head-arrivals.txt`):
+
+| the parked pane | control | with the fix |
+|---|---|---|
+| pixel-identical | 81 | 80 |
+| differed, measured +0px | 13 | 20 |
+| **moved −24px** | **6** | **0** |
+
+Fisher two-sided p = 0.029 on the landings that moved.
+
+**And the mechanism is gone rather than merely quiet**, which is the stronger
+half. Of 149 head arrivals in the parked pane, **none** had anything write to
+the scroller between the anchor's commit and the next, against 6 of 151 in the
+control (p = 0.030). The correction the virtualiser applies is computed from
+where the pane is rather than from where it was, and at that position it does
+not apply at all.
+
+## What no test covers
+
+The race is not reproducible in `layoutHarness.ts`, and two sweeps went looking:
+134 parked positions on a head arrival, then 51 more on the shape the second
+landing has, with every write to the parked scroller recorded. In all 185 there
+is **exactly one write, the anchor's**, where the live app makes two. The
+harness settles the layout between actions, so a first measurement of a row
+above the fold never straddles a head arrival there.
+
+So the evidence for this fix is the arm above and not a unit test, and
+`docs/manual-verification.md` says so.
+
 ## What this leaves
 
 #508 has a mechanism, reproduced 6 times in 100 landings on the shipping walk,
-predicted exactly by the records, and grounded in the library's own source
-rather than inferred from pixels.
+predicted exactly by the records, grounded in the library's own source rather
+than inferred from pixels, and answered by a fix that takes it to 0 in 100 on
+the same walk.
 
-The fix is not in this run and wants its own. What the evidence says about it:
+Two things this run deliberately did not do:
 
-- **The virtualiser's cache is the root**, not the anchor's arithmetic. Anything
-  that leaves the anchor writing `el.scrollTop` behind the virtualiser's back
-  leaves this window open.
-- **The head in a pane that asked for nothing is the exposure.** `loadingOlder`
+- **The head in a pane that asked for nothing is left alone.** `loadingOlder`
   belongs to the conversation, so a parked pane draws a line saying its reader's
-  history is loading when it is not, and pays a 24px correction for the
-  privilege. Making the head the asking pane's own would take this particular
-  race off the parked pane — though not off the pane that asked.
-- **A second pass would not have caught it.** The one the `moved` branch arms
-  declines when `scrollTop` is not where it left it, which is precisely the state
-  this defect creates.
-
-`docs/manual-verification.md` is unchanged by this run: everything here is
-automated and the instrument is committed.
+  history is loading when it is not, and paid a 24px correction for the
+  privilege. The correction is right now, so the line is a question about what
+  the app should say rather than about where a pane sits, and it wants deciding
+  on its own evidence.
+- **The rate is bounded, not zero.** 100 landings can only say the fix took a
+  6% failure below about 3%, and the arm that says so ran on a build with the
+  probe compiled in. What carries the claim past that is the discriminator
+  going to 0 of 149: the write that did the damage stopped happening, rather
+  than stopping being visible.

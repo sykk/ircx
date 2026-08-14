@@ -6,7 +6,7 @@ use std::time::Duration;
 use ircx_ipc::HistoryRequest;
 use ircx_ipc::{
     Channel, ChatMessage, CommandOutcome, ConnectionStatus, IrcxEvent, Member, Network, NetworkId,
-    Query, Severity, TargetName,
+    PageBackOutcome, Query, Severity, TargetName,
 };
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
 use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, NotifyRequest, PluginRuntime};
@@ -180,15 +180,17 @@ pub enum SessionCommand {
     ///
     /// The reply says whether another page may be behind the one that arrives,
     /// and waits for the server rather than for the send — so it is answered
-    /// from `Action::PagedBack`, a round trip later. It is `false` where
-    /// nothing could be asked at all, and `true` without a round trip where
-    /// the conversation's own first page is already coming and is what was
-    /// being asked for.
+    /// from `Action::PagedBack`, a round trip later. It is `End` where nothing
+    /// could be asked at all, and `Deferred` without a round trip where the
+    /// conversation's own first page is already coming and is what was being
+    /// asked for. Those last two are what a reader has to tell apart to know
+    /// whether a batch carrying nothing new is the server's answer or somebody
+    /// else's (#522).
     PageBack {
         target: TargetName,
         from: String,
         msgid: Option<String>,
-        reply: oneshot::Sender<bool>,
+        reply: oneshot::Sender<PageBackOutcome>,
     },
     Snapshot {
         reply: oneshot::Sender<(Network, Vec<Channel>, Vec<Query>)>,
@@ -640,15 +642,16 @@ async fn apply(
                 // Nothing went out, so nothing will answer. Saying so now is
                 // what stops the pane waiting for a page it will never be sent.
                 PageBack::Refused => {
-                    let _ = reply.send(false);
+                    let _ = reply.send(PageBackOutcome::End);
                 }
                 // Nothing went out because the conversation's first page is
                 // already on its way and is what the reader is asking for. It
-                // arrives as history like any other, so the pane is answered
-                // by it rather than by this; `true` is what leaves the pane
-                // able to ask again once it has landed.
+                // arrives as history like any other, so the pane is answered by
+                // it rather than by this — and said in its own word rather than
+                // as `More`, because what lands is not an answer to any
+                // question about what is behind the reader's window. #522.
                 PageBack::Deferred => {
-                    let _ = reply.send(true);
+                    let _ = reply.send(PageBackOutcome::Deferred);
                 }
             }
             actions
@@ -702,7 +705,7 @@ struct Context {
     /// request went out with. Held here rather than in the session because a
     /// oneshot is the Tauri layer's half of the call and `SessionState` is a
     /// state machine with no channels in it.
-    page_backs: Mutex<HashMap<String, oneshot::Sender<bool>>>,
+    page_backs: Mutex<HashMap<String, oneshot::Sender<PageBackOutcome>>>,
 }
 
 /// How late a hook may run and still be worth running. A note about a message
@@ -752,7 +755,9 @@ impl Waiting {
 }
 
 impl Context {
-    fn waiting_readers(&self) -> std::sync::MutexGuard<'_, HashMap<String, oneshot::Sender<bool>>> {
+    fn waiting_readers(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<String, oneshot::Sender<PageBackOutcome>>> {
         self.page_backs
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -881,7 +886,11 @@ impl Context {
                 Action::Notify { target, messages } => self.notify(target, messages),
                 Action::PagedBack { label, more } => {
                     if let Some(reply) = self.waiting_readers().remove(&label) {
-                        let _ = reply.send(more);
+                        let _ = reply.send(if more {
+                            PageBackOutcome::More
+                        } else {
+                            PageBackOutcome::End
+                        });
                     }
                 }
                 Action::Close => close = true,

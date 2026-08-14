@@ -56,6 +56,7 @@ const EMPTY_TIMELINE: TimelineState = {
   hasMore: true,
   loadingOlder: false,
   askedBehind: null,
+  historyLanded: 0,
 };
 
 /** Sequential rather than random so a test can name the view it just opened. */
@@ -262,6 +263,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             ...(next.timelines[key] ?? EMPTY_TIMELINE),
             messages: capped(timeline.messages),
             unreadFrom: timeline.unreadFrom,
+            askedBehind: timeline.askedBehind,
+            hasMore: timeline.hasMore,
+            historyLanded: timeline.historyLanded,
           };
         }
         next = { ...next, timelines: held };
@@ -556,7 +560,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           [key]: {
             ...timeline,
             messages: ordered,
-            hasMore: kept.length < fresh.length ? false : hasMore,
+            // `&& timeline.hasMore`, so that paging stopped stays stopped. The
+            // caller computed `hasMore` before the page it is filing, and a
+            // page of history landing in between can have ended the paging on
+            // its own — the server answering with nothing behind the message it
+            // was asked about (#522). Nothing ever turned this back on: below
+            // the cap the reader is refused at `!current.hasMore` before a read
+            // is even attempted.
+            hasMore: timeline.hasMore && (kept.length < fresh.length ? false : hasMore),
             loadingOlder: false,
           },
         },
@@ -916,8 +927,51 @@ function applyRoster(roster: Map<string, Member>, event: RosterEvent): void {
 }
 
 /** What `applyEvents` builds for one conversation while a batch runs: the
- * messages it will hand the timeline, and where the seam landed on the way. */
-type HeldTimeline = { messages: ChatMessage[]; unreadFrom: string | null };
+ * messages it will hand the timeline, where the seam landed on the way, and
+ * whether the page somebody was waiting for arrived in it. */
+type HeldTimeline = {
+  messages: ChatMessage[];
+  unreadFrom: string | null;
+  askedBehind: string | null;
+  hasMore: boolean;
+  historyLanded: number;
+};
+
+/** Whether this batch is a page of the server's own history, which is what the
+ * pane waiting on a page-back is waiting for (#522).
+ *
+ * The guard used to come off by the window's oldest message moving, and a batch
+ * carrying only rows the pane already holds moves it not at all — `#486`'s
+ * `CHATHISTORY LATEST` is a whole page of exactly those. Held past its own
+ * answer it refused every later scroll, and nothing short of a reconnect
+ * cleared it.
+ *
+ * Server history rather than the batch being useful, then, because arriving is
+ * what is being waited for. A live message at the other end of the conversation
+ * is not an answer to anything and leaves the guard armed. */
+function isServerHistory(event: Extract<IrcxEvent, { type: "messagesAppended" }>): boolean {
+  return event.messages.some((m) => m.source === "serverHistory");
+}
+
+/** What a landing page does to the conversation that asked for one.
+ *
+ * `askedBehind` is only ever armed for an ask that reached the server and whose
+ * answer had not crossed yet, so a batch arriving against an armed guard is
+ * that answer. It comes off either way; what the batch carried decides whether
+ * there is anything left to ask for. Nothing new means the server has nothing
+ * behind that message — the pane stops paging and says where the history ends,
+ * rather than refusing every later scroll in silence. */
+function afterHistoryLanded(
+  timeline: Pick<TimelineState, "askedBehind" | "hasMore" | "historyLanded">,
+  fresh: number,
+): Pick<TimelineState, "askedBehind" | "hasMore" | "historyLanded"> {
+  const answered = timeline.askedBehind !== null;
+  return {
+    historyLanded: timeline.historyLanded + 1,
+    askedBehind: null,
+    hasMore: answered && fresh === 0 ? false : timeline.hasMore,
+  };
+}
 
 /** Older messages stay in SQLite, so the window keeps its newest `TIMELINE_CAP`
  * and nothing else. */
@@ -953,13 +1007,22 @@ function holdMessages(
     known.add(seen.id);
   }
   const fresh = event.messages.filter((m) => !known.has(m.id));
-  if (fresh.length === 0) return;
+  // A page of history is worth opening the conversation for even when every row
+  // of it is already held, because its arriving is what the pane waiting on one
+  // is waiting for.
+  const history = isServerHistory(event);
+  if (fresh.length === 0 && !history) return;
 
   const opened = held ?? {
     messages: timeline.messages.slice(),
     unreadFrom: timeline.unreadFrom,
+    askedBehind: timeline.askedBehind,
+    hasMore: timeline.hasMore,
+    historyLanded: timeline.historyLanded,
   };
   if (!held) timelines.set(key, opened);
+  if (history) Object.assign(opened, afterHistoryLanded(opened, fresh.length));
+  if (fresh.length === 0) return;
 
   const last = opened.messages[opened.messages.length - 1];
   if (last && Date.parse(fresh[0]!.timestamp) < Date.parse(last.timestamp)) {
@@ -1076,7 +1139,15 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         known.add(held.id);
       }
       const fresh = event.messages.filter((m) => !known.has(m.id));
-      if (fresh.length === 0) return {};
+      const history = isServerHistory(event);
+      const landed = history ? afterHistoryLanded(timeline, fresh.length) : null;
+      if (fresh.length === 0) {
+        // A page the window keeps nothing of is still a page that arrived, and
+        // for a pane waiting on one that is the whole of what it was waiting
+        // for (#522).
+        if (!landed) return {};
+        return { timelines: { ...s.timelines, [key]: { ...timeline, ...landed } } };
+      }
 
       const merged = mergeByTime(timeline.messages, fresh);
       const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
@@ -1092,6 +1163,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
           ...s.timelines,
           [key]: {
             ...timeline,
+            ...landed,
             messages: capped(merged),
             unreadFrom:
               timeline.unreadFrom ??

@@ -268,32 +268,60 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       // page the archive holds. The server's own history lands while that read
       // is in flight, and asking from today's row asks again for the page that
       // just arrived (#496).
-      const live = useAppStore.getState().timelines[key]?.messages ?? current.messages;
-      const oldest = olderOf(older[0], live[0]);
+      const live = useAppStore.getState().timelines[key] ?? current;
+      const oldest = olderOf(older[0], live.messages[0]);
       let more = older.length === PAGE_SIZE;
       let outcome: PageBackOutcome | null = null;
+      let armed = false;
       if (!more) {
-        // Named before the request goes out, and it is the conversation's own
-        // oldest message once this page is filed: what the guard above compares
-        // against on every scroll event until the page lands.
-        store.setAskedBehind(key, oldest?.id ?? null);
+        // How many pages of server history this conversation has taken, read
+        // immediately before the ask — off `live` rather than off the snapshot
+        // this call opened with, because the archive read is awaited and the
+        // server's own history lands during it, which is #496's whole shape.
+        //
+        // What it is for: telling the answer from the answer having arrived.
+        // The two cross on different channels — the batch is an event, this is
+        // a command's return — and core emits the batch first, so by the time
+        // the outcome is read the page it describes has usually landed already.
+        // Usually is not a thing to build on. #522.
+        const landedBefore = live.historyLanded;
         outcome = await pageBack(network, target, oldest);
         // A server that has not answered yet has not said the history ends
         // here either, so the pane keeps both the page it is owed and the one
         // that may be behind it.
         more = outcome !== "end";
-        // And the guard comes back off, because `waiting` is the round trip
-        // already spent: the ask it names outlived its own deadline before
-        // this answer got here. Held, it refuses every later scroll for a page
-        // that may never land — an empty batch, or one carrying only what the
-        // pane already holds, moves the oldest message not at all, and nothing
-        // short of a reconnect would let the reader ask again. The retry costs
-        // no burst: it is a whole round trip later, and `loadingOlder` is what
-        // a scroll meets for the length of the next one.
-        if (outcome === "waiting") store.setAskedBehind(key, null);
+        const held = useAppStore.getState().timelines[key];
+        const answered = (held?.historyLanded ?? landedBefore) > landedBefore;
+        const stillOldest = (held?.messages[0]?.id ?? oldest?.id) === oldest?.id;
+        if (outcome === "more" && answered && stillOldest) {
+          // The page came back, and there was nothing in it this window did not
+          // already hold. That is the server saying it has nothing behind this
+          // message, whatever the page's size said about fullness, so the pane
+          // stops paging and says where the history ends rather than refusing
+          // every later scroll in silence.
+          more = false;
+        } else if (outcome === "more") {
+          // Armed only here: a question went to the server and its answer has
+          // not crossed yet, which is the window #487 was — the same msgid
+          // asked again by every scroll event of one wheel burst. It comes off
+          // when the batch lands, in the store, because a batch that carries
+          // nothing new moves no message for it to come off by.
+          //
+          // `deferred` is not armed at all. Nothing went out for it: the
+          // conversation's own first page is already coming and is what
+          // answered, and that page says nothing about what is behind the
+          // window — so a reader who scrolls again is asking a question nobody
+          // has put yet, and the guard would refuse it for the rest of the run.
+          // `waiting` is not armed either, being the round trip already spent.
+          armed = true;
+        }
       }
       setWaitingBehind(outcome === "waiting" ? (oldest?.id ?? null) : null);
+      // Both writes after the answer and with no await between them, so no
+      // batch can land in the middle of them: an event needs a task boundary
+      // and there is none here.
       useAppStore.getState().prependHistory(key, older, more);
+      if (armed) useAppStore.getState().setAskedBehind(key, oldest?.id ?? null);
       return "read";
     } catch (e) {
       setLoadError(String(e));

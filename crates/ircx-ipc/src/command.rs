@@ -121,7 +121,18 @@ pub struct HistoryRequest {
 /// another page may be behind the one just asked for. `Waiting` is not an
 /// answer at all: the request is still out and its page may still arrive, which
 /// is why it is an outcome here rather than an error. The messages themselves
-/// arrive as their own event in every case, so none of the three carries them.
+/// arrive as their own event in every case, so none of these carries them.
+///
+/// `Deferred` is not an answer either, and is the one that had to be told apart
+/// from `More` (#522). Nothing goes out on the wire for it: the conversation's
+/// own first page is already coming and is what was being asked for. So a
+/// reader who is told `More` has had a question about what is behind their
+/// window answered, and one told `Deferred` has not asked it yet — which
+/// decides what the batch landing afterwards is allowed to mean. Flattened into
+/// `More`, a page carrying nothing new could not be read either as "the server
+/// has nothing behind this" or as "the first page arrived and said nothing
+/// about what is behind it", and the client had to guess. It guessed the same
+/// way for both and wedged on one of them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -129,6 +140,7 @@ pub enum PageBackOutcome {
     More,
     End,
     Waiting,
+    Deferred,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

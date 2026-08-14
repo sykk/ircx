@@ -108,6 +108,18 @@ export interface TimelineState {
    * and would otherwise each ask, and a pane rebuilt by a split would forget.
    */
   askedBehind: string | null;
+
+  /** How many batches of the server's own history this conversation has taken.
+   *
+   * A count rather than a flag because the question it answers is "did one
+   * arrive while I was asking", and the asker holds the number it started with.
+   * The answer to a page-back and the page itself reach the frontend on
+   * different channels — a command's return and an event — so a pane cannot
+   * assume the page it was just told about has been filed, and a page carrying
+   * only rows the window already holds leaves no other trace that it came
+   * (#522).
+   */
+  historyLanded: number;
 }
 
 /**

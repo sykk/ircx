@@ -1,0 +1,13 @@
+page  1: 200  'line 2370 ack' … 'depthprobe joined the channel'
+page  2: 200  'line 2172 the reader is somewhere above this line an' … 'line 2369 the reader is somewhere above this line an'
+page  3: 200  'line 1974 the reader is somewhere above this line an' … 'line 2171 the reader is somewhere above this line an'
+page  4: 200  'line 1776 the reader is somewhere above this line an' … 'line 1973 the reader is somewhere above this line an'
+page  5: 200  'line 1576 the reader is somewhere above this line an' … 'line 1775 ack'
+page  6: 200  'line 1376 the reader is somewhere above this line an' … 'line 1575 ack'
+page  7: 200  'line 1176 the reader is somewhere above this line an' … 'line 1375 ack'
+page  8: 200  'line 0976 the reader is somewhere above this line an' … 'line 1175 ack'
+page  9: 200  'line 0776 the reader is somewhere above this line an' … 'line 0975 ack'
+page 10: 200  'line 0576 the reader is somewhere above this line an' … 'line 0775 ack'
+page 11:  48  'line 0528 the reader is somewhere above this line an' … 'line 0575 ack'
+
+#scrollback: 2048 events behind the live edge, over 11 pages

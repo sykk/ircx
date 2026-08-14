@@ -1,0 +1,76 @@
+
+=== connection 1, opened at 1.507, 0 asks
+    no page-back
+    reached 2026-08-12 22:44:40 'walker quit (connection closed)'
+
+=== connection 2, opened at 12.744, 1 asks
+  1  22:44:40 'walker quit (connection closed)'
+    reached 2026-08-12 22:16:03 'line 2224 the reader is somewhere above this'
+
+=== connection 3, opened at 87.075, 0 asks
+    no page-back
+    reached 2026-08-12 22:51:00 'walker quit (connection closed)'
+
+=== connection 4, opened at 97.987, 1 asks
+  1  22:51:00 'walker quit (connection closed)'
+    reached 2026-08-12 22:16:04 'line 2228 the reader is somewhere above this'
+
+=== connection 5, opened at 172.009, 0 asks
+    no page-back
+    reached 2026-08-12 22:57:21 'walker quit (connection closed)'
+
+=== connection 6, opened at 183.487, 4 asks
+  1  22:57:21 'walker quit (connection closed)'
+  2  22:16:05 'line 2232 the reader is somewhere above this'
+  3  22:15:15 'line 2034 the reader is somewhere above this'
+  4  22:14:25 'line 1836 a longer line, wrapping over more '
+    reached 2026-08-12 22:13:35 'line 1636 the reader is somewhere above this'
+
+=== connection 7, opened at 255.604, 0 asks
+    no page-back
+    reached 2026-08-12 23:03:41 'walker quit (connection closed)'
+
+=== connection 8, opened at 266.573, 4 asks
+  1  23:03:41 'walker quit (connection closed)'
+  2  22:16:06 'line 2236 the reader is somewhere above this'
+  3  22:15:16 'line 2038 the reader is somewhere above this'
+  4  22:14:26 'line 1840 ack'
+    reached 2026-08-12 22:13:36 'line 1640 ack'
+
+=== connection 9, opened at 338.518, 0 asks
+    no page-back
+    reached 2026-08-12 23:10:03 'walker quit (connection closed)'
+
+=== connection 10, opened at 349.836, 1 asks
+  1  23:10:03 'walker quit (connection closed)'
+    reached 2026-08-12 22:16:07 'line 2240 ack'
+
+=== connection 11, opened at 424.582, 1 asks
+  1  yhnymznjxph8gdnhf3d57jfqbi — never sent here
+    reached 2026-08-12 23:10:15 'walker joined the channel'
+
+=== connection 12, opened at 436.372, 1 asks
+  1  23:10:15 'walker joined the channel'
+    reached 2026-08-12 22:16:08 'line 2243 the reader is somewhere above this'
+
+=== connection 13, opened at 510.364, 0 asks
+    no page-back
+    reached 2026-08-12 23:22:45 'walker quit (connection closed)'
+
+=== connection 14, opened at 522.414, 4 asks
+  1  23:22:45 'walker quit (connection closed)'
+  2  22:16:09 'line 2248 the reader is somewhere above this'
+  3  22:15:19 'line 2050 ack'
+  4  22:14:29 'line 1852 the reader is somewhere above this'
+    reached 2026-08-12 22:13:39 'line 1652 the reader is somewhere above this'
+
+=== connection 15, opened at 594.170, 0 asks
+    no page-back
+    reached 2026-08-12 23:29:07 'walker quit (connection closed)'
+
+=== connection 16, opened at 605.583, 4 asks
+  1  23:29:07 'walker quit (connection closed)'
+  2  22:16:10 'line 2251 the reader is somewhere above this'
+  3  22:15:20 'line 2054 the reader is somewhere above this'
+  4  22:14:30 'line 1856 the reader is somewhere above this'
+    reached 2026-08-12 22:13:40 'line 1656 the reader is somewhere above this'

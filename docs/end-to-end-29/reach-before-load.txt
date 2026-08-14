@@ -1,0 +1,24 @@
+
+=== connection 1, opened at 1.504, 0 asks
+    no page-back
+    reached 2026-08-12 22:16:43 'line 2384 the reader is somewhere above this'
+
+=== connection 2, opened at 13.350, 1 asks
+  1  22:16:43 'line 2384 the reader is somewhere above this'
+    reached 2026-08-12 22:15:54 'line 2188 the reader is somewhere above this'
+
+=== connection 3, opened at 474.127, 0 asks
+    no page-back
+    reached 2026-08-12 22:16:44 'line 2388 the reader is somewhere above this'
+
+=== connection 4, opened at 486.018, 1 asks
+  1  22:16:44 'line 2388 the reader is somewhere above this'
+    reached 2026-08-12 22:15:55 'line 2192 the reader is somewhere above this'
+
+=== connection 5, opened at 945.807, 0 asks
+    no page-back
+    reached 2026-08-12 22:16:45 'line 2392 the reader is somewhere above this'
+
+=== connection 6, opened at 957.486, 1 asks
+  1  22:16:45 'line 2392 the reader is somewhere above this'
+    reached 2026-08-12 22:15:56 'line 2196 the reader is somewhere above this'

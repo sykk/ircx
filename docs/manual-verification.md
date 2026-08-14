@@ -3190,14 +3190,46 @@ walk, exactly as the wedged control does — **the wire does not separate them a
 the frame does**, one drawing "Beginning of history" where the other draws
 nothing. `docs/end-to-end-run-27.md`.
 
-What that leaves besides: the empty-batch route is still argued from the code
-rather than walked; how often a live network takes sixty seconds over a page is
-not measured, #491's origin having taken 45; and whether the batch really does
-reach the webview before the answer to the ask on anything slower than a local
-socket, which every walk here saw and no walk here varied. Neither does any of
-this explain the count run 17 opened this thread with. Six asks a run against
-two was measured between the #494/#496 builds, and the wedge above is on both of
-them.
+What that leaves besides: how often a live network takes sixty seconds over a
+page is not measured, #491's origin having taken 45. Neither does any of this
+explain the count run 17 opened this thread with. Six asks a run against two was
+measured between the #494/#496 builds, and the wedge above is on both of them.
+
+**The chain is walked**, in `docs/end-to-end-run-28.md` (2026-08-14, release
+build against a local ergo). Every paging walk before it was made on a channel
+whose history ran out in two asks — run 17 said so and asked for one with a
+dozen behind it, and the answer is that `#scrollback` has held eleven pages for
+some time: `depth.py` asks the way the client asks and counts them, and what
+binds is ergo's `history.channel-length` rather than the drift run 17 found. Run
+that probe before trusting a paging count.
+
+Ten links is what a count of asks cannot see. Six walks, three quiet and three
+under thirty-two spinners, each made **10 asks under 10 distinct msgids, none
+repeated and none unanswered**, ending on a 48-row page and the pane drawing
+"Beginning of history" above the oldest line the server still held. A link asked
+twice is #487 and a link that stops early is a reader left short of history that
+exists; the chain has ten chances to show either and showed neither.
+
+- **The empty-batch route is walked**, and `emptypage.py` is what it took: a
+  page-back answered with an open batch, no messages and a close. It cannot be
+  provoked from ergo here because 2048 events do not divide by a 200-message
+  page, so the last page is short rather than absent — the same branch in
+  `message.rs`, a different line on the wire. Three walks, one ask each, page
+  size 0, the end of history drawn with ten pages still on the server behind it,
+  and no second ask from a scroll that goes down and comes back up. The control
+  under `--pass` asks twice on the same walk and draws no such line.
+- **The ordering is as settled as a walk can make it.** Load moved the round
+  trip from 2–4 ms to 8–19 ms and moved the chain not at all. Which of the two
+  orders any page took is not on the wire and cannot be; both are asserted in
+  the suite from either side and end in the same state.
+- **What it does not claim** is a separation between builds. A pre-#522 build
+  reads the same, necessarily: the wedge needs a page carrying nothing new and a
+  real chain carries 200 new rows a link. Run 27's proxy is what separates them.
+
+> A hole in the label sequence on a wire log is usually a keepalive. `session.rs`
+> mints the PING token from the counter the request labels come from — `ircx8`
+> against `label=ircx-8` — so `ircx-8` missing between two asks is a ping rather
+> than a request the client composed and never sent. `chain.py` subtracts them.
 
 ## The archive's own controls
 

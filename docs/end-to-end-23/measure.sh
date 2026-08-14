@@ -11,12 +11,22 @@
 #
 # Two landings a run, which is the unit #511 says to count in.
 #
-# `differs` is not `moved`. The head that says a page is loading is drawn in
-# both panes, because `loadingOlder` belongs to the conversation rather than to
-# the pane that asked — so a parked pane whose rows have not moved at all still
-# has a line at the top of it that was not there before. That is #475 working,
-# and it is why every landing that differs is handed to `paneshift.py` rather
-# than counted as a shift.
+# `differs` is not `moved`, which is why every landing that differs is handed to
+# `paneshift.py` rather than counted as a shift. What it usually is instead is
+# the group's spine, and the topic over a run, changing where the landing page
+# regrouped the window — run 23 photographed it (`run2-spine-only.png`) and run
+# 25 counted it, 22 of the 33 differing landings across both its arms and not
+# one of them moving any text.
+#
+# This said the cause was the head that says a page is loading, drawn in a pane
+# that had not asked because `loadingOlder` belonged to the conversation. Two
+# things are wrong with that. #516 made the line the pane's own in August 2026,
+# and the head could not have been it here anyway: the parked pane sits some 720
+# lines below the top of its own content, so that row is far above the fold and
+# has no pixels on screen to change.
+#
+# `docs/end-to-end-25/tally.py` is where the three states are counted, and it
+# does not trust `paneshift.py` for the third — see its own note.
 set -euo pipefail
 
 TREE=${1:?tree}

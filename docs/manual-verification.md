@@ -748,6 +748,32 @@ either side of the fix on the same walk, machine and server. 6 moved before and
 0 after, and the write that did the damage went from 6 of 151 head arrivals to
 0 of 149.
 
+**On the build that ships**, in `docs/end-to-end-run-25.md`. Run 24's arms both
+carried `VITE_PROBE=1`, so its own report declined to call that binary the one
+anybody runs. Run 25 built both arms without it — checked, not assumed: the
+whole of the probe surviving in the bundle is one unreferenced member of the
+object `ipc.ts` exports — and alternated them rather than running one after the
+other. The control moved **4 in 100**, against 6 in 100 with the instrument
+compiled in, so the instrument was not the experiment. The fixed arm moved 0 in
+100, at p = 0.121: consistent with run 24 and not an independent confirmation of
+it. What carries the fix is still run 24's discriminator rather than either
+rate.
+
+> Run 25 also found `paneshift.py` naming −202px for a pane whose message
+> column was byte-for-byte identical — the failure `still.py`'s docstring
+> records from #510's control, and the second sighting of it. A move is read off
+> the message column now: a pane that translated draws different text at every
+> row. Runs 23 and 24 are unaffected, checked rather than assumed — every
+> landing either counted is −24px exactly, and run 24's six are the same six its
+> probe records independently flag.
+
+**The line at the head of a pane that did not ask (#516) has not been walked.**
+It is held by `Timeline.layout.test.tsx` alone. Run 25 took 200 frames of a
+parked pane and none of them contains the row: the line draws at the top of the
+timeline, and a pane scrolled far enough up to show it is a pane that has asked
+for a page itself, which is the case the fix says *should* draw it. Provoking
+the other case wants an arrangement nobody has designed yet.
+
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom

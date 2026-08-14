@@ -1,0 +1,51 @@
+
+=== connection 1, opened at 1.500, 0 asks
+    no page-back
+    reached 2026-08-12 22:16:46 'line 2396 the reader is somewhere above this'
+
+=== connection 2, opened at 13.682, 10 asks
+  1  22:16:46 'line 2396 the reader is somewhere above this'
+  2  22:15:57 'line 2200 ack'
+  3  22:15:07 'line 2002 the reader is somewhere above this'
+  4  22:14:17 'line 1804 the reader is somewhere above this'
+  5  22:13:27 'line 1604 the reader is somewhere above this'
+  6  22:12:37 'line 1404 the reader is somewhere above this'
+  7  22:11:47 'line 1204 the reader is somewhere above this'
+  8  22:10:57 'line 1004 the reader is somewhere above this'
+  9  22:10:07 'line 0804 the reader is somewhere above this'
+ 10  22:09:17 'line 0604 the reader is somewhere above this'
+    reached 2026-08-12 22:09:06 'line 0558 the reader is somewhere above this'
+
+=== connection 3, opened at 465.227, 0 asks
+    no page-back
+    reached 2026-08-12 22:16:47 'line 2400 ack'
+
+=== connection 4, opened at 477.319, 10 asks
+  1  22:16:47 'line 2400 ack'
+  2  22:15:58 'line 2204 the reader is somewhere above this'
+  3  22:15:08 'line 2006 a longer line, wrapping over more '
+  4  22:14:18 'line 1808 the reader is somewhere above this'
+  5  22:13:28 'line 1608 the reader is somewhere above this'
+  6  22:12:38 'line 1408 the reader is somewhere above this'
+  7  22:11:48 'line 1208 the reader is somewhere above this'
+  8  22:10:58 'line 1008 the reader is somewhere above this'
+  9  22:10:08 'line 0808 the reader is somewhere above this'
+ 10  22:09:18 'line 0608 the reader is somewhere above this'
+    reached 2026-08-12 22:09:07 'line 0562 the reader is somewhere above this'
+
+=== connection 5, opened at 928.333, 0 asks
+    no page-back
+    reached 2026-08-12 22:17:42 'drain5 quit (Quit: bye)'
+
+=== connection 6, opened at 939.764, 10 asks
+  1  22:17:42 'drain5 quit (Quit: bye)'
+  2  22:15:59 'line 2208 the reader is somewhere above this'
+  3  22:15:09 'line 2010 ack'
+  4  22:14:19 'line 1812 the reader is somewhere above this'
+  5  22:13:29 'line 1612 the reader is somewhere above this'
+  6  22:12:39 'line 1412 the reader is somewhere above this'
+  7  22:11:49 'line 1212 the reader is somewhere above this'
+  8  22:10:59 'line 1012 the reader is somewhere above this'
+  9  22:10:09 'line 0812 the reader is somewhere above this'
+ 10  22:09:19 'line 0612 a longer line, wrapping over more '
+    reached 2026-08-12 22:09:08 'line 0566 the reader is somewhere above this'

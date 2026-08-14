@@ -1,0 +1,42 @@
+
+=== connection 1, opened at 1.503, 0 asks
+    no page-back
+    reached 2026-08-14 16:36:17 'peeker quit (connection closed)'
+
+=== connection 2, opened at 12.407, 10 asks
+  1  16:36:17 'peeker quit (connection closed)'
+  2  22:16:26 'line 2318 the reader is somewhere above this'
+  3  22:15:37 'line 2122 the reader is somewhere above this'
+  4  22:14:47 'line 1922 the reader is somewhere above this'
+  5  22:13:57 'line 1724 the reader is somewhere above this'
+  6  22:13:07 'line 1524 the reader is somewhere above this'
+  7  22:12:17 'line 1324 the reader is somewhere above this'
+  8  22:11:27 'line 1124 the reader is somewhere above this'
+  9  22:10:37 'line 0924 the reader is somewhere above this'
+ 10  22:09:47 'line 0724 the reader is somewhere above this'
+    reached 2026-08-12 22:09:36 'line 0678 the reader is somewhere above this'
+
+=== connection 3, opened at 448.509, 0 asks
+    no page-back
+    reached 2026-08-14 16:42:27 'walker quit (connection closed)'
+
+=== connection 4, opened at 459.410, 1 asks
+  1  16:42:27 'walker quit (connection closed)'
+    reached 2026-08-12 22:16:27 'line 2322 the reader is somewhere above this'
+
+=== connection 5, opened at 897.492, 0 asks
+    no page-back
+    reached 2026-08-14 16:44:44 'walker quit (connection closed)'
+
+=== connection 6, opened at 908.400, 10 asks
+  1  16:44:44 'walker quit (connection closed)'
+  2  22:16:28 'line 2326 the reader is somewhere above this'
+  3  22:15:39 'line 2130 ack'
+  4  22:14:49 'line 1930 ack'
+  5  22:13:59 'line 1732 the reader is somewhere above this'
+  6  22:13:09 'line 1532 the reader is somewhere above this'
+  7  22:12:19 'line 1332 the reader is somewhere above this'
+  8  22:11:29 'line 1132 the reader is somewhere above this'
+  9  22:10:39 'line 0932 the reader is somewhere above this'
+ 10  22:09:49 'line 0732 the reader is somewhere above this'
+    reached 2026-08-12 22:09:38 'line 0686 the reader is somewhere above this'

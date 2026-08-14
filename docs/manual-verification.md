@@ -3231,6 +3231,44 @@ exists; the chain has ten chances to show either and showed neither.
 > against `label=ircx-8` — so `ircx-8` missing between two asks is a ping rather
 > than a request the client composed and never sent. `chain.py` subtracts them.
 
+**Run 17's count is explained**, in `docs/end-to-end-run-29.md` (2026-08-14,
+release builds of `b75edf2`, `61a98fa` and `61d8b23` against the same ergo). Six
+asks a run against two was never a build paging more eagerly. **The old build
+stops.** On a second visit to a channel the pane opens on an empty timeline, asks
+the archive with `before` null, and `load_history` answers with the newest page
+it holds while the server's own `CHATHISTORY LATEST` is still landing — and in
+that race the pre-#494/#496 build asks the server from the archive page's first
+row and files that page in front of the window, which leaves `messages[0]`
+naming what `askedBehind` names. The `#487` guard then answers every later
+scroll with `"skipped"`, for the rest of the session.
+
+The reader is left holding four hundred rows of a conversation the server has two
+thousand of, with no "Beginning of history", no error and nothing loading —
+which is the symptom run 17 feared and neither #494 nor #496 describes.
+
+```text
+                    walk to the top, 32 spinners      run 16's two bursts, 32 spinners
+b75edf2 (before)    1 ask 3/3, stops ~2 pages in      1 1 4 4 1 2 4 4   (21 over 8)
+61a98fa (after)     10 asks 3/3, start of history     4 4 4 5 4 4 4 4   (33 over 8)
+61d8b23 (ships)     10, 10, and one walk that         4 4 5 4 4 4 4 4   (33 over 8)
+                    never reached the top
+```
+
+Two things that reading is worth carrying.
+
+- **Depth is what made it visible, not load.** The wedge fires on an idle machine
+  too — the control's quiet arm is 10 asks, 1, 10, so one run in three against
+  three in three loaded. Contention raises the rate; it is not the condition.
+  What runs 18 to 28 lacked was a channel deep enough to tell a build that
+  stopped after two asks from a build that finished after two.
+- **At thirty-two spinners the walk is no longer reliable.** One `61d8b23` run
+  delivered all fourteen bursts and left the scroller a third of the way down a
+  window it had reached the top of twice before, which on the count alone reads
+  as a wedge. The frame is what separates them: a wedged pane sits at the top of
+  everything it holds with the seam above its last row, and that one had rows
+  running off the top of the viewport. Read the frame before believing a count
+  taken under load.
+
 ## The archive's own controls
 
 Built and walked on 2026-08-01 (#241). Everything in `ircx-store` for this

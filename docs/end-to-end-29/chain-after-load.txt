@@ -1,0 +1,42 @@
+
+=== walk 1
+  #  label     msgid                         page      ms
+  1  ircx-1    wgq937u896ucdkipcan5dxmahi     200      18
+  2  ircx-2    nce4hgsvcxpw28a54ejifdsbe2     200      11
+  3  ircx-3    8u22bsmfduzed56gbc2h57v8si     200       9
+  4  ircx-4    xipjjvb3mx3mkjd88gevwvxff2     200      14
+  5  ircx-5    i9ybbem8x26g92ypg7uzjtrzwa     200      12
+  6  ircx-6    j73xgfw7ihvkyxetb6q9y8rd6w     200      12
+  7  ircx-7    fcm8zxd34v5fgefwrcxpfiw84w     200      15
+  8  ircx-9    mc9jyq6cujzer569zfa2x4fmnn     200      10
+  9  ircx-10   y57sr7b56cd9ckqnyyue2y4fun     200       9
+ 10  ircx-11   y42hv4ikkvr5enauvvu42nisua      46       4
+10 asks, 10 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none
+
+=== walk 2
+  #  label     msgid                         page      ms
+  1  ircx-1    5uerqsprypnqex5edtabhupq2i     200      16
+  2  ircx-2    bc7kigvfpz7vdqk4sq2hpeab36     200      11
+  3  ircx-3    q75a7f5w7heheydc4e6gs56ks6     200      11
+  4  ircx-4    7ahuqr3bzpmkzrdkvrwyu7qxpi     200      19
+  5  ircx-5    23skvtw88izwaz5sp2vbaeunnw     200      11
+  6  ircx-6    8dmqa2dzgazydvzkvd3s697etn     200      11
+  7  ircx-7    mispg27qm86uz77bbbpyz5ksj6     200      21
+  8  ircx-9    gfsghfy8q76hfrcgn2uydqbn7w     200      10
+  9  ircx-10   nupkm9cau7gbeetfygsbx2b97w     200      15
+ 10  ircx-11   7uzgbppx7a79y5gw5z2m55grqn      46       2
+10 asks, 10 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none
+
+=== walk 3
+  #  label     msgid                         page      ms
+  1  ircx-1    _ivvbkahhztaiecntuahvu962fi    200       8
+  2  ircx-2    d5pkgtuvbectbfgaxgfycmuwgs     200      15
+  3  ircx-3    7jii4nexfhkiscjarpq3q63vqa     200      13
+  4  ircx-4    f8cacenwthwkjnvizr6ecie432     200      11
+  5  ircx-5    w3x9ysxrgh7f8aqgtt2drxsx4w     200      16
+  6  ircx-6    36b35wb8gjvgc6j5rqgskdxz6s     200      30
+  7  ircx-7    tdqxrngwf42q6ubwgpstezf45e     200      16
+  8  ircx-8    jvrwstk3qekwphajhkuqj7tw2w     200      18
+  9  ircx-10   f8z3yky2srzt2cfikxmur5n26a     200      22
+ 10  ircx-11   5x24cg2grs8e5s4a2sbw58fcn2      46       2
+10 asks, 10 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none

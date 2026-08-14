@@ -1,0 +1,43 @@
+
+=== connection 1, opened at 1.504, 0 asks
+    no page-back
+    reached 2026-08-12 22:25:21 'walker quit (connection closed)'
+
+=== connection 2, opened at 13.660, 10 asks
+  1  22:25:21 'walker quit (connection closed)'
+  2  22:16:00 'line 2212 the reader is somewhere above this'
+  3  22:15:10 'line 2014 the reader is somewhere above this'
+  4  22:14:20 'line 1816 the reader is somewhere above this'
+  5  22:13:30 'line 1616 the reader is somewhere above this'
+  6  22:12:40 'line 1416 the reader is somewhere above this'
+  7  22:11:50 'line 1216 the reader is somewhere above this'
+  8  22:11:00 'line 1016 the reader is somewhere above this'
+  9  22:10:10 'line 0816 a longer line, wrapping over more '
+ 10  22:09:20 'line 0616 the reader is somewhere above this'
+    reached 2026-08-12 22:09:09 'line 0570 ack'
+
+=== connection 3, opened at 465.053, 0 asks
+    no page-back
+    reached 2026-08-12 22:31:57 'walker quit (connection closed)'
+
+=== connection 4, opened at 476.620, 10 asks
+  1  22:31:57 'walker quit (connection closed)'
+  2  22:16:01 'line 2216 the reader is somewhere above this'
+  3  22:15:11 'line 2018 the reader is somewhere above this'
+  4  22:14:21 'line 1820 ack'
+  5  22:13:31 'line 1620 ack'
+  6  22:12:41 'line 1420 ack'
+  7  22:11:51 'line 1220 ack'
+  8  22:11:01 'line 1020 a longer line, wrapping over more '
+  9  22:10:11 'line 0820 ack'
+ 10  22:09:21 'line 0620 ack'
+    reached 2026-08-12 22:09:10 'line 0574 the reader is somewhere above this'
+
+=== connection 5, opened at 929.387, 0 asks
+    no page-back
+    reached 2026-08-12 22:38:18 'walker quit (connection closed)'
+
+=== connection 6, opened at 940.979, 2 asks
+  1  22:38:18 'walker quit (connection closed)'
+  2  22:16:02 'line 2220 ack'
+    reached 2026-08-12 22:15:12 'line 2022 the reader is somewhere above this'

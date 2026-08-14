@@ -1,0 +1,34 @@
+
+=== walk 1
+  #  label     msgid                         page      ms
+  1  ircx-1    _86hzx5timmeq8w765es6isgq3n    200      12
+  2  ircx-2    jge23ihpjbqabuzyfksnip6j56     200       8
+  3  ircx-3    p966tg9wv8nfravvhu5pxatvce     200      14
+  4  ircx-4    qs37jc95xut3dnbzctdhwx2jc6     200      16
+  5  ircx-5    5hcz9e8vc9tnxwhq39cuy27m9i     200      17
+  6  ircx-6    vjge5s7xnm6sqfb7s5gkn3hska     200      10
+  7  ircx-7    thpnficd54c63id49rdb4r7wen     200       6
+  8  ircx-9    52624gvyvbh8cj9fkampnmpy3e     200      14
+  9  ircx-10   3d59dixu68qj8dpid2zr3khn9a     200      21
+ 10  ircx-11   2tqurivq62en83v7by36r9jgri      46       7
+10 asks, 10 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none
+
+=== walk 2
+  #  label     msgid                         page      ms
+  1  ircx-1    _96ix2qfdabwscqz5zmx6tsehka    200       9
+  2  ircx-2    iq45znev4a27yvvshsdauttcva     200      20
+  3  ircx-3    2whnrbejizk3fp43x6mbnb4utw     200      14
+  4  ircx-4    pa8ppfzvip8czjr368w8bqy2fe     200      21
+  5  ircx-5    whzv8m42yaziu5cgx4kp3nyu5w     200      17
+  6  ircx-6    paccii4nftcqzh8yvee5v6yu6n     200      12
+  7  ircx-7    xen7qkedyz7xp2f9d9s7uskc5w     200       8
+  8  ircx-9    c4bs4mr39jxzzbpyfix6ty9eu2     200       7
+  9  ircx-10   tdhe9m48bkievna7t3eyyewnxi     200      17
+ 10  ircx-11   9w3aqwnmwsa4hjnn27qdb8bwu6      46       2
+10 asks, 10 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none
+
+=== walk 3
+  #  label     msgid                         page      ms
+  1  ircx-1    _6mdjb2r99my49wuw2uwmtgi74s    200      10
+  2  ircx-2    z5gkjx973dkz4yu4yks5k8u3ss     200      26
+2 asks, 2 distinct, 0 repeated, 0 unanswered, labels neither sent nor pinged: none

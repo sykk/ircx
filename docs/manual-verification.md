@@ -2865,14 +2865,49 @@ What is left:
   `line 0001` through `line 1999` with nothing missing between them. The cap
   still stops the eleventh request and still says so.
 
-  **What survives the cap is the oldest of what was missed, not the newest.**
-  `AFTER` pages forward, so the reader gets lines 1 to 2000 and loses 2001 to
-  2500 — the five hundred closest to now. The discontinuity therefore sits
+  **What survived the cap was the oldest of what was missed, not the newest.**
+  `AFTER` pages forward, so the reader got lines 1 to 2000 and lost 2001 to
+  2500 — the five hundred closest to now. The discontinuity therefore sat
   immediately above the live seam, which is where a reader is least likely to
-  expect one, and the sentence explaining it is drawn below the seam rather than
-  at the join. `continue_gap` states the reasoning for saying something at all;
-  what it does not decide is which end of the gap to keep, and this walk is the
-  first time anyone has seen which end that turns out to be.
+  expect one, and the sentence explaining it was drawn below the seam rather
+  than at the join. `continue_gap` stated the reasoning for saying something at
+  all; what it did not decide is which end of the gap to keep, and this walk is
+  the first time anyone saw which end that turned out to be.
+
+  **Fixed and walked on 2026-08-14** (#520), in `tests/gap_walk.rs`, which is
+  the first driver here to run against a server of its own: the walk is only
+  interesting past the cap, and at the 1000 ergo advertises by default that is
+  two thousand messages before anything under test happens. With
+  `chathistory-maxmessages: 5` the whole budget is fifty and seventy lines is a
+  wide gap, so the same shape runs in a minute.
+
+  Half the budget goes forward from the watermark; pages still coming back full
+  at `GAP_FORWARD` turn the walk round to the newest page and work back until
+  the two halves meet. Against ergo 2.19 on 6687, seventy lines said while the
+  reader was away: five `AFTER` (the first on the watermark's timestamp, the
+  rest on msgids), one `LATEST`, four unlabelled `BEFORE`. The reader came back
+  holding `line 001` to `line 024` and `line 047` to `line 070` — one hole,
+  and the near end that the conversation runs on from is on the right side of
+  it. The sentence is stamped a millisecond above `line 047`, so it is drawn
+  at the hole rather than under the seam.
+
+  **The control is the same walk on `main`**, which is worth stating because a
+  driver that passes on both builds has measured neither: ten `AFTER` requests,
+  `line 001` to `line 049` held, and everything from there to what was being
+  said as the reader arrived gone.
+
+  Two things the run settled that no test could:
+
+  - **An outgoing `RawLine` is emitted as the line is queued**, not as it is
+    written, and this client paces its own writes at half a second a line once
+    the burst allowance is out. Waiting for one as a barrier let the reader
+    reconnect into the middle of the flood, where the rest of it arrives live
+    and there is no gap to fetch at all — a walk that would have passed while
+    testing nothing. The barrier is the `echo-message` copy coming back.
+  - **Ergo answers an unlabelled `BEFORE`.** The backward half is a request
+    nobody is waiting on, and it has to stay unlabelled: a label is how a page
+    a reader scrolled for is matched to them, and a gap fill wearing one would
+    be taken for an answer to somebody.
 - **Libera offers no history to ask for.** The capability was not in what
   `cadmium.libera.chat` advertised on 2026-07-30, so nothing is sent there and
   the archive stays the whole history. That is the degrade working, and it also

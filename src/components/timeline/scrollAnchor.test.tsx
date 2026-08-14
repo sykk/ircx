@@ -81,7 +81,7 @@ function Scroller({
   useLayoutEffect(() => {
     headRef.current = head === null ? null : { offsetHeight: head };
   });
-  const record = usePrependAnchor(ref, headRef, messages, offsetsFor(layout), margin);
+  const record = usePrependAnchor(ref, headRef, messages, offsetsFor(layout), margin, "pane");
   return <div ref={ref} data-testid="scroller" onScroll={record} />;
 }
 

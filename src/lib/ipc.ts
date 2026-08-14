@@ -204,6 +204,10 @@ export const ipc = {
    * cannot be read or holds no certificate. */
   certificateFingerprint: (path: string) =>
     invoke<string>("certificate_fingerprint", { path }),
+
+  /** The instrument's lines, appended to the file `IRCX_PROBE` names. Rejects
+   * when it names nothing, which is what turns `@/lib/probe` off. */
+  probe: (lines: string[]) => invoke<void>("probe", { lines }),
 };
 
 /**

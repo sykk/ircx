@@ -3103,9 +3103,28 @@ ask from 2, 3/3, the retry naming the same msgid ninety-three seconds later.
 Fixed by disarming on the `waiting` outcome, which is the round trip already
 spent. `docs/end-to-end-run-18.md`.
 
-What that leaves: the empty-batch and duplicate-batch routes are argued from the
-code rather than walked, and how often a live network takes sixty seconds over a
-page is not measured — #491's origin took 45.
+**The duplicate-batch route was the one that mattered, and it is fixed** (#522).
+Run 18 left it argued from the code, and the argument turned out to understate
+it: that route needs no page to go missing at all. The batch arrives, on time,
+carrying only rows the pane already holds — which is what `CHATHISTORY LATEST`
+is, and what `PageBack::Deferred` answers `true` for — and the window's oldest
+message does not move, so the guard that was watching it stays armed. The
+`waiting` disarm does not reach this: the round trip completed. The guard now
+comes off the batch that answers it rather than off the head moving, and a
+message said at the live edge still does not answer anything.
+
+Held in a test rather than by a walk, in `Timeline.test.tsx` and
+`index.test.ts`, both of which fail on the build before the fix. What a walk
+would add is the ordering this cannot see: whether the batch really does reach
+the webview after the answer to the ask, which is the window `#487` was, and
+which run 18's proxy could be made to hold open by rewriting the batch rather
+than swallowing it.
+
+What that leaves besides: the empty-batch route is still argued from the code
+rather than walked, and how often a live network takes sixty seconds over a page
+is not measured — #491's origin took 45. Neither does any of this explain the
+count run 17 opened this thread with. Six asks a run against two was measured
+between the #494/#496 builds, and the wedge above is on both of them.
 
 ## The archive's own controls
 

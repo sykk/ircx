@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { UIEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
@@ -13,7 +14,7 @@ import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { buildRows, rowIndexOfMessage, rowMessages, type TimelineRow } from "./rows";
 
-import { usePrependAnchor, type Offsets } from "./scrollAnchor";
+import { raisedByAnchor, usePrependAnchor, type Offsets } from "./scrollAnchor";
 
 const PAGE_SIZE = 200;
 export const ESTIMATED_ROW_PX = 46;
@@ -312,9 +313,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     });
   }, [loadOlder, messages, timeline.hasMore, timeline.loadingOlder, network, target]);
 
-  const onScroll = useCallback(() => {
+  const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
     if (!el) return;
+    // The anchor putting the pane back, telling the virtualiser so. It has
+    // recorded the reader's place itself, and everything below would read this
+    // as the reader having moved: the follow state, the row the pane is
+    // remembered at, and whether to ask for another page.
+    if (raisedByAnchor(event.nativeEvent)) return;
     // Every write to `scrollTop` raises one of these, whoever made it — the
     // reader's wheel, the anchor, and the virtualiser correcting for a row it
     // has just measured. A pane that moves with nothing in this trace moved

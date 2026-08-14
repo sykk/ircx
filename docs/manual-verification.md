@@ -767,12 +767,33 @@ rate.
 > landing either counted is −24px exactly, and run 24's six are the same six its
 > probe records independently flag.
 
-**The line at the head of a pane that did not ask (#516) has not been walked.**
-It is held by `Timeline.layout.test.tsx` alone. Run 25 took 200 frames of a
-parked pane and none of them contains the row: the line draws at the top of the
-timeline, and a pane scrolled far enough up to show it is a pane that has asked
-for a page itself, which is the case the fix says *should* draw it. Provoking
-the other case wants an arrangement nobody has designed yet.
+**The line at the head of a pane that did not ask (#516) is walked**, in
+`docs/end-to-end-run-26.md` (2026-08-14, release builds against a local ergo).
+Run 25 could not: the line draws at the top of the timeline, a pane scrolled far
+enough up to show it is a pane that has asked for a page itself, and that is the
+case the fix says *should* draw it.
+
+What resolves it is the state a pane is in when it is **owed a page it has
+already asked for and not been given**. `holdpage.py` keeps the batch answering
+a `CHATHISTORY BEFORE` and passes everything else at wire speed, so the ask runs
+out `ROUND_TRIP_TIMEOUT` and the pane settles at the top of its content with
+"The server has not sent this page yet" over it — nothing prepended to move it,
+and no scroll left in it to ask again with. The pane beside it is then walked to
+the top, where it asks.
+
+- **The control draws the line in the pane that asked for nothing**, 3 runs of
+  3, and the fixed arm in none of 3. The rows under the head are still in all 18
+  comparisons either arm, so the whole of what the fix changes is that sentence.
+- **Both arms draw it in the pane that did ask**, and take it off when the round
+  trip gives up, so the fixed arm is not a build that stopped saying anything.
+- **The half of the fix that keeps the line is walked too.** A second pane that
+  reaches the top mid-flight is refused its own request and says it is waiting
+  all the same: two heads, one `CHATHISTORY BEFORE` on the wire, in both arms.
+
+Still open: **what the head does as the page it named arrives.** Every answer in
+that run is held, which is what makes the state stable enough to photograph.
+The line going, and the anchor correcting for the rows that came with it, are
+`Timeline.layout.test.tsx`'s still.
 
 ## Resizing a split
 

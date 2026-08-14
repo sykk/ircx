@@ -197,11 +197,11 @@ describe("a timeline whose rows are the heights it draws", () => {
  * archive with nobody touching it, and about one landing in four moved it by a
  * line of text.
  *
- * The pane that asked for the page is not the only one the ask reaches:
- * `loadingOlder` is the conversation's rather than the pane's, so the head
- * saying so is drawn in both of them, and the archive lands in both of them.
- * The parked pane sees a page it did not ask for arrive above a reader who is
- * not there.
+ * The pane that asked for the page is not the only one the ask reaches: the
+ * archive lands in both of them, and the parked pane sees a page it did not ask
+ * for arrive above a reader who is not there. What it no longer sees is the
+ * head saying so, that being the pane's own report and not the conversation's
+ * (#516).
  */
 describe("two panes on one channel, one of them parked", () => {
   /** The read the reader's scroll asks for, held open the way a round trip
@@ -239,7 +239,7 @@ describe("two panes on one channel, one of them parked", () => {
     return { reading: reading!, parked: parked! };
   }
 
-  it("draws the head of a read it did not ask for", () => {
+  it("draws no head for a read it did not ask for", () => {
     const { reading, parked } = twoPanes();
     heldOpen(olderPage(11));
 
@@ -247,10 +247,36 @@ describe("two panes on one channel, one of them parked", () => {
     fireEvent.scroll(reading);
     flushLayout();
 
-    expect(within(parked).getByText("Loading older messages")).toBeTruthy();
+    expect(within(reading).getByText("Loading older messages")).toBeTruthy();
+    expect(within(parked).queryByText("Loading older messages")).toBeNull();
   });
 
-  it("leaves the parked pane's page where it was while that head is up", () => {
+  it("draws it in a pane owed the page a read already out will answer", async () => {
+    const { reading, parked } = twoPanes();
+    const land = heldOpen(olderPage(11));
+
+    reading.scrollTop = 100;
+    fireEvent.scroll(reading);
+    flushLayout();
+    // The second reader scrolls to the top while that read is in flight. Their
+    // pane asks and is told a page is already coming, which is an answer it is
+    // owed too — so it is waiting, and says so.
+    parked.scrollTop = 100;
+    fireEvent.scroll(parked);
+    flushLayout();
+
+    expect(within(parked).getByText("Loading older messages")).toBeTruthy();
+
+    land();
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+    flushLayout();
+
+    expect(within(parked).queryByText("Loading older messages")).toBeNull();
+  });
+
+  it("leaves the parked pane's page where it was while the other pane asks", () => {
     const { reading, parked } = twoPanes();
     heldOpen(olderPage(11));
     const watching = atTheFold(parked);
@@ -270,8 +296,8 @@ describe("two panes on one channel, one of them parked", () => {
     reading.scrollTop = 100;
     fireEvent.scroll(reading);
     flushLayout();
-    // Read with the head up, which is where the reader's eyes were for the
-    // whole of the round trip.
+    // Read with the read out, which is where the parked reader's eyes were for
+    // the whole of the round trip.
     const watching = atTheFold(parked);
     const before = eyeLine(parked, watching);
 

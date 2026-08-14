@@ -1,0 +1,12 @@
+the parked pane                control  with the fixes
+pixel-identical                     80              87
+differed, did not move              16              13
+moved                                4               0
+landings                           100             100
+
+moved: 4/100 against 0/100, Fisher p = 0.121
+not pixel-identical: 20/100 against 13/100, Fisher p = 0.253
+ control: 148 pages over 50 runs — 2 runs asked 2, 48 runs asked 3
+   fixed: 151 pages over 50 runs — 49 runs asked 3, 1 runs asked 4
+ control: 14 spine only, 2 message column only, 4 both
+   fixed: 8 spine only, 0 message column only, 5 both

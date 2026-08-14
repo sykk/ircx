@@ -74,6 +74,11 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // arrive — and when it does, the conversation's oldest message is no longer
   // this one, which is what takes the line back off the head (#491).
   const [waitingBehind, setWaitingBehind] = useState<string | null>(null);
+  // Whether the page in flight is one this pane asked for. `loadingOlder` is
+  // the conversation's, and a split can hold one channel twice, so the store
+  // alone says "loading" over a reader who asked for nothing (#516). The rest
+  // of the head is already the pane's own: this is what makes that line so.
+  const [askedForPage, setAskedForPage] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Read once: from the restore onwards the scroller owns the position, and
   // reading it as a subscription would fight every scroll event with a stale
@@ -113,8 +118,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     return map;
   }, [messages]);
 
+  // The read is over, whoever it belonged to, so the next one has to be asked
+  // for again before this pane draws anything about it.
+  useEffect(() => {
+    if (!timeline.loadingOlder) setAskedForPage(false);
+  }, [timeline.loadingOlder]);
+
   const waiting = waitingBehind !== null && messages[0]?.id === waitingBehind;
-  const head = rows.length === 0 ? null : historyHead(timeline, loadError, waiting);
+  const loadingHere = timeline.loadingOlder && askedForPage;
+  const head = rows.length === 0 ? null : historyHead(timeline, loadError, waiting, loadingHere);
   const headRef = useRef<HTMLDivElement>(null);
   // The head is the first thing in the scroller, so the list starts that far
   // down it. The virtualiser needs the offset to place rows and to scroll to
@@ -220,12 +232,20 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     // A channel restored across a restart has no entry at all until something
     // is filed under it, and that is exactly the pane with an archive to read.
     const current = store.timelines[key] ?? EMPTY_TIMELINE;
-    if (!current.hasMore || current.loadingOlder) return "skipped";
+    if (!current.hasMore) return "skipped";
+    // A read for this very page is already out, from this pane or the one
+    // beside it. Either way the answer is owed to this reader too, so the pane
+    // is waiting on it and says so.
+    if (current.loadingOlder) {
+      setAskedForPage(true);
+      return "skipped";
+    }
     // Nothing has moved since the server was asked for the page behind this
     // very message, so the archive can only answer what it answered then and
     // the request would come out identical (#487).
     if (current.messages[0]?.id === current.askedBehind) return "skipped";
 
+    setAskedForPage(true);
     store.setLoadingOlder(key, true);
     try {
       const older = await ipc.loadHistory({
@@ -503,9 +523,10 @@ function historyHead(
   timeline: TimelineState,
   loadError: string | null,
   waiting: boolean,
+  loading: boolean,
 ): string | null {
   if (loadError !== null) return loadError;
-  if (timeline.loadingOlder) return "Loading older messages";
+  if (loading) return "Loading older messages";
   // Said in the faint colour the rest of these are, because a page the server
   // is taking its time over is not a failure to report: it arrives and draws,
   // and this line goes when it does. Reporting it as one is what told the

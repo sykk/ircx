@@ -4665,34 +4665,177 @@ mod paging_a_gap {
         );
     }
 
-    /// Somebody away for a month is not worth a thousand requests, and the
-    /// reader is told where the fetching stopped rather than left with the
-    /// oldest of what they missed and no reason to doubt it.
-    #[test]
-    fn it_stops_and_says_so() {
-        let mut session = behind();
-        // Nine full pages, each answered by a request for the next.
-        for round in 1..=9 {
-            page(&mut session, round, &[round, round + 20, round + 40]);
+    /// #520. Half the budget forward, and if the pages are still coming back
+    /// full, the rest of it spent at the end of the gap that runs up to now.
+    ///
+    /// `GAP_FORWARD` is five of `GAP_PAGES`' ten, spelt here because both are
+    /// `pub(crate)` and this walk is what they mean.
+    mod a_gap_too_wide_to_fetch_whole {
+        use super::*;
+
+        /// A page whose messages are given as `hour:minute`, a walk that turns
+        /// round covering more of a day than one hour holds.
+        fn page_at(session: &mut Harness, reference: u32, at: &[(u32, u32)]) {
+            session.feed(&format!(":ergo.test BATCH +{reference} chathistory #ircx"));
+            for (hour, minute) in at {
+                session.feed(&format!(
+                    "@batch={reference};time=2026-07-31T{hour:02}:{minute:02}:00.000Z \
+                     :phrack!p@h PRIVMSG #ircx :line {hour}:{minute}"
+                ));
+            }
+            session.feed(&format!(":ergo.test BATCH -{reference}"));
         }
-        assert_eq!(session.sent_starting("CHATHISTORY").len(), 9);
-        session.sent();
 
-        // The tenth is the cap.
-        page(&mut session, 10, &[10, 30, 50]);
+        /// The forward half of the budget, spent. Five full pages walking up
+        /// through the nine o'clock hour, the last of which turns the walk
+        /// round.
+        fn walk_out(session: &mut Harness) {
+            for round in 1..=5 {
+                let (a, b, c) = (round * 3 - 2, round * 3 - 1, round * 3);
+                page_at(session, round, &[(9, a), (9, b), (9, c)]);
+            }
+        }
 
-        assert!(session.sent_starting("CHATHISTORY").is_empty());
-        let said: Vec<String> = session
-            .messages()
-            .iter()
-            .filter(|message| message.kind == MessageKind::Client)
-            .map(|message| message.text.clone())
-            .collect();
-        let stopped: Vec<&String> = said
-            .iter()
-            .filter(|text| text.contains("more that was not"))
-            .collect();
-        assert_eq!(stopped.len(), 1, "said once, and only once: {said:?}");
+        /// The backward half. Each page is older than the one before it and
+        /// none of them reaches 09:15, where the forward half stopped.
+        fn walk_back(session: &mut Harness, rounds: u32) {
+            for round in 0..rounds {
+                let top = 60 - round * 3;
+                page_at(
+                    session,
+                    6 + round,
+                    &[(11, top - 3), (11, top - 2), (11, top - 1)],
+                );
+            }
+        }
+
+        #[test]
+        fn half_the_budget_in_it_asks_for_the_newest_page_instead() {
+            let mut session = behind();
+            for round in 1..=4 {
+                let (a, b, c) = (round * 3 - 2, round * 3 - 1, round * 3);
+                page_at(&mut session, round, &[(9, a), (9, b), (9, c)]);
+            }
+            assert_eq!(
+                session
+                    .sent_starting("CHATHISTORY")
+                    .last()
+                    .map(String::as_str),
+                Some("CHATHISTORY AFTER #ircx timestamp=2026-07-31T09:12:00.000Z 3"),
+                "the fourth page is still walking forward"
+            );
+            session.sent();
+
+            page_at(&mut session, 5, &[(9, 13), (9, 14), (9, 15)]);
+
+            assert_eq!(
+                session.sent_starting("CHATHISTORY"),
+                ["CHATHISTORY LATEST #ircx * 3"]
+            );
+        }
+
+        /// Nobody is waiting on these, so they go out bare — the label is what
+        /// tells a page a reader scrolled for from a gap the client is filling,
+        /// and this is the second kind.
+        #[test]
+        fn walking_back_carries_on_from_the_oldest_of_the_page() {
+            let mut session = behind();
+            walk_out(&mut session);
+            session.sent();
+
+            page_at(&mut session, 6, &[(11, 57), (11, 58), (11, 59)]);
+
+            assert_eq!(
+                session.sent_starting("CHATHISTORY"),
+                ["CHATHISTORY BEFORE #ircx timestamp=2026-07-31T11:57:00.000Z 3"]
+            );
+        }
+
+        /// The gap is closed by the two halves meeting rather than by a count,
+        /// which is what keeps every gap that fitted in ten pages fitting.
+        #[test]
+        fn the_halves_meeting_closes_it_with_nothing_said() {
+            let mut session = behind();
+            walk_out(&mut session);
+            session.sent();
+
+            // Reaching back past 09:15, where the forward half stopped.
+            page_at(&mut session, 6, &[(9, 14), (9, 15), (9, 16)]);
+
+            assert!(session.sent_starting("CHATHISTORY").is_empty());
+            assert!(
+                said(&session)
+                    .iter()
+                    .all(|text| !text.contains("moved faster")),
+                "nothing was lost, so there is nothing to say: {:?}",
+                said(&session)
+            );
+        }
+
+        /// Ten pages of a gap, as before — the change is which ten, not how
+        /// many. Nine requests to fetch them: the join's own ask is spent before
+        /// `behind` hands the session over, and the tenth page is answered by
+        /// the sentence rather than by another request.
+        #[test]
+        fn the_whole_budget_is_ten_pages_either_way() {
+            let mut session = behind();
+            walk_out(&mut session);
+            walk_back(&mut session, 5);
+
+            let asked = session.sent_starting("CHATHISTORY");
+            let of = |kind: &str| asked.iter().filter(|line| line.contains(kind)).count();
+            assert_eq!(asked.len(), 9, "{asked:#?}");
+            assert_eq!((of(" AFTER "), of(" LATEST "), of(" BEFORE ")), (4, 1, 4));
+        }
+
+        /// Somebody away for a month is not worth a thousand requests, and the
+        /// reader is told where the fetching stopped rather than left with the
+        /// oldest of what they missed and no reason to doubt it.
+        #[test]
+        fn it_stops_and_says_so() {
+            let mut session = behind();
+            walk_out(&mut session);
+            walk_back(&mut session, 4);
+            session.sent();
+
+            walk_back(&mut session, 5);
+
+            let stopped: Vec<String> = said(&session)
+                .into_iter()
+                .filter(|text| text.contains("moved faster"))
+                .collect();
+            assert_eq!(stopped.len(), 1, "said once, and only once: {stopped:?}");
+        }
+
+        /// The row is drawn at the hole rather than under the live seam, which
+        /// is the half of #520 a reader meets: the sentence is the only thing
+        /// between two messages three hours and five hundred lines apart.
+        #[test]
+        fn the_sentence_is_stamped_at_the_hole() {
+            let mut session = behind();
+            walk_out(&mut session);
+            walk_back(&mut session, 5);
+
+            let messages = session.messages();
+            let stopped = messages
+                .iter()
+                .find(|message| message.text.contains("moved faster"))
+                .expect("the cap says so");
+
+            assert_eq!(
+                stopped.timestamp, "2026-07-31T11:44:59.999Z",
+                "a millisecond above the oldest message the walk brought back"
+            );
+        }
+
+        fn said(session: &Harness) -> Vec<String> {
+            session
+                .messages()
+                .iter()
+                .filter(|message| message.kind == MessageKind::Client)
+                .map(|message| message.text.clone())
+                .collect()
+        }
     }
 
     /// A first page of a conversation this client never held is not a gap, so

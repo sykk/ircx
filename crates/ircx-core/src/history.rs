@@ -27,9 +27,20 @@ pub(crate) const TARGETS: u32 = 50;
 ///
 /// A cap rather than a loop until the server runs out: a conversation somebody
 /// was away from for a month is not worth a thousand requests, and the reader is
-/// told where the fetching stopped. At `PAGE` apiece this is the last two
-/// thousand messages of what was missed.
+/// told where the fetching stopped. At `PAGE` apiece this is two thousand
+/// messages of what was missed.
 pub(crate) const GAP_PAGES: u32 = 10;
+
+/// How much of that budget is spent walking forward from the archive's
+/// watermark before the walk turns round and spends the rest at the near end.
+///
+/// The cap is what makes the direction matter. Under it every page arrives
+/// whichever way the walk runs; at it, the direction decides which half of the
+/// gap the reader loses — and fetched forward, what is lost is the stretch that
+/// leads into the conversation happening now. Halved, the reader keeps what
+/// continues from where they stopped reading and what runs up to the live seam,
+/// with the hole between them rather than under the seam. #520.
+pub(crate) const GAP_FORWARD: u32 = GAP_PAGES / 2;
 
 /// Which conversations were spoken in between `since` and now.
 ///
@@ -81,13 +92,26 @@ pub(crate) fn request(target: &str, since: Option<Resume<'_>>, limit: u32) -> Op
 /// conversation, and the answer to this one is a page nobody was waiting for
 /// unless it can be matched to the reader who asked.
 ///
+/// `None` is the second half of a gap fill, which walks back from now (#520)
+/// and wants the opposite: an unlabelled batch is the one nobody is waiting on,
+/// and what fills a gap is what the reader missed rather than what they scrolled
+/// to.
+///
 /// No fallback to `LATEST` where the selector will not build, unlike `request`.
 /// The reader is asking for what is behind a particular message, and the most
 /// recent page is what they are already looking at.
-pub(crate) fn before(target: &str, from: Resume<'_>, limit: u32, label: &str) -> Option<String> {
+pub(crate) fn before(
+    target: &str,
+    from: Resume<'_>,
+    limit: u32,
+    label: Option<&str>,
+) -> Option<String> {
     let selector = selector(from)?;
-    MessageBuilder::new("CHATHISTORY")
-        .tag("label", Some(label.to_string()))
+    let mut request = MessageBuilder::new("CHATHISTORY");
+    if let Some(label) = label {
+        request = request.tag("label", Some(label.to_string()));
+    }
+    request
         .param("BEFORE")
         .param(target)
         .param(selector)
@@ -95,6 +119,21 @@ pub(crate) fn before(target: &str, from: Resume<'_>, limit: u32, label: &str) ->
         .build()
         .ok()
         .map(|message| message.to_line())
+}
+
+/// A millisecond before the message named, which is where a row belonging above
+/// it goes.
+///
+/// The timeline files a message by its timestamp and the archive reads it back
+/// the same way, so a row stamped with its neighbour's own timestamp has no
+/// settled side to land on. A millisecond is what the wire's own resolution
+/// makes the smallest step there is.
+pub(crate) fn just_before(timestamp: &str) -> Option<String> {
+    let at = OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
+        .ok()?
+        - time::Duration::milliseconds(1);
+    at.format(&time::format_description::well_known::Rfc3339)
+        .ok()
 }
 
 /// The msgid where there is one to use, and the timestamp otherwise.
@@ -167,7 +206,7 @@ mod tests {
                 "#ircx",
                 at_only("2026-07-31T09:15:04.123456789Z"),
                 200,
-                "ircx-1"
+                Some("ircx-1")
             )
             .as_deref(),
             Some("@label=ircx-1 CHATHISTORY BEFORE #ircx timestamp=2026-07-31T09:15:04.123Z 200")
@@ -182,8 +221,18 @@ mod tests {
         };
 
         assert_eq!(
-            before("#ircx", from, 200, "ircx-7").as_deref(),
+            before("#ircx", from, 200, Some("ircx-7")).as_deref(),
             Some("@label=ircx-7 CHATHISTORY BEFORE #ircx msgid=pqpmmxnsetcinv4abh5jmxn3gs 200")
+        );
+    }
+
+    /// The second half of a gap fill asks the same question with nobody waiting
+    /// on the answer, so it goes out bare. #520.
+    #[test]
+    fn a_gap_walking_back_asks_without_a_label() {
+        assert_eq!(
+            before("#ircx", at_only("2026-07-31T09:15:04.123Z"), 200, None).as_deref(),
+            Some("CHATHISTORY BEFORE #ircx timestamp=2026-07-31T09:15:04.123Z 200")
         );
     }
 
@@ -192,7 +241,7 @@ mod tests {
     /// is what they are already looking at.
     #[test]
     fn a_page_back_from_a_timestamp_that_will_not_parse_asks_for_nothing() {
-        assert!(before("#ircx", at_only("the other day"), 200, "ircx-1").is_none());
+        assert!(before("#ircx", at_only("the other day"), 200, Some("ircx-1")).is_none());
         assert_eq!(
             request("#ircx", Some(at_only("the other day")), 200).as_deref(),
             Some("CHATHISTORY LATEST #ircx * 200")

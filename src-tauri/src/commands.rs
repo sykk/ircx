@@ -175,11 +175,9 @@ pub async fn page_back(
             reply,
         })
         .await?;
-    Ok(match answer {
-        Some(true) => PageBackOutcome::More,
-        Some(false) => PageBackOutcome::End,
-        None => PageBackOutcome::Waiting,
-    })
+    // The session says which of the three answers it is; `None` is the round
+    // trip's own deadline expiring, which is the one it cannot say.
+    Ok(answer.unwrap_or(PageBackOutcome::Waiting))
 }
 
 #[tauri::command]

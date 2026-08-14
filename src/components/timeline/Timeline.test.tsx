@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, Reaction } from "@/types";
+import type { ChatMessage, PageBackOutcome, Reaction } from "@/types";
 import { TIMELINE_CAP, useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
@@ -132,7 +132,7 @@ function seedTimelines(timelines: AppState["timelines"]) {
 }
 
 function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
-  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null } });
+  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 } });
 }
 
 /** A second pane on the same channel, as a split would open. `anchor` is the
@@ -486,7 +486,7 @@ describe("Timeline", () => {
         messages: makeConversation({ count: 20, seed: 6 }),
         unreadFrom: null,
         hasMore: false,
-        loadingOlder: false, askedBehind: null
+        loadingOlder: false, askedBehind: null, historyLanded: 0
       },
     });
     render(<Timeline view={TEST_VIEW} />);
@@ -663,6 +663,9 @@ describe("Timeline", () => {
      * a row from today, and asking the server for what is behind *that* asks
      * again for the page it has already sent. */
     it("asks from the oldest message the window will hold, not the page's own first row", async () => {
+      // Answered rather than ended, because the guard below is armed only where
+      // there is a later scroll for it to refuse.
+      ipcMock.pageBack.mockResolvedValue("more");
       let answer: (page: ChatMessage[]) => void = () => {};
       ipcMock.loadHistory.mockReturnValue(
         new Promise<ChatMessage[]>((resolve) => {
@@ -894,20 +897,22 @@ describe("Timeline", () => {
       });
 
       /**
-       * And when nothing lands behind it either. The batch above is the whole
-       * of what that ask was answered with, so the oldest message the pane
-       * holds is the one the guard was armed with and stays that way: every
-       * later scroll is refused for a page that has already arrived and moved
-       * nothing. Only a reconnect clears it, which leaves the reader at the top
-       * of a conversation that says it has more and cannot be made to go and
-       * look.
+       * And when nothing lands behind it either. #522.
        *
-       * The `more` answer is what makes it safe to ask again. It is sent when
-       * the batch carrying that label has come back, so the ask the guard names
-       * is over by the time it is read — unlike `waiting`, where it has not
-       * even landed. What is behind the batch is a question nobody has put yet.
+       * The batch is the whole of what that ask was answered with, and it moved
+       * the pane's oldest message not at all. The guard used to be armed on
+       * that message and to come off by its moving, so it stayed on: every
+       * later scroll refused for a page that had already arrived, nothing short
+       * of a reconnect clearing it, and the reader left at the top of a
+       * conversation that says it has more and cannot be made to go and look.
+       *
+       * Asking again is the wrong repair and the walk in `docs/end-to-end-27`
+       * is why — the same msgid went out 26 times in a walk, 65ms apart, which
+       * is #487 again. The server answered. What it answered with is that there
+       * is nothing behind this message, whatever the page's size said about
+       * fullness, so the paging stops and the pane says where the history ends.
        */
-      it("asks again when the page that answered it moved nothing", async () => {
+      it("stops paging when the page that answered it moved nothing", async () => {
         ipcMock.pageBack.mockResolvedValue("more");
         const page = older(60);
         await readToTheStart(page);
@@ -929,14 +934,79 @@ describe("Timeline", () => {
         ipcMock.loadHistory.mockResolvedValue([]);
 
         await scrollAgain();
+        await scrollAgain();
 
-        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
-        expect(ipcMock.pageBack).toHaveBeenLastCalledWith(
-          "libera",
-          "#ctf-ops",
-          page[0]!.timestamp,
-          page[0]!.id,
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(1);
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false);
+        expect(await screen.findByText("Beginning of history")).toBeTruthy();
+      });
+
+      /**
+       * And the reader is not told that where a page is still coming. The same
+       * batch, landing before the answer to the ask it belongs to — which is
+       * the ordinary order, core emitting the messages before the outcome —
+       * reads identically from inside `loadOlder`, and is told apart by the
+       * count of pages this conversation has taken rather than by hoping.
+       */
+      it("stops paging when that page landed before the answer did", async () => {
+        const page = older(60);
+        let answer: (outcome: PageBackOutcome) => void = () => {};
+        ipcMock.pageBack.mockReturnValue(
+          new Promise<PageBackOutcome>((resolve) => {
+            answer = resolve;
+          }),
         );
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              network: "libera",
+              target: "#ctf-ops",
+              messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
+            },
+          ]);
+        });
+        await act(async () => {
+          answer("more");
+        });
+
+        await waitFor(() =>
+          expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(false),
+        );
+      });
+
+      /**
+       * `deferred` is the other half of the same distinction. Nothing went out:
+       * the conversation's own first page was already coming and is what
+       * answered, and it says nothing about what is behind the window. So a
+       * batch carrying nothing new does not end the paging there — the question
+       * has not been asked yet — and the reader can still ask it.
+       */
+      it("keeps paging when no ask went out and the first page carried nothing new", async () => {
+        ipcMock.pageBack.mockResolvedValue("deferred");
+        const page = older(60);
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              network: "libera",
+              target: "#ctf-ops",
+              messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
+            },
+          ]);
+        });
+        ipcMock.loadHistory.mockResolvedValue([]);
+
+        await scrollAgain();
+
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
       });
 
       it("asks for the next one once it has landed", async () => {

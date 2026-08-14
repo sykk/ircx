@@ -73,8 +73,8 @@ beforeEach(() => {
     },
     members: { [CTF]: CTF_OPS_MEMBERS },
     timelines: {
-      [CTF]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null },
-      [HACKINT]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null },
+      [CTF]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 },
+      [HACKINT]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 },
     },
     views: {},
     viewOrder: [],

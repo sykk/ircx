@@ -3103,28 +3103,45 @@ ask from 2, 3/3, the retry naming the same msgid ninety-three seconds later.
 Fixed by disarming on the `waiting` outcome, which is the round trip already
 spent. `docs/end-to-end-run-18.md`.
 
-**The duplicate-batch route was the one that mattered, and it is fixed** (#522).
-Run 18 left it argued from the code, and the argument turned out to understate
-it: that route needs no page to go missing at all. The batch arrives, on time,
-carrying only rows the pane already holds — which is what `CHATHISTORY LATEST`
-is, and what `PageBack::Deferred` answers `true` for — and the window's oldest
-message does not move, so the guard that was watching it stays armed. The
-`waiting` disarm does not reach this: the round trip completed. The guard now
-comes off the batch that answers it rather than off the head moving, and a
-message said at the live edge still does not answer anything.
+**The duplicate-batch route was the one that mattered, and run 27 walked it**
+(#522). The sentence above understates it: that route needs no page to go
+missing at all. The batch arrives, on time, carrying only rows the pane already
+holds — which is what `CHATHISTORY LATEST` is, and what `PageBack::Deferred`
+answers `true` for — and the window's oldest message does not move, so the guard
+watching it stays armed. **The `waiting` disarm does not reach this**, the round
+trip having completed, so "the fix covers them" was wrong about this one.
 
-Held in a test rather than by a walk, in `Timeline.test.tsx` and
-`index.test.ts`, both of which fail on the build before the fix. What a walk
-would add is the ordering this cannot see: whether the batch really does reach
-the webview after the answer to the ask, which is the window `#487` was, and
-which run 18's proxy could be made to hold open by rewriting the batch rather
-than swallowing it.
+`docs/end-to-end-27/replaypage.py` is run 18's proxy with its decision inverted:
+it replaces the answering batch's contents with the page the client was sent on
+joining, rather than dropping them. Against the release app on `#scrollback`,
+three walks a build: the build before the fix asks once and never again, 3/3,
+with no line of any kind above the first message.
+
+**The first fix was wrong and the walk is what said so.** Taking the guard off
+the batch that answered it separated from the control — 26 asks against 1 — and
+put #487 back: the same msgid 65 ms apart, seven of them from one over-scroll,
+where #487's own bursts were 37 to 40 ms apart. The unit test written for it
+asserted a second ask and passed, because jsdom's mock answers a page-back with
+no event channel behind it. **A fix whose cost is a rate cannot be confirmed by
+the instrument that found the state.**
+
+What ships tells the two cases apart instead, `PageBackOutcome::Deferred` being
+the fourth answer added for it: nothing went out and the first page is coming,
+against the server answered and had nothing behind that message. The guard is
+armed only for the second, and a page landing against it with nothing in it ends
+the paging rather than restarting the asking. The shipping build asks once per
+walk, exactly as the wedged control does — **the wire does not separate them and
+the frame does**, one drawing "Beginning of history" where the other draws
+nothing. `docs/end-to-end-run-27.md`.
 
 What that leaves besides: the empty-batch route is still argued from the code
-rather than walked, and how often a live network takes sixty seconds over a page
-is not measured — #491's origin took 45. Neither does any of this explain the
-count run 17 opened this thread with. Six asks a run against two was measured
-between the #494/#496 builds, and the wedge above is on both of them.
+rather than walked; how often a live network takes sixty seconds over a page is
+not measured, #491's origin having taken 45; and whether the batch really does
+reach the webview before the answer to the ask on anything slower than a local
+socket, which every walk here saw and no walk here varied. Neither does any of
+this explain the count run 17 opened this thread with. Six asks a run against
+two was measured between the #494/#496 builds, and the wedge above is on both of
+them.
 
 ## The archive's own controls
 

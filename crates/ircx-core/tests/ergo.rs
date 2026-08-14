@@ -603,7 +603,7 @@ async fn a_reader_reads_back_past_the_archive(report: &mut Report, live: &mut Li
     }
 
     match timeout(PATIENCE, answer).await {
-        Ok(Ok(more)) => report.pass("page back answered", &format!("more={more}")),
+        Ok(Ok(outcome)) => report.pass("page back answered", &format!("{outcome:?}")),
         Ok(Err(_)) => report.fail("page back answered", "the session dropped the request"),
         Err(_) => {
             report.fail(

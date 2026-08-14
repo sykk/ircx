@@ -136,7 +136,7 @@ describe("paging backwards", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null },
+        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null, historyLanded: 0 },
       },
     }));
 
@@ -227,11 +227,16 @@ describe("paging backwards", () => {
     });
 
     /**
-     * #522. The batch that answers the ask is what takes it off, and not the
+     * #522. A page of history arriving is what takes it off, and not the
      * window's oldest message moving. A page carrying only rows the pane
      * already holds moves that not at all — `#486`'s `CHATHISTORY LATEST` is a
      * whole page of them — so a guard waiting on it waited for the rest of the
      * run, refusing every scroll for a page that had already arrived.
+     *
+     * And it is only ever armed for an ask that went to a server and was not
+     * answered yet, so a page landing against an armed one is that answer:
+     * nothing in it means the server has nothing behind that message, and the
+     * paging stops rather than the asking resuming.
      */
     const arrived = (messages: ChatMessage[]): IrcxEvent => ({
       type: "messagesAppended",
@@ -251,6 +256,7 @@ describe("paging backwards", () => {
       useAppStore.getState().applyEvent(arrived([message]));
 
       expect(timeline()!.askedBehind).toBeNull();
+      expect(timeline()!.hasMore).toBe(false);
     });
 
     /** And the same through the batching path, which `applyEvents` reads by. */
@@ -259,6 +265,25 @@ describe("paging backwards", () => {
       useAppStore.getState().applyEvents([arrived([message])]);
 
       expect(timeline()!.askedBehind).toBeNull();
+      expect(timeline()!.hasMore).toBe(false);
+    });
+
+    /** A page that carried something is an answer too, and one with history
+     * behind it: the paging goes on. */
+    it("is answered by a page that carried history, without ending it", () => {
+      alreadyHeld();
+      useAppStore.getState().applyEvents([
+        arrived([
+          makeMessage({
+            id: "older-1",
+            source: "serverHistory",
+            timestamp: "2026-07-01T00:00:00.000Z",
+          }),
+        ]),
+      ]);
+
+      expect(timeline()!.askedBehind).toBeNull();
+      expect(timeline()!.hasMore).toBe(true);
     });
 
     /** A channel does not go quiet because somebody is paging through it, and
@@ -270,6 +295,32 @@ describe("paging backwards", () => {
         .applyEvents([arrived([makeMessage({ id: "live", timestamp: "2026-08-01T00:00:00.000Z" })])]);
 
       expect(timeline()!.askedBehind).toBe("msg-1");
+      expect(timeline()!.hasMore).toBe(true);
+    });
+
+    /** Nobody was waiting, so nothing is concluded from it. A backfill after a
+     * reconnect lands on conversations no reader has scrolled in, and a page
+     * whose rows are all held is what a reconnect into a quiet channel gets. */
+    it("ends nothing where no ask was outstanding", () => {
+      const message = makeMessage({ id: "msg-1", source: "serverHistory" });
+      useAppStore.getState().applyEvent(arrived([message]));
+      useAppStore.getState().applyEvent(arrived([message]));
+
+      expect(timeline()!.hasMore).toBe(true);
+    });
+
+    /** The count the asker reads to tell an answer from an answer that has not
+     * crossed yet. Pages only — what somebody says is not a page. */
+    it("counts the pages of history this conversation has taken", () => {
+      const message = makeMessage({ id: "msg-1", source: "serverHistory" });
+      useAppStore.getState().applyEvent(arrived([message]));
+      expect(timeline()!.historyLanded).toBe(1);
+
+      useAppStore.getState().applyEvents([arrived([message])]);
+      expect(timeline()!.historyLanded).toBe(2);
+
+      useAppStore.getState().applyEvent(arrived([makeMessage({ id: "said" })]));
+      expect(timeline()!.historyLanded).toBe(2);
     });
   });
 });
@@ -418,7 +469,7 @@ describe("showing a target", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null },
+        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 },
       },
     }));
   }
@@ -546,7 +597,7 @@ describe("a message a notification rule raised", () => {
           messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
           unreadFrom: null,
           hasMore: true,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, historyLanded: 0
         },
       },
     }));
@@ -698,7 +749,7 @@ describe("a query whose other end renames", () => {
           messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, historyLanded: 0
         },
       },
       replyTo: { [OLD]: "msgid-1" },
@@ -1253,7 +1304,7 @@ describe("deleting a network", () => {
           messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, historyLanded: 0
         },
       },
     });

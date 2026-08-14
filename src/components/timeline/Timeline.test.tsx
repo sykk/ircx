@@ -893,6 +893,52 @@ describe("Timeline", () => {
         );
       });
 
+      /**
+       * And when nothing lands behind it either. The batch above is the whole
+       * of what that ask was answered with, so the oldest message the pane
+       * holds is the one the guard was armed with and stays that way: every
+       * later scroll is refused for a page that has already arrived and moved
+       * nothing. Only a reconnect clears it, which leaves the reader at the top
+       * of a conversation that says it has more and cannot be made to go and
+       * look.
+       *
+       * The `more` answer is what makes it safe to ask again. It is sent when
+       * the batch carrying that label has come back, so the ask the guard names
+       * is over by the time it is read — unlike `waiting`, where it has not
+       * even landed. What is behind the batch is a question nobody has put yet.
+       */
+      it("asks again when the page that answered it moved nothing", async () => {
+        ipcMock.pageBack.mockResolvedValue("more");
+        const page = older(60);
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        // The batch that ask was answered with, arriving off the server the way
+        // the answer says it already has, and carrying nothing the pane's own
+        // archive read had not given it.
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              network: "libera",
+              target: "#ctf-ops",
+              messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
+            },
+          ]);
+        });
+        ipcMock.loadHistory.mockResolvedValue([]);
+
+        await scrollAgain();
+
+        expect(ipcMock.pageBack).toHaveBeenCalledTimes(2);
+        expect(ipcMock.pageBack).toHaveBeenLastCalledWith(
+          "libera",
+          "#ctf-ops",
+          page[0]!.timestamp,
+          page[0]!.id,
+        );
+      });
+
       it("asks for the next one once it has landed", async () => {
         ipcMock.pageBack.mockResolvedValue("more");
         const page = older(60);

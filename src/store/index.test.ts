@@ -225,6 +225,52 @@ describe("paging backwards", () => {
 
       expect(timeline()!.askedBehind).toBe("msg-1");
     });
+
+    /**
+     * #522. The batch that answers the ask is what takes it off, and not the
+     * window's oldest message moving. A page carrying only rows the pane
+     * already holds moves that not at all — `#486`'s `CHATHISTORY LATEST` is a
+     * whole page of them — so a guard waiting on it waited for the rest of the
+     * run, refusing every scroll for a page that had already arrived.
+     */
+    const arrived = (messages: ChatMessage[]): IrcxEvent => ({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages,
+    });
+    const alreadyHeld = () => {
+      const message = makeMessage({ id: "msg-1", source: "serverHistory" });
+      useAppStore.getState().applyEvent(arrived([message]));
+      asked();
+      return message;
+    };
+
+    it("is answered by a page the window keeps nothing of", () => {
+      const message = alreadyHeld();
+      useAppStore.getState().applyEvent(arrived([message]));
+
+      expect(timeline()!.askedBehind).toBeNull();
+    });
+
+    /** And the same through the batching path, which `applyEvents` reads by. */
+    it("is answered by that page inside a batch", () => {
+      const message = alreadyHeld();
+      useAppStore.getState().applyEvents([arrived([message])]);
+
+      expect(timeline()!.askedBehind).toBeNull();
+    });
+
+    /** A channel does not go quiet because somebody is paging through it, and
+     * a line said at the live edge answers nothing. */
+    it("stands while what arrives is somebody talking", () => {
+      alreadyHeld();
+      useAppStore
+        .getState()
+        .applyEvents([arrived([makeMessage({ id: "live", timestamp: "2026-08-01T00:00:00.000Z" })])]);
+
+      expect(timeline()!.askedBehind).toBe("msg-1");
+    });
   });
 });
 

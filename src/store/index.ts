@@ -262,6 +262,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             ...(next.timelines[key] ?? EMPTY_TIMELINE),
             messages: capped(timeline.messages),
             unreadFrom: timeline.unreadFrom,
+            askedBehind: timeline.askedBehind,
           };
         }
         next = { ...next, timelines: held };
@@ -916,8 +917,29 @@ function applyRoster(roster: Map<string, Member>, event: RosterEvent): void {
 }
 
 /** What `applyEvents` builds for one conversation while a batch runs: the
- * messages it will hand the timeline, and where the seam landed on the way. */
-type HeldTimeline = { messages: ChatMessage[]; unreadFrom: string | null };
+ * messages it will hand the timeline, where the seam landed on the way, and
+ * whether the page somebody was waiting for arrived in it. */
+type HeldTimeline = {
+  messages: ChatMessage[];
+  unreadFrom: string | null;
+  askedBehind: string | null;
+};
+
+/** Whether this batch is the answer to a page-back, which is what takes the
+ * `#487` guard back off (#522).
+ *
+ * The guard used to come off by the window's oldest message moving, and a batch
+ * carrying only rows the pane already holds moves it not at all — `#486`'s
+ * `CHATHISTORY LATEST` is a whole page of exactly those. Held past its own
+ * answer, it refuses every later scroll for a page that has already arrived,
+ * and nothing short of a reconnect clears it.
+ *
+ * Server history rather than the batch being useful, then, because arriving is
+ * what the guard is waiting for. A live message at the other end of the
+ * conversation is not an answer to anything and leaves it armed. */
+function answersPageBack(event: Extract<IrcxEvent, { type: "messagesAppended" }>): boolean {
+  return event.messages.some((m) => m.source === "serverHistory");
+}
 
 /** Older messages stay in SQLite, so the window keeps its newest `TIMELINE_CAP`
  * and nothing else. */
@@ -953,13 +975,20 @@ function holdMessages(
     known.add(seen.id);
   }
   const fresh = event.messages.filter((m) => !known.has(m.id));
-  if (fresh.length === 0) return;
+  // A batch that answers a page-back is worth opening the conversation for even
+  // when every row of it is already held, because the guard comes off it.
+  const answered =
+    (held?.askedBehind ?? timeline.askedBehind) !== null && answersPageBack(event);
+  if (fresh.length === 0 && !answered) return;
 
   const opened = held ?? {
     messages: timeline.messages.slice(),
     unreadFrom: timeline.unreadFrom,
+    askedBehind: timeline.askedBehind,
   };
   if (!held) timelines.set(key, opened);
+  if (answered) opened.askedBehind = null;
+  if (fresh.length === 0) return;
 
   const last = opened.messages[opened.messages.length - 1];
   if (last && Date.parse(fresh[0]!.timestamp) < Date.parse(last.timestamp)) {
@@ -1076,7 +1105,14 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         known.add(held.id);
       }
       const fresh = event.messages.filter((m) => !known.has(m.id));
-      if (fresh.length === 0) return {};
+      const askedBehind =
+        timeline.askedBehind !== null && answersPageBack(event) ? null : timeline.askedBehind;
+      if (fresh.length === 0) {
+        // The answer to a page-back can be a batch the window keeps nothing of,
+        // and it is still the answer (#522).
+        if (askedBehind === timeline.askedBehind) return {};
+        return { timelines: { ...s.timelines, [key]: { ...timeline, askedBehind } } };
+      }
 
       const merged = mergeByTime(timeline.messages, fresh);
       const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
@@ -1096,6 +1132,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
             unreadFrom:
               timeline.unreadFrom ??
               (isActive || !seam || seam.sender.isSelf ? null : seam.id),
+            askedBehind,
           },
         },
       };

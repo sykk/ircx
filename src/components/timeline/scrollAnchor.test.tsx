@@ -43,6 +43,13 @@ interface Row {
    * that far below where their row starts (#535).
    */
   lines?: { id: string; within: number }[];
+  /**
+   * Whether the virtualiser is still carrying an estimate for this row, so the
+   * `scrollTop` it owes for the difference has not been written yet. A row
+   * remounted under a new key is in this state for a commit or more, and a block
+   * that has just merged a page into itself is remounted by definition.
+   */
+  unmeasured?: boolean;
 }
 
 function linesOf(row: Row): { id: string; within: number }[] {
@@ -65,6 +72,7 @@ function offsetsFor(layout: Row[]): Offsets {
       const row = holding(id);
       return row === undefined ? undefined : linesOf(row).find((l) => l.id === id)?.within;
     },
+    rowUnmeasured: (id) => holding(id)?.unmeasured ?? false,
   };
 }
 
@@ -346,6 +354,41 @@ describe("usePrependAnchor", () => {
     rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
 
     expect(el.scrollTop).toBe(400);
+  });
+
+  /**
+   * A height that stands still is not the measuring being over: the row the
+   * reader is inside can be one the virtualiser has yet to measure, and its
+   * correction is written a commit or more later.
+   *
+   * That row is the one a landing page merges into. It is remounted under the key
+   * of the message the page brought, so nothing has measured it, and a first
+   * measurement is compensated for in full wherever the row *starts* above the
+   * fold — the part of it drawn below the reader's line included. So the reader
+   * is dropped by everything the page added above them, on a commit the hold used
+   * to have ended on.
+   */
+  it("keeps the hold while the row the reader is inside has yet to be measured", () => {
+    const before = evenly(0, 1_000, "c", "d");
+    const landed = evenly(0, 1_000, "a", "b", "c", "d");
+    const pending = landed.map((row) => (row.id === "c" ? { ...row, unmeasured: true } : row));
+    const { getByTestId, rerender } = render(<Scroller messages={ids("c", "d")} layout={before} />);
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("c", "d")} layout={before} />);
+    scrollTo(el, 0);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={pending} />);
+    expect(el.scrollTop).toBe(2_000);
+
+    // Nothing measured differently on this commit, and the hold does not end on
+    // it: what the reader's own row owes has not been paid yet.
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={pending} />);
+    // Paid, and by the whole of the row rather than by the part above the fold.
+    scrollTo(el, 2_744);
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+
+    expect(el.scrollTop).toBe(2_000);
   });
 
   it("declines the second assertion once the reader has scrolled away from it", () => {

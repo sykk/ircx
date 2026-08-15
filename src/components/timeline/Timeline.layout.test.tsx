@@ -5,7 +5,7 @@ import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type { AppState } from "@/store/types";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
-import { ESTIMATED_ROW_PX, Timeline } from "./Timeline";
+import { ESTIMATED_ROW_PX, LOAD_OLDER_PX, Timeline } from "./Timeline";
 import { makeConversation, makeMessage } from "./fixtures";
 import { assignGroups } from "./groups";
 import { buildRows } from "./rows";
@@ -31,6 +31,13 @@ const { ipcMock, openExternalMock } = vi.hoisted(() => ({
 vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent: vi.fn(), openExternal: openExternalMock }));
 
 const KEY = targetKey("libera", "#ctf-ops");
+
+// A landing here is two hundred rows measured over as many commits as a browser
+// would take to measure them, and the model reports the first observation of
+// every one of them. That is 1.5x what the model cost when it did not, and the
+// slowest test in this file then runs past the default five seconds on a machine
+// running the rest of the suite beside it.
+vi.setConfig({ testTimeout: 20_000 });
 
 beforeAll(installLayout);
 
@@ -607,6 +614,111 @@ describe("a page that regroups the window it lands above", () => {
 
     // The row above the reader gave the name up, which is the line it lost.
     expect(rowOf(parked!, "line1100").querySelectorAll('[data-ui="group-name"]')).toHaveLength(0);
+    expect(eyeLine(parked!, watching)).toBe(before);
+  });
+});
+
+/**
+ * #535 in the pane that did not ask, which end-to-end run 31 could not park a
+ * pane for.
+ *
+ * The band it needs is real and narrow: a pane closer than `LOAD_OLDER_PX` to
+ * the top of its content asks for that page itself and is the asker, and a pane
+ * further down than the arriving page can reach holds nothing a merge could
+ * move. Run 31 tried to aim a wheel burst into it — 700 notches left the pane on
+ * line 0253, 750 on 0206, 850 on 0217 — and abandoned the parking on its own
+ * evidence.
+ *
+ * The two are only irreconcilable while a row is a message tall. A block of
+ * twenty is 400px of one row, so a reader sitting inside it is past the
+ * threshold and inside the row the page merges into at the same time — and that
+ * is the shape a channel talking in runs actually has.
+ */
+describe("a neighbour parked inside the run the arriving page merges into", () => {
+  /** A run long enough to sit inside: `historian` says the last eleven lines of
+   * the page and the first twenty of the window, so the block at the top of the
+   * window is 400px of row before the page has landed anything in it. */
+  function longRunAcrossTheBoundary(from: number, count: number): ChatMessage[] {
+    const started = Date.parse("2026-07-28T00:00:00.000Z");
+    return Array.from({ length: count }, (_, i) => {
+      const n = from + i;
+      const run = n >= 190 && n <= 220;
+      return makeMessage({
+        id: `line${n}`,
+        nick: run ? "historian" : ["archivist", "curator"][n % 2]!,
+        text: `line ${String(n).padStart(4, "0")} the reader is somewhere in this run`,
+        timestamp: new Date(started + n * 90).toISOString(),
+      });
+    });
+  }
+
+  it("holds the parked reader whose own row takes the page in", async () => {
+    seed(longRunAcrossTheBoundary(201, 400));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [reading, parked] = screen.getAllByTestId("timeline-scroller");
+    // Both panes open at the live edge, so the pane is walked back to the top of
+    // the window first — and stopped short of the threshold on the way, because
+    // a pane that reaches it asks for the page itself and is the asker.
+    parked!.scrollTop = LOAD_OLDER_PX + 200;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    const opening = parked!
+      .querySelector('[data-msgid="line201"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    // Inside that block and past the threshold, which is the whole of the band.
+    // Written as the block's own geometry rather than as a number: what a row
+    // measures is the model's to decide, and a test naming 450 would stop being
+    // about the band the day a line wrapped.
+    parked!.scrollTop = topOf(opening) + opening.offsetHeight - 100;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    expect(parked!.scrollTop).toBeGreaterThan(LOAD_OLDER_PX);
+    expect(topOf(opening)).toBeLessThan(parked!.scrollTop);
+    expect(topOf(opening) + opening.offsetHeight).toBeGreaterThan(parked!.scrollTop);
+
+    let land = () => {};
+    ipcMock.loadHistory.mockReturnValue(
+      new Promise<ChatMessage[]>((resolve) => {
+        land = () => resolve(longRunAcrossTheBoundary(1, 200));
+      }),
+    );
+
+    reading!.scrollTop = 100;
+    fireEvent.scroll(reading!);
+    flushLayout();
+
+    const watching = atTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+    // The reader's own line inside the merging row, which is the reading the
+    // fold cannot give: the fold names the row below this one.
+    const inside = eyeLine(parked!, "line201");
+
+    land();
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+    flushLayout();
+
+    // The merge, asserted rather than assumed: the block the reader is inside
+    // opens with a message the page brought.
+    expect(
+      parked!
+        .querySelector('[data-msgid="line201"]')!
+        .closest<HTMLElement>("[data-index]")!
+        .querySelector("[data-msgid]")!
+        .getAttribute("data-msgid"),
+    ).toBe("line190");
+
+    expect(eyeLine(parked!, "line201")).toBe(inside);
     expect(eyeLine(parked!, watching)).toBe(before);
   });
 });

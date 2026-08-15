@@ -117,6 +117,9 @@ function heightOf(el: HTMLElement): number {
   return VIEWPORT_PX;
 }
 
+/** A size no element has, for a target observed and not yet reported on. */
+const NEVER_REPORTED = -1;
+
 interface Observation {
   callback: ResizeObserverCallback;
   observer: ResizeObserver;
@@ -205,10 +208,19 @@ export function installLayout(): void {
     }
 
     observe(target: Element): void {
-      // At the size it already has: a browser reports one on observing, and the
-      // virtualiser has just measured this element itself. Reporting a change
-      // that did not happen would ask it to correct for a delta of zero.
-      this.watch.reported.set(target as HTMLElement, heightOf(target as HTMLElement));
+      // A browser delivers one entry per newly observed element, whatever its
+      // size, and the virtualiser needs it: its own measurement at mount is
+      // skipped while `isScrolling`, which in here is every commit that follows
+      // a scroll event, the timer that would clear it never running inside a
+      // synchronous flush. Suppressed, a row remounted under a new key — which
+      // is what a landing page merging into a block produces — keeps the
+      // estimated size for its slot and everything below it is drawn where a
+      // 46px row would have left it.
+      //
+      // `NEVER_REPORTED` rather than the size it has, so the next flush sees a
+      // change and delivers it. For an element the virtualiser did measure the
+      // delta is zero and `resizeItem` returns without doing anything.
+      this.watch.reported.set(target as HTMLElement, NEVER_REPORTED);
     }
 
     unobserve(target: Element): void {

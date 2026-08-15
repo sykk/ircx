@@ -270,6 +270,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         {selected === undefined ? (
           <MemberList
             members={members}
+            onSelect={(member) => setSelectedNick(member.nick)}
             onMenu={openMemberMenu}
             filter={filter ?? ""}
           />

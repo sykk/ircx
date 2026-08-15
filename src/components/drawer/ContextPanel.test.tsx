@@ -85,13 +85,19 @@ describe("filtering the roster", () => {
   it("shows member actions only from the context menu", () => {
     const row = screen.getByRole("listitem", { name: /phrack/ });
 
-    fireEvent.click(row);
     expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.contextMenu(row, { clientX: 40, clientY: 60 });
     expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Whois" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Give ops" })).toHaveProperty("disabled", false);
+  });
+
+  it("opens member details from the row", () => {
+    fireEvent.click(screen.getByRole("listitem", { name: /phrack/ }));
+
+    expect(useAppStore.getState().views[TEST_VIEW]?.selectedUser).toBe("phrack");
+    expect(screen.getByRole("button", { name: "Members" })).toBeTruthy();
   });
 
   it("opens on a typed character, carrying it", () => {

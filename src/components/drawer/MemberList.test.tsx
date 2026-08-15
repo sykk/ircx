@@ -25,7 +25,7 @@ afterAll(() => {
 
 function show(members = CTF_OPS_MEMBERS, filter = "") {
   return render(
-    <MemberList members={members} onMenu={vi.fn()} filter={filter} />,
+    <MemberList members={members} onSelect={vi.fn()} onMenu={vi.fn()} filter={filter} />,
   );
 }
 
@@ -47,12 +47,14 @@ function plain(count: number) {
 }
 
 describe("MemberList", () => {
-  it("opens member actions on right-click, not left-click", () => {
+  it("selects a member on left-click and opens actions on right-click", () => {
+    const onSelect = vi.fn();
     const onMenu = vi.fn();
-    render(<MemberList members={[member("sable")]} onMenu={onMenu} filter="" />);
+    render(<MemberList members={[member("sable")]} onSelect={onSelect} onMenu={onMenu} filter="" />);
     const row = screen.getByRole("listitem", { name: "sable" });
 
     fireEvent.click(row);
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ nick: "sable" }));
     expect(onMenu).not.toHaveBeenCalled();
 
     fireEvent.contextMenu(row, { clientX: 42, clientY: 64 });
@@ -61,7 +63,7 @@ describe("MemberList", () => {
 
   it("opens member actions from the keyboard context-menu chord", () => {
     const onMenu = vi.fn();
-    render(<MemberList members={[member("sable")]} onMenu={onMenu} filter="" />);
+    render(<MemberList members={[member("sable")]} onSelect={vi.fn()} onMenu={onMenu} filter="" />);
 
     fireEvent.keyDown(screen.getByRole("listitem", { name: "sable" }), {
       key: "F10",
@@ -69,6 +71,22 @@ describe("MemberList", () => {
     });
 
     expect(onMenu).toHaveBeenCalledOnce();
+  });
+
+  it.each(["Enter", " "])("selects a focused member with %s", (key) => {
+    const onSelect = vi.fn();
+    render(
+      <MemberList
+        members={[member("sable")]}
+        onSelect={onSelect}
+        onMenu={vi.fn()}
+        filter=""
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("listitem", { name: "sable" }), { key });
+
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ nick: "sable" }));
   });
 
   it("heads two groups with their counts, folding voice into members", () => {
@@ -213,7 +231,7 @@ describe("a filtered MemberList", () => {
     const { rerender } = show(plain(15), "nick1");
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
 
-    rerender(<MemberList members={plain(15)} onMenu={vi.fn()} filter="" />);
+    rerender(<MemberList members={plain(15)} onSelect={vi.fn()} onMenu={vi.fn()} filter="" />);
 
     expect(screen.getByRole("button", { name: "… and 5 more" })).toBeTruthy();
   });

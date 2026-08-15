@@ -57,7 +57,7 @@ describe("nick colour across surfaces", () => {
     "paints %s the same in the member list and the timeline",
     (nick) => {
       const roster = render(
-        <MemberRow member={member(nick)} onMenu={() => {}} />,
+        <MemberRow member={member(nick)} onSelect={() => {}} onMenu={() => {}} />,
       );
       // The block, because that is where the name is written: once, at the head
       // of its author's run.

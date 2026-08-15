@@ -1412,6 +1412,122 @@ fn two_rules_each_keep_their_own_raise() {
     );
 }
 
+/// The three tables hanging off a message are read for a whole page in one
+/// statement each, so what a page costs does not follow how long it is. What
+/// that puts at risk is which message a row lands on, and a page where most
+/// messages carry nothing is the ordinary one.
+#[test]
+fn a_page_gives_each_message_only_what_hangs_off_it() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            with_msgid(
+                message("x", "#ircx", "2026-01-01T00:00:00Z", "first"),
+                "111",
+            ),
+            with_msgid(
+                message("x", "#ircx", "2026-01-01T00:00:01Z", "second"),
+                "222",
+            ),
+            with_msgid(
+                message("x", "#ircx", "2026-01-01T00:00:02Z", "third"),
+                "333",
+            ),
+        ])
+        .unwrap();
+    for (nick, emoji) in [("nick2", "🎉"), ("nick3", "👀"), ("nick4", "🎉")] {
+        store
+            .set_reaction("libera", "111", nick, emoji, true)
+            .unwrap();
+    }
+    store
+        .set_reaction("libera", "333", "nick5", "👍", true)
+        .unwrap();
+    store
+        .set_annotation("libera", "333", "units", "22 C")
+        .unwrap();
+    store.set_raised("libera", "333", "oncall").unwrap();
+
+    let read = store.load_history(&history("#ircx", None, 10)).unwrap();
+    let shown: Vec<(&str, Vec<&str>)> = read[0]
+        .reactions
+        .iter()
+        .map(|held| {
+            (
+                held.emoji.as_str(),
+                held.nicks.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        vec![("🎉", vec!["nick2", "nick4"]), ("👀", vec!["nick3"])],
+        "grouped by value in arrival order, as they are for a page of one"
+    );
+    assert!(read[0].annotations.is_empty());
+    assert!(read[0].raised_by.is_empty());
+
+    assert!(read[1].reactions.is_empty(), "nothing hangs off the second");
+    assert!(read[1].annotations.is_empty());
+    assert!(read[1].raised_by.is_empty());
+
+    assert_eq!(read[2].reactions.len(), 1);
+    assert_eq!(read[2].reactions[0].emoji, "👍");
+    assert_eq!(read[2].annotations[0].text, "22 C");
+    assert_eq!(read[2].raised_by, vec!["oncall"]);
+}
+
+/// Two networks can hand out the same msgid, and a search spans them: it is
+/// the one read that can put two messages of that name in one page. They are
+/// asked for a network at a time, and this is what says so.
+#[test]
+fn one_msgid_on_two_networks_keeps_its_reactions_apart() {
+    let store = Store::open_in_memory().unwrap();
+    let mut elsewhere = with_msgid(
+        message("x", "#ircx", "2026-01-01T00:00:01Z", "the same msgid"),
+        "123",
+    );
+    elsewhere.network = "oftc".into();
+    store
+        .append_messages(&[
+            with_msgid(
+                message("x", "#ircx", "2026-01-01T00:00:00Z", "the same msgid"),
+                "123",
+            ),
+            elsewhere,
+        ])
+        .unwrap();
+    store
+        .set_reaction("libera", "123", "nick2", "🇦🇷", true)
+        .unwrap();
+    store
+        .set_reaction("oftc", "123", "nick3", "🇩🇪", true)
+        .unwrap();
+
+    let hits = store
+        .search(&SearchRequest {
+            query: "msgid".into(),
+            network: None,
+            target: None,
+            limit: 10,
+        })
+        .unwrap();
+    let found: Vec<(&str, Vec<&str>)> = hits
+        .iter()
+        .map(|hit| {
+            (
+                hit.message.network.as_str(),
+                hit.message
+                    .reactions
+                    .iter()
+                    .map(|held| held.emoji.as_str())
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(found, vec![("oftc", vec!["🇩🇪"]), ("libera", vec!["🇦🇷"])]);
+}
+
 /// A message nothing raised is the ordinary case, and says so by being empty
 /// rather than by carrying a third state.
 #[test]

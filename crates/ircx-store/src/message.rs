@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ircx_ipc::{Annotation, ChatMessage, Delivery, MessageSource, Reaction, Sender};
 use rusqlite::{params, Connection, Row, Transaction};
 
@@ -226,8 +228,77 @@ pub(crate) fn set_reaction(
     Ok(())
 }
 
-const REACTIONS: &str =
-    "SELECT nick, emoji FROM reactions WHERE network = ?1 AND msgid = ?2 ORDER BY id";
+/// How many msgids go into one `IN` list. SQLite takes far more bound
+/// parameters than this; the chunk is what stops a caller's own limit — which
+/// `search` takes from the user — deciding how large a statement gets.
+const KEYS_AT_A_TIME: usize = 500;
+
+/// Where in the page each `(network, msgid)` is, which is what the answer to
+/// one statement has to be fanned back out over.
+///
+/// A key can name more than one row. A search reads whichever conversations
+/// match, so the same message can arrive twice in one set of results, and both
+/// copies want what hangs off it.
+fn positions<'a>(
+    messages: &'a [ChatMessage],
+    key: fn(&'a ChatMessage) -> &'a str,
+) -> HashMap<(&'a str, &'a str), Vec<usize>> {
+    let mut at: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
+    for (index, message) in messages.iter().enumerate() {
+        at.entry((message.network.as_str(), key(message)))
+            .or_default()
+            .push(index);
+    }
+    at
+}
+
+/// Asks one of the tables hanging off a message for the whole page at once,
+/// and hands every row back with the network it was read under.
+///
+/// The three of them were a statement per message until #526: six hundred
+/// executions for a 200-row page, most of them answering nothing, and three
+/// quarters of what reading the page cost. `docs/measurements.md` has the
+/// figures. All three tables are keyed by `(network, msgid)`, so a page is one
+/// `IN` list per network it names.
+///
+/// The list is bound parameters rather than text, and `{msgids}` in the
+/// statement is where they go. It is chunked because a page's size is the
+/// caller's, and a statement's is not something a caller should be choosing.
+fn rows_for_page(
+    conn: &Connection,
+    sql: &str,
+    at: &HashMap<(&str, &str), Vec<usize>>,
+    mut take: impl FnMut(&str, &Row<'_>) -> Result<(), StoreError>,
+) -> Result<(), StoreError> {
+    let mut by_network: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (network, msgid) in at.keys() {
+        by_network.entry(network).or_default().push(msgid);
+    }
+
+    for (network, msgids) in by_network {
+        for chunk in msgids.chunks(KEYS_AT_A_TIME) {
+            let list = (0..chunk.len())
+                .map(|index| format!("?{}", index + 2))
+                .collect::<Vec<_>>()
+                .join(", ");
+            // Cached, because a reader paging back through a conversation asks
+            // for the same page size every time, which is the same statement
+            // text with the same two hundred placeholders in it.
+            let mut stmt = conn.prepare_cached(&sql.replace("{msgids}", &list))?;
+            let mut bound: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(chunk.len() + 1);
+            bound.push(&network);
+            bound.extend(chunk.iter().map(|msgid| msgid as &dyn rusqlite::ToSql));
+            let mut rows = stmt.query(bound.as_slice())?;
+            while let Some(row) = rows.next()? {
+                take(network, row)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+const REACTIONS: &str = "SELECT msgid, nick, emoji FROM reactions
+     WHERE network = ?1 AND msgid IN ({msgids}) ORDER BY id";
 
 /// Fills in the reactions for messages already read. Grouped by value in the
 /// order the first of each arrived, and the nicks within a value likewise, so
@@ -236,22 +307,25 @@ pub(crate) fn attach_reactions(
     conn: &Connection,
     messages: &mut [ChatMessage],
 ) -> Result<(), StoreError> {
-    let mut stmt = conn.prepare_cached(REACTIONS)?;
-    for message in messages {
-        let (network, key) = (message.network.clone(), reaction_key(message).to_string());
-        let mut rows = stmt.query(params![network, key])?;
-        let mut reactions: Vec<Reaction> = Vec::new();
-        while let Some(row) = rows.next()? {
-            let nick: String = row.get(0)?;
-            let emoji: String = row.get(1)?;
+    let at = positions(messages, reaction_key);
+    let mut filled: Vec<Vec<Reaction>> = vec![Vec::new(); messages.len()];
+    rows_for_page(conn, REACTIONS, &at, |network, row| {
+        let msgid: String = row.get(0)?;
+        let nick: String = row.get(1)?;
+        let emoji: String = row.get(2)?;
+        for index in at.get(&(network, msgid.as_str())).into_iter().flatten() {
+            let reactions = &mut filled[*index];
             match reactions.iter_mut().find(|held| held.emoji == emoji) {
-                Some(held) => held.nicks.push(nick),
+                Some(held) => held.nicks.push(nick.clone()),
                 None => reactions.push(Reaction {
-                    emoji,
-                    nicks: vec![nick],
+                    emoji: emoji.clone(),
+                    nicks: vec![nick.clone()],
                 }),
             }
         }
+        Ok(())
+    })?;
+    for (message, reactions) in messages.iter_mut().zip(filled) {
         message.reactions = reactions;
     }
     Ok(())
@@ -272,8 +346,8 @@ pub(crate) fn set_annotation(
     Ok(())
 }
 
-const ANNOTATIONS: &str =
-    "SELECT plugin, text FROM annotations WHERE network = ?1 AND msgid = ?2 ORDER BY plugin";
+const ANNOTATIONS: &str = "SELECT msgid, plugin, text FROM annotations
+     WHERE network = ?1 AND msgid IN ({msgids}) ORDER BY plugin";
 
 /// Fills in the notes for messages already read. Ordered by plugin rather than
 /// by arrival, because two annotators race and a reader should not find the
@@ -282,17 +356,20 @@ pub(crate) fn attach_annotations(
     conn: &Connection,
     messages: &mut [ChatMessage],
 ) -> Result<(), StoreError> {
-    let mut stmt = conn.prepare_cached(ANNOTATIONS)?;
-    for message in messages {
-        let (network, key) = (message.network.clone(), message.id.clone());
-        let mut rows = stmt.query(params![network, key])?;
-        let mut annotations = Vec::new();
-        while let Some(row) = rows.next()? {
-            annotations.push(Annotation {
-                plugin: row.get(0)?,
-                text: row.get(1)?,
-            });
+    let at = positions(messages, |message| message.id.as_str());
+    let mut filled: Vec<Vec<Annotation>> = vec![Vec::new(); messages.len()];
+    rows_for_page(conn, ANNOTATIONS, &at, |network, row| {
+        let msgid: String = row.get(0)?;
+        let annotation = Annotation {
+            plugin: row.get(1)?,
+            text: row.get(2)?,
+        };
+        for index in at.get(&(network, msgid.as_str())).into_iter().flatten() {
+            filled[*index].push(annotation.clone());
         }
+        Ok(())
+    })?;
+    for (message, annotations) in messages.iter_mut().zip(filled) {
         message.annotations = annotations;
     }
     Ok(())
@@ -311,7 +388,8 @@ pub(crate) fn set_raised(
     Ok(())
 }
 
-const RAISED: &str = "SELECT plugin FROM raised WHERE network = ?1 AND msgid = ?2 ORDER BY plugin";
+const RAISED: &str = "SELECT msgid, plugin FROM raised
+     WHERE network = ?1 AND msgid IN ({msgids}) ORDER BY plugin";
 
 /// Fills in who raised each message on a page already read, ordered by plugin
 /// for the reason the notes are.
@@ -319,14 +397,17 @@ pub(crate) fn attach_raised(
     conn: &Connection,
     messages: &mut [ChatMessage],
 ) -> Result<(), StoreError> {
-    let mut stmt = conn.prepare_cached(RAISED)?;
-    for message in messages {
-        let (network, key) = (message.network.clone(), message.id.clone());
-        let mut rows = stmt.query(params![network, key])?;
-        let mut raised = Vec::new();
-        while let Some(row) = rows.next()? {
-            raised.push(row.get(0)?);
+    let at = positions(messages, |message| message.id.as_str());
+    let mut filled: Vec<Vec<String>> = vec![Vec::new(); messages.len()];
+    rows_for_page(conn, RAISED, &at, |network, row| {
+        let msgid: String = row.get(0)?;
+        let plugin: String = row.get(1)?;
+        for index in at.get(&(network, msgid.as_str())).into_iter().flatten() {
+            filled[*index].push(plugin.clone());
         }
+        Ok(())
+    })?;
+    for (message, raised) in messages.iter_mut().zip(filled) {
         message.raised_by = raised;
     }
     Ok(())

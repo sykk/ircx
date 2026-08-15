@@ -456,6 +456,47 @@ waiting for, and the *Startup* table above did not move.
 > old figure as a regression this caused; read it as a number that outlived what
 > it measured, which is what this file exists to prevent.
 
+### What reading a page of history costs
+
+**Measured 2026-08-14** by `crates/ircx-store/tests/history_page.rs`, which is
+ignored by default and says how to run it. Release profile, a 100,000-message
+archive of one conversation on `TMPDIR`, medians of nine, both columns taken on
+the same machine in the same sitting. The frontend pages back in 200s, so that
+is the size every row here is about.
+
+| `load_history` | before #526 | after |
+|---|---|---|
+| the newest 200, some carrying reactions and notes | 2.25 ms | 0.86 ms |
+| 200 at 1,000 messages back | 2.31 ms | 0.90 ms |
+| 200 at 10,000 back | 3.01 ms | 1.61 ms |
+| 200 at 50,000 back | 7.57 ms | 6.21 ms |
+| 200 at 90,000 back | 11.88 ms | 10.55 ms |
+| 10 at 50,000 back | 5.34 ms | 5.30 ms |
+
+**Two costs, and #526 is only the first of them.** A page is read and then
+filled in from the three tables that hang off a message, and those three passes
+were a statement per message — 600 executions for a 200-row page, whether or
+not anything hung off it. Instrumented separately on the before build:
+
+```text
+read 0.50 ms   reactions 0.63 ms   annotations 0.58 ms   raised 0.56 ms
+```
+
+1.77 ms of the 2.25 ms, which is what the fix takes off every page at every
+depth: the saving is a flat 1.4 ms rather than a proportion.
+
+**The rest follows how far back the reader has paged**, and is #527. Ten rows at
+50,000 back cost six times two hundred rows at the head, because almost none of
+that is the page — the `(?3 IS NULL OR …)` in the page-back filter is a
+disjunction, so the index cannot serve it and every page-back walks the whole
+distance again. Roughly 0.11 ms per thousand messages skipped, unchanged by
+this measurement's fix.
+
+**Not measured:** any of this on a machine under load, which is where
+`docs/end-to-end-run-17.md` argued it matters — it named these three passes as
+what CPU contention stretches, and the walks that motivated the argument were
+run against a build that had them.
+
 ### What the second search index costs
 
 **Measured 2026-08-03.** #378 gave the archive a second FTS5 index over the

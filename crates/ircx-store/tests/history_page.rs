@@ -23,19 +23,60 @@
 //!   the whole distance again. Both filters' plans are printed rather than
 //!   argued, so the arm says why it costs what it does and not only what.
 //!
+//! Both of those were taken on an idle machine over a file the kernel held
+//! entirely, which is the best case and neither of the two the argument was
+//! about. Two more arms are what the first figure's *Not measured* named:
+//!
+//! - **Under load**, because that is what run 17 claimed the read was
+//!   sensitive to. Its walks contended for CPU and nothing else — the profile
+//!   is on tmpfs and the server is a local socket — so the arm leaves twice the
+//!   cores spinning and reads the same pages again.
+//! - **Off a cold archive**, because every figure here was taken seconds after
+//!   the fill wrote the file. `page_cache` takes the cache off it between
+//!   rounds, the same way `cold_archive.rs` does for the export, and the page
+//!   is read through a connection opened after the drop so that SQLite's own
+//!   cache is not what answers.
+//!
 //! ```text
 //! cargo test --release -p ircx-store --test history_page -- --ignored --nocapture
+//!
+//! TMPDIR=/some/path/on/a/disk \
+//!   cargo test --release -p ircx-store --test history_page -- --ignored --nocapture cold
 //! ```
+//!
+//! The cold arm needs that `TMPDIR`: a tmpfs *is* the page cache and cannot be
+//! taken off it, and the arm says so rather than reporting two warm numbers.
+//!
+//! The *before* columns in `docs/measurements.md` are this probe against the
+//! commit before #526, which is how a build that has neither fix is read on the
+//! same machine in the same sitting:
+//!
+//! ```text
+//! git checkout 2dd01c4 -- crates/ircx-store/src/lib.rs crates/ircx-store/src/message.rs
+//! # build, run the arms above, then
+//! git checkout HEAD -- crates/ircx-store/src/lib.rs crates/ircx-store/src/message.rs
+//! ```
+//!
+//! Its quiet figures are what say the control is the build it claims to be:
+//! they land on the ones the *before* column was first taken with, to three
+//! digits.
 //!
 //! It prints and asserts nothing about the timings, like `cold_archive.rs`: a
 //! measurement that fails the build on a busy machine is one nobody runs.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::{available_parallelism, JoinHandle};
 use std::time::{Duration, Instant};
 
 use ircx_ipc::{
     ChatMessage, Delivery, EncryptionState, HistoryRequest, MessageKind, MessageSource, Sender,
 };
 use ircx_store::Store;
+
+mod page_cache;
+
+use page_cache::{evict_archive, eviction_failed, held, page_size};
 
 /// Enough rounds that one run of a busy machine cannot carry a figure.
 const ROUNDS: usize = 9;
@@ -182,6 +223,90 @@ fn timed(store: &Store, what: &str, before: Option<String>, limit: u32) {
     );
 }
 
+fn cores() -> usize {
+    available_parallelism()
+        .map(|cores| cores.get())
+        .unwrap_or(1)
+}
+
+/// How many threads to leave spinning for the loaded arm.
+///
+/// Twice the cores, which is what the walks behind run 17's argument ran under:
+/// enough that every reader waits for a core rather than finding one free, and
+/// not so many that the machine is only measuring its own scheduler.
+fn spinners() -> usize {
+    std::env::var("IRCX_SPINNERS")
+        .ok()
+        .and_then(|said| said.parse().ok())
+        .unwrap_or_else(|| cores() * 2)
+}
+
+/// Threads that do nothing but hold a core, until this is dropped.
+struct Contention {
+    stop: Arc<AtomicBool>,
+    threads: Vec<JoinHandle<()>>,
+}
+
+impl Contention {
+    fn of(count: usize) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let threads = (0..count)
+            .map(|_| {
+                let stop = Arc::clone(&stop);
+                std::thread::spawn(move || {
+                    let mut burning = 0u64;
+                    while !stop.load(Ordering::Relaxed) {
+                        // Arithmetic the optimiser is not allowed to fold away,
+                        // and nothing the archive's pages or locks can see.
+                        burning = std::hint::black_box(
+                            burning
+                                .wrapping_mul(6_364_136_223_846_793_005)
+                                .wrapping_add(1),
+                        );
+                    }
+                })
+            })
+            .collect();
+        Self { stop, threads }
+    }
+}
+
+impl Drop for Contention {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        for thread in self.threads.drain(..) {
+            thread.join().expect("a spinner stops");
+        }
+    }
+}
+
+/// Every arm of the reading, so that a pass under load reads the same pages in
+/// the same order as the quiet one it is set against.
+fn arms(store: &Store, count: usize) {
+    // At the head, where the three passes have rows to return and where the
+    // pair of limits says whether what a page costs follows its size.
+    timed(store, "newest page, with rows", None, PAGE);
+    timed(store, "a twentieth of it, with rows", None, PAGE / 20);
+
+    // And down the archive, where nothing carries a row and the only thing
+    // changing is how far back the reader has paged.
+    for depth in [1_000, 10_000, 50_000, 90_000] {
+        if depth >= count {
+            continue;
+        }
+        let before = Some(stamp(count - depth));
+        timed(
+            store,
+            &format!("{depth} back, no rows"),
+            before.clone(),
+            PAGE,
+        );
+        if depth == 50_000 {
+            timed(store, "  a twentieth of it, no rows", before, PAGE / 20);
+        }
+    }
+}
+
 /// What SQLite says it will do with the page-back, which is where a cost that
 /// follows the depth rather than the page size has to be read.
 ///
@@ -229,26 +354,101 @@ fn what_a_page_of_history_costs() {
     plan(&archive, "(?3 IS NULL OR m.timestamp < ?3)");
     plan(&archive, "m.timestamp < ?3");
 
-    // At the head, where the three passes have rows to return and where the
-    // pair of limits says whether what a page costs follows its size.
-    timed(&store, "newest page, with rows", None, PAGE);
-    timed(&store, "a twentieth of it, with rows", None, PAGE / 20);
+    println!("  on a quiet machine:");
+    arms(&store, count);
 
-    // And down the archive, where nothing carries a row and the only thing
-    // changing is how far back the reader has paged.
-    for depth in [1_000, 10_000, 50_000, 90_000] {
-        if depth >= count {
-            continue;
-        }
-        let before = Some(stamp(count - depth));
-        timed(
-            &store,
-            &format!("{depth} back, no rows"),
-            before.clone(),
-            PAGE,
+    let spinning = spinners();
+    println!("\n  under {spinning} spinners on {} cores:", cores());
+    let contention = Contention::of(spinning);
+    arms(&store, count);
+    drop(contention);
+}
+
+/// The same pages, read off an archive the kernel is holding none of.
+///
+/// A round drops the cache and then opens the store again, because the
+/// connection that read the last round has SQLite's own page cache behind it
+/// and would answer from there. The open is not timed; it faults in the header
+/// and the schema, which is what the client's own launch pays for and not what
+/// a page costs. What each round counts instead is the pages the read itself
+/// brings in.
+///
+/// Warm is taken in the same round, through a connection opened the same way
+/// over the pages the cold read just faulted in, so the pair differs by the
+/// cache and by nothing else.
+#[test]
+#[ignore = "writes a large archive to a temp file and reads pages off it with the page cache dropped"]
+fn what_a_page_of_history_costs_off_a_cold_archive() {
+    let count = archived_count();
+    let home = tempfile::tempdir().expect("a directory to archive into");
+    let archive = home.path().join("ircx.sqlite3");
+    {
+        let store = Store::open_without_keyring(&archive).expect("the archive opens");
+        fill(&store, count);
+        furnish(&store, count);
+        println!(
+            "  reactions, notes and raised rows on every {FURNISHED_EVERY}th of the newest {PAGE}"
         );
-        if depth == 50_000 {
-            timed(&store, "  a twentieth of it, no rows", before, PAGE / 20);
+    }
+
+    evict_archive(&archive);
+    let after = held(&archive);
+    if eviction_failed(after) {
+        println!(
+            "\n  the eviction left {} of {} pages resident — this run measured nothing.",
+            after.0, after.1
+        );
+        println!("  TMPDIR is a tmpfs, which is the page cache and cannot be taken off it.");
+        return;
+    }
+    println!(
+        "  the archive is {} pages, of which the eviction left {}\n",
+        after.1, after.0
+    );
+
+    let mut reading = vec![("newest page, with rows".to_string(), None)];
+    for depth in [10_000, 50_000] {
+        if depth < count {
+            reading.push((format!("{depth} back, no rows"), Some(stamp(count - depth))));
         }
+    }
+
+    for (what, before) in reading {
+        let mut cold = Vec::new();
+        let mut warm = Vec::new();
+        let mut faulted = Vec::new();
+        let mut rows = 0;
+
+        for _ in 0..ROUNDS {
+            evict_archive(&archive);
+            let store = Store::open_without_keyring(&archive).expect("the archive opens");
+            let opened = held(&archive).0;
+            let (took, read) = page(&store, before.clone(), PAGE);
+            faulted.push(held(&archive).0.saturating_sub(opened));
+            cold.push(took);
+            rows = read;
+            drop(store);
+
+            let store = Store::open_without_keyring(&archive).expect("the archive opens");
+            warm.push(page(&store, before.clone(), PAGE).0);
+        }
+
+        faulted.sort();
+        let pages = faulted[faulted.len() / 2];
+        let spread = |taken: &[Duration]| {
+            let low = taken.iter().min().expect("a round").as_secs_f64() * 1_000.0;
+            let high = taken.iter().max().expect("a round").as_secs_f64() * 1_000.0;
+            format!("({low:.3}–{high:.3})")
+        };
+        let (spreads, warms) = (spread(&cold), spread(&warm));
+        let (cold, warm) = (median(cold), median(warm));
+        println!(
+            "  {what:<24} {rows:>4} rows  cold {:>6.3} ms {spreads:<17} \
+             warm {:>6.3} ms {warms:<17} {:>4.1}x, faulting {pages} pages ({} KiB)",
+            cold.as_secs_f64() * 1_000.0,
+            warm.as_secs_f64() * 1_000.0,
+            cold.as_secs_f64() / warm.as_secs_f64(),
+            pages * page_size() / 1_024,
+        );
     }
 }

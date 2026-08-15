@@ -81,6 +81,7 @@ export interface AppActions {
    * server said or the protocol log. */
   openConsole: (network: string, raw?: boolean) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
+  replaceHistory: (key: TargetKey, messages: ChatMessage[]) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   /** Records the message the server has been asked for the page behind, so the
    * next scroll can tell its own request from the one already out (#487). */
@@ -88,6 +89,7 @@ export interface AppActions {
   clearUnreadMarker: (key: TargetKey) => void;
 
   setViewAnchor: (view: ViewId, row: string | null) => void;
+  setMessageJump: (view: ViewId, message: string | null) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
   setViewRaw: (view: ViewId, raw: boolean) => void;
   /** Holds one console pane's command box. Both fields together: sending clears
@@ -182,6 +184,7 @@ const initialState: AppState = {
   channelList: {},
   views: {},
   viewAnchor: {},
+  messageJump: {},
   consoleInput: {},
   rawAnchor: {},
   composerError: {},
@@ -379,6 +382,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { viewAnchor: { ...s.viewAnchor, [view]: row } };
     }),
 
+  setMessageJump: (view, message) =>
+    set((s) => {
+      if (!s.views[view]) return {};
+      const messageJump = { ...s.messageJump };
+      if (message === null) delete messageJump[view];
+      else messageJump[view] = message;
+      return { messageJump };
+    }),
+
   setViewSelectedUser: (view, nick) =>
     set((s) => {
       const current = s.views[view];
@@ -571,6 +583,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         },
       };
     }),
+
+  replaceHistory: (key, messages) =>
+    set((s) => ({
+      timelines: {
+        ...s.timelines,
+        [key]: { ...EMPTY_TIMELINE, messages },
+      },
+    })),
 
   setLoadingOlder: (key, loading) =>
     set((s) => ({

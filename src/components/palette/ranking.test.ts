@@ -51,6 +51,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     inputHistory: {},
     views: {},
     viewAnchor: {},
+    messageJump: {},
     consoleInput: {},
     rawAnchor: {},
     composerError: {},

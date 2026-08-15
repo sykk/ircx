@@ -6,7 +6,13 @@ import type { ChatMessage, SearchHit } from "@/types";
 import { SearchOverlay, snippetSegments } from "./SearchOverlay";
 
 const searchHistory = vi.fn();
-vi.mock("@/lib/ipc", () => ({ ipc: { searchHistory: (req: unknown) => searchHistory(req) } }));
+const loadHistoryAround = vi.fn();
+vi.mock("@/lib/ipc", () => ({
+  ipc: {
+    searchHistory: (req: unknown) => searchHistory(req),
+    loadHistoryAround: (...args: unknown[]) => loadHistoryAround(...args),
+  },
+}));
 
 function message(id: string, text: string): ChatMessage {
   return {
@@ -45,6 +51,8 @@ const hits: SearchHit[] = [
 beforeEach(() => {
   searchHistory.mockReset();
   searchHistory.mockResolvedValue(hits);
+  loadHistoryAround.mockReset();
+  loadHistoryAround.mockResolvedValue(hits.map((hit) => hit.message));
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     searchOpen: true,
@@ -111,7 +119,7 @@ describe("SearchOverlay", () => {
     expect(screen.getByText(/got the/)).toBeTruthy();
   });
 
-  it("moves through hits and jumps to the one chosen", async () => {
+  it("moves through hits and jumps to the exact message chosen", async () => {
     render(<SearchOverlay />);
     type("lfi");
     await screen.findAllByRole("option");
@@ -121,8 +129,11 @@ describe("SearchOverlay", () => {
 
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
 
+    await waitFor(() => expect(useAppStore.getState().searchOpen).toBe(false));
+    expect(loadHistoryAround).toHaveBeenCalledWith("libera", "#ctf-ops", "2", 200);
     expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
-    expect(useAppStore.getState().searchOpen).toBe(false);
+    const view = useAppStore.getState().activeViewId!;
+    expect(useAppStore.getState().messageJump[view]).toBe("2");
   });
 
   it("closes on Escape", () => {

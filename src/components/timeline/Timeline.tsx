@@ -4,8 +4,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { probe } from "@/lib/probe";
+import { displayChord, DEFAULT_BINDINGS, type ActionId } from "@/lib/keybindings";
+import { useHotkeys } from "@/hooks/useHotkeys";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
-import { targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
+import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
 import { assignGroups } from "./groups";
@@ -56,6 +58,7 @@ interface TimelineForProps {
 
 function TimelineFor({ view, network, target }: TimelineForProps) {
   const timeline = useTimelineForView(view);
+  const active = useAppStore((s) => s.activeViewId === view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const highlightWords = useAppStore((s) => s.highlightWords);
   // One object, so everything below decides loudness from the same pair rather
@@ -84,9 +87,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // reading it as a subscription would fight every scroll event with a stale
   // value. Cleared when the pane is back where it was and the reader has it.
   const restoreTo = useRef(useAppStore.getState().viewAnchor[view] ?? null);
-  const followingRef = useRef(restoreTo.current === null);
-
   const { messages, unreadFrom } = timeline;
+  const followingRef = useRef(restoreTo.current === null && unreadFrom === null);
+  const [caughtUp, setCaughtUp] = useState(unreadFrom === null);
+  const mentionCursor = useRef(-1);
 
   // Who is in the channel, which is what tells an address from a colon.
   const members = useMembers(network, target);
@@ -104,6 +108,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     () => buildRows(messages, unreadFrom, highlight, groups, roster),
     [messages, unreadFrom, highlight, groups, roster],
   );
+  const seam = rows.find((row) => row.kind === "unread")?.seam ?? null;
+  const unreadAt = rows.findIndex((row) => row.kind === "unread");
+  const mentions = useMemo(() => {
+    if (unreadFrom === null) return [];
+    const start = messages.findIndex((message) => message.id === unreadFrom);
+    if (start === -1) return [];
+    return messages.slice(start).filter((message) => isHighlight(message, highlight, roster));
+  }, [messages, unreadFrom, highlight, roster]);
   // A `+reply` names its parent the way the server does, and for a message we
   // sent that is the `msgid` tag its echo carried, not the local id the UI drew
   // it with. Both names have to reach the same message or a reply to your own
@@ -438,6 +450,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     if (restoreTo.current !== null) return;
     const following = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
     followingRef.current = following;
+    if (following && seam !== null) setCaughtUp(true);
     // The row at the top of the screen, not the offset it happens to sit at: a
     // rebuilt pane comes back a different width, where the same offset is a
     // different message. A pane at the live edge has no row to name — it wants
@@ -453,7 +466,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       .getState()
       .setViewAnchor(view, top === undefined ? null : (rows[top.index]?.id ?? null));
     if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder, view, rows, virtualizer, recordAnchor]);
+  }, [loadOlder, view, rows, virtualizer, recordAnchor, seam]);
 
   const jump = useCallback(
     (msgid: string) => {
@@ -469,6 +482,49 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     },
     [byId, rows, virtualizer],
   );
+
+  const jumpUnread = useCallback(() => {
+    if (unreadAt === -1) return;
+    followingRef.current = false;
+    setCaughtUp(false);
+    virtualizer.scrollToIndex(unreadAt, { align: "start" });
+  }, [unreadAt, virtualizer]);
+
+  const jumpMention = useCallback(() => {
+    if (mentions.length === 0) return;
+    mentionCursor.current = (mentionCursor.current + 1) % mentions.length;
+    jump(mentions[mentionCursor.current]!.id);
+  }, [jump, mentions]);
+
+  const jumpLatest = useCallback(() => {
+    if (rows.length === 0) return;
+    followingRef.current = true;
+    setCaughtUp(true);
+    useAppStore.getState().setViewAnchor(view, null);
+    virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
+  }, [rows.length, view, virtualizer]);
+
+  useHotkeys({
+    "timeline.unread": () => {
+      if (!active || unreadAt === -1) return false;
+      jumpUnread();
+    },
+    "timeline.nextMention": () => {
+      if (!active || mentions.length === 0) return false;
+      jumpMention();
+    },
+    "timeline.latest": () => {
+      if (!active || rows.length === 0) return false;
+      jumpLatest();
+    },
+  });
+
+  const placedAtUnread = useRef(false);
+  useLayoutEffect(() => {
+    if (placedAtUnread.current || unreadAt === -1 || restoreTo.current !== null) return;
+    placedAtUnread.current = true;
+    virtualizer.scrollToIndex(unreadAt, { align: "start" });
+  }, [unreadAt, virtualizer]);
 
   useEffect(() => {
     if (!flashId) return;
@@ -499,7 +555,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-ui="timeline">
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
           onScroll={onScroll}
@@ -556,9 +612,78 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
             </div>
           )}
         </div>
+        {!caughtUp && seam !== null && (
+          <CatchUpControls
+            messages={seam.messages}
+            mentions={mentions.length}
+            onUnread={jumpUnread}
+            onMention={jumpMention}
+            onLatest={jumpLatest}
+          />
+        )}
       </div>
 
       <TypingIndicator network={network} target={target} />
+    </div>
+  );
+}
+
+function shortcut(action: ActionId): string {
+  const binding = DEFAULT_BINDINGS.find((candidate) => candidate.action === action);
+  return binding ? displayChord(binding.chord) : "";
+}
+
+function CatchUpControls({
+  messages,
+  mentions,
+  onUnread,
+  onMention,
+  onLatest,
+}: {
+  messages: number;
+  mentions: number;
+  onUnread: () => void;
+  onMention: () => void;
+  onLatest: () => void;
+}) {
+  return (
+    <div
+      className="absolute right-3 bottom-3 flex items-center overflow-hidden rounded border text-[11px] shadow-[var(--shadow-overlay)]"
+      style={{
+        borderColor: "var(--border-strong)",
+        background: "var(--surface-raised)",
+        color: "var(--text-muted)",
+      }}
+      aria-label="Unread messages"
+    >
+      <button
+        type="button"
+        className="px-2.5 py-1.5 hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)]"
+        onClick={onUnread}
+        title={`Unread messages (${shortcut("timeline.unread")})`}
+      >
+        {messages} unread
+      </button>
+      {mentions > 0 && (
+        <button
+          type="button"
+          className="border-l px-2.5 py-1.5 hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)]"
+          style={{ borderColor: "var(--border-subtle)", color: "var(--divider-unread)" }}
+          onClick={onMention}
+          title={`Next mention (${shortcut("timeline.nextMention")})`}
+        >
+          {mentions} {mentions === 1 ? "mention" : "mentions"}
+        </button>
+      )}
+      <button
+        type="button"
+        className="border-l px-2.5 py-1.5 hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)]"
+        style={{ borderColor: "var(--border-subtle)", color: "var(--accent)" }}
+        onClick={onLatest}
+        title={`Latest message (${shortcut("timeline.latest")})`}
+      >
+        Latest
+      </button>
     </div>
   );
 }

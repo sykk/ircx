@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Composer } from "@/components/composer/Composer";
 import { ContextPanel } from "@/components/drawer/ContextPanel";
@@ -21,6 +21,9 @@ export function ChatPane({ view }: { view: ViewId | null }) {
   // a query has nobody to list and draws no column at all.
   const hidden = useAppStore((s) => (view ? s.rosterHidden[view] === true : true));
   const ref = useRef<HTMLElement>(null);
+  const conversation = pane?.network ? `${pane.network}\0${pane.target}` : null;
+  const [catchUpFor, setCatchUpFor] = useState<string | null>(null);
+  const catchUp = conversation !== null && catchUpFor === conversation;
 
   // A pane opened by a split arrives focused, so the caret follows into it.
   // Later focus changes are left alone: clicking into a pane to read or select
@@ -68,9 +71,13 @@ export function ChatPane({ view }: { view: ViewId | null }) {
         </div>
       ) : (
         <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)_auto]">
-          <ChannelHeader view={view} />
+          <ChannelHeader
+            view={view}
+            catchUp={catchUp}
+            onCatchUp={() => setCatchUpFor(catchUp ? null : conversation)}
+          />
           <div className="col-start-1 row-start-3 min-h-0 min-w-0">
-            <Timeline view={view} />
+            <Timeline view={view} catchUp={catchUp} />
           </div>
           {!hidden && (
             <div className="col-start-2 row-start-2 row-end-4 min-h-0">

@@ -7,9 +7,17 @@ import type { ViewId } from "@/store/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ClosePaneButton } from "./ClosePaneButton";
 import { HeaderButton } from "./HeaderButton";
-import { ChevronIcon, MembersIcon, OverflowIcon, SearchIcon } from "./icons";
+import { CatchUpIcon, ChevronIcon, MembersIcon, OverflowIcon, SearchIcon } from "./icons";
 
-export function ChannelHeader({ view }: { view: ViewId | null }) {
+export function ChannelHeader({
+  view,
+  catchUp = false,
+  onCatchUp,
+}: {
+  view: ViewId | null;
+  catchUp?: boolean;
+  onCatchUp?: () => void;
+}) {
   const channel = useChannelForView(view);
   const network = useNetwork(channel?.network);
   // The channel name carries the focus indicator, so an unfocused pane reads a
@@ -78,6 +86,17 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
         </span>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          {onCatchUp && (
+            <HeaderButton
+              label="Catch up"
+              title="Show mentions, replies, reactions, and important events"
+              pressed={catchUp}
+              onClick={onCatchUp}
+            >
+              <CatchUpIcon size={16} />
+            </HeaderButton>
+          )}
+
           <HeaderButton
             label="Toggle member list"
             title="Member list (Ctrl+Shift+M)"

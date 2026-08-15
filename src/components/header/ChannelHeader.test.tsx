@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -40,6 +40,16 @@ describe("ChannelHeader", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     expect(screen.getByRole("heading", { name: CTF_OPS.name })).toBeTruthy();
     expect(screen.getByText("16 members")).toBeTruthy();
+  });
+
+  it("exposes the catch-up filter as a pressed header action", () => {
+    const onCatchUp = vi.fn();
+    render(<ChannelHeader view={TEST_VIEW} catchUp onCatchUp={onCatchUp} />);
+
+    const button = screen.getByRole("button", { name: "Catch up" });
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button);
+    expect(onCatchUp).toHaveBeenCalledOnce();
   });
 
   /** #345: the topic crossed every layer and no component drew it, so it was

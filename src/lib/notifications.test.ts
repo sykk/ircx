@@ -22,7 +22,7 @@ const BOTH: Notifications = { highlights: true, directMessages: true };
 type Appended = Extract<IrcxEvent, { type: "messagesAppended" }>;
 
 function appended(target: string, message: ChatMessage): Appended {
-  return { type: "messagesAppended", network: "libera", target, messages: [message] };
+  return { type: "messagesAppended", answers: null, network: "libera", target, messages: [message] };
 }
 
 /** The reader is `sable`, in one channel and one query, looking at neither. */

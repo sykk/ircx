@@ -132,7 +132,7 @@ function seedTimelines(timelines: AppState["timelines"]) {
 }
 
 function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
-  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 } });
+  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null } });
 }
 
 /** A second pane on the same channel, as a split would open. `anchor` is the
@@ -469,6 +469,7 @@ describe("Timeline", () => {
     act(() => {
       useAppStore.getState().applyEvent({
         type: "messagesAppended",
+        answers: null,
         network: "libera",
         target: "#ctf-ops",
         messages: Array.from({ length: 15 }, (_, i) => line(`help${i}`, 19)),
@@ -486,7 +487,7 @@ describe("Timeline", () => {
         messages: makeConversation({ count: 20, seed: 6 }),
         unreadFrom: null,
         hasMore: false,
-        loadingOlder: false, askedBehind: null, historyLanded: 0
+        loadingOlder: false, askedBehind: null
       },
     });
     render(<Timeline view={TEST_VIEW} />);
@@ -652,6 +653,7 @@ describe("Timeline", () => {
         "#ctf-ops",
         page[0]!.timestamp,
         page[0]!.id,
+        page[0]!.id,
       );
     });
 
@@ -686,6 +688,7 @@ describe("Timeline", () => {
       act(() => {
         useAppStore.getState().applyEvent({
           type: "messagesAppended",
+          answers: null,
           network: "libera",
           target: "#ctf-ops",
           messages: history,
@@ -707,6 +710,7 @@ describe("Timeline", () => {
         "libera",
         "#ctf-ops",
         history[0]!.timestamp,
+        history[0]!.id,
         history[0]!.id,
       );
       expect(useAppStore.getState().timelines[KEY]!.askedBehind).toBe(history[0]!.id);
@@ -746,6 +750,7 @@ describe("Timeline", () => {
       act(() => {
         useAppStore.getState().applyEvent({
           type: "messagesAppended",
+          answers: null,
           network: "libera",
           target: "#ctf-ops",
           messages: history,
@@ -763,6 +768,7 @@ describe("Timeline", () => {
         "libera",
         "#ctf-ops",
         history[0]!.timestamp,
+        history[0]!.id,
         history[0]!.id,
       );
       // The history did not end here, and the pane may still be read back.
@@ -815,8 +821,8 @@ describe("Timeline", () => {
       };
 
       /** The page, arriving the way the server's history does: in front of the
-       * oldest message the pane holds. */
-      const land = (before: ChatMessage, count = 200) => {
+       * oldest message the pane holds, naming the ask it answers. */
+      const land = (before: ChatMessage, answers: string | null = null, count = 200) => {
         const messages = Array.from({ length: count }, (_, i) =>
           makeMessage({
             id: `landed-${i}`,
@@ -831,7 +837,7 @@ describe("Timeline", () => {
           useAppStore
             .getState()
             .applyEvents([
-              { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages },
+              { type: "messagesAppended", answers, network: "libera", target: "#ctf-ops", messages },
             ]);
         });
         return messages;
@@ -881,7 +887,7 @@ describe("Timeline", () => {
           useAppStore
             .getState()
             .applyEvents([
-              { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages: page },
+              { type: "messagesAppended", answers: null, network: "libera", target: "#ctf-ops", messages: page },
             ]);
         });
         const landed = land(page[0]!);
@@ -892,6 +898,7 @@ describe("Timeline", () => {
           "libera",
           "#ctf-ops",
           landed[0]!.timestamp,
+          landed[0]!.id,
           landed[0]!.id,
         );
       });
@@ -919,12 +926,13 @@ describe("Timeline", () => {
         await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
 
         // The batch that ask was answered with, arriving off the server the way
-        // the answer says it already has, and carrying nothing the pane's own
-        // archive read had not given it.
+        // the answer says it already has, naming the ask it belongs to and
+        // carrying nothing the pane's own archive read had not given it.
         act(() => {
           useAppStore.getState().applyEvents([
             {
               type: "messagesAppended",
+              answers: page[0]!.id,
               network: "libera",
               target: "#ctf-ops",
               messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
@@ -944,9 +952,9 @@ describe("Timeline", () => {
       /**
        * And the reader is not told that where a page is still coming. The same
        * batch, landing before the answer to the ask it belongs to — which is
-       * the ordinary order, core emitting the messages before the outcome —
-       * reads identically from inside `loadOlder`, and is told apart by the
-       * count of pages this conversation has taken rather than by hoping.
+       * the ordinary order, core emitting the messages before the outcome — is
+       * read the same way round: the guard is armed before the ask goes out, so
+       * the batch that names it finds it armed whichever channel arrives first.
        */
       it("stops paging when that page landed before the answer did", async () => {
         const page = older(60);
@@ -963,6 +971,7 @@ describe("Timeline", () => {
           useAppStore.getState().applyEvents([
             {
               type: "messagesAppended",
+              answers: page[0]!.id,
               network: "libera",
               target: "#ctf-ops",
               messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
@@ -995,6 +1004,7 @@ describe("Timeline", () => {
           useAppStore.getState().applyEvents([
             {
               type: "messagesAppended",
+              answers: null,
               network: "libera",
               target: "#ctf-ops",
               messages: page.map((m) => ({ ...m, source: "serverHistory" as const })),
@@ -1029,7 +1039,54 @@ describe("Timeline", () => {
           "#ctf-ops",
           landed[0]!.timestamp,
           landed[0]!.id,
+          landed[0]!.id,
         );
+      });
+
+      /**
+       * #540. The round trip's deadline is 60s and the answer outlives it —
+       * `answered_in_time` reads passing it as "nothing failed, the answer may
+       * still arrive" — so a reader who gave up and asked again has two
+       * page-backs outstanding and is sent both answers. The late one carries
+       * the page its replacement already delivered, and lands against the guard
+       * armed for the question after that.
+       *
+       * Read as the answer to that question, it said the server had nothing
+       * behind a message it was never asked about: "Beginning of history" over
+       * a conversation whose next page was in flight, and every later scroll
+       * refused for the rest of the run.
+       */
+      it("keeps paging when what lands answers an ask two questions old", async () => {
+        ipcMock.pageBack.mockResolvedValue("more");
+        const page = older(60);
+        await readToTheStart(page);
+        await waitFor(() => expect(ipcMock.pageBack).toHaveBeenCalledTimes(1));
+
+        // The answer to that ask, and the reader scrolls on behind it.
+        const landed = land(page[0]!, page[0]!.id);
+        ipcMock.loadHistory.mockResolvedValue([]);
+        await scrollAgain();
+        await waitFor(() =>
+          expect(useAppStore.getState().timelines[KEY]!.askedBehind).toBe(landed[0]!.id),
+        );
+
+        // The page the pane gave up on, arriving at last: every row of it is
+        // held, and it names the ask it was made for rather than this one.
+        act(() => {
+          useAppStore.getState().applyEvents([
+            {
+              type: "messagesAppended",
+              answers: page[0]!.id,
+              network: "libera",
+              target: "#ctf-ops",
+              messages: landed.map((m) => ({ ...m, source: "serverHistory" as const })),
+            },
+          ]);
+        });
+
+        expect(useAppStore.getState().timelines[KEY]!.hasMore).toBe(true);
+        expect(screen.queryByText("Beginning of history")).toBeNull();
+        expect(useAppStore.getState().timelines[KEY]!.askedBehind).toBe(landed[0]!.id);
       });
 
       /** A channel does not go quiet because somebody is paging through it, and
@@ -1043,6 +1100,7 @@ describe("Timeline", () => {
           useAppStore.getState().applyEvents([
             {
               type: "messagesAppended",
+              answers: null,
               network: "libera",
               target: "#ctf-ops",
               messages: [makeMessage({ id: "live", timestamp: "2026-08-01T00:00:00.000Z" })],
@@ -1125,6 +1183,7 @@ describe("Timeline", () => {
           useAppStore.getState().applyEvents([
             {
               type: "messagesAppended",
+              answers: null,
               network: "libera",
               target: "#ctf-ops",
               messages: [
@@ -1197,6 +1256,7 @@ describe("Timeline", () => {
         "#ctf-ops",
         page[0]!.timestamp,
         null,
+        page[0]!.id,
       );
     });
   });
@@ -1278,7 +1338,7 @@ describe("Timeline", () => {
       act(() => {
         useAppStore
           .getState()
-          .applyEvent({ type: "messagesAppended", network: "libera", target: "#ctf-ops", messages });
+          .applyEvent({ type: "messagesAppended", answers: null, network: "libera", target: "#ctf-ops", messages });
       });
 
     it("leaves the reader where they were when it lands below them", () => {

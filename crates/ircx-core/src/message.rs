@@ -171,6 +171,7 @@ impl SessionState {
             network: self.config.network.clone(),
             target: target.clone(),
             messages: vec![message],
+            answers: None,
         });
         // After the emit, so the conversation is drawn before any rule runs.
         if !ask.is_empty() {
@@ -228,6 +229,7 @@ impl SessionState {
             network: self.config.network.clone(),
             target: target.to_string(),
             messages,
+            answers: None,
         });
     }
 
@@ -276,11 +278,15 @@ impl SessionState {
         // both are `chathistory` batches naming the same conversation, and both
         // can be in flight at once — a reconnect backfills a channel while
         // somebody is reading up through it.
-        let paged_back = batch
-            .label
-            .as_ref()
-            .filter(|label| self.page_backs.contains(*label))
-            .cloned();
+        // With the label, what the reader called the ask: the batch goes out
+        // carrying it, so that a pane holding two page-backs can tell which of
+        // them this one answers (#540).
+        let paged_back = batch.label.as_ref().and_then(|label| {
+            self.page_backs
+                .get(label)
+                .map(|ask| (label.clone(), ask.clone()))
+        });
+        let answers = paged_back.as_ref().map(|(_, ask)| ask.as_str());
         // Every message in such a batch belongs to that one answer, so how much
         // of it arrived is the batch's own size.
         let paged_arrived = batch.messages.len() as u32;
@@ -362,11 +368,11 @@ impl SessionState {
             }
             self.remember_newest(&message);
             if run.last().is_some_and(|last| last.target != message.target) {
-                self.flush_run(&mut run, live);
+                self.flush_run(&mut run, live, answers);
             }
             run.push(message);
         }
-        self.flush_run(&mut run, live);
+        self.flush_run(&mut run, live, answers);
         let limit = self.page_limit();
         for (target, arrived, page) in filled {
             // Short of the limit is the end of the gap. Exactly the limit is the
@@ -383,7 +389,7 @@ impl SessionState {
                 }
             }
         }
-        if let Some(label) = paged_back {
+        if let Some((label, _)) = paged_back {
             self.page_backs.remove(&label);
             // The same reading a gap's page gets: short of the limit is the
             // server's history running out, and a full page has another behind
@@ -464,7 +470,7 @@ impl SessionState {
         }
     }
 
-    fn flush_run(&mut self, run: &mut Vec<ChatMessage>, live: bool) {
+    fn flush_run(&mut self, run: &mut Vec<ChatMessage>, live: bool, answers: Option<&str>) {
         let Some(target) = run.first().map(|message| message.target.clone()) else {
             return;
         };
@@ -479,6 +485,7 @@ impl SessionState {
             network: self.config.network.clone(),
             target: target.clone(),
             messages,
+            answers: answers.map(str::to_owned),
         });
         // After the emit, so the conversation is drawn before any rule runs.
         if !ask.is_empty() {

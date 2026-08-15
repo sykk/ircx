@@ -56,7 +56,6 @@ const EMPTY_TIMELINE: TimelineState = {
   hasMore: true,
   loadingOlder: false,
   askedBehind: null,
-  historyLanded: 0,
 };
 
 /** Sequential rather than random so a test can name the view it just opened. */
@@ -265,7 +264,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             unreadFrom: timeline.unreadFrom,
             askedBehind: timeline.askedBehind,
             hasMore: timeline.hasMore,
-            historyLanded: timeline.historyLanded,
           };
         }
         next = { ...next, timelines: held };
@@ -934,43 +932,34 @@ type HeldTimeline = {
   unreadFrom: string | null;
   askedBehind: string | null;
   hasMore: boolean;
-  historyLanded: number;
 };
-
-/** Whether this batch is a page of the server's own history, which is what the
- * pane waiting on a page-back is waiting for (#522).
- *
- * The guard used to come off by the window's oldest message moving, and a batch
- * carrying only rows the pane already holds moves it not at all — `#486`'s
- * `CHATHISTORY LATEST` is a whole page of exactly those. Held past its own
- * answer it refused every later scroll, and nothing short of a reconnect
- * cleared it.
- *
- * Server history rather than the batch being useful, then, because arriving is
- * what is being waited for. A live message at the other end of the conversation
- * is not an answer to anything and leaves the guard armed. */
-function isServerHistory(event: Extract<IrcxEvent, { type: "messagesAppended" }>): boolean {
-  return event.messages.some((m) => m.source === "serverHistory");
-}
 
 /** What a landing page does to the conversation that asked for one.
  *
- * `askedBehind` is only ever armed for an ask that reached the server and whose
- * answer had not crossed yet, so a batch arriving against an armed guard is
- * that answer. It comes off either way; what the batch carried decides whether
- * there is anything left to ask for. Nothing new means the server has nothing
- * behind that message — the pane stops paging and says where the history ends,
- * rather than refusing every later scroll in silence. */
+ * The guard comes off when the page it names arrives, whether or not the window
+ * kept any of it: a page carrying only rows the pane already holds moves no
+ * message for the guard to come off by, and waiting for one to move refused
+ * every later scroll for a page that had arrived (#522).
+ *
+ * Which page that is, the batch says. Two page-backs can be outstanding on one
+ * conversation — a reader who gave up on the first asked again — and both are
+ * answered, so a batch was read as the answer to whichever ask happened to be
+ * armed when it landed. That ended the history behind a message the server was
+ * never asked about, and left the pane refusing to page for the rest of the run
+ * (#540).
+ *
+ * Nothing new in the page this ask named is the server saying it has nothing
+ * behind that message, whatever the page's size said about fullness: the pane
+ * stops paging and says where the history ends, rather than refusing every
+ * later scroll in silence. */
 function afterHistoryLanded(
-  timeline: Pick<TimelineState, "askedBehind" | "hasMore" | "historyLanded">,
+  timeline: Pick<TimelineState, "askedBehind" | "hasMore">,
   fresh: number,
-): Pick<TimelineState, "askedBehind" | "hasMore" | "historyLanded"> {
-  const answered = timeline.askedBehind !== null;
-  return {
-    historyLanded: timeline.historyLanded + 1,
-    askedBehind: null,
-    hasMore: answered && fresh === 0 ? false : timeline.hasMore,
-  };
+  answers: string | null,
+): Pick<TimelineState, "askedBehind" | "hasMore"> {
+  const answered = timeline.askedBehind !== null && answers === timeline.askedBehind;
+  if (!answered) return { askedBehind: timeline.askedBehind, hasMore: timeline.hasMore };
+  return { askedBehind: null, hasMore: fresh === 0 ? false : timeline.hasMore };
 }
 
 /** Older messages stay in SQLite, so the window keeps its newest `TIMELINE_CAP`
@@ -1007,21 +996,20 @@ function holdMessages(
     known.add(seen.id);
   }
   const fresh = event.messages.filter((m) => !known.has(m.id));
-  // A page of history is worth opening the conversation for even when every row
-  // of it is already held, because its arriving is what the pane waiting on one
-  // is waiting for.
-  const history = isServerHistory(event);
-  if (fresh.length === 0 && !history) return;
+  // The page a pane is waiting on is worth opening the conversation for even
+  // when every row of it is already held, because its arriving is what is being
+  // waited for (#522).
+  const answering = event.answers !== null;
+  if (fresh.length === 0 && !answering) return;
 
   const opened = held ?? {
     messages: timeline.messages.slice(),
     unreadFrom: timeline.unreadFrom,
     askedBehind: timeline.askedBehind,
     hasMore: timeline.hasMore,
-    historyLanded: timeline.historyLanded,
   };
   if (!held) timelines.set(key, opened);
-  if (history) Object.assign(opened, afterHistoryLanded(opened, fresh.length));
+  if (answering) Object.assign(opened, afterHistoryLanded(opened, fresh.length, event.answers));
   if (fresh.length === 0) return;
 
   const last = opened.messages[opened.messages.length - 1];
@@ -1139,8 +1127,8 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         known.add(held.id);
       }
       const fresh = event.messages.filter((m) => !known.has(m.id));
-      const history = isServerHistory(event);
-      const landed = history ? afterHistoryLanded(timeline, fresh.length) : null;
+      const answering = event.answers !== null;
+      const landed = answering ? afterHistoryLanded(timeline, fresh.length, event.answers) : null;
       if (fresh.length === 0) {
         // A page the window keeps nothing of is still a page that arrived, and
         // for a pane waiting on one that is the whole of what it was waiting

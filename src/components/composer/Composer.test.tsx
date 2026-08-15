@@ -383,7 +383,7 @@ describe("Composer replying", () => {
               ],
               unreadFrom: null,
               hasMore: false,
-              loadingOlder: false, askedBehind: null, historyLanded: 0
+              loadingOlder: false, askedBehind: null
             },
           }
         : {},
@@ -676,7 +676,7 @@ function queue(pending: number) {
     return message;
   });
   useAppStore.setState({
-    timelines: { [KEY]: { messages, unreadFrom: null, hasMore: false, loadingOlder: false, askedBehind: null, historyLanded: 0 } },
+    timelines: { [KEY]: { messages, unreadFrom: null, hasMore: false, loadingOlder: false, askedBehind: null } },
   });
 }
 

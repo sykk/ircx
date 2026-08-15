@@ -190,6 +190,11 @@ pub enum SessionCommand {
         target: TargetName,
         from: String,
         msgid: Option<String>,
+        /// What the reader calls this ask. Carried through untouched and put
+        /// back on the batch that answers it, so that the answer to an ask
+        /// somebody has given up on is not read as the answer to the one they
+        /// put next (#540).
+        ask: String,
         reply: oneshot::Sender<PageBackOutcome>,
     },
     Snapshot {
@@ -632,9 +637,10 @@ async fn apply(
             target,
             from,
             msgid,
+            ask,
             reply,
         } => {
-            let (asked, actions) = session.page_back(&target, &from, msgid.as_deref());
+            let (asked, actions) = session.page_back(&target, &from, msgid.as_deref(), ask);
             match asked {
                 PageBack::Asked(label) => {
                     context.waiting_readers().insert(label, reply);
@@ -1560,6 +1566,7 @@ mod tests {
                             network: "test".into(),
                             target: "#burst".into(),
                             messages: vec![said("a")],
+                            answers: None,
                         })),
                         Action::Emit(Box::new(IrcxEvent::MessageUpdated {
                             message: Box::new(settled),

@@ -306,10 +306,16 @@ pub struct SessionState {
     /// rather than merely never seen, which is the whole of the difference to
     /// the unread count.
     pub(crate) gap_fills: HashMap<String, GapFill>,
-    /// The labels of the page-back requests still waiting for a batch. Labels
-    /// rather than conversations, because two panes on one channel can be
-    /// scrolled back at once and each is waiting for its own answer.
-    pub(crate) page_backs: HashSet<String>,
+    /// The page-back requests still waiting for a batch, by the label that will
+    /// name the answer. Labels rather than conversations, because two panes on
+    /// one channel can be scrolled back at once and each is waiting for its own
+    /// answer — and one pane can have two outstanding, having given up on the
+    /// first and asked again (#540).
+    ///
+    /// The value is what the reader called the ask. It means nothing here; it
+    /// goes back out on the batch that answers, which is the only place the two
+    /// can be told apart.
+    pub(crate) page_backs: HashMap<String, String>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
     ///
@@ -359,7 +365,7 @@ impl SessionState {
             archived: HashMap::new(),
             away_since: None,
             gap_fills: HashMap::new(),
-            page_backs: HashSet::new(),
+            page_backs: HashMap::new(),
             first_pages: HashSet::new(),
         }
     }
@@ -1188,11 +1194,21 @@ impl SessionState {
         target: &str,
         from: &str,
         msgid: Option<&str>,
+        ask: String,
     ) -> (PageBack, Vec<Action>) {
-        (self.ask_for_page_back(target, from, msgid), self.drain())
+        (
+            self.ask_for_page_back(target, from, msgid, ask),
+            self.drain(),
+        )
     }
 
-    fn ask_for_page_back(&mut self, target: &str, from: &str, msgid: Option<&str>) -> PageBack {
+    fn ask_for_page_back(
+        &mut self,
+        target: &str,
+        from: &str,
+        msgid: Option<&str>,
+        ask: String,
+    ) -> PageBack {
         if !self.caps.is_enabled("draft/chathistory") || !self.caps.is_enabled("labeled-response") {
             return PageBack::Refused;
         }
@@ -1213,7 +1229,7 @@ impl SessionState {
         let Some(line) = history::before(target, resume, limit, Some(&label)) else {
             return PageBack::Refused;
         };
-        self.page_backs.insert(label.clone());
+        self.page_backs.insert(label.clone(), ask);
         self.send_line(line);
         PageBack::Asked(label)
     }
@@ -2665,7 +2681,7 @@ impl SessionState {
         // an unknown msgid or a selector it cannot resolve comes back as.
         if kind == "FAIL" {
             if let Some(label) = message.tag("label") {
-                if self.page_backs.remove(label) {
+                if self.page_backs.remove(label).is_some() {
                     self.actions.push(Action::PagedBack {
                         label: label.to_string(),
                         more: false,
@@ -2740,7 +2756,7 @@ impl SessionState {
         // the next connection will answer nothing under the old label. Telling
         // them there is no more to reach is wrong by one page and unsticks the
         // pane; leaving it would stop that conversation ever paging again.
-        for label in self.page_backs.drain() {
+        for (label, _) in self.page_backs.drain() {
             self.actions.push(Action::PagedBack { label, more: false });
         }
         // The batches that would have cleared these are among the ones

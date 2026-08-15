@@ -159,6 +159,11 @@ pub async fn load_history(
 /// another may be behind it, or that the server has not said yet; the messages
 /// arrive as `messagesAppended` on their way through the archive, the same as
 /// any other history.
+///
+/// `ask` is the caller's own name for this request, and comes back on the batch
+/// that answers it. The answer outlives the deadline this waits on — a reader
+/// who gave up and asked again has two of these outstanding, and only the batch
+/// says which is which (#540).
 #[tauri::command]
 pub async fn page_back(
     app: State<'_, App>,
@@ -166,12 +171,14 @@ pub async fn page_back(
     target: TargetName,
     from: String,
     msgid: Option<String>,
+    ask: String,
 ) -> Result<PageBackOutcome, String> {
     let answer = app
         .ask_server(&network, |reply| SessionCommand::PageBack {
             target,
             from,
             msgid,
+            ask,
             reply,
         })
         .await?;

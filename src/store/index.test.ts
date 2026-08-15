@@ -41,6 +41,7 @@ describe("the echo of a message you sent", () => {
 
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [optimistic],
@@ -67,6 +68,7 @@ describe("the echo of a message you sent", () => {
     const { applyEvent } = useAppStore.getState();
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [
@@ -136,7 +138,7 @@ describe("paging backwards", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null, historyLanded: 0 },
+        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null },
       },
     }));
 
@@ -171,6 +173,7 @@ describe("paging backwards", () => {
     );
     useAppStore.getState().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: yesterday,
@@ -233,13 +236,14 @@ describe("paging backwards", () => {
      * whole page of them — so a guard waiting on it waited for the rest of the
      * run, refusing every scroll for a page that had already arrived.
      *
-     * And it is only ever armed for an ask that went to a server and was not
-     * answered yet, so a page landing against an armed one is that answer:
-     * nothing in it means the server has nothing behind that message, and the
-     * paging stops rather than the asking resuming.
+     * Where the history ends is the answer's own to say, and a batch says which
+     * ask it answers: nothing in the one this pane is waiting on means the
+     * server has nothing behind that message, and the paging stops rather than
+     * the asking resuming (#540).
      */
-    const arrived = (messages: ChatMessage[]): IrcxEvent => ({
+    const arrived = (messages: ChatMessage[], answers: string | null = null): IrcxEvent => ({
       type: "messagesAppended",
+      answers,
       network: "libera",
       target: "#ctf-ops",
       messages,
@@ -253,7 +257,7 @@ describe("paging backwards", () => {
 
     it("is answered by a page the window keeps nothing of", () => {
       const message = alreadyHeld();
-      useAppStore.getState().applyEvent(arrived([message]));
+      useAppStore.getState().applyEvent(arrived([message], "msg-1"));
 
       expect(timeline()!.askedBehind).toBeNull();
       expect(timeline()!.hasMore).toBe(false);
@@ -262,7 +266,7 @@ describe("paging backwards", () => {
     /** And the same through the batching path, which `applyEvents` reads by. */
     it("is answered by that page inside a batch", () => {
       const message = alreadyHeld();
-      useAppStore.getState().applyEvents([arrived([message])]);
+      useAppStore.getState().applyEvents([arrived([message], "msg-1")]);
 
       expect(timeline()!.askedBehind).toBeNull();
       expect(timeline()!.hasMore).toBe(false);
@@ -273,13 +277,16 @@ describe("paging backwards", () => {
     it("is answered by a page that carried history, without ending it", () => {
       alreadyHeld();
       useAppStore.getState().applyEvents([
-        arrived([
-          makeMessage({
-            id: "older-1",
-            source: "serverHistory",
-            timestamp: "2026-07-01T00:00:00.000Z",
-          }),
-        ]),
+        arrived(
+          [
+            makeMessage({
+              id: "older-1",
+              source: "serverHistory",
+              timestamp: "2026-07-01T00:00:00.000Z",
+            }),
+          ],
+          "msg-1",
+        ),
       ]);
 
       expect(timeline()!.askedBehind).toBeNull();
@@ -309,18 +316,30 @@ describe("paging backwards", () => {
       expect(timeline()!.hasMore).toBe(true);
     });
 
-    /** The count the asker reads to tell an answer from an answer that has not
-     * crossed yet. Pages only — what somebody says is not a page. */
-    it("counts the pages of history this conversation has taken", () => {
-      const message = makeMessage({ id: "msg-1", source: "serverHistory" });
-      useAppStore.getState().applyEvent(arrived([message]));
-      expect(timeline()!.historyLanded).toBe(1);
+    /** A page-back the client gave up on is answered all the same: the round
+     * trip's deadline is 60s and `answered_in_time` reads passing it as
+     * "nothing failed, the answer may still arrive". So the reader asks again,
+     * the server answers both, and the second answer carries the page the
+     * first one already delivered — against a guard armed for the question
+     * after it. Nothing in it is new, and this concluded the server had
+     * nothing behind a message it was never asked about. */
+    it("does not end the history on the answer to an ask two questions old", () => {
+      const page = [
+        makeMessage({
+          id: "older-1",
+          source: "serverHistory",
+          timestamp: "2026-07-01T00:00:00.000Z",
+        }),
+      ];
+      useAppStore.getState().applyEvent(arrived(page, "msg-1"));
+      // The reader scrolls on, and the next ask goes out behind the page that
+      // landed rather than behind the message that page was asked for.
+      useAppStore.getState().setAskedBehind(KEY, "older-1");
+      // The answer to the ask they gave up on, arriving last and naming it.
+      useAppStore.getState().applyEvent(arrived(page, "msg-1"));
 
-      useAppStore.getState().applyEvents([arrived([message])]);
-      expect(timeline()!.historyLanded).toBe(2);
-
-      useAppStore.getState().applyEvent(arrived([makeMessage({ id: "said" })]));
-      expect(timeline()!.historyLanded).toBe(2);
+      expect(timeline()!.hasMore).toBe(true);
+      expect(timeline()!.askedBehind).toBe("older-1");
     });
   });
 });
@@ -345,6 +364,7 @@ describe("a reaction", () => {
   beforeEach(() => {
     useAppStore.getState().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [makeMessage({ id: "123" })],
@@ -398,6 +418,7 @@ describe("a reaction", () => {
     });
     useAppStore.getState().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [ours],
@@ -469,7 +490,7 @@ describe("showing a target", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 },
+        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null },
       },
     }));
   }
@@ -597,7 +618,7 @@ describe("a message a notification rule raised", () => {
           messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
           unreadFrom: null,
           hasMore: true,
-          loadingOlder: false, askedBehind: null, historyLanded: 0
+          loadingOlder: false, askedBehind: null
         },
       },
     }));
@@ -657,12 +678,14 @@ describe("a backfill of what was said while nobody was here", () => {
     const { applyEvent } = useAppStore.getState();
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [makeMessage({ id: "live", timestamp: "2026-07-30T13:10:00.000Z" })],
     });
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [
@@ -678,6 +701,7 @@ describe("a backfill of what was said while nobody was here", () => {
     const { applyEvent } = useAppStore.getState();
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [
@@ -687,6 +711,7 @@ describe("a backfill of what was said while nobody was here", () => {
     });
     applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [
@@ -706,6 +731,7 @@ describe("a backfill of what was said while nobody was here", () => {
   it("does not move the seam that says where looking stopped", () => {
     useAppStore.getState().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [backfilled("old-1", "2026-07-30T12:00:00.000Z")],
@@ -717,6 +743,7 @@ describe("a backfill of what was said while nobody was here", () => {
   it("leaves the seam on the first live message in the same batch", () => {
     useAppStore.getState().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [
@@ -749,7 +776,7 @@ describe("a query whose other end renames", () => {
           messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null, historyLanded: 0
+          loadingOlder: false, askedBehind: null
         },
       },
       replyTo: { [OLD]: "msgid-1" },
@@ -1304,7 +1331,7 @@ describe("deleting a network", () => {
           messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
           unreadFrom: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null, historyLanded: 0
+          loadingOlder: false, askedBehind: null
         },
       },
     });
@@ -1481,6 +1508,7 @@ describe("a batch of arriving messages", () => {
     // Arrives in the pane showing it, so it is read and leaves no seam.
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#hackint",
       messages: [said("b1", "2026-07-30T13:00:00.000Z")],
@@ -1488,18 +1516,21 @@ describe("a batch of arriving messages", () => {
     { type: "channelRemoved", network: "libera", name: "#hackint" },
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#hackint",
       messages: [said("b2", "2026-07-30T13:01:00.000Z")],
     },
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#hackint",
       messages: [said("b2", "2026-07-30T13:01:00.000Z"), said("b3", "2026-07-30T13:02:00.000Z")],
     },
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#hackint",
       messages: [said("h0", "2026-07-30T12:59:00.000Z", { source: "serverHistory" })],
@@ -1512,12 +1543,14 @@ describe("a batch of arriving messages", () => {
     // seam — but it does not stop the answer from opening one either.
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [mine("c0", "2026-07-30T13:03:00.000Z")],
     },
     {
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [makeMessage({ id: "c1", timestamp: "2026-07-30T13:04:00.000Z" })],
@@ -1571,6 +1604,7 @@ describe("a batch of arriving messages", () => {
     seed();
     store().applyEvent({
       type: "messagesAppended",
+      answers: null,
       network: "libera",
       target: "#ctf-ops",
       messages: [c1],
@@ -1580,12 +1614,13 @@ describe("a batch of arriving messages", () => {
     store().applyEvents([
       {
         type: "messagesAppended",
+        answers: null,
         network: "libera",
         target: "#hackint",
         messages: [said("b1", "2026-07-30T13:04:00.000Z")],
       },
       // An echo of what it already holds is not news either.
-      { type: "messagesAppended", network: "libera", target: "#ctf-ops", messages: [c1] },
+      { type: "messagesAppended", answers: null, network: "libera", target: "#ctf-ops", messages: [c1] },
     ]);
 
     expect(store().timelines[targetKey("libera", "#ctf-ops")]).toBe(before);

@@ -1,0 +1,167 @@
+The two sets as run.sh printed them: thirty walks, five runs of each build
+under each of the three timings. `again` is the reading.
+
+=== 15 and behind, five runs of each build, 2026-08-15 14:22-15:29 ===
+
+2026/08/15 14:22:50 database initialized:  ircd.db
+ergo listening on 127.0.0.1:6718, pid 46546
+seeded 1600 messages into #wedge
+run 1 fixed, 15
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 133s, 202 lines, 15s after the third ask
+    again     yes, 3s after the answer landed
+    frames    the answer landed outside the burst
+run 1 fixed, behind
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 118s, 202 lines, 0s after the third ask
+    again     yes, 18s after the answer landed
+    frames    the answer landed outside the burst
+run 1 prefix, 15
+    asks      6 out, the second 79s after the first
+    release   ask 1 let go at 132s, 202 lines, 15s after the third ask
+    again     yes, 6s after the answer landed
+    frames    the answer landed outside the burst
+run 1 prefix, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 118s, 202 lines, 0s after the third ask
+    again     yes, 18s after the answer landed
+    frames    the answer landed outside the burst
+run 2 fixed, 15
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 133s, 202 lines, 15s after the third ask
+    again     yes, 4s after the answer landed
+    frames    the answer landed outside the burst
+run 2 fixed, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 117s, 202 lines, 0s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 2 prefix, 15
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 132s, 202 lines, 15s after the third ask
+    again     yes, 4s after the answer landed
+    frames    the answer landed outside the burst
+run 2 prefix, behind
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 117s, 202 lines, 0s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 3 fixed, 15
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 134s, 202 lines, 15s after the third ask
+    again     yes, 3s after the answer landed
+    frames    the answer landed outside the burst
+run 3 fixed, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 117s, 202 lines, 0s after the third ask
+    again     yes, 20s after the answer landed
+    frames    the answer landed outside the burst
+run 3 prefix, 15
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 133s, 202 lines, 15s after the third ask
+    again     yes, 3s after the answer landed
+    frames    the answer landed outside the burst
+run 3 prefix, behind
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 117s, 202 lines, 0s after the third ask
+    again     yes, 18s after the answer landed
+    frames    the answer landed outside the burst
+run 4 fixed, 15
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 132s, 202 lines, 15s after the third ask
+    again     yes, 5s after the answer landed
+    frames    the answer landed outside the burst
+run 4 fixed, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 117s, 202 lines, 0s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 4 prefix, 15
+    asks      6 out, the second 82s after the first
+    release   ask 1 let go at 133s, 202 lines, 15s after the third ask
+    again     yes, 3s after the answer landed
+    frames    the answer landed outside the burst
+run 4 prefix, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 119s, 202 lines, 0s after the third ask
+    again     yes, 18s after the answer landed
+    frames    the answer landed outside the burst
+run 5 fixed, 15
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 132s, 202 lines, 15s after the third ask
+    again     yes, 4s after the answer landed
+    frames    the answer landed outside the burst
+run 5 fixed, behind
+    asks      6 out, the second 82s after the first
+    release   ask 1 let go at 118s, 202 lines, 0s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 5 prefix, 15
+    asks      6 out, the second 82s after the first
+    release   ask 1 let go at 132s, 202 lines, 15s after the third ask
+    again     yes, 4s after the answer landed
+    frames    the answer landed outside the burst
+run 5 prefix, behind
+    asks      6 out, the second 81s after the first
+    release   ask 1 let go at 118s, 202 lines, 0s after the third ask
+    again     yes, 18s after the answer landed
+    frames    the answer landed outside the burst
+stopped
+
+=== inflight, five runs of each build, 2026-08-15 15:40-16:14 ===
+
+2026/08/15 15:40:59 database initialized:  ircd.db
+ergo listening on 127.0.0.1:6726, pid 61556
+seeded 1600 messages into #wedge
+run 1 fixed, inflight
+    asks      5 out, the second 80s after the first
+    release   ask 1 let go at 122s, 202 lines, 5s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 1 prefix, inflight
+    asks      3 out, the second 79s after the first
+    release   ask 1 let go at 123s, 202 lines, 5s after the third ask
+    again     no: nothing was asked after the answer landed
+    frames    the answer landed outside the burst
+run 2 fixed, inflight
+    asks      6 out, the second 80s after the first
+    release   ask 1 let go at 123s, 202 lines, 5s after the third ask
+    again     yes, 17s after the answer landed
+    frames    the answer landed outside the burst
+run 2 prefix, inflight
+    asks      3 out, the second 81s after the first
+    release   ask 1 let go at 123s, 202 lines, 5s after the third ask
+    again     no: nothing was asked after the answer landed
+    frames    the answer landed outside the burst
+run 3 fixed, inflight
+    asks      5 out, the second 80s after the first
+    release   ask 1 let go at 122s, 202 lines, 5s after the third ask
+    again     yes, 20s after the answer landed
+    frames    the answer landed outside the burst
+run 3 prefix, inflight
+    asks      3 out, the second 80s after the first
+    release   ask 1 let go at 123s, 202 lines, 5s after the third ask
+    again     no: nothing was asked after the answer landed
+    frames    the answer landed outside the burst
+run 4 fixed, inflight
+    asks      5 out, the second 81s after the first
+    release   ask 1 let go at 122s, 202 lines, 5s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 4 prefix, inflight
+    asks      3 out, the second 81s after the first
+    release   ask 1 let go at 122s, 202 lines, 5s after the third ask
+    again     no: nothing was asked after the answer landed
+    frames    the answer landed outside the burst
+run 5 fixed, inflight
+    asks      5 out, the second 81s after the first
+    release   ask 1 let go at 122s, 202 lines, 5s after the third ask
+    again     yes, 19s after the answer landed
+    frames    the answer landed outside the burst
+run 5 prefix, inflight
+    asks      3 out, the second 81s after the first
+    release   ask 1 let go at 124s, 202 lines, 5s after the third ask
+    again     no: nothing was asked after the answer landed
+    frames    the answer landed outside the burst
+stopped
+

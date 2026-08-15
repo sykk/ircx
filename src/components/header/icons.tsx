@@ -53,3 +53,11 @@ export function OverflowIcon({ size = 14 }: IconProps) {
     </svg>
   );
 }
+
+export function ChevronIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="m4 6 4 4 4-4" />
+    </svg>
+  );
+}

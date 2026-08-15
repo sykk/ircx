@@ -4,7 +4,7 @@ import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
-import { ChannelHeader } from "./ChannelHeader";
+import { ChannelHeader, formatTopicTimestamp } from "./ChannelHeader";
 
 const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
 
@@ -15,7 +15,7 @@ beforeEach(() => {
     channels: {
       [targetKey("libera", CTF_OPS.name)]: {
         ...CTF_OPS,
-        topic: { text: TOPIC, setBy: "sable", setAt: null },
+        topic: { text: TOPIC, setBy: "sable", setAt: "2026-05-25T17:25:00Z" },
       },
     },
     ...oneView({ network: "libera", target: CTF_OPS.name }),
@@ -48,9 +48,29 @@ describe("ChannelHeader", () => {
    * being in the mockup, before anything had established that nothing else
    * showed it either. */
   describe("the topic", () => {
-    it("is drawn beside the count", () => {
+    it("is drawn in a separate banner below the controls", () => {
+      const { container } = render(<ChannelHeader view={TEST_VIEW} />);
+      const controls = container.querySelector('[data-ui="channel-header-row"]');
+      const banner = container.querySelector('[data-ui="topic-banner"]');
+      expect(controls).toBeTruthy();
+      expect(banner).toBeTruthy();
+      expect(controls?.contains(screen.getByText(TOPIC))).toBe(false);
+      expect(banner?.contains(screen.getByText(TOPIC))).toBe(true);
+    });
+
+    it("shows who set it and when", () => {
       render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.getByText("Set by sable on 2026-05-25 at 17:25 UTC")).toBeTruthy();
+    });
+
+    it("collapses the metadata while keeping the topic visible", () => {
+      render(<ChannelHeader view={TEST_VIEW} />);
+      fireEvent.click(screen.getByRole("button", { name: "Collapse topic" }));
+
       expect(screen.getByText(TOPIC)).toBeTruthy();
+      expect(screen.queryByText(/Set by sable/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Expand topic" }).getAttribute("aria-expanded"))
+        .toBe("false");
     });
 
     /** A long one truncates rather than pushing the controls off the end, so
@@ -67,6 +87,7 @@ describe("ChannelHeader", () => {
       render(<ChannelHeader view={TEST_VIEW} />);
       expect(screen.queryByText(TOPIC)).toBeNull();
       expect(screen.getByText("16 members")).toBeTruthy();
+      expect(document.querySelector('[data-ui="topic-banner"]')).toBeNull();
     });
 
     /** A server that clears a topic sends an empty one rather than none. */
@@ -82,6 +103,13 @@ describe("ChannelHeader", () => {
       const { container } = render(<ChannelHeader view={TEST_VIEW} />);
       expect(container.querySelector("p")).toBeNull();
     });
+  });
+
+  it("formats topic timestamps in UTC", () => {
+    expect(formatTopicTimestamp("2026-05-25T13:25:00-04:00")).toBe(
+      "2026-05-25 at 17:25 UTC",
+    );
+    expect(formatTopicTimestamp("server time unavailable")).toBe("server time unavailable");
   });
 
   it("hides and shows this pane's member list", () => {

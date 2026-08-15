@@ -9,13 +9,12 @@ const ROW_HEIGHT = 26;
 
 interface MemberListProps {
   members: Member[];
-  selected: string | null;
-  onSelect: (nick: string) => void;
+  onMenu: (member: Member, x: number, y: number) => void;
   /** What the roster is narrowed to, or "" for a filter open and still empty. */
   filter: string;
 }
 
-export function MemberList({ members, selected, onSelect, filter }: MemberListProps) {
+export function MemberList({ members, onMenu, filter }: MemberListProps) {
   const [expandMembers, setExpandMembers] = useState(false);
   const rows = useMemo(() => {
     const narrowed = filterMembers(members, filter);
@@ -69,8 +68,7 @@ export function MemberList({ members, selected, onSelect, filter }: MemberListPr
                 ) : (
                   <MemberRow
                     member={row.member}
-                    selected={row.member.nick === selected}
-                    onSelect={onSelect}
+                    onMenu={onMenu}
                   />
                 )}
               </div>

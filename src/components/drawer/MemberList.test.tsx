@@ -25,17 +25,17 @@ afterAll(() => {
 
 function show(members = CTF_OPS_MEMBERS, filter = "") {
   return render(
-    <MemberList members={members} selected={null} onSelect={vi.fn()} filter={filter} />,
+    <MemberList members={members} onMenu={vi.fn()} filter={filter} />,
   );
 }
 
 function memberButtons() {
-  return screen.queryAllByRole("button");
+  return screen.queryAllByRole("listitem");
 }
 
 /** A row's presence dot, which is its only aria-hidden child. */
 function dot(nick: RegExp): HTMLElement {
-  const found = screen.getByRole("button", { name: nick }).querySelector("[aria-hidden]");
+  const found = screen.getByRole("listitem", { name: nick }).querySelector("[aria-hidden]");
   if (!found) throw new Error(`no presence dot on the ${String(nick)} row`);
   return found as HTMLElement;
 }
@@ -47,6 +47,30 @@ function plain(count: number) {
 }
 
 describe("MemberList", () => {
+  it("opens member actions on right-click, not left-click", () => {
+    const onMenu = vi.fn();
+    render(<MemberList members={[member("sable")]} onMenu={onMenu} filter="" />);
+    const row = screen.getByRole("listitem", { name: "sable" });
+
+    fireEvent.click(row);
+    expect(onMenu).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(row, { clientX: 42, clientY: 64 });
+    expect(onMenu).toHaveBeenCalledWith(expect.objectContaining({ nick: "sable" }), 42, 64);
+  });
+
+  it("opens member actions from the keyboard context-menu chord", () => {
+    const onMenu = vi.fn();
+    render(<MemberList members={[member("sable")]} onMenu={onMenu} filter="" />);
+
+    fireEvent.keyDown(screen.getByRole("listitem", { name: "sable" }), {
+      key: "F10",
+      shiftKey: true,
+    });
+
+    expect(onMenu).toHaveBeenCalledOnce();
+  });
+
   it("heads two groups with their counts, folding voice into members", () => {
     show();
     expect(screen.getByRole("heading", { name: /operators/i }).textContent).toContain(
@@ -57,7 +81,7 @@ describe("MemberList", () => {
 
     // A voiced member sits in members and still carries its sigil.
     expect(
-      within(screen.getByRole("button", { name: /phrack/ })).getByText("+"),
+      within(screen.getByRole("listitem", { name: /phrack/ })).getByText("+"),
     ).toBeTruthy();
   });
 
@@ -68,13 +92,13 @@ describe("MemberList", () => {
       member("guest41"),
     ]);
     expect(
-      within(screen.getByRole("button", { name: /Ariel/ })).getByText("~"),
+      within(screen.getByRole("listitem", { name: /Ariel/ })).getByText("~"),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("button", { name: /sable/ })).getByText("@"),
+      within(screen.getByRole("listitem", { name: /sable/ })).getByText("@"),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("button", { name: /guest41/ })).queryByText("+"),
+      within(screen.getByRole("listitem", { name: /guest41/ })).queryByText("+"),
     ).toBeNull();
   });
 
@@ -82,7 +106,7 @@ describe("MemberList", () => {
     show();
     fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
-    const wren = screen.getByRole("button", { name: /wren/ });
+    const wren = screen.getByRole("listitem", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
     expect(within(wren).getByText("wren").className).toContain("--text-muted");
   });
@@ -104,7 +128,7 @@ describe("MemberList", () => {
     show();
     fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
-    const wren = screen.getByRole("button", { name: /wren/ });
+    const wren = screen.getByRole("listitem", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
     expect(within(wren).getByText("wren")).toHaveProperty("title", "wren");
   });
@@ -122,7 +146,7 @@ describe("MemberList", () => {
 
   it("falls back to a bare away label when the server gave no reason", () => {
     show();
-    expect(screen.getByRole("button", { name: /nyx/ })).toHaveProperty(
+    expect(screen.getByRole("listitem", { name: /nyx/ })).toHaveProperty(
       "title",
       "Away: away",
     );
@@ -130,18 +154,18 @@ describe("MemberList", () => {
 
   it("truncates the members group and reveals the rest on demand", () => {
     show(plain(15));
-    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(10);
+    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(10);
 
     fireEvent.click(screen.getByRole("button", { name: "… and 5 more" }));
 
-    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
+    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(15);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
   it("never hides an operator behind the truncation", () => {
     show(plain(15).map((m) => ({ ...m, prefixes: ["@"] })));
 
-    expect(screen.getAllByRole("button", { name: /^nick/ })).toHaveLength(15);
+    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(15);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
@@ -160,9 +184,9 @@ describe("a filtered MemberList", () => {
   it("draws only the names carrying the filter", () => {
     show(CTF_OPS_MEMBERS, "ra");
 
-    expect(screen.getByRole("button", { name: /phrack/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /spiral/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /marrow/ })).toBeNull();
+    expect(screen.getByRole("listitem", { name: /phrack/ })).toBeTruthy();
+    expect(screen.getByRole("listitem", { name: /spiral/ })).toBeTruthy();
+    expect(screen.queryByRole("listitem", { name: /marrow/ })).toBeNull();
   });
 
   it("counts the matches in the group heading, not the channel", () => {
@@ -180,8 +204,8 @@ describe("a filtered MemberList", () => {
   it("reaches past the truncation without being expanded", () => {
     show(plain(400), "nick39");
 
-    expect(screen.getAllByRole("button", { name: /^nick39/ })).toHaveLength(11);
-    expect(screen.getByRole("button", { name: "nick399" })).toBeTruthy();
+    expect(screen.getAllByRole("listitem", { name: /^nick39/ })).toHaveLength(11);
+    expect(screen.getByRole("listitem", { name: "nick399" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
@@ -189,7 +213,7 @@ describe("a filtered MemberList", () => {
     const { rerender } = show(plain(15), "nick1");
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
 
-    rerender(<MemberList members={plain(15)} selected={null} onSelect={vi.fn()} filter="" />);
+    rerender(<MemberList members={plain(15)} onMenu={vi.fn()} filter="" />);
 
     expect(screen.getByRole("button", { name: "… and 5 more" })).toBeTruthy();
   });

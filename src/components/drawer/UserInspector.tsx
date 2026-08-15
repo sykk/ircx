@@ -1,31 +1,21 @@
-import { useMemo, useState } from "react";
-import { ipc } from "@/lib/ipc";
+import { useMemo } from "react";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
 import { sameTarget, splitTargetKey, type TargetKey } from "@/store/keys";
 import type { Member } from "@/types";
-import { useAnnounce } from "@/hooks/useAnnounce";
 import { BackIcon } from "./icons";
-import { actionsFor, rankOf } from "./members";
 
 interface UserInspectorProps {
   network: string;
-  channel: string;
   member: Member;
-  /** The local user's entry in this channel, absent until NAMES lands. */
-  self: Member | undefined;
   onBack: () => void;
 }
 
 export function UserInspector({
   network,
-  channel,
   member,
-  self,
   onBack,
 }: UserInspectorProps) {
-  const [error, setError] = useState<string | null>(null);
-  useAnnounce(error);
   const membersByTarget = useAppStore((s) => s.members);
 
   const shared = useMemo(() => {
@@ -37,29 +27,6 @@ export function UserInspector({
     }
     return channels.sort((a, b) => a.localeCompare(b));
   }, [membersByTarget, network, member.nick]);
-
-  const allowed = actionsFor(self);
-  const isOp = rankOf(member) >= 3;
-  const isVoiced = member.prefixes.includes("+");
-
-  async function run(input: string) {
-    setError(null);
-    try {
-      const outcome = await ipc.submitInput(network, channel, input);
-      if (outcome.kind === "rejected") setError(outcome.value);
-    } catch (reason) {
-      setError(typeof reason === "string" ? reason : "The command could not be sent.");
-    }
-  }
-
-  async function openQuery() {
-    setError(null);
-    try {
-      await ipc.openQuery(network, member.nick);
-    } catch (reason) {
-      setError(typeof reason === "string" ? reason : "The query could not be opened.");
-    }
-  }
 
   // The column carries the mono family so its width can be counted in `ch`. The
   // inspector is prose and fields rather than a list of names.
@@ -117,74 +84,6 @@ export function UserInspector({
         </ul>
       </div>
 
-      <div className="grid grid-cols-2 gap-1 border-t border-[var(--border-subtle)] px-2 py-2">
-        <ActionButton label="Message" onClick={openQuery} />
-        <ActionButton label="Whois" onClick={() => run(`/whois ${member.nick}`)} />
-        <ActionButton
-          label={isOp ? "Take ops" : "Give ops"}
-          allowed={allowed.op}
-          requires="operator status"
-          onClick={() => run(`/mode ${channel} ${isOp ? "-o" : "+o"} ${member.nick}`)}
-        />
-        <ActionButton
-          label={isVoiced ? "Take voice" : "Give voice"}
-          allowed={allowed.voice}
-          requires="halfop status or better"
-          onClick={() => run(`/mode ${channel} ${isVoiced ? "-v" : "+v"} ${member.nick}`)}
-        />
-        <ActionButton
-          label="Kick"
-          danger
-          allowed={allowed.kick}
-          requires="halfop status or better"
-          onClick={() => run(`/kick ${channel} ${member.nick}`)}
-        />
-        <ActionButton
-          label="Ban"
-          danger
-          allowed={allowed.ban}
-          requires="operator status"
-          onClick={() => run(`/mode ${channel} +b ${member.nick}!*@*`)}
-        />
-      </div>
-
-      {error !== null && (
-        <p role="alert" className="px-3 pb-3 text-[var(--danger)]">
-          {error}
-        </p>
-      )}
     </div>
-  );
-}
-
-interface ActionButtonProps {
-  label: string;
-  onClick: () => void;
-  allowed?: boolean;
-  requires?: string;
-  danger?: boolean;
-}
-
-function ActionButton({
-  label,
-  onClick,
-  allowed = true,
-  requires,
-  danger = false,
-}: ActionButtonProps) {
-  return (
-    <button
-      type="button"
-      disabled={!allowed}
-      onClick={onClick}
-      title={allowed ? undefined : `Needs ${requires}`}
-      className={`rounded-[var(--radius-md)] border border-[var(--border-default)] px-2 py-1 disabled:cursor-not-allowed disabled:border-[var(--border-subtle)] disabled:text-[var(--text-faint)] disabled:hover:bg-transparent ${
-        danger
-          ? "text-[var(--danger)] hover:bg-[var(--surface-hover)]"
-          : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

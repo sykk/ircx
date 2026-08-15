@@ -62,23 +62,26 @@ export function ChatPane({ view }: { view: ViewId | null }) {
             : "border-t border-transparent"),
       )}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {consoleFor ? (
+      {consoleFor ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ServerConsole view={view} network={consoleFor} />
-        ) : (
-          <>
-            <ChannelHeader view={view} />
-            <div className="min-h-0 flex-1">
-              <Timeline view={view} />
+        </div>
+      ) : (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)_auto]">
+          <ChannelHeader view={view} />
+          <div className="col-start-1 row-start-3 min-h-0 min-w-0">
+            <Timeline view={view} />
+          </div>
+          {!hidden && (
+            <div className="col-start-2 row-start-2 row-end-4 min-h-0">
+              <ContextPanel view={view} />
             </div>
+          )}
+          <div className="col-span-2 row-start-4 min-w-0">
             <Composer view={view} />
-          </>
-        )}
-      </div>
-
-      {/* Beside the whole column rather than under the header, so the panel's
-          own header lands on the same rule as this pane's. */}
-      {!hidden && !consoleFor && <ContextPanel view={view} />}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

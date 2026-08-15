@@ -82,6 +82,18 @@ describe("filtering the roster", () => {
     expect(strip()).toBeNull();
   });
 
+  it("shows member actions only from the context menu", () => {
+    const row = screen.getByRole("listitem", { name: /phrack/ });
+
+    fireEvent.click(row);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 60 });
+    expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Whois" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Give ops" })).toHaveProperty("disabled", false);
+  });
+
   it("opens on a typed character, carrying it", () => {
     fireEvent.keyDown(roster(), { key: "r" });
 
@@ -99,8 +111,8 @@ describe("filtering the roster", () => {
     fireEvent.keyDown(roster(), { key: "r" });
     fireEvent.change(strip()!, { target: { value: "ra" } });
 
-    expect(screen.getByRole("button", { name: /phrack/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /marrow/ })).toBeNull();
+    expect(screen.getByRole("listitem", { name: /phrack/ })).toBeTruthy();
+    expect(screen.queryByRole("listitem", { name: /marrow/ })).toBeNull();
   });
 
   it("leaves a chord to whatever else wants it", () => {
@@ -125,7 +137,8 @@ describe("filtering the roster", () => {
     // Clicked rather than set on the store: a write from outside React's own
     // event system has not re-rendered by the time the key is dispatched, so
     // the handler would still be looking at a roster with no inspector over it.
-    fireEvent.click(screen.getByRole("button", { name: /phrack/ }));
+    fireEvent.contextMenu(screen.getByRole("listitem", { name: /phrack/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Details" }));
 
     fireEvent.keyDown(roster(), { key: "r" });
 
@@ -146,7 +159,8 @@ describe("filtering the roster", () => {
    * on something the reader cannot see. */
   it("leaves a filter alone while the inspector is over it", () => {
     fireEvent.keyDown(roster(), { key: "r" });
-    fireEvent.click(screen.getByRole("button", { name: /phrack/ }));
+    fireEvent.contextMenu(screen.getByRole("listitem", { name: /phrack/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Details" }));
     expect(strip()).toBeNull();
 
     fireEvent.keyDown(roster(), { key: "Escape" });

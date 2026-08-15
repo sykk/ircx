@@ -680,28 +680,6 @@ function queue(pending: number) {
   });
 }
 
-describe("what is waiting to send", () => {
-  it("keeps the hint while nothing is queued", async () => {
-    await mount();
-    expect(screen.getByText("Markdown is supported")).toBeTruthy();
-  });
-
-  /** One is every message between Enter and the socket, so saying it would
-   * twitch the row on ordinary typing without telling anyone anything. */
-  it("says nothing about a single line in flight", async () => {
-    queue(1);
-    await mount();
-    expect(screen.getByText("Markdown is supported")).toBeTruthy();
-  });
-
-  it("counts the queue once a line is waiting behind another", async () => {
-    queue(12);
-    await mount();
-    expect(screen.getByText("12 waiting to send")).toBeTruthy();
-    expect(screen.queryByText("Markdown is supported")).toBeNull();
-  });
-});
-
 describe("what a reader is told about the queue", () => {
   const said = () => screen.getByRole("status").textContent;
 

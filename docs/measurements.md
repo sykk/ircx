@@ -503,12 +503,84 @@ depth measured, against 0.11 ms per thousand messages skipped before it. The
 last row is where the old shape shows plainest: ten rows deep in a conversation
 were 5.3 ms and are 0.11 ms, because almost none of that was ever the page.
 
-**Not measured:** any of this on a machine under load, which is where
-`docs/end-to-end-run-17.md` argued it matters — it named the three passes as
-what CPU contention stretches, and the walks that motivated the argument were
-run against a build that had them. Nor an archive whose pages are not already
-in the page cache; `TMPDIR` is a tmpfs here, and *What an export costs against
-a cold archive* below is what that distinction is worth.
+Every figure above is an idle machine reading a file the kernel holds entirely,
+which is the best case and neither of the two cases the argument behind #526
+was about. The two arms below are the ones that stood here as *not measured*.
+
+#### The same page on a loaded machine
+
+**Measured 2026-08-14** by the same probe's second pass: 32 spinner threads on
+16 cores, which is the contention `docs/end-to-end-run-17.md` ran its walks
+under — that profile is on tmpfs and its server is a local socket, so CPU is
+all there is to contend for. Six sittings of the build that ships and four of a
+control built from `2dd01c4`, which is the commit before #526 and reproduces
+the *before* column above to three digits. Medians of nine, and the ranges are
+across sittings.
+
+| `load_history` | before, quiet | before, loaded | now, quiet | now, loaded |
+|---|---|---|---|---|
+| the newest 200, with rows | 2.20–2.25 ms | 3.70–6.97 ms | 0.84–0.87 ms | 1.77–4.71 ms |
+| 200 at 1,000 back | 2.25–2.27 ms | 3.88–7.10 ms | 0.82–0.84 ms | 1.77–4.67 ms |
+| 200 at 10,000 back | 2.96–3.00 ms | 5.45–11.33 ms | 0.81–0.83 ms | 1.78–4.68 ms |
+| 200 at 50,000 back | 7.45–7.48 ms | 28.3–28.8 ms | 0.81–0.83 ms | 1.78–4.61 ms |
+| 200 at 90,000 back | 11.5–11.9 ms | 22.3–66.1 ms | 0.82–0.83 ms | 1.78–7.48 ms |
+| 10 at 50,000 back | 5.25–5.41 ms | 10.4–22.3 ms | 0.109–0.111 ms | 0.212–0.225 ms |
+
+**Run 17 was right, and the quiet table understates what the fix is worth.** A
+page at 90,000 back is 14× faster than it was on an idle machine, and on a
+loaded one it is 22.3–66.1 ms against 1.78–7.48 — the two columns do not
+overlap at any depth, and the gap between their medians runs from 9× to 37×
+depending which sitting is set against which. Contention multiplies work that
+is per message and per message skipped along with everything else. 66 ms is
+worth naming on its own: one page-back, inside the archive lock a connection
+shares, on a machine doing what a machine does.
+
+**What the loaded column is, is a floor and a tail.** Every loaded sitting of
+the shipping build has a minimum of 1.73–1.87 ms whatever the depth — 2.2× the
+quiet figure, flat, which is what paying for a core rather than finding one free
+costs. The medians above that floor are excursions: four of the six sittings had
+them, two did not, and the worst round seen was 10.3 ms. So do not read a single
+loaded median as a result. The flat part is the reading; the spread is the load.
+
+#### The same page off a cold archive
+
+**Measured 2026-08-14** by `what_a_page_of_history_costs_off_a_cold_archive`,
+which drops the page cache between rounds the way `cold_archive.rs` does for the
+export, and opens the store again after the drop so that SQLite's own cache is
+not what answers. The open is not timed — it faults the header and the schema,
+which the client's launch pays for and a page does not. `TMPDIR` on btrfs, NVMe,
+medians of nine rounds, four sittings of the shipping build and three of the
+control. The eviction left 0 of 12,443 pages resident every time.
+
+| a 200-row page | before | now |
+|---|---|---|
+| the newest, with rows | 5.01–5.31 ms, 254 pages (1,016 KiB) | 3.15–3.52 ms, 168–190 pages (672–760 KiB) |
+| at 10,000 back | 24.1–27.0 ms, 513 pages (2,052 KiB) | 3.62–4.06 ms, 173–191 pages |
+| at 50,000 back | 117–119 ms, 1,625 pages (6,500 KiB) | 3.44–3.81 ms, 170–194 pages |
+
+**The messages a page-back skipped were disk, not only CPU.** Before #527, a
+page at 50,000 back faulted 1,625 pages in — 6.5 MiB read off the disk to return
+about 94 KiB of rows — because walking the distance means faulting every page
+the distance is written on. It now faults 170–194 wherever it is read from, and
+the reading is 117 ms against 3.4–3.8.
+
+**A cold page costs 3.1–3.9× a warm one, flat with depth.** Before, that
+multiple was 1.9× at the head and 12.8× at 50,000 back, which is the same shape
+the timings have: what got colder with depth was the distance rather than the
+page.
+
+**The warm column of this arm is not the table above.** Read through a
+connection opened for the round, over btrfs rather than tmpfs, a warm page is
+1.05–1.10 ms against that table's 0.82–0.85 — an empty SQLite cache and a
+recompiled statement, paid once per connection rather than once per page.
+Compare within a column here, not across the two.
+
+**Not measured:** an archive larger than the machine's memory, which for this
+operation is a different question than a cold one — a page-back seeks rather
+than scans, so what it faults is not what it would evict. A disk slower than an
+NVMe. And a load that contends for the archive rather than for the CPU: nothing
+else was reading or writing while the spinners ran, and *What an archive command
+costs a search* below is what that distinction is worth.
 
 ### What the second search index costs
 

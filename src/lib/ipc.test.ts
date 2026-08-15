@@ -38,13 +38,14 @@ describe("pageBack", () => {
     invoke.mockResolvedValue("more");
 
     await expect(
-      ipc.pageBack("libera", "#ctf-ops", "2026-07-31T09:00:00.000Z", "abc"),
+      ipc.pageBack("libera", "#ctf-ops", "2026-07-31T09:00:00.000Z", "abc", "abc"),
     ).resolves.toBe("more");
     expect(invoke).toHaveBeenCalledWith("page_back", {
       network: "libera",
       target: "#ctf-ops",
       from: "2026-07-31T09:00:00.000Z",
       msgid: "abc",
+      ask: "abc",
     });
   });
 
@@ -52,7 +53,7 @@ describe("pageBack", () => {
   // what it has, so there is nothing behind it to ask for.
   it("answers for the server console without asking", async () => {
     await expect(
-      ipc.pageBack("libera", SERVER_TARGET, "2026-07-31T09:00:00.000Z", null),
+      ipc.pageBack("libera", SERVER_TARGET, "2026-07-31T09:00:00.000Z", null, "local-1"),
     ).resolves.toBe("end");
 
     expect(invoke).not.toHaveBeenCalled();

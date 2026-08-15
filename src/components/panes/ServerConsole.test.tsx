@@ -77,7 +77,7 @@ beforeEach(() => {
     networks: { libera: makeNetwork("libera", { name: "Libera.Chat", host: "irc.libera.chat" }) },
     networkOrder: ["libera"],
     timelines: {
-      [CONSOLE]: { messages: motd(), unreadFrom: null, hasMore: false, loadingOlder: false, askedBehind: null, historyLanded: 0 },
+      [CONSOLE]: { messages: motd(), unreadFrom: null, hasMore: false, loadingOlder: false, askedBehind: null },
     },
     rawLog: { libera: [">> CAP LS 302", "<< :platinum.libera.chat NOTICE * :*** Checking Ident"] },
     ...oneView({ network: "libera", target: SERVER_TARGET }),
@@ -107,7 +107,7 @@ describe("the server console", () => {
           messages: [motd()[0]!],
           unreadFrom: null,
           hasMore: true,
-          loadingOlder: false, askedBehind: null, historyLanded: 0
+          loadingOlder: false, askedBehind: null
         },
       },
     });
@@ -173,6 +173,7 @@ describe("the server console", () => {
     ipcMock.submitInput.mockImplementation((network: string, target: string) => {
       useAppStore.getState().applyEvent({
         type: "messagesAppended",
+        answers: null,
         network,
         target,
         messages: [

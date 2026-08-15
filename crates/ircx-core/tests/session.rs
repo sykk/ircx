@@ -221,6 +221,17 @@ impl Harness {
             .next_back()
     }
 
+    /// The ask each batch of messages says it answers, in order.
+    fn answered(&self) -> Vec<Option<String>> {
+        self.events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessagesAppended { answers, .. } => Some(answers.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn appended(&self) -> Vec<&Vec<ChatMessage>> {
         self.events
             .iter()
@@ -3756,9 +3767,10 @@ mod paging_back_through_the_server {
 
     /// The oldest message a window holds, which is what the frontend asks from.
     fn scroll_back(session: &mut Harness) -> PageBack {
-        let (asked, actions) = session
-            .state
-            .page_back("#ircx", "2026-07-31T09:00:00.000Z", None);
+        let (asked, actions) =
+            session
+                .state
+                .page_back("#ircx", "2026-07-31T09:00:00.000Z", None, "oldest".into());
         session.apply(actions);
         asked
     }
@@ -3826,6 +3838,41 @@ mod paging_back_through_the_server {
         );
 
         assert_eq!(session.paged_back, [("ircx-1".to_string(), true)]);
+    }
+
+    /// Which ask a page answers is the reader's own name for it, carried out
+    /// with the request and put back on the batch. Two page-backs can be
+    /// outstanding at once — a reader who gave up on one asked again — and both
+    /// are answered, so a batch that named none of them was read as the answer
+    /// to whichever the reader was waiting on (#540).
+    #[test]
+    fn the_page_that_answers_an_ask_carries_the_readers_name_for_it() {
+        let mut session = reading("draft/chathistory labeled-response");
+        let label = label_of(scroll_back(&mut session));
+
+        older(
+            &mut session,
+            &label,
+            &["@batch=h;time=2026-07-31T08:00:00.000Z :phrack!p@h PRIVMSG #ircx :earlier"],
+        );
+
+        assert_eq!(session.answered(), [Some("oldest".to_string())]);
+    }
+
+    /// And a batch nobody scrolled back for names nothing. A gap fill after a
+    /// reconnect is a `chathistory` batch on the same conversation, which is
+    /// the pair the label was already the only way to tell apart.
+    #[test]
+    fn a_page_nobody_asked_for_names_no_ask() {
+        let mut session = reading("draft/chathistory labeled-response");
+
+        older(
+            &mut session,
+            "ircx-99",
+            &["@batch=h;time=2026-07-31T08:00:00.000Z :phrack!p@h PRIVMSG #ircx :earlier"],
+        );
+
+        assert_eq!(session.answered(), [None]);
     }
 
     /// The case the sentence at the top of the pane was wrong about. An empty
@@ -3952,9 +3999,10 @@ mod the_page_a_join_already_asked_for {
     }
 
     fn scroll_back(session: &mut Harness, target: &str) -> PageBack {
-        let (asked, actions) = session
-            .state
-            .page_back(target, "2026-07-31T09:00:00.000Z", None);
+        let (asked, actions) =
+            session
+                .state
+                .page_back(target, "2026-07-31T09:00:00.000Z", None, "oldest".into());
         session.apply(actions);
         asked
     }

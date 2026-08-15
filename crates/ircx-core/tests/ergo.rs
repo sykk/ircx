@@ -587,6 +587,7 @@ async fn a_reader_reads_back_past_the_archive(report: &mut Report, live: &mut Li
         target: CHANNEL.into(),
         from: newest.timestamp.clone(),
         msgid: (!newest.id_is_local).then(|| newest.id.clone()),
+        ask: newest.id.clone(),
         reply,
     })
     .await;

@@ -65,7 +65,7 @@ function seedTimelines(timelines: AppState["timelines"]) {
 
 function seed(messages: ChatMessage[]) {
   seedTimelines({
-    [KEY]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null, historyLanded: 0 },
+    [KEY]: { messages, unreadFrom: null, hasMore: true, loadingOlder: false, askedBehind: null },
   });
 }
 

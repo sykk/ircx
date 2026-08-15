@@ -153,9 +153,9 @@ export const ipc = {
    * The console is not a conversation and no server keeps history for it, the
    * same reason `setTyping` is silent there. Its archive is the whole of what
    * it has, so `"end"` is the true answer rather than a refusal to ask. */
-  pageBack: (network: string, target: string, from: string, msgid: string | null) =>
+  pageBack: (network: string, target: string, from: string, msgid: string | null, ask: string) =>
     isConversation(target)
-      ? invoke<PageBackOutcome>("page_back", { network, target, from, msgid })
+      ? invoke<PageBackOutcome>("page_back", { network, target, from, msgid, ask })
       : Promise.resolve<PageBackOutcome>("end"),
   searchHistory: (req: SearchRequest) => invoke<SearchHit[]>("search_history", { req }),
   markRead: (network: string, target: string) =>

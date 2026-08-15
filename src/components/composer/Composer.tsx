@@ -276,6 +276,7 @@ function ComposerFor({
         network: message.network,
         target: message.target,
         messages: [message],
+        answers: null,
       });
       return;
     }

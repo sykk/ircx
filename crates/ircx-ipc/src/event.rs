@@ -44,10 +44,18 @@ pub enum IrcxEvent {
         enabled: Vec<String>,
     },
     /// Batched: history backfill would otherwise emit thousands of events.
+    ///
+    /// `answers` names the page-back this batch is the answer to, as the reader
+    /// named it when they asked — `None` for everything else, which is most
+    /// batches. Two page-backs can be outstanding on one conversation at once,
+    /// and a reader who has given up on one is still sent its answer, so a
+    /// batch that says nothing about which ask it belongs to can be read as the
+    /// answer to a question nobody put (#540).
     MessagesAppended {
         network: NetworkId,
         target: TargetName,
         messages: Vec<ChatMessage>,
+        answers: Option<String>,
     },
     /// Delivery confirmed by echo, or a preview finished loading. Boxed so the
     /// enum is not the size of one message; serialises unchanged.

@@ -154,10 +154,20 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
 /// Returns the event back when it has to stand on its own.
 fn merge(held: &mut IrcxEvent, event: IrcxEvent) -> Option<IrcxEvent> {
     match (held, event) {
+        // Not across the ask they answer: a batch says which page-back it is
+        // the answer to, and folding two together would put one ask's name over
+        // the other's messages (#540). Two answers to one ask cannot arrive —
+        // the label comes off the moment its batch closes.
         (
-            IrcxEvent::MessagesAppended { messages, .. },
-            IrcxEvent::MessagesAppended { messages: more, .. },
-        ) => {
+            IrcxEvent::MessagesAppended {
+                messages, answers, ..
+            },
+            IrcxEvent::MessagesAppended {
+                messages: more,
+                answers: also,
+                ..
+            },
+        ) if *answers == also => {
             messages.extend(more);
             None
         }
@@ -299,6 +309,16 @@ mod tests {
             network: "net".into(),
             target: target.into(),
             messages: vec![message(id, target)],
+            answers: None,
+        }
+    }
+
+    fn answering(id: &str, target: &str, ask: &str) -> IrcxEvent {
+        IrcxEvent::MessagesAppended {
+            network: "net".into(),
+            target: target.into(),
+            messages: vec![message(id, target)],
+            answers: Some(ask.into()),
         }
     }
 
@@ -365,6 +385,30 @@ mod tests {
         };
         assert_eq!(target, "#ircx");
         assert_eq!(messages.len(), 2);
+    }
+
+    /// A page-back's answer says which ask it belongs to, and the frontend
+    /// reads where the history ends off that. Folded into the batch beside it,
+    /// one ask's name would stand over the other's messages — and a page
+    /// answering nobody would come to name an ask (#540).
+    #[test]
+    fn a_page_that_answers_an_ask_is_not_folded_into_one_that_does_not() {
+        let mut batch = Batch::default();
+        batch.push(appended("live", "#ircx"));
+        batch.push(answering("older", "#ircx", "msg-1"));
+        batch.push(appended("later", "#ircx"));
+
+        let events = batch.take();
+
+        assert_eq!(events.len(), 3);
+        let answers: Vec<Option<&str>> = events
+            .iter()
+            .map(|event| match event {
+                IrcxEvent::MessagesAppended { answers, .. } => answers.as_deref(),
+                other => panic!("expected appends, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(answers, [None, Some("msg-1"), None]);
     }
 
     /// The unread counter ticks with every message; only the last figure is

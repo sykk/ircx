@@ -49,6 +49,10 @@ interface Anchor {
 interface Committed {
   firstId: string | null;
   headPx: number;
+  /** The container's height last commit, which is how a hold knows whether the
+   * rows above the reader are still measuring. Only ever compared for equality
+   * — #477 is what reading a position out of it costs. */
+  sh: number;
 }
 
 /**
@@ -102,14 +106,36 @@ export function movedInList(
  * has already been paid for. Anything adding a delta pays it twice; a position
  * subsumes it.
  *
- * Asserted again on the commit after, because the offsets are current on the
+ * Asserted again on the commits after, because the offsets are current on the
  * landing commit and the DOM is not: the rows are still transformed to where
  * the superseded render put them, so the frame that paints is short by whatever
- * was measured between the two. The second pass is what the doubled-estimate
- * control needs — 46px to 92px leaves the landing at 0.0 with it and -102
- * without — and it declines if `scrollTop` is not where the first pass left it,
- * because a reader who scrolled in that window owns the pane and putting them
- * back is the defect rather than the fix.
+ * was measured between the two. That second assertion is what the doubled-
+ * estimate control needs — 46px to 92px leaves the landing at 0.0 with it and
+ * -102 without.
+ *
+ * **It is held until the measuring stops rather than spent on one commit**, and
+ * #532 is the difference. A page of two hundred rows is measured over the
+ * commits that follow it — fourteen of them in end-to-end run 30, two to three
+ * milliseconds apart and inside one frame — and a single second pass answers
+ * the first of them and leaves the rest to move the reader.
+ *
+ * Which commit moves them cannot be guessed at. Thirteen of those fourteen
+ * measured rows *below* the reader and asked nothing of the anchor; the
+ * fourteenth measured one above and moved them 11px. So a hold that ends the
+ * first time the pane looks right ends twelve commits early, which is what the
+ * first attempt at this did and why it changed nothing a walk could see.
+ *
+ * What ends it is the container's height standing still between two commits:
+ * the rows have stopped measuring, whatever they measured. Also the list
+ * changing again, which means this hold's landing is over and anything that
+ * moves the reader now — a live message, the window dropping its oldest, the
+ * pane following its tail — is a fresh event that arms its own; and the
+ * reader's message going, which is a target switch.
+ *
+ * What it can no longer do is read a changed `scrollTop` as the reader: during
+ * settling the virtualiser moves the pane on purpose, and that is the thing
+ * being corrected for. The reader is told by `release`, on the wheel, pointer
+ * and key `Timeline` already stands the restore down on.
  *
  * The head is inside the scroller, so it displaces every row below it when it
  * arrives — and it arrives on a commit that changes no message's place, where
@@ -131,10 +157,11 @@ export function movedInList(
  * pass below corrected it a commit later and only while nothing else moved the
  * pane; #508 is the landings where something did.
  *
- * Returns the recorder for the reader's position, which the scroll handler has
- * to call: the page lands a round trip after the scroll that asked for it, so a
- * position recorded on the last commit is however far the reader has read
- * since.
+ * Returns two things the pane has to call. `record` is the reader's position,
+ * for the scroll handler: the page lands a round trip after the scroll that
+ * asked for it, so a position recorded on the last commit is however far the
+ * reader has read since. `release` is the reader taking the pane over, for the
+ * wheel, pointer and key handlers.
  *
  * `view` names the pane in the records `@/lib/probe` writes, which are nothing
  * in a build that did not ask for them.
@@ -146,10 +173,14 @@ export function usePrependAnchor(
   offsets: Offsets,
   margin: number,
   view: string,
-): () => void {
+): { record: () => void; release: () => void } {
   const committed = useRef<Committed | null>(null);
   const anchor = useRef<Anchor | null>(null);
-  const pending = useRef<(Anchor & { at: number }) | null>(null);
+  /** The reader the landing put back, held while the rows above them are still
+   * measuring, with the length of the list it was taken against. Cleared by the
+   * commit that finds the measuring over, and by the reader taking the pane
+   * over. */
+  const settling = useRef<(Anchor & { count: number }) | null>(null);
   // Read by `record` between commits, where the rows and messages they close
   // over are the ones last rendered. Nothing changes either without a commit to
   // assign it.
@@ -222,18 +253,42 @@ export function usePrependAnchor(
       branch = "moved";
       const start = drawnAt(reader.id);
       if (start !== undefined) place(start - reader.delta);
-      pending.current = { ...reader, at: el.scrollTop };
-    } else if (pending.current !== null) {
-      branch = "second";
-      const held = pending.current;
-      pending.current = null;
+      settling.current = { ...reader, count: messages.length };
+    } else if (settling.current !== null) {
+      const held = settling.current;
       const start = drawnAt(held.id);
-      if (start !== undefined && el.scrollTop === held.at) place(start - held.delta);
+      // What ends the hold, and none of the three is "the pane looks right on
+      // this commit": it looked right on eleven of the fourteen that #532 was
+      // measured over, and the drift arrived on the twelfth.
+      //
+      //   - the message is gone, which is a target switch and not this reader;
+      //   - the list changed again under it, so whatever this hold was taken
+      //     for is over — a live message arriving, the window dropping its
+      //     oldest, the pane following its tail. A landing that moved the
+      //     reader takes the branch above and arms a hold of its own;
+      //   - the container stopped growing, which is the measuring finishing and
+      //     is the ordinary way out.
+      const settled =
+        start === undefined ||
+        messages.length !== held.count ||
+        el.scrollHeight === previous?.sh;
+      if (settled) {
+        branch = "settled";
+        settling.current = null;
+      } else if (Math.abs(el.scrollTop - (start - held.delta)) > 1) {
+        branch = "settling";
+        place(start - held.delta);
+      } else {
+        // Held, and this commit asked nothing of it. Named rather than left as
+        // `none` because the two are the difference between an anchor that is
+        // watching and one that has gone home, and a walk reads these back.
+        branch = "holding";
+      }
     } else if (previous && previous.firstId === first && headPx !== previous.headPx) {
       branch = "head";
       place(el.scrollTop + (headPx - previous.headPx));
     }
-    committed.current = { firstId: first, headPx };
+    committed.current = { firstId: first, headPx, sh: el.scrollHeight };
     record();
     // After `record`, so `now` is the message under the reader's eyes on the
     // frame this commit paints and `held` is the one it was before. Where they
@@ -260,5 +315,12 @@ export function usePrependAnchor(
     });
   });
 
-  return record;
+  /** The reader has taken the pane over, so stop putting it back. The same
+   * signal the restore stands down on and for the same reason: a wheel, a
+   * pointer or a key is the reader, and an assignment to `scrollTop` is not. */
+  const release = useCallback(() => {
+    settling.current = null;
+  }, []);
+
+  return { record, release };
 }

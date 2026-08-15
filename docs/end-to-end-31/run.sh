@@ -85,8 +85,11 @@ for run in $(seq 1 "$RUNS"); do
     # A port per walk and none reused: one left in TIME_WAIT is a proxy that
     # never binds, and the walk behind it connects to nothing.
     echo "run $run $arm"
+    # A walk that cannot be read is one walk, not the end of the set: the frames
+    # either straddle the release or they do not, and `pick.py` says which.
     bash "$HERE/parked.sh" "$TREE" "$OUT/$arm/run$run" \
-      $((HOLDS + 2 * run + $([ "$arm" = intime ] && echo 1 || echo 0))) "$ERGO" "$HELD" "$PARK"
+      $((HOLDS + 2 * run + $([ "$arm" = intime ] && echo 1 || echo 0))) "$ERGO" "$HELD" "$PARK" \
+      || echo "  run $run $arm was not read"
   done
 done
 

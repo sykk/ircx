@@ -1,99 +1,125 @@
-"""The frames either side of the release, and what each pane did across them.
+"""The frames either side of the landing, and what each pane did across them.
 
     pick.py <walk directory>
 
-Run 30's `pick.py`, reading both panes off the same frames. The choice of frames
-is that script's and so is the reason for it: `parked.sh` photographs on a timer
-without knowing which pair the page will land between, and the pair is chosen
-afterwards against the epoch `latepage.py` stamps on the release.
+`parked.sh` photographs every two seconds across a window wide enough to hold
+the release however the wheel burst went, and this chooses the pair afterwards.
 
-Three pairs per pane, and the first and last are what make the middle one mean
-anything:
+**Chosen by the change rather than by the clock, which is where run 30's
+`pick.py` is departed from.** That script took the last frame written before the
+epoch `latepage.py` stamps on the release and the first written after it. The
+release is when the batch went on the wire, and what a frame can show is the
+page being drawn — two hundred rows later. A pair straddling the wire by a tenth
+of a second is a pair taken before the client has finished with it: one walk here
+read `pane still` on every pane and every pair, which is a landing photographed
+twice from in front.
+
+So the release is what says the page is on its way, and the first frame that
+differs from the one before it — at or after that instant — is what says it
+arrived. Nothing else changes this window: the seeders stop talking once the
+channel is filled, so a pane that differs is a pane the page reached.
+
+Three pairs, and the first and last are what make the middle one mean anything:
 
     still    two frames before the landing, neither of which contains it
-    landing  the pair the release falls between
+    landing  the pair the change falls between
     after    two frames past it, once the page is in
 
 Three readings per pair, because a pane that did not move is not the same claim
 as a pane that did not change:
 
     the distance   `paneshift.py`, over the message column
-    rows           `still.py`, pixel for pixel over that same column
-    pane           pixel for pixel over the whole pane, spine and scrollbar in
+    rows           that same column, pixel for pixel
+    pane           the whole pane, spine and scrollbar in
 
-**The third is the landing's witness and this walk needs one.** Both panes here
-read `+0px` with their rows identical, which is also what a walk that missed the
-landing entirely would print. The scrollbar is what cannot stay still: two
-hundred messages arriving above the reader shorten the thumb in every pane on
-the conversation, whether or not a row moves. A landing pair that reads `rows
-still, pane differs` is a page that arrived and moved nobody; one that reads
-`pane still` on all three pairs is a walk that photographed the wrong minute.
+**The third is what a landing shows itself in when it moves nobody.** Two hundred
+messages arriving above the reader shorten the scrollbar's thumb in every pane on
+the conversation, and a topic declared on the page's last line re-opens a group
+that runs forward into rows already drawn, which changes the spine beside every
+one of them. Neither is a displacement. Both are outside the column the distance
+is measured over, and inside this.
 """
 
 import glob
 import os
 import re
-import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from paneshift import COLUMNS, measure, same  # noqa: E402
+
 DIR = sys.argv[1]
-HERE = os.path.dirname(os.path.abspath(__file__))
-RUN23 = os.path.join(os.path.dirname(HERE), "end-to-end-23")
-# The whole of a pane, which `paneshift.py`'s columns deliberately are not: the
-# spine on one side of the message column and the scrollbar on the other are
-# where a landing shows itself without anything moving.
+# The whole of a pane, which the message column deliberately is not.
 PANES = {"left": "340x620+245+80", "right": "340x620+725+80"}
+Y0, HEIGHT = 80, 620
 
 released = None
+release_at = None
+asked = None
 for line in open(os.path.join(DIR, "wire.log")):
-    stamped = re.search(r"~~ released .* at (\d+\.\d+)", line)
+    stamped = re.search(r"^\s*([\d.]+) ~~ released .* at (\d+\.\d+)", line)
     if stamped:
-        released = float(stamped.group(1))
+        release_at, released = float(stamped.group(1)), float(stamped.group(2))
+    ask = re.search(r"^\s*([\d.]+) >> .*CHATHISTORY BEFORE", line)
+    if ask and asked is None:
+        asked = float(ask.group(1))
 if released is None:
     sys.exit("nothing was released in this walk")
 
 frames = sorted(glob.glob(os.path.join(DIR, "frame-*.png")))
-before = [f for f in frames if os.path.getmtime(f) < released]
-after = [f for f in frames if os.path.getmtime(f) > released]
-if len(before) < 3 or len(after) < 3:
-    sys.exit(
-        f"the burst does not straddle the release: {len(before)} frames before it "
-        f"and {len(after)} after"
-    )
+
+# **Which pane asked is read rather than assumed, and a walk got it wrong before
+# this line existed.** `parked.png` is taken after the parking wheel and before
+# the one that pages, so an ask stamped ahead of it came out of the right pane —
+# which happens when the parking overshoots to within `LOAD_OLDER_PX` of the top
+# of its content, 400px in `Timeline.tsx`. The pane is then the asker and there
+# is no parked pane in the walk at all. The proxy stamps its log in seconds since
+# it started and the release line carries a wall clock as well, which is what
+# puts the two on one timeline.
+parking = os.path.getmtime(os.path.join(DIR, "parked.png"))
+who = "the left pane asked"
+if asked is not None and released - release_at + asked < parking:
+    who = "THE RIGHT PANE ASKED, while parking: this walk has no parked pane"
+
+
+def unchanged(first, second):
+    return all(same(box, first, second) for box in PANES.values())
+
+
+landing = None
+for index in range(1, len(frames)):
+    if os.path.getmtime(frames[index]) < released:
+        continue
+    if not unchanged(frames[index - 1], frames[index]):
+        landing = index
+        break
+
+if landing is None:
+    sys.exit(f"no frame after the release differs from the one before it, of {len(frames)}")
+if landing < 3 or landing + 2 >= len(frames):
+    sys.exit(f"the landing is at frame {landing} of {len(frames)}, too near an end to read")
 
 PAIRS = [
-    ("still", before[-3], before[-2]),
-    ("landing", before[-1], after[0]),
-    ("after", after[1], after[2]),
+    ("still", frames[landing - 3], frames[landing - 2]),
+    ("landing", frames[landing - 1], frames[landing]),
+    ("after", frames[landing + 1], frames[landing + 2]),
 ]
 
-
-def ran(script, *arguments):
-    out = subprocess.run(["python3", script, *arguments], capture_output=True, text=True)
-    return out.stdout.strip()
-
-
-def identical(box, first, second):
-    """`compare` exits 1 when the images differ, which is an answer rather than a
-    failure, so the return code is read instead of checked."""
-    out = subprocess.run(
-        ["magick", "compare", "-metric", "AE", "-crop", box, first, second, "null:"],
-        capture_output=True,
-        text=True,
-    )
-    if out.returncode > 1:
-        sys.exit(f"compare failed: {out.stderr.strip()}")
-    return float(out.stderr.strip().split()[0]) == 0
-
-
 for pane in ("left", "right"):
+    x0, width = COLUMNS[pane]
+    column = f"{width}x{HEIGHT}+{x0}+{Y0}"
     for name, first, second in PAIRS:
-        distance = ran(os.path.join(HERE, "paneshift.py"), pane, first, second)
-        rows = ran(os.path.join(RUN23, "still.py"), pane, first, second)
-        whole = "pane still" if identical(PANES[pane], first, second) else "pane differs"
-        print(f"    {pane:>5} {name:<9} {distance:<48} rows {rows}, {whole}")
+        rows = "rows still" if same(column, first, second) else "rows differ"
+        whole = "pane still" if same(PANES[pane], first, second) else "pane differs"
+        print(f"    {pane:>5} {name:<9} {measure(pane, first, second):<44} {rows}, {whole}")
 
 print(
-    f"    (the landing is between {os.path.basename(before[-1])} and "
-    f"{os.path.basename(after[0])}, {os.path.getmtime(after[0]) - released:.1f}s of slack)"
+    f"    ({who}; the landing is {os.path.basename(frames[landing])}, "
+    f"{os.path.getmtime(frames[landing]) - released:.1f}s after the release, "
+    # How long the wheel burst went on after the ask, which is what decides
+    # where the window has to start and is different every walk. `frame-000` is
+    # taken a second and a half after the burst ends, so this is the release
+    # measured from there: the shorter it is, the earlier in its burst the pane
+    # asked.
+    f"{released - os.path.getmtime(frames[0]):.0f}s after the burst)"
 )

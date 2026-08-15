@@ -20,6 +20,12 @@
 # both have to happen before the page-back does, and a launch that has just
 # restored a two-pane tree is also the state #508 was reported in.
 #
+# `IRCX_PROBE` names a file on the second launch and nothing writes to it unless
+# the binary was built with `VITE_PROBE=1`, which the binary the frames come from
+# is not. It is here so that the same script serves the probe walk, where what a
+# photograph cannot answer — whether the parked pane's anchor was asked to do
+# anything at all — is read off the records instead.
+#
 # The proxy is up across both launches. It holds `CHATHISTORY BEFORE` and
 # nothing else, so the first launch's join page and the second launch's restore
 # — `TARGETS` and `AFTER`, which `asks.py` found a restored launch makes — cross
@@ -67,13 +73,22 @@ fi
 # apart. `parked.png` names the line it stopped on and the count in the line
 # below says whether it asked.
 #
-# The burst then opens twenty-eight seconds before the release could be at its
-# earliest and runs fifty-two seconds. **The ask is inside the wheel burst, not
-# after it** — a pane asks the moment it reaches the top of its content and the
-# burst goes on scrolling against a top it has already reached — so the walk
-# cannot know when it is asking and photographs a window instead. Run 30's first
-# set counted the wait from the frame after the wheel and put both frames after
-# the landing, six walks out of six.
+# The frames then run from the end of the wheel burst until the page can no
+# longer be outstanding. **The ask is inside the burst, not after it** — a pane
+# asks the moment it reaches the top of its content and the burst goes on
+# scrolling against a top it has already reached — so the walk cannot know when
+# it is asking and photographs a window instead, and `pick.py` chooses the
+# straddling pair afterwards. Run 30's first set counted the wait from the frame
+# after the wheel and put both frames after the landing, six walks out of six.
+#
+# **The window cannot be narrowed to the end of that wait, which is run 30's
+# arrangement and does not survive a split.** How long the burst goes on after
+# the ask is the free variable: 13 seconds in one probe walk here and 25 in
+# another, against a hold that is the same number every time. Run 30 opened the
+# window 28 seconds before the release could be at its earliest, and a walk whose
+# ask came 25 seconds early spent its whole burst before the first frame — one
+# frame ahead of the landing where `pick.py` needs three. So the window starts
+# where the burst ends and runs the whole hold out.
 {
   echo "wait 12000"
   echo "wheel 880 400 -$PARK"
@@ -82,13 +97,13 @@ fi
   echo "wheel 400 400 -1600"
   echo "wait 1500"
   echo "ss $DIR/frame-000.png"
-  echo "wait $(( (SECONDS_HELD - 28) * 1000 ))"
-  for n in $(seq -w 1 26); do
+  for n in $(seq -w 1 $(( (SECONDS_HELD + 8) / 2 + 3 ))); do
     echo "ss $DIR/frame-$n.png"
     echo "wait 2000"
   done
   echo "quit"
-} | node "$HARNESS" --release --profile "$PROFILE" > "$DIR/walk.log" 2>&1 \
+} | IRCX_PROBE="$DIR/probe.log" node "$HARNESS" --release --profile "$PROFILE" \
+    > "$DIR/walk.log" 2>&1 \
   || echo "    the walk exited $?"
 
 kill "$HOLD_PID" 2>/dev/null || true

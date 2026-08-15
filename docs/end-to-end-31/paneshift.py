@@ -14,9 +14,15 @@ couple of rows it can tie with an offset two rows away and lose the tie —
 that was byte-for-byte identical. Strips that must match exactly cannot mislock
 that way; they can only fail to be found, which is counted and printed.
 
-Run 23's columns, because they are the columns that walk's frames were read over
-and this walk draws the same two panes in the same 1200x800 window. What they
-have to clear is the divider on one side and the pane's own roster on the other.
+**The columns start clear of the spine, and a probe walk is why.** The page this
+run lands declares a topic on its last line, which opens a group that reaches
+forward into the rows already on the screen: every one of them gains a
+continuous coloured spine where each had a grey stub of its own. Nothing moves —
+the text is drawn at the same heights either side of it — but a strip that
+includes those four pixels is a strip that cannot be found afterwards, and the
+first walk to park a pane where the regrouping reaches it lost all fourteen. The
+change is real and `pick.py` reports it; what it must not do is take away the
+marks the distance is measured against.
 """
 
 import re
@@ -25,38 +31,52 @@ import sys
 import tempfile
 from collections import Counter
 
-WHICH, BEFORE, AFTER = sys.argv[1], sys.argv[2], sys.argv[3]
-COLUMNS = {"left": (262, 308), "right": (740, 310)}
+# One pane's message column: the spine on the left of it and the scrollbar on
+# the right of it are both outside.
+COLUMNS = {"left": (266, 300), "right": (750, 300)}
 # Tall enough to cross a row's second line, which is where the number is. A
 # strip inside one line catches a nick and a clock the seed repeats, and half of
 # them then match somewhere they did not come from.
-STRIP_PX = 26
+#
+# Run 30's 26 was two lines of this seed's prose and left six strips of fourteen
+# locked somewhere they did not come from, on frames that were pixel for pixel
+# identical: a strip has to be found *somewhere*, and a tie between rows is
+# broken by whichever comes first. 52 crosses a row boundary as well, so the
+# nick and the number of the row below are in it — 12 of 14 agreeing on the same
+# frames, against 8.
+STRIP_PX = 52
 FROM_Y, TO_Y, EVERY = 240, 660, 30
-X0, WIDTH = COLUMNS[WHICH]
 
 
-def crop(path, y):
+def crop(path, box):
     out = subprocess.run(
-        ["magick", path, "-crop", f"{WIDTH}x{STRIP_PX}+{X0}+{y}", "+repage", "png:-"],
-        capture_output=True,
-        check=True,
+        ["magick", path, "-crop", box, "+repage", "png:-"], capture_output=True, check=True
     )
     return out.stdout
 
 
-def column(path):
+def same(box, first, second):
+    """Whether two frames are pixel for pixel the same over a region.
+
+    Cropping both and comparing the bytes does not answer this: ImageMagick
+    writes a PNG that differs between two crops of frames `compare` scores at
+    zero. `compare` exits 1 when the images differ, which is an answer rather
+    than a failure, so the return code is read instead of checked.
+    """
     out = subprocess.run(
-        ["magick", path, "-crop", f"{WIDTH}x0+{X0}+0", "+repage", "png:-"],
+        ["magick", "compare", "-metric", "AE", "-crop", box, first, second, "null:"],
         capture_output=True,
-        check=True,
+        text=True,
     )
-    return out.stdout
+    if out.returncode > 1:
+        sys.exit(f"compare failed: {out.stderr.strip()}")
+    return float(out.stderr.strip().split()[0]) == 0
 
 
-def find(needle):
+def find(haystack, needle):
     """`compare -subimage-search` prints `<metric> (<normalised>) @ <x>,<y>`."""
     result = subprocess.run(
-        ["magick", "compare", "-subimage-search", "-metric", "AE", HAYSTACK.name, "-", "null:"],
+        ["magick", "compare", "-subimage-search", "-metric", "AE", haystack, "-", "null:"],
         input=needle,
         capture_output=True,
     )
@@ -68,27 +88,32 @@ def find(needle):
     return None if float(metric) != 0 else int(y)
 
 
-HAYSTACK = tempfile.NamedTemporaryFile(suffix=".png")
-HAYSTACK.write(column(AFTER))
-HAYSTACK.flush()
+def measure(which, before, after):
+    x0, width = COLUMNS[which]
+    with tempfile.NamedTemporaryFile(suffix=".png") as haystack:
+        haystack.write(crop(after, f"{width}x0+{x0}+0"))
+        haystack.flush()
+        offsets = []
+        missing = 0
+        for y in range(FROM_Y, TO_Y, EVERY):
+            landed = find(haystack.name, crop(before, f"{width}x{STRIP_PX}+{x0}+{y}"))
+            if landed is None:
+                missing += 1
+            else:
+                offsets.append(landed - y)
 
-offsets = []
-missing = 0
-for y in range(FROM_Y, TO_Y, EVERY):
-    landed = find(crop(BEFORE, y))
-    if landed is None:
-        missing += 1
-    else:
-        offsets.append(landed - y)
+    if not offsets:
+        return f"no strip of {missing} was found in the second frame, pixel for pixel"
 
-if not offsets:
-    print(f"no strip of {missing} was found in the second frame, pixel for pixel")
-    sys.exit()
+    agreed, count = Counter(offsets).most_common(1)[0]
+    spread = max(offsets) - min(offsets)
+    evidence = f"{count} of {len(offsets)} agree, spread {spread}px, {missing} redrawn"
+    # A mode that is not a majority is a mislock with company rather than a
+    # measurement, and saying so is the whole of what run 25 asks of this.
+    if count * 2 <= len(offsets):
+        return f"the strips do not agree on a distance ({evidence})"
+    return f"{agreed:+d}px  ({evidence})"
 
-agreed, count = Counter(offsets).most_common(1)[0]
-spread = max(offsets) - min(offsets)
-evidence = f"{count} of {len(offsets)} strips agree, spread {spread}px, {missing} redrawn"
-if count * 2 <= len(offsets):
-    print(f"the strips do not agree on a distance ({evidence})")
-else:
-    print(f"{agreed:+d}px  ({evidence})")
+
+if __name__ == "__main__":
+    print(measure(sys.argv[1], sys.argv[2], sys.argv[3]))

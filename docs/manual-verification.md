@@ -802,10 +802,17 @@ went to 9245. That is `scrollAnchor.ts`'s claim that the head's departure "needs
 no term of its own" — watched rather than argued, on the one commit it is about,
 where `headPx` is 0 against a `margin` of 24 that is a commit behind it.
 
-**The reader is moved all the same**, by 22 to 46px, and by the fourteen commits
-of settling after the write rather than by the write. #532. The pane is
-motionless either side — twelve readings at zero on frames two seconds apart —
-so the distance belongs to the landing.
+**The reader is moved all the same**, by the fourteen commits of settling after
+the write rather than by the write. #532, fixed by holding the anchor until the
+rows stop measuring instead of for one commit; the same walk reads +0px on all
+three runs after it. The pane is motionless either side — twelve readings at
+zero on frames two seconds apart — so the distance belongs to the landing.
+
+The frames read 22 to 46px and **the displacement is 11px of that**. A strip is
+a row below the anchored one, and this channel is seeded so a landing page gives
+some blocks a name they did not have; the rest of the distance is those rows
+redrawing. Read the anchored row's own painted position if the number matters —
+a screenshot cannot separate the two.
 
 Worth knowing before repeating it: **a pane asks the moment it reaches the top
 of its content, not when the wheel burst ends**, so the ask can precede the

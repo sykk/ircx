@@ -73,6 +73,20 @@ what this establishes is that a landing page displaces the reader; it does not
 establish that a late one displaces them further, and nothing here should be
 quoted for that.
 
+> **What that column is not, and this was found while fixing it.** A strip is a
+> row *below* the anchored one, and this channel is seeded so that a landing
+> page changes what some rows draw — a topic declared in the page reaches
+> forward and gives a block a name it did not have, which is a line of height
+> gained above every strip under it. So the number is the pane's displacement
+> plus whatever the rows between redrew, and the two are not separable by
+> photograph.
+>
+> Reading the anchored row's own painted position out of the window instead —
+> `getBoundingClientRect` against the scroller, on a build carrying it — the
+> displacement is **11px**, arriving on one commit of the fourteen. The rest of
+> the 22 to 46px is rows redrawing, which is the seed working as designed and
+> not a defect. #532 was filed at the larger figure and is corrected there.
+
 `owed.png` and `landed.png` are the pair from `late run1`: the head reading
 "The server has not sent this page yet" over the top of the content, and the
 same pane 1.8 seconds later with two hundred rows above it.
@@ -144,8 +158,10 @@ prints the spread and how many were redrawn, so a thin reading looks thin.
 - **The anchor's write on that commit is exact**, and the head's departure needs
   no term of its own, which is what `scrollAnchor.ts` says and what nothing had
   watched.
-- **The reader is nonetheless moved by tens of pixels**, by the settling after
-  the write rather than by the write. #532.
+- **The reader is nonetheless moved**, by the settling after the write rather
+  than by the write: 11px of the frames' 22 to 46, the rest being rows
+  redrawing. #532, fixed by holding the anchor until the measuring stops rather
+  than for one commit — the late arm reads +0px on all three runs after it.
 
 ## What it does not claim
 

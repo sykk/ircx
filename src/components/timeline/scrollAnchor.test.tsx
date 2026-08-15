@@ -30,11 +30,23 @@ describe("movedInList", () => {
   });
 });
 
-/** Where each message's row sits, in the scroller's own coordinates. */
+/** Where a row sits, in the scroller's own coordinates. */
 interface Row {
+  /** The message the row is named by, which is the first one in it. */
   id: string;
   start: number;
   size: number;
+  /**
+   * The run this row draws and how far into it each line is, where the row holds
+   * more than the message it is named for. A page landing can merge into the
+   * block at the top of the window, and the reader's own message is then drawn
+   * that far below where their row starts (#535).
+   */
+  lines?: { id: string; within: number }[];
+}
+
+function linesOf(row: Row): { id: string; within: number }[] {
+  return row.lines ?? [{ id: row.id, within: 0 }];
 }
 
 /**
@@ -45,9 +57,14 @@ interface Row {
  * of #477 was that the number it read there was the wrong one.
  */
 function offsetsFor(layout: Row[]): Offsets {
+  const holding = (id: string) => layout.find((row) => linesOf(row).some((l) => l.id === id));
   return {
-    offsetOfMessage: (id) => layout.find((row) => row.id === id)?.start,
+    offsetOfMessage: (id) => holding(id)?.start,
     messageAtOffset: (offset) => layout.find((row) => offset < row.start + row.size)?.id,
+    lineWithinRow: (id) => {
+      const row = holding(id);
+      return row === undefined ? undefined : linesOf(row).find((l) => l.id === id)?.within;
+    },
   };
 }
 
@@ -166,6 +183,35 @@ describe("usePrependAnchor", () => {
     rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={after} />);
 
     expect(el.scrollTop).toBe(3_000);
+  });
+
+  /**
+   * #535, photographed in end-to-end run 31. The page's last message is by the
+   * person whose run the window opens with, so the two sides are drawn as one
+   * block: the reader's message opened a row and is now the second line of one.
+   * Its row starts 200px higher than the message does, and a pane put back by
+   * the row leaves the reader a message lower than they were.
+   */
+  it("holds the reader still when their row takes in the messages the page brought", () => {
+    const before = evenly(0, 1_000, "c", "d");
+    const after: Row[] = [
+      { id: "a", start: 0, size: 1_000 },
+      // "c" kept its own line and lost the row it named: "b" arrived above it,
+      // by the same person and a moment earlier, and the block is the two.
+      { id: "b", start: 1_000, size: 1_200, lines: [{ id: "b", within: 0 }, { id: "c", within: 200 }] },
+      { id: "d", start: 2_200, size: 1_000 },
+    ];
+    const { getByTestId, rerender } = render(<Scroller messages={ids("c", "d")} layout={before} />);
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("c", "d")} layout={before} />);
+    scrollTo(el, 0);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={after} />);
+
+    // "c" was drawn at the top of the scroller and is put back there: its row
+    // starts at 1_000 and its own line is 200 into it.
+    expect(el.scrollTop).toBe(1_200);
   });
 
   it("asserts the place again when the next commit measures the page differently", () => {

@@ -74,16 +74,19 @@ function openSecondView() {
   return id;
 }
 
-/** How far below the top of the viewport a message is drawn. Rows are laid out
- * inside the sizer, which starts below the head, so the head has to be added
+/** How far below the top of the viewport a message's own line is drawn. Rows are
+ * laid out inside the sizer, which starts below the head, so the head has to be added
  * back before `scrollTop` can be taken off. */
 function eyeLine(scroller: HTMLElement, msgid: string): number {
-  const row = scroller
-    .querySelector(`[data-msgid="${msgid}"]`)
-    ?.closest<HTMLElement>("[data-index]");
-  if (!row) throw new Error(`${msgid} is not drawn in this pane`);
+  const line = scroller.querySelector<HTMLElement>(`[data-msgid="${msgid}"]`);
+  const row = line?.closest<HTMLElement>("[data-index]");
+  if (!line || !row) throw new Error(`${msgid} is not drawn in this pane`);
   const head = scroller.querySelector<HTMLElement>('[data-testid="timeline-head"]');
-  return topOf(row) + (head?.offsetHeight ?? 0) - scroller.scrollTop;
+  // The line's own place in the row and not the row's, which are the same
+  // number until a landing page merges into the row and puts its messages above
+  // this one inside it (#535).
+  const within = line.getBoundingClientRect().top - row.getBoundingClientRect().top;
+  return topOf(row) + within + (head?.offsetHeight ?? 0) - scroller.scrollTop;
 }
 
 function topOf(row: HTMLElement): number {
@@ -111,6 +114,30 @@ function olderPage(seedNumber: number): ChatMessage[] {
     seed: seedNumber,
     startedAt: Date.parse("2026-07-28T00:00:00.000Z"),
   }).map((m) => ({ ...m, id: `old-${m.id}` }));
+}
+
+/**
+ * A channel whose page boundary falls inside one person's run: `historian` says
+ * the last line of the page and the first two of the window, so the two sides
+ * are one block once both are drawn. Run 31 photographed exactly this at lines
+ * 0232 and 0233 — the seeder's speaker function repeats where a run happens to
+ * straddle wherever the window begins, which is not a shape a walk can arrange.
+ *
+ * Everything else alternates, so the block the reader opens is two messages
+ * rather than the channel.
+ */
+function runAcrossTheBoundary(from: number, count: number): ChatMessage[] {
+  const started = Date.parse("2026-07-28T00:00:00.000Z");
+  return Array.from({ length: count }, (_, i) => {
+    const n = from + i;
+    const run = n >= 200 && n <= 202;
+    return makeMessage({
+      id: `line${n}`,
+      nick: run ? "historian" : ["archivist", "curator"][n % 2]!,
+      text: `line ${String(n).padStart(4, "0")} the reader is somewhere above this line`,
+      timestamp: new Date(started + n * 90).toISOString(),
+    });
+  });
 }
 
 /**
@@ -222,6 +249,44 @@ describe("a timeline whose rows are the heights it draws", () => {
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
     flushLayout();
+
+    expect(eyeLine(scroller, reading)).toBe(before);
+  });
+
+  /**
+   * #535, photographed in end-to-end run 31: the pane that asked was at the top
+   * of its content, the page landed with a message by the same person a moment
+   * earlier, and the reader's own line was drawn 84px lower afterwards.
+   *
+   * The page boundary falls inside one person's run here, so `groups.ts` draws
+   * the two sides as one block once both are in the window — and the reader's
+   * message, which opened the block, is now the second message in it. The row's
+   * top is no longer just above their line, and holding the row still leaves the
+   * line a message lower.
+   */
+  it("holds the reader still when the page merges into the run they are reading", async () => {
+    ipcMock.loadHistory.mockResolvedValue(runAcrossTheBoundary(1, 200));
+    seed(runAcrossTheBoundary(201, 200));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    const reading = atTheFold(scroller);
+    const before = eyeLine(scroller, reading);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(400),
+    );
+    flushLayout();
+
+    // The merge itself, which is what makes this a different test from the one
+    // above rather than the same one with another fixture.
+    const row = scroller
+      .querySelector(`[data-msgid="${reading}"]`)!
+      .closest<HTMLElement>("[data-index]")!;
+    expect(row.querySelector("[data-msgid]")!.getAttribute("data-msgid")).not.toBe(reading);
 
     expect(eyeLine(scroller, reading)).toBe(before);
   });

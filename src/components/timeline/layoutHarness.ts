@@ -58,24 +58,57 @@ function wrapped(text: string): number {
 }
 
 /**
- * A row's height, from the lines it draws.
+ * What a row draws, in the order it draws it: the group's name, the name and
+ * clock over the run, and each message's own line.
  *
  * The name over a run is counted by the clock beside it, and only where that
  * clock is the run's rather than a line's: a reader who asked for the name on
  * every line is drawn a clock inside each message instead, where it is part of
  * the line it sits in.
  */
+function pieces(row: HTMLElement): HTMLElement[] {
+  const drawn = row.querySelectorAll<HTMLElement>('[data-msgid], [data-ui="group-name"], time');
+  return [...drawn].filter(
+    (piece) => piece.tagName !== "TIME" || piece.closest("[data-msgid]") === null,
+  );
+}
+
+function piecePx(piece: HTMLElement): number {
+  if (piece.hasAttribute("data-msgid")) return wrapped(piece.textContent ?? "") * LINE_PX;
+  return piece.tagName === "TIME" ? NAME_PX : GROUP_NAME_PX;
+}
+
+/** A row's height, from the pieces it draws. */
 function rowPx(row: HTMLElement): number {
-  let lines = 0;
-  for (const line of row.querySelectorAll<HTMLElement>("[data-msgid]")) {
-    lines += wrapped(line.textContent ?? "");
+  const drawn = pieces(row);
+  const says = drawn.some((piece) => piece.hasAttribute("data-msgid") || piece.tagName === "TIME");
+  if (!says) return DIVIDER_PX;
+  return drawn.reduce((px, piece) => px + piecePx(piece), 0) + FRAME_PX;
+}
+
+/**
+ * How far into its row a piece is drawn: the height of everything the row draws
+ * above it.
+ *
+ * **A row is a run of messages, so this is not always zero, and #535 is what it
+ * costs to assume it is.** A page landing can merge into the block at the top of
+ * the window, which puts the messages it brought above a reader's own line
+ * inside the row that holds it — a distance the virtualiser cannot report,
+ * because it measures rows.
+ *
+ * The row's frame is counted below its content, so the first piece of a row
+ * starts at the row's own top. Only differences between two of these are ever
+ * read, and that choice keeps them whole.
+ */
+function above(piece: HTMLElement): number {
+  const row = piece.closest<HTMLElement>("[data-index]");
+  if (row === null) return 0;
+  let px = 0;
+  for (const drawn of pieces(row)) {
+    if (drawn === piece || drawn.contains(piece)) break;
+    px += piecePx(drawn);
   }
-  const names = [...row.querySelectorAll("time")].filter(
-    (clock) => clock.closest("[data-msgid]") === null,
-  ).length;
-  const topics = row.querySelectorAll('[data-ui="group-name"]').length;
-  if (lines === 0 && names === 0) return DIVIDER_PX;
-  return lines * LINE_PX + names * NAME_PX + topics * GROUP_NAME_PX + FRAME_PX;
+  return px;
 }
 
 function heightOf(el: HTMLElement): number {
@@ -200,6 +233,16 @@ export function installLayout(): void {
   };
   globalThis.cancelAnimationFrame = (id: number) => {
     frames.delete(id);
+  };
+
+  // What a row draws is laid out by the browser rather than by the virtualiser,
+  // so the distance from a row's top to a line inside it is a rect away in the
+  // app and zero in jsdom. Modelled in the row's own coordinates — a row's top
+  // is 0 and a line's is what the row draws above it — because the distance
+  // between the two is the whole of what anything reads here.
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    const top = this.hasAttribute("data-index") ? 0 : above(this);
+    return new DOMRect(0, top, VIEWPORT_WIDTH_PX, heightOf(this));
   };
 
   Object.defineProperty(HTMLElement.prototype, "offsetHeight", {

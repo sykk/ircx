@@ -148,6 +148,33 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     overscan: 10,
   });
 
+  /**
+   * How far into its row a message's own line is drawn, and undefined where the
+   * row is not on the screen to be measured.
+   *
+   * The DOM rather than the virtualiser, which measures rows and cannot answer
+   * this. It is the distance between two boxes inside one row, so the transform
+   * the row is drawn at — a render behind on the commit a page lands in, which
+   * is what #477 is about — cancels out of it.
+   *
+   * Undefined rather than zero, and the difference is the whole of what makes
+   * this safe. The rows rendered on the commit a page lands in are the ones the
+   * *old* scroll offset asks for, which after two hundred messages arrive above
+   * the reader is a window that does not hold them; answering 0 there would move
+   * every reader by the name over their own run. The anchor keeps what it last
+   * measured for exactly this.
+   */
+  const lineWithinRow = useCallback((id: string) => {
+    const drawn = scrollRef.current?.querySelectorAll<HTMLElement>("[data-msgid]");
+    // Compared rather than selected on: an id is the server's or this client's
+    // and neither is written to be a selector, and `CSS.escape` is not in every
+    // environment this renders in.
+    const line = [...(drawn ?? [])].find((candidate) => candidate.dataset.msgid === id);
+    const row = line?.closest<HTMLElement>("[data-index]");
+    if (!line || !row) return undefined;
+    return line.getBoundingClientRect().top - row.getBoundingClientRect().top;
+  }, []);
+
   // The anchor works in messages, the virtualiser in rows, and this is the
   // whole of the translation. A row that holds none — a date, a seam — cannot
   // name the reader's place, so the search runs forward to one that can.
@@ -165,6 +192,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         virtualizer.getTotalSize();
         return virtualizer.getOffsetForIndex(index, "start")?.[0];
       },
+      lineWithinRow,
       messageAtOffset: (offset) => {
         const from = virtualizer.getVirtualItemForOffset(offset)?.index;
         if (from === undefined) return undefined;
@@ -175,7 +203,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         return undefined;
       },
     }),
-    [rows, virtualizer],
+    [rows, virtualizer, lineWithinRow],
   );
 
   // `headPx` and not the head itself: it is the margin the offsets above were

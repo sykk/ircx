@@ -1,0 +1,94 @@
+2026/08/15 08:02:16 database initialized:  ircd.db
+ergo listening on 127.0.0.1:6781, pid 4112585
+seeded 400 messages into #late
+run 1 late
+  1 page-backs asked, 202 lines held
+     left still     +0px  (12 of 14 agree, spread 303px, 0 redrawn) rows still, pane still
+     left landing   +0px  (12 of 14 agree, spread 303px, 0 redrawn) rows still, pane differs
+     left after     +0px  (12 of 14 agree, spread 303px, 0 redrawn) rows still, pane still
+    right still     +0px  (13 of 14 agree, spread 202px, 0 redrawn) rows still, pane still
+    right landing   +0px  (13 of 14 agree, spread 202px, 0 redrawn) rows still, pane differs
+    right after     +0px  (13 of 14 agree, spread 202px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-30.png, 1.7s after the release, 59s after the burst)
+run 1 intime
+  1 page-backs asked, 202 lines held
+     left still     +0px  (14 of 14 agree, spread 0px, 0 redrawn) rows still, pane still
+     left landing   +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows differ, pane differs
+     left after     +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane still
+    right still     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    right landing   +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane differs
+    right after     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-14.png, 1.4s after the release, 26s after the burst)
+run 2 late
+  2 page-backs asked, 404 lines held
+     left still     +0px  (12 of 14 agree, spread 360px, 0 redrawn) rows still, pane still
+     left landing   +0px  (12 of 14 agree, spread 360px, 0 redrawn) rows still, pane differs
+     left after     +0px  (12 of 14 agree, spread 360px, 0 redrawn) rows still, pane still
+    right still     +0px  (14 of 14 agree, spread 0px, 0 redrawn) rows still, pane still
+    right landing   +0px  (14 of 14 agree, spread 0px, 0 redrawn) rows still, pane differs
+    right after     +0px  (14 of 14 agree, spread 0px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-30.png, 0.4s after the release, 60s after the burst)
+run 2 intime
+  1 page-backs asked, 202 lines held
+     left still     +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane still
+     left landing   +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows differ, pane differs
+     left after     +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane still
+    right still     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    right landing   +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane differs
+    right after     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-13.png, 2.0s after the release, 23s after the burst)
+run 3 late
+  2 page-backs asked, 404 lines held
+     left still     +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane still
+     left landing   +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane differs
+     left after     +0px  (13 of 14 agree, spread 158px, 0 redrawn) rows still, pane still
+    right still     +0px  (12 of 14 agree, spread 404px, 0 redrawn) rows still, pane still
+    right landing   +0px  (12 of 14 agree, spread 404px, 0 redrawn) rows still, pane differs
+    right after     +0px  (12 of 14 agree, spread 404px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-30.png, 0.8s after the release, 60s after the burst)
+run 3 intime
+  1 page-backs asked, 202 lines held
+     left still     +0px  (11 of 14 agree, spread 404px, 0 redrawn) rows still, pane still
+     left landing   +0px  (10 of 14 agree, spread 606px, 0 redrawn) rows differ, pane differs
+     left after     +0px  (10 of 14 agree, spread 606px, 0 redrawn) rows still, pane still
+    right still     +0px  (10 of 14 agree, spread 404px, 0 redrawn) rows still, pane still
+    right landing   +0px  (10 of 14 agree, spread 404px, 0 redrawn) rows still, pane differs
+    right after     +0px  (10 of 14 agree, spread 404px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-13.png, 0.5s after the release, 25s after the burst)
+run 4 late
+  1 page-backs asked, 202 lines held
+     left still     +0px  (11 of 14 agree, spread 360px, 0 redrawn) rows still, pane still
+     left landing   +0px  (11 of 14 agree, spread 360px, 0 redrawn) rows still, pane differs
+     left after     +0px  (11 of 14 agree, spread 360px, 0 redrawn) rows still, pane still
+    right still     +0px  (11 of 14 agree, spread 550px, 0 redrawn) rows still, pane still
+    right landing   +0px  (11 of 14 agree, spread 550px, 0 redrawn) rows still, pane differs
+    right after     +0px  (11 of 14 agree, spread 550px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-30.png, 0.8s after the release, 60s after the burst)
+run 4 intime
+  1 page-backs asked, 202 lines held
+     left still     +0px  (12 of 14 agree, spread 259px, 0 redrawn) rows still, pane still
+     left landing   +84px  (8 of 11 agree, spread 384px, 3 redrawn) rows differ, pane differs
+     left after     +0px  (10 of 14 agree, spread 643px, 0 redrawn) rows still, pane still
+    right still     +0px  (11 of 14 agree, spread 303px, 0 redrawn) rows still, pane still
+    right landing   +0px  (11 of 14 agree, spread 303px, 0 redrawn) rows still, pane differs
+    right after     +0px  (11 of 14 agree, spread 303px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-13.png, 1.1s after the release, 24s after the burst)
+run 5 late
+  2 page-backs asked, 404 lines held
+     left still     +0px  (12 of 14 agree, spread 486px, 0 redrawn) rows still, pane still
+     left landing   +0px  (12 of 14 agree, spread 486px, 0 redrawn) rows still, pane differs
+     left after     +0px  (12 of 14 agree, spread 486px, 0 redrawn) rows still, pane still
+    right still     +0px  (12 of 14 agree, spread 275px, 0 redrawn) rows still, pane still
+    right landing   +0px  (12 of 14 agree, spread 275px, 0 redrawn) rows still, pane differs
+    right after     +0px  (12 of 14 agree, spread 275px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-30.png, 2.2s after the release, 58s after the burst)
+run 5 intime
+  1 page-backs asked, 202 lines held
+     left still     +0px  (12 of 14 agree, spread 202px, 0 redrawn) rows still, pane still
+     left landing   +0px  (12 of 14 agree, spread 202px, 0 redrawn) rows differ, pane differs
+     left after     +0px  (12 of 14 agree, spread 202px, 0 redrawn) rows still, pane still
+    right still     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    right landing   +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane differs
+    right after     +0px  (13 of 14 agree, spread 101px, 0 redrawn) rows still, pane still
+    (the left pane asked; the landing is frame-13.png, 1.3s after the release, 24s after the burst)
+stopped

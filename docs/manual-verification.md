@@ -821,6 +821,32 @@ that frame and photographed the same state twice, six walks out of six, reading
 as a reader who never moved. The release carries an epoch now and the frames are
 chosen against it afterwards.
 
+**The pane beside the one that waited is walked**, in
+`docs/end-to-end-run-31.md` (2026-08-15), which is run 30's late page under run
+23's split. Ten landings on the build that ships, five of them past the timeout,
+and the parked pane's message column is pixel for pixel what it was across every
+one — while the same frames show the page arriving in it, the scrollbar's thumb
+shortening and the spine changing beside every row. A probe build has that pane
+taking the anchor's `moved` branch and writing ten thousand pixels of correction
+of its own, exact, with no settling after it: **the stillness is work rather than
+distance from the event.** Its `lag` is 0 where the asking pane's is −24, never
+having had a head to lose (#516, from the inside).
+
+Two things that run leaves open, and both are narrower than what it closed:
+
+- **#535**, the one reading in ten that was not zero, in the pane that *did*
+  ask: where the page merges the reader's top row into the group above it, the
+  anchor puts the row back rather than the message, and the reader drops by what
+  the row took in. Photographed at 84px.
+- **A neighbour among the rows the arriving page re-groups.** The band a pane can
+  be parked in and still be a neighbour starts 400px (`LOAD_OLDER_PX`) below the
+  top of its content, and a wheel burst cannot be aimed into it: seven walks of
+  ten put the pane at the top, where it asks for the page itself and the walk has
+  no parked pane in it. Where a pane stops is not a function of how far it was
+  wheeled — 700 notches left it on line 0253 of that seed, 750 on 0206, 850 on
+  0217. Read `parked.png` and the ask's own timestamp before believing an
+  arrangement, which is what run 31's `pick.py` does.
+
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom

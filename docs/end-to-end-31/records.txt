@@ -1,0 +1,43 @@
+The two walks of this run that carried a probe and had a parked pane in them,
+read by landing.py. Both are the late arm: the page held seventy-five seconds,
+landing against a client that gave up on it at sixty.
+
+The parked pane is the one at x 724. It never asked, so its margin and its
+headPx are both 0 and its lag is 0 with them; the pane that asked carries the
+head out on this commit, at headPx 0 against a margin of 24.
+
+=== walk one
+left pane, at x 244: 454 commits
+  note: 2 landings; the last one is read below
+  before the page  msgs  208  top    470  branch settled
+  the landing      msgs  408  top  11137  branch moved
+    the write      drawn 11059 - delta -78 = 11137, and the pane went to 11137
+    the head       headPx 0 against margin 24, lag -24
+    the reader     still pyiz9rqpn2ig7xdwidhgxmx9aa, delta -78 to -78
+    the settling   11 commits: delta -78 to -78, +0px under the reader
+right pane, at x 724: 423 commits
+  note: 2 landings; the last one is read below
+  before the page  msgs  208  top   2289  branch none
+  the landing      msgs  408  top  13173  branch moved
+    the write      drawn 13146 - delta -27 = 13173, and the pane went to 13173
+    the head       headPx 0 against margin 0, lag 0
+    the reader     still ch77rh5dx73ffyz9qmxdzn3gtw, delta -27 to -27
+    the settling   2 commits: delta -27 to -27, +0px under the reader
+
+=== walk two
+left pane, at x 244: 448 commits
+  note: 2 landings; the last one is read below
+  before the page  msgs  208  top    470  branch settled
+  the landing      msgs  408  top  11137  branch moved
+    the write      drawn 11059 - delta -78 = 11137, and the pane went to 11137
+    the head       headPx 0 against margin 24, lag -24
+    the reader     still v9yhuw2i487vpivikxb7zdzbpa, delta -78 to -78
+    the settling   11 commits: delta -78 to -78, +0px under the reader
+right pane, at x 724: 181 commits
+  note: 2 landings; the last one is read below
+  before the page  msgs  208  top   7119  branch settled
+  the landing      msgs  408  top  18091  branch moved
+    the write      drawn 18006 - delta -85 = 18091, and the pane went to 18091
+    the head       headPx 0 against margin 0, lag 0
+    the reader     still mevfnvqqsshtsdyrdedpp3sxai, delta -85 to -85
+    the settling   2 commits: delta -85 to -85, +0px under the reader

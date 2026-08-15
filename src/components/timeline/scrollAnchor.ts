@@ -29,6 +29,19 @@ export interface Offsets {
    * the row that holds it (#535).
    */
   lineWithinRow: (id: string) => number | undefined;
+  /**
+   * Whether the row holding a message is a height the virtualiser has not been
+   * told about, and false where the row is not on the screen to compare.
+   *
+   * A row the virtualiser is still carrying an estimate for is a `scrollTop`
+   * write that has not happened yet: the correction comes on the commit that
+   * measures it, and a row starting above the fold is compensated for in full
+   * — including the part of it drawn *below* the fold, which is content the
+   * reader is not sitting on top of. A block that has just taken a page in is
+   * that row and the reader is inside it, so the write is the whole of what the
+   * page added above their line (#535's shape in the pane that did not ask).
+   */
+  rowUnmeasured: (id: string) => boolean;
 }
 
 /**
@@ -139,12 +152,17 @@ export function movedInList(
  * first time the pane looks right ends twelve commits early, which is what the
  * first attempt at this did and why it changed nothing a walk could see.
  *
- * What ends it is the container's height standing still between two commits:
- * the rows have stopped measuring, whatever they measured. Also the list
- * changing again, which means this hold's landing is over and anything that
- * moves the reader now — a live message, the window dropping its oldest, the
- * pane following its tail — is a fresh event that arms its own; and the
- * reader's message going, which is a target switch.
+ * What ends it is the container's height standing still between two commits
+ * *and* the reader's own row being a height the virtualiser knows: the rows have
+ * stopped measuring and there is no correction still owed for the one the reader
+ * is inside. A height that stands still is not the measuring being over on its
+ * own — a row remounted under a new key is measured a commit or more later than
+ * the rows around it, and a block that has just merged a page into itself is
+ * remounted under a new key by definition. Also the list changing again, which
+ * means this hold's landing is over and anything that moves the reader now — a
+ * live message arriving, the window dropping its oldest, the pane following its
+ * tail — is a fresh event that arms its own; and the reader's message going,
+ * which is a target switch.
  *
  * What it can no longer do is read a changed `scrollTop` as the reader: during
  * settling the virtualiser moves the pane on purpose, and that is the thing
@@ -297,8 +315,11 @@ export function usePrependAnchor(
       //     for is over — a live message arriving, the window dropping its
       //     oldest, the pane following its tail. A landing that moved the
       //     reader takes the branch above and arms a hold of its own;
-      //   - the container stopped growing, which is the measuring finishing and
-      //     is the ordinary way out.
+      //   - the container stopped growing *and* the reader's row is the height
+      //     the virtualiser has for it, which is the measuring finishing and is
+      //     the ordinary way out. Both halves are needed: the row a page merged
+      //     into is remounted under a key nothing has measured, so its own
+      //     correction lands after the height has already stood still once.
       //
       // **A pane that is not where this would put it is corrected first, and
       // #535 is why the order matters.** What the reader's row took in can only
@@ -317,7 +338,7 @@ export function usePrependAnchor(
         // a hold worth keeping: it would be asserted again on every commit for
         // the rest of the conversation.
         if (Math.abs(el.scrollTop - target) > 1) settling.current = null;
-      } else if (gone || el.scrollHeight === previous?.sh) {
+      } else if (gone || (el.scrollHeight === previous?.sh && !offsets.rowUnmeasured(held.id))) {
         branch = "settled";
         settling.current = null;
       } else {

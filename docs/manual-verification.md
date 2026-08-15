@@ -873,6 +873,27 @@ Two things that run leaves open, and both are narrower than what it closed:
   0217. Read `parked.png` and the ask's own timestamp before believing an
   arrangement, which is what run 31's `pick.py` does.
 
+  **The band is wider than run 31 took it for, and the jsdom model reaches it.**
+  A pane is only ever a message tall from the top of its content where a row is
+  a message tall. A block of twenty lines is 400px of one row, so a reader
+  sitting inside such a block is past `LOAD_OLDER_PX` and inside the row the
+  page merges into at the same time — which is the whole of the band, and a
+  channel talking in runs has it. `Timeline.layout.test.tsx` parks a second pane
+  there and the reader was dropped 744px, by the block's own estimate-to-measured
+  difference: the virtualiser compensates `scrollTop` in full for a row's first
+  measurement wherever that row *starts* above the fold, the part of it drawn
+  below the reader's line included, and a block that has just merged a page into
+  itself is remounted under a new key and therefore measured for the first time.
+  Fixed by holding the anchor until the reader's own row is a height the
+  virtualiser knows, rather than until the container's height stands still.
+
+  **What no walk has watched is still the release app.** The model is where the
+  744px was read, and the model had to be corrected to read it — its
+  `ResizeObserver` never delivered the entry a browser delivers on observing, so
+  every row remounted under a new key kept its estimate. A walk of this wants a
+  seed that speaks in runs of twenty or more, so that a pane can be parked inside
+  one block and be a neighbour without being the asker.
+
 ## Resizing a split
 
 `PaneTree.test.tsx` drives the divider with a mocked rectangle, because jsdom

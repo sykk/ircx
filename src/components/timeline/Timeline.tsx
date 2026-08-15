@@ -19,7 +19,7 @@ import { raisedByAnchor, usePrependAnchor, type Offsets } from "./scrollAnchor";
 const PAGE_SIZE = 200;
 export const ESTIMATED_ROW_PX = 46;
 /** Distance from the top that triggers the next page of history. */
-const LOAD_OLDER_PX = 400;
+export const LOAD_OLDER_PX = 400;
 /** Slack below the bottom that still counts as following the conversation. */
 const STUCK_PX = 48;
 const FLASH_MS = 1_200;
@@ -175,6 +175,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     return line.getBoundingClientRect().top - row.getBoundingClientRect().top;
   }, []);
 
+  /** The row drawn at a place in the list, or null where it is off the screen.
+   * An index is this component's own number and safe to select on, which an id
+   * is not. */
+  const drawnRow = useCallback(
+    (index: number) => scrollRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`) ?? null,
+    [],
+  );
+
   // The anchor works in messages, the virtualiser in rows, and this is the
   // whole of the translation. A row that holds none — a date, a seam — cannot
   // name the reader's place, so the search runs forward to one that can.
@@ -193,6 +201,17 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         return virtualizer.getOffsetForIndex(index, "start")?.[0];
       },
       lineWithinRow,
+      rowUnmeasured: (id) => {
+        const index = rowIndexOfMessage(rows, id);
+        if (index === -1) return false;
+        const drawn = drawnRow(index);
+        if (drawn === null) return false;
+        virtualizer.getTotalSize();
+        const known = virtualizer.getVirtualItems().find((item) => item.index === index)?.size;
+        // A fraction of a pixel is a browser rounding a border box, not a
+        // measurement the virtualiser has yet to hear about.
+        return known !== undefined && Math.abs(known - drawn.offsetHeight) > 1;
+      },
       messageAtOffset: (offset) => {
         const from = virtualizer.getVirtualItemForOffset(offset)?.index;
         if (from === undefined) return undefined;
@@ -203,7 +222,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
         return undefined;
       },
     }),
-    [rows, virtualizer, lineWithinRow],
+    [rows, virtualizer, lineWithinRow, drawnRow],
   );
 
   // `headPx` and not the head itself: it is the margin the offsets above were

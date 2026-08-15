@@ -460,42 +460,55 @@ waiting for, and the *Startup* table above did not move.
 
 **Measured 2026-08-14** by `crates/ircx-store/tests/history_page.rs`, which is
 ignored by default and says how to run it. Release profile, a 100,000-message
-archive of one conversation on `TMPDIR`, medians of nine, both columns taken on
+archive of one conversation on `TMPDIR`, medians of nine, every column taken on
 the same machine in the same sitting. The frontend pages back in 200s, so that
 is the size every row here is about.
 
-| `load_history` | before #526 | after |
-|---|---|---|
-| the newest 200, some carrying reactions and notes | 2.25 ms | 0.86 ms |
-| 200 at 1,000 messages back | 2.31 ms | 0.90 ms |
-| 200 at 10,000 back | 3.01 ms | 1.61 ms |
-| 200 at 50,000 back | 7.57 ms | 6.21 ms |
-| 200 at 90,000 back | 11.88 ms | 10.55 ms |
-| 10 at 50,000 back | 5.34 ms | 5.30 ms |
+| `load_history` | before | #526 | #527 |
+|---|---|---|---|
+| the newest 200, some carrying reactions and notes | 2.25 ms | 0.86 ms | 0.85 ms |
+| 200 at 1,000 messages back | 2.31 ms | 0.90 ms | 0.83 ms |
+| 200 at 10,000 back | 3.01 ms | 1.61 ms | 0.82 ms |
+| 200 at 50,000 back | 7.57 ms | 6.21 ms | 0.84 ms |
+| 200 at 90,000 back | 11.88 ms | 10.55 ms | 0.83 ms |
+| 10 at 50,000 back | 5.34 ms | 5.30 ms | 0.11 ms |
 
-**Two costs, and #526 is only the first of them.** A page is read and then
-filled in from the three tables that hang off a message, and those three passes
-were a statement per message — 600 executions for a 200-row page, whether or
-not anything hung off it. Instrumented separately on the before build:
+**Two costs, and each column is one of them.**
+
+**#526 was per message.** A page is read and then filled in from the three
+tables that hang off a message, and those three passes were a statement per
+message — 600 executions for a 200-row page, whether or not anything hung off
+it. Instrumented separately on the before build:
 
 ```text
 read 0.50 ms   reactions 0.63 ms   annotations 0.58 ms   raised 0.56 ms
 ```
 
-1.77 ms of the 2.25 ms, which is what the fix takes off every page at every
-depth: the saving is a flat 1.4 ms rather than a proportion.
+1.77 ms of the 2.25 ms, and what the fix takes off is flat: the same 1.4 ms at
+every depth rather than a proportion of it.
 
-**The rest follows how far back the reader has paged**, and is #527. Ten rows at
-50,000 back cost six times two hundred rows at the head, because almost none of
-that is the page — the `(?3 IS NULL OR …)` in the page-back filter is a
-disjunction, so the index cannot serve it and every page-back walks the whole
-distance again. Roughly 0.11 ms per thousand messages skipped, unchanged by
-this measurement's fix.
+**#527 was per message skipped.** The page-back filter was
+`(?3 IS NULL OR m.timestamp < ?3)`, and a disjunction is not something SQLite
+can put on the index, so a page-back started at the newest message and
+discarded its way down — every page paying for the whole distance again. It is
+the difference between the two plans, which the probe prints rather than argues:
+
+```text
+SEARCH m USING INDEX idx_messages_timeline (network=? AND target=?)
+SEARCH m USING INDEX idx_messages_timeline (network=? AND target=? AND timestamp<?)
+```
+
+**A page now costs the same wherever it is read from**, 0.82–0.85 ms at every
+depth measured, against 0.11 ms per thousand messages skipped before it. The
+last row is where the old shape shows plainest: ten rows deep in a conversation
+were 5.3 ms and are 0.11 ms, because almost none of that was ever the page.
 
 **Not measured:** any of this on a machine under load, which is where
-`docs/end-to-end-run-17.md` argued it matters — it named these three passes as
+`docs/end-to-end-run-17.md` argued it matters — it named the three passes as
 what CPU contention stretches, and the walks that motivated the argument were
-run against a build that had them.
+run against a build that had them. Nor an archive whose pages are not already
+in the page cache; `TMPDIR` is a tmpfs here, and *What an export costs against
+a cold archive* below is what that distinction is worth.
 
 ### What the second search index costs
 

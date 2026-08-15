@@ -19,8 +19,9 @@
 //! - **Down the archive**, where the page is the same size and the only thing
 //!   changing is how far back the reader has paged. That is #527: ten rows deep
 //!   in a conversation cost more than two hundred at its head, because the
-//!   page-back filter cannot be served by the index and every page walks the
-//!   whole distance again. The plan is printed rather than argued.
+//!   page-back filter could not be served by the index and every page walked
+//!   the whole distance again. Both filters' plans are printed rather than
+//!   argued, so the arm says why it costs what it does and not only what.
 //!
 //! ```text
 //! cargo test --release -p ircx-store --test history_page -- --ignored --nocapture
@@ -181,15 +182,22 @@ fn timed(store: &Store, what: &str, before: Option<String>, limit: u32) {
     );
 }
 
-/// What SQLite says it will do with the query, which is where a cost that
+/// What SQLite says it will do with the page-back, which is where a cost that
 /// follows the depth rather than the page size has to be read.
-fn plan(archive: &std::path::Path) {
+///
+/// `m.*` stands in for the column list `load_history` selects, which is
+/// `message::COLUMNS` and not reachable from a test. What matters is that it
+/// is more than the timeline index holds, so the plan is the one the client
+/// gets rather than a covering read the column list rules out.
+fn plan(archive: &std::path::Path, filter: &str) {
     let conn = rusqlite::Connection::open(archive).expect("the archive opens for reading");
-    let sql = "SELECT m.id FROM messages m
-               WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
-                 AND (?3 IS NULL OR m.timestamp < ?3)
-               ORDER BY m.timestamp DESC, m.id DESC
-               LIMIT ?4";
+    let sql = format!(
+        "SELECT m.* FROM messages m
+         WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+           AND {filter}
+         ORDER BY m.timestamp DESC, m.id DESC
+         LIMIT ?4"
+    );
     let mut stmt = conn
         .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
         .expect("a plan");
@@ -198,8 +206,9 @@ fn plan(archive: &std::path::Path) {
             row.get::<_, String>(3)
         })
         .expect("the plan reads");
+    println!("  for {filter}");
     for step in rows {
-        println!("  plan: {}", step.expect("a step"));
+        println!("    {}", step.expect("a step"));
     }
     println!();
 }
@@ -217,7 +226,8 @@ fn what_a_page_of_history_costs() {
     println!(
         "  reactions, notes and raised rows on every {FURNISHED_EVERY}th of the newest {PAGE}\n"
     );
-    plan(&archive);
+    plan(&archive, "(?3 IS NULL OR m.timestamp < ?3)");
+    plan(&archive, "m.timestamp < ?3");
 
     // At the head, where the three passes have rows to return and where the
     // pair of limits says whether what a page costs follows its size.

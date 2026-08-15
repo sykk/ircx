@@ -288,20 +288,41 @@ impl Store {
     /// ASCII folding rather than the server's casemapping, which differs only
     /// for `[]\^` in a nick — and errs toward showing a message rather than
     /// losing one, which is the direction a reader can do something about.
+    ///
+    /// The two callers get two statements rather than one holding
+    /// `?3 IS NULL OR m.timestamp < ?3`, which is #527. A disjunction is not
+    /// something SQLite can put on the index, so that one statement started at
+    /// the newest message whatever it was asked for and discarded its way down
+    /// to the page — and a reader paging back paid for the whole distance
+    /// again on every page. Written as a plain comparison it is a range the
+    /// index serves, and the walk starts where it was asked to.
     pub fn load_history(&self, req: &HistoryRequest) -> Result<Vec<ChatMessage>, StoreError> {
-        let sql = format!(
-            "SELECT {columns}
-             FROM messages m
-             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
-               AND (?3 IS NULL OR m.timestamp < ?3)
-             ORDER BY m.timestamp DESC, m.id DESC
-             LIMIT ?4",
-            columns = message::COLUMNS,
-        );
+        let sql = match req.before {
+            Some(_) => format!(
+                "SELECT {columns}
+                 FROM messages m
+                 WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+                   AND m.timestamp < ?3
+                 ORDER BY m.timestamp DESC, m.id DESC
+                 LIMIT ?4",
+                columns = message::COLUMNS,
+            ),
+            None => format!(
+                "SELECT {columns}
+                 FROM messages m
+                 WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+                 ORDER BY m.timestamp DESC, m.id DESC
+                 LIMIT ?3",
+                columns = message::COLUMNS,
+            ),
+        };
 
         let conn = self.reading();
         let mut stmt = conn.prepare(&sql)?;
-        let mut rows = stmt.query(params![req.network, req.target, req.before, req.limit])?;
+        let mut rows = match &req.before {
+            Some(before) => stmt.query(params![req.network, req.target, before, req.limit])?,
+            None => stmt.query(params![req.network, req.target, req.limit])?,
+        };
         let mut page = Vec::new();
         while let Some(row) = rows.next()? {
             page.push(message::from_row(row)?);

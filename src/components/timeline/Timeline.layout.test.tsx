@@ -190,6 +190,41 @@ describe("a timeline whose rows are the heights it draws", () => {
 
     expect(eyeLine(scroller, reading)).toBe(before);
   });
+
+  /**
+   * #532, and the geometry is the whole of what tells it from the test above.
+   * There the reader is a hundred pixels down; here they are against the top of
+   * the content, which is where a pane asks for a page at all — so the head is
+   * drawn above them and leaves on the very commit the page prepends.
+   *
+   * `scrollAnchor.ts` says that departure "needs no term of its own: it leaves
+   * on the commit that prepends the page, where the offsets on both sides are
+   * measured from the top of the scroller and carry it". End-to-end run 30
+   * watched that commit and found the write exact and the reader moved 22 to
+   * 46px all the same.
+   */
+  it("holds the reader still when the page lands under a head that is leaving", async () => {
+    ipcMock.loadHistory.mockResolvedValue(olderPage(7));
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    // The head the ask puts up, which is the row this case turns on. `getByTestId`
+    // throws where there is none, so asking for it is the assertion.
+    screen.getByTestId("timeline-head");
+    const reading = atTheFold(scroller);
+    const before = eyeLine(scroller, reading);
+
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+    flushLayout();
+
+    expect(eyeLine(scroller, reading)).toBe(before);
+  });
 });
 
 /**

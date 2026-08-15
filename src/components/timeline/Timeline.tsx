@@ -181,7 +181,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // `headPx` and not the head itself: it is the margin the offsets above were
   // measured against, and the anchor needs both to tell one from the other on
   // the commit they disagree.
-  const recordAnchor = usePrependAnchor(scrollRef, headRef, messages, offsets, headPx, view);
+  const { record: recordAnchor, release: releaseAnchor } = usePrependAnchor(
+    scrollRef,
+    headRef,
+    messages,
+    offsets,
+    headPx,
+    view,
+  );
 
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole
@@ -217,10 +224,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   /** The reader has taken the pane over, so stop putting it back. Anything that
    * moves a scroller by hand — a wheel, a drag of the bar, a key — rather than
-   * `scroll` itself, which the restore also raises. */
+   * `scroll` itself, which the restore also raises.
+   *
+   * The anchor stands down on the same signal and for the same reason (#532):
+   * while a landed page is still measuring, a `scrollTop` that moved is the
+   * virtualiser correcting itself rather than anybody reading. */
   const takeOver = useCallback(() => {
     restoreTo.current = null;
-  }, []);
+    releaseAnchor();
+  }, [releaseAnchor]);
 
   /** Says which of the three things happened, because the caller below cannot
    * tell them apart from the outside and one of them is not an answer: a call

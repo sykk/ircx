@@ -80,9 +80,39 @@ function Scroller({
   const headRef = useRef<Head | null>(null);
   useLayoutEffect(() => {
     headRef.current = head === null ? null : { offsetHeight: head };
+    // How tall the content is, which jsdom answers 0 for however the test drew
+    // it. The anchor compares it against the commit before to tell rows that
+    // are still measuring from rows that have finished, so a model that left it
+    // at zero would report every landing as settled on the commit after it —
+    // which is the shape #532 was.
+    //
+    // Declared here rather than inside the hook so it runs first, the way the
+    // real container's height is a fact before any effect reads it.
+    const el = ref.current;
+    if (el) {
+      const total = layout.reduce((tallest, row) => Math.max(tallest, row.start + row.size), 0);
+      Object.defineProperty(el, "scrollHeight", { configurable: true, value: total });
+    }
   });
-  const record = usePrependAnchor(ref, headRef, messages, offsetsFor(layout), margin, "pane");
-  return <div ref={ref} data-testid="scroller" onScroll={record} />;
+  const { record, release } = usePrependAnchor(
+    ref,
+    headRef,
+    messages,
+    offsetsFor(layout),
+    margin,
+    "pane",
+  );
+  // `onWheel` as `Timeline` wires it, which is how the reader says the pane is
+  // theirs. A bare `scroll` is not that signal: the virtualiser raises one for
+  // every correction it makes while a landed page measures.
+  return <div ref={ref} data-testid="scroller" onScroll={record} onWheel={release} />;
+}
+
+/** The reader taking the pane over, wheel first — which is the order a browser
+ * sends them in and the order the app reads them in. */
+function readerScrollsTo(el: HTMLElement, top: number) {
+  fireEvent.wheel(el);
+  scrollTo(el, top);
 }
 
 /**
@@ -161,6 +191,117 @@ describe("usePrependAnchor", () => {
     expect(el.scrollTop).toBe(3_000);
   });
 
+  /**
+   * #532. The page lands and the rows above the reader are measured over the
+   * commits that follow — fourteen of them in end-to-end run 30, two to three
+   * milliseconds apart, inside a single frame. The assertion above answers the
+   * first of those and the anchor then stood down, so everything measured after
+   * it moved the reader: 22 to 46px in the release app, in the pane that asked
+   * for the page.
+   *
+   * Two rows measuring on two separate commits is the smallest version of that,
+   * and it is the same shape: the reader is put back on the first and left
+   * behind on the second.
+   */
+  it("goes on asserting it while the rows above the reader are still measuring", () => {
+    const before = evenly(0, 1_000, "c", "d");
+    const landed = evenly(0, 1_000, "a", "b", "c", "d");
+    // "a" measures taller than the estimate on the commit after the landing.
+    const oneMeasured: Row[] = [
+      { id: "a", start: 0, size: 1_500 },
+      { id: "b", start: 1_500, size: 1_000 },
+      { id: "c", start: 2_500, size: 1_000 },
+      { id: "d", start: 3_500, size: 1_000 },
+    ];
+    // And "b" on the commit after that, which is the one nothing answered.
+    const bothMeasured: Row[] = [
+      { id: "a", start: 0, size: 1_500 },
+      { id: "b", start: 1_500, size: 1_500 },
+      { id: "c", start: 3_000, size: 1_000 },
+      { id: "d", start: 4_000, size: 1_000 },
+    ];
+    const { getByTestId, rerender } = render(<Scroller messages={ids("c", "d")} layout={before} />);
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("c", "d")} layout={before} />);
+    scrollTo(el, 0);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+    expect(el.scrollTop).toBe(2_000);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={oneMeasured} />);
+    expect(el.scrollTop).toBe(2_500);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={bothMeasured} />);
+    expect(el.scrollTop).toBe(3_000);
+  });
+
+  /**
+   * The shape #532 actually had, and the reason a hold cannot let go the first
+   * time the pane looks right. In the release app the reader was exactly in
+   * place on eleven of the fourteen commits a landing settled over — the rows
+   * being measured were below them, so nothing needed correcting — and the
+   * twelfth measured a row above them and moved them 11px.
+   *
+   * A hold that ends when the position is right ends on the first of those and
+   * is not there for the twelfth.
+   */
+  it("keeps the hold through commits that need no correction", () => {
+    const landed = evenly(0, 1_000, "a", "b", "c", "d");
+    // A row below the reader measures taller. "c" has not moved, so this commit
+    // asks nothing of the anchor — and the container is still growing.
+    const belowGrew: Row[] = [
+      { id: "a", start: 0, size: 1_000 },
+      { id: "b", start: 1_000, size: 1_000 },
+      { id: "c", start: 2_000, size: 1_000 },
+      { id: "d", start: 3_000, size: 1_500 },
+    ];
+    // And then one above them does, which is the commit that moved the reader.
+    const aboveGrew: Row[] = [
+      { id: "a", start: 0, size: 1_500 },
+      { id: "b", start: 1_500, size: 1_000 },
+      { id: "c", start: 2_500, size: 1_000 },
+      { id: "d", start: 3_500, size: 1_500 },
+    ];
+    const { getByTestId, rerender } = render(
+      <Scroller messages={ids("c", "d")} layout={evenly(0, 1_000, "c", "d")} />,
+    );
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("c", "d")} layout={evenly(0, 1_000, "c", "d")} />);
+    scrollTo(el, 0);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+    expect(el.scrollTop).toBe(2_000);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={belowGrew} />);
+    expect(el.scrollTop).toBe(2_000);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={aboveGrew} />);
+    expect(el.scrollTop).toBe(2_500);
+  });
+
+  it("stops asserting it once the measurements have stopped moving", () => {
+    const before = evenly(0, 1_000, "c", "d");
+    const landed = evenly(0, 1_000, "a", "b", "c", "d");
+    const { getByTestId, rerender } = render(<Scroller messages={ids("c", "d")} layout={before} />);
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("c", "d")} layout={before} />);
+    scrollTo(el, 0);
+
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+    expect(el.scrollTop).toBe(2_000);
+
+    // Nothing measured differently, so the hold is spent and the reader owns the
+    // pane again: a scroll on the commit after is theirs and stays.
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+    scrollTo(el, 400);
+    rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
+
+    expect(el.scrollTop).toBe(400);
+  });
+
   it("declines the second assertion once the reader has scrolled away from it", () => {
     const before = evenly(0, 1_000, "c", "d");
     const landed = evenly(0, 1_000, "a", "b", "c", "d");
@@ -177,7 +318,9 @@ describe("usePrependAnchor", () => {
     scrollTo(el, 0);
 
     rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={landed} />);
-    scrollTo(el, 500);
+    // By hand, which is what tells this from the virtualiser moving the pane
+    // while the page it just landed is still being measured (#532).
+    readerScrollsTo(el, 500);
 
     rerender(<Scroller messages={ids("a", "b", "c", "d")} layout={settled} />);
 

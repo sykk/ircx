@@ -84,7 +84,8 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   // reading it as a subscription would fight every scroll event with a stale
   // value. Cleared when the pane is back where it was and the reader has it.
   const restoreTo = useRef(useAppStore.getState().viewAnchor[view] ?? null);
-  const followingRef = useRef(restoreTo.current === null);
+  const [following, setFollowing] = useState(restoreTo.current === null);
+  const followingRef = useRef(following);
 
   const { messages, unreadFrom } = timeline;
 
@@ -438,6 +439,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     if (restoreTo.current !== null) return;
     const following = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_PX;
     followingRef.current = following;
+    setFollowing(following);
     // The row at the top of the screen, not the offset it happens to sit at: a
     // rebuilt pane comes back a different width, where the same offset is a
     // different message. A pane at the live edge has no row to name — it wants
@@ -464,11 +466,20 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       const index = rowIndexOfMessage(rows, id);
       if (index === -1) return;
       followingRef.current = false;
+      setFollowing(false);
       virtualizer.scrollToIndex(index, { align: "center" });
       setFlashId(id);
     },
     [byId, rows, virtualizer],
   );
+
+  const jumpToLatest = useCallback(() => {
+    if (rows.length === 0) return;
+    followingRef.current = true;
+    setFollowing(true);
+    useAppStore.getState().setViewAnchor(view, null);
+    virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
+  }, [rows.length, view, virtualizer]);
 
   useEffect(() => {
     if (!flashId) return;
@@ -499,7 +510,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-ui="timeline">
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
           onScroll={onScroll}
@@ -556,6 +567,15 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
             </div>
           )}
         </div>
+        {!following && rows.length > 0 && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-2.5 py-1 font-[family-name:var(--font-ui)] text-[12px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] hover:bg-[var(--surface-hover)]"
+          >
+            Jump to latest
+          </button>
+        )}
       </div>
 
       <TypingIndicator network={network} target={target} />

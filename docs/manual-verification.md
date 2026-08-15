@@ -838,6 +838,32 @@ Two things that run leaves open, and both are narrower than what it closed:
   ask: where the page merges the reader's top row into the group above it, the
   anchor puts the row back rather than the message, and the reader drops by what
   the row took in. Photographed at 84px.
+
+  **Fixed and walked, 2026-08-15.** Run 31's own walk on a channel seeded to
+  speak in runs of eight, so that the page boundary usually falls inside one
+  rather than in a walk out of ten: `seed.py`'s speaker function with `n // 8`,
+  and `parked.sh` at the in-time hold, which is where a reader sits against the
+  top of their own content. Read from the records rather than the frames,
+  because a strip is a row below the anchored one and a landing page changes
+  what those rows draw — the same confound run 30 names, and it produced a
+  −24px reading on a walk whose reader had not moved.
+
+  The reader's own line is `delta + within` in a record, their row's place plus
+  how far into it the line is drawn. Three walks a build, both panes read:
+
+  ```text
+                    control          fixed
+  run1 left     89 → 105  +16px    89 → 89  +0px    the row took messages in
+  run1 right   −47 → −31  +16px   −37 → −37 +0px    the row took messages in
+  run2 left     12 →  28  +16px    12 → 12  +0px
+  run3 left     89 → 105  +16px    89 → 89  +0px    the row took messages in
+  ```
+
+  The control is the same instrumented binary with the correction backed out and
+  the measurement left in, so both arms compute the line the same way. **It also
+  answers something run 31 could not:** the parked pane is displaced by this too
+  — run 1's right pane is 16px on the control — and read 0px throughout run 31
+  only because that seed's runs were too short for a merge to reach it.
 - **A neighbour among the rows the arriving page re-groups.** The band a pane can
   be parked in and still be a neighbour starts 400px (`LOAD_OLDER_PX`) below the
   top of its content, and a wheel burst cannot be aimed into it: seven walks of

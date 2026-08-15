@@ -22,8 +22,11 @@ page merging into the group at the top, which `scrollAnchor.ts` names as the
 reason the anchor works in messages. It is detected in messages and corrected in
 rows, and this line is where the two part company.
 
-**The settling.** Every commit after the landing. Where the id stays the same and
-its `delta` changes, the pane moved under a reader nobody scrolled.
+**The settling.** Every commit after the landing. What is followed is the
+reader's own line — `delta` is where their *row* starts and `within` is how far
+into it their line is drawn, and a row that takes in the messages a page brought
+trades one against the other without moving anybody (#535). Where the line moves
+and nobody scrolled, the pane moved under them.
 """
 
 import json
@@ -36,6 +39,14 @@ with open(sys.argv[1]) as lines:
         record = json.loads(line)
         if record.get("kind") == "commit":
             commits[record["x"]].append(record)
+
+def line(anchor):
+    """Where the reader's own line sits below the top of the scroller: their
+    row's place plus how far into it the line is drawn. `within` is absent on a
+    build from before #535 and null where the row was not on the screen to
+    measure, and both are read as the row's own top."""
+    return anchor["delta"] + (anchor.get("within") or 0)
+
 
 for x in sorted(commits):
     pane = commits[x]
@@ -58,27 +69,35 @@ for x in sorted(commits):
     print(f"  the landing      msgs {landing['msgs']:>4}  top {landing['top']:>6}  "
           f"branch {landing['branch']}")
     if held is not None and drawn is not None:
-        print(f"    the write      drawn {drawn} - delta {held['delta']} = {drawn - held['delta']}, "
-              f"and the pane went to {landing['top']}")
+        # `tookIn` is a build with #535's fix in it saying what the reader's row
+        # took in above their line, and 0 or absent is a row that took nothing.
+        took = landing.get("tookIn") or 0
+        print(f"    the write      drawn {drawn} + tookIn {took} - delta {held['delta']} = "
+              f"{drawn + took - held['delta']}, and the pane went to {landing['top']}")
     print(f"    the head       headPx {landing['headPx']} against margin {landing['margin']}, "
           f"lag {landing['headPx'] - landing['margin']}")
-    if held is not None and now is not None:
-        if held["id"] == now["id"]:
-            print(f"    the reader     still {now['id']}, delta {held['delta']} to {now['delta']}")
-        else:
-            print(f"    THE ROW TOOK IN MESSAGES: held {held['id']} at delta {held['delta']}, "
-                  f"and the row under the reader now starts at {now['id']}, delta {now['delta']}")
+    if held is not None and now is not None and held["id"] != now["id"]:
+        print(f"    THE ROW TOOK IN MESSAGES: held {held['id']} at {line(held)}, and the row "
+              f"under the reader now starts at {now['id']} at {line(now)}")
 
-    after = [c for c in pane if c["n"] > landing["n"]]
-    print(f"    the settling   {len(after)} commits", end="")
-    if now is None:
-        print(", and nothing was anchored on the landing commit")
+    # The reader's own line, which is what the anchor is for, followed by the id
+    # it was recorded against rather than by whatever is at the top of the
+    # scroller: a merge re-names the row and `now` is a different message on the
+    # commit after it.
+    reader = held if held is not None else now
+    if reader is None:
+        print("    the settling   nothing was anchored on the landing commit")
         continue
-    last = now["delta"]
-    for commit in after:
-        current = commit.get("now")
-        if current is None or current["id"] != now["id"]:
-            print(", and the anchor changed hands part way", end="")
-            break
-        last = current["delta"]
-    print(f": delta {now['delta']:+d} to {last:+d}, {last - now['delta']:+d}px under the reader")
+    was = line(reader)
+    seen = [
+        commit["now"]
+        for commit in pane
+        if commit["n"] > landing["n"] and (commit.get("now") or {}).get("id") == reader["id"]
+    ]
+    after = [c for c in pane if c["n"] > landing["n"]]
+    if not seen:
+        print(f"    the settling   {len(after)} commits, and the reader was never recorded again")
+        continue
+    ended = line(seen[-1])
+    print(f"    the settling   {len(after)} commits: the reader's line {was} to {ended}, "
+          f"{ended - was:+d}px under them")

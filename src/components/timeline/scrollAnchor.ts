@@ -19,6 +19,16 @@ export interface Offsets {
   offsetOfMessage: (id: string) => number | undefined;
   /** A message in the row under an offset, or undefined above the first row. */
   messageAtOffset: (offset: number) => string | undefined;
+  /**
+   * How far into its row a message's own line is drawn, and undefined where the
+   * row is not on the screen to be measured.
+   *
+   * A row is a run of messages, so this is not always zero and does not always
+   * stay what it was: a landing page can merge into the block at the top of the
+   * window, putting the messages it brought above the reader's own line inside
+   * the row that holds it (#535).
+   */
+  lineWithinRow: (id: string) => number | undefined;
 }
 
 /**
@@ -44,6 +54,10 @@ interface Anchor {
   id: string;
   delta: number;
   index: number;
+  /** How far into that row the message's own line was drawn, or null where the
+   * row was not on the screen to measure. Held so that a row which takes in
+   * messages above the reader can be told from one that did not (#535). */
+  within: number | null;
 }
 
 interface Committed {
@@ -202,6 +216,7 @@ export function usePrependAnchor(
             id,
             delta: start + lag.current - el.scrollTop,
             index: rendered.current.findIndex((message) => message.id === id),
+            within: latest.current.lineWithinRow(id) ?? null,
           };
   }, [ref]);
 
@@ -218,6 +233,22 @@ export function usePrependAnchor(
     const drawnAt = (id: string) => {
       const start = offsets.offsetOfMessage(id);
       return start === undefined ? undefined : start + lag.current;
+    };
+    /**
+     * What the row under the reader has taken in above their own line since the
+     * anchor was taken, which the row's own top cannot say (#535): a page that
+     * merges into the block at the top of the window leaves the reader's
+     * message second in a run it opened, that far below where the row starts.
+     *
+     * Zero where either side is unmeasured, which is the row not being on the
+     * screen — and on the commit a page lands in it usually is not, the rendered
+     * window being the one the old scroll offset asked for. That is not a
+     * failure to correct: the hold below runs again on the commits after, where
+     * the row is drawn and this answers.
+     */
+    const tookIn = (held: Anchor) => {
+      const now = offsets.lineWithinRow(held.id);
+      return held.within === null || now === undefined ? 0 : now - held.within;
     };
     /**
      * Puts the pane there, and sends the scroll event a browser would send a
@@ -252,7 +283,7 @@ export function usePrependAnchor(
     if (previous && reader !== null && movedInList(messages, reader)) {
       branch = "moved";
       const start = drawnAt(reader.id);
-      if (start !== undefined) place(start - reader.delta);
+      if (start !== undefined) place(start + tookIn(reader) - reader.delta);
       settling.current = { ...reader, count: messages.length };
     } else if (settling.current !== null) {
       const held = settling.current;
@@ -268,16 +299,27 @@ export function usePrependAnchor(
       //     reader takes the branch above and arms a hold of its own;
       //   - the container stopped growing, which is the measuring finishing and
       //     is the ordinary way out.
-      const settled =
-        start === undefined ||
-        messages.length !== held.count ||
-        el.scrollHeight === previous?.sh;
-      if (settled) {
+      //
+      // **A pane that is not where this would put it is corrected first, and
+      // #535 is why the order matters.** What the reader's row took in can only
+      // be read once that row is drawn, and on the commit a page lands in it is
+      // not: the rendered window there is the one the *old* scroll offset asked
+      // for. The term arrives on the commit after — the same commit the height
+      // stops changing on — so a hold that reads the ending first ends one
+      // commit before the only measurement that could have answered it, which
+      // is what a walk of this fix found it doing.
+      const gone = start === undefined || messages.length !== held.count;
+      const target = start === undefined ? 0 : start + tookIn(held) - held.delta;
+      if (!gone && Math.abs(el.scrollTop - target) > 1) {
+        branch = "settling";
+        place(target);
+        // Somewhere the scroller will not go — clamped at either end — is not
+        // a hold worth keeping: it would be asserted again on every commit for
+        // the rest of the conversation.
+        if (Math.abs(el.scrollTop - target) > 1) settling.current = null;
+      } else if (gone || el.scrollHeight === previous?.sh) {
         branch = "settled";
         settling.current = null;
-      } else if (Math.abs(el.scrollTop - (start - held.delta)) > 1) {
-        branch = "settling";
-        place(start - held.delta);
       } else {
         // Held, and this commit asked nothing of it. Named rather than left as
         // `none` because the two are the difference between an anchor that is
@@ -311,6 +353,9 @@ export function usePrependAnchor(
       ch: el.clientHeight,
       held: reader,
       drawn: reader === null ? null : (drawnAt(reader.id) ?? null),
+      // What the reader's row took in above them, which is a term of the write
+      // and is otherwise invisible in these records.
+      tookIn: reader === null ? null : tookIn(reader),
       now: anchor.current,
     });
   });

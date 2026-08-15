@@ -178,7 +178,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   if (channel === undefined) return null;
 
   return (
-    <>
+    <div className="flex h-full min-h-0">
       <RosterHandle roster={ref} width={dragged} />
       <aside
         ref={ref}
@@ -238,7 +238,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
            A floor on the divider was measured instead and rejected: 440 on each
            side of a 960px split leaves it about 40px of travel, which is most of
            a control given up for a case that only bites at the end of its range. */
-        className="flex h-full min-h-0 shrink-0 flex-col border-l border-[var(--border-subtle)] bg-[var(--surface-sidebar)] font-mono @max-[440px]:hidden"
+        className="flex h-full min-h-0 shrink-0 flex-col font-mono @max-[440px]:hidden"
         style={{
           width:
             dragged === null
@@ -246,18 +246,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
               : `${dragged}px`,
         }}
       >
-        {/* Empty, and the same height and rule as the pane header a few inches to
-            the left, so the line under that header carries on into the roster and
-            the two read as one conversation. The header already names the channel
-            and counts its members; repeating either here would be dead chrome.
-
-            The filter is the one thing that draws here, and only while it is
-            being used: the band is already the height of a control, so a filter
-            costs the roster no room it was not holding, and the moment it is
-            cleared the band is empty again. */}
-        {filter === undefined || selected !== undefined ? (
-          <div className="h-11 shrink-0 border-b border-[var(--border-default)]" />
-        ) : (
+        {filter !== undefined && selected === undefined && (
           <MemberFilter
             value={filter}
             channel={channel.name}
@@ -293,7 +282,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         )}
       </aside>
       {menu !== null && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
-    </>
+    </div>
   );
 }
 
@@ -372,7 +361,7 @@ function RosterHandle({
       aria-valuemin={128}
       aria-valuemax={400}
       tabIndex={0}
-      className="w-1 shrink-0 cursor-col-resize hover:bg-[var(--accent-muted)] @max-[440px]:hidden"
+      className="w-1 shrink-0 cursor-col-resize @max-[440px]:hidden"
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
         from.current = { x: event.clientX, width: drawn() };

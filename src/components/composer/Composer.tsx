@@ -449,22 +449,6 @@ function ComposerFor({
         </button>
       </div>
 
-      <div
-        className="flex justify-between px-1 pt-1 text-[11px]"
-        style={{ color: "var(--text-faint)" }}
-      >
-        {/* The queue takes the hint's slot rather than a row of its own. The
-            mockup gives the composer one line of quiet text, and a hint that
-            stops being news after the first day is what a paste has something
-            to say over.
-
-            Two, not one: every line is pending between Enter and the socket, so
-            announcing a queue of one would twitch this row on ordinary typing
-            and say nothing. A queue is the case where a line is waiting behind
-            another one. */}
-        <span>{queued > 1 ? `${queued} waiting to send` : "Markdown is supported"}</span>
-        <span>Shift+Enter for new line</span>
-      </div>
     </div>
   );
 }

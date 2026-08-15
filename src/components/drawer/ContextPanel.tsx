@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { ContextMenu, type ContextMenuState } from "@/components/common/ContextMenu";
 import { IconButton } from "@/components/common/IconButton";
+import { useAnnounce } from "@/hooks/useAnnounce";
+import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork, useView } from "@/store/selectors";
@@ -7,6 +10,7 @@ import type { ViewId } from "@/store/types";
 import type { Member } from "@/types";
 import { MemberList } from "./MemberList";
 import { UserInspector } from "./UserInspector";
+import { actionsFor, rankOf } from "./members";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
 const NO_MEMBERS: Member[] = [];
@@ -62,6 +66,9 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   const toggleRoster = useAppStore((s) => s.toggleRoster);
   const dragged = useAppStore((s) => s.rosterWidth);
   const ref = useRef<HTMLElement>(null);
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  useAnnounce(actionError);
 
   // Undefined is no filter and the band above the list stays empty. Cleared by
   // `retarget` along with the rest of what a pane holds about one conversation,
@@ -86,16 +93,89 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
     [view, setViewSelectedUser],
   );
 
-  // A query or a console has nobody to list, and an empty column standing in
-  // for a roster is worse than the space it costs.
-  if (channel === undefined) return null;
-
   const selected = members.find((m) => m.nick === selectedNick);
   const currentNick = network?.currentNick ?? null;
   const self =
     currentNick === null
       ? undefined
       : members.find((m) => sameTarget(m.nick, currentNick));
+
+  const openMemberMenu = useCallback(
+    (member: Member, x: number, y: number) => {
+      if (channel === undefined) return;
+      const allowed = actionsFor(self);
+      const isOp = rankOf(member) >= 3;
+      const isVoiced = member.prefixes.includes("+");
+      const run = async (input: string) => {
+        setActionError(null);
+        try {
+          const outcome = await ipc.submitInput(channel.network, channel.name, input);
+          if (outcome.kind === "rejected") setActionError(outcome.value);
+        } catch (reason) {
+          setActionError(
+            typeof reason === "string" ? reason : "The command could not be sent.",
+          );
+        }
+      };
+      const message = async () => {
+        setActionError(null);
+        try {
+          await ipc.openQuery(channel.network, member.nick);
+        } catch (reason) {
+          setActionError(typeof reason === "string" ? reason : "The query could not be opened.");
+        }
+      };
+
+      setMenu({
+        x,
+        y,
+        items: [
+          {
+            kind: "action",
+            label: "Details",
+            onClick: () => setSelectedNick(member.nick),
+          },
+          { kind: "separator" },
+          { kind: "action", label: "Message", onClick: () => void message() },
+          { kind: "action", label: "Whois", onClick: () => void run(`/whois ${member.nick}`) },
+          { kind: "separator" },
+          {
+            kind: "action",
+            label: isOp ? "Take ops" : "Give ops",
+            disabled: !allowed.op,
+            onClick: () =>
+              void run(`/mode ${channel.name} ${isOp ? "-o" : "+o"} ${member.nick}`),
+          },
+          {
+            kind: "action",
+            label: isVoiced ? "Take voice" : "Give voice",
+            disabled: !allowed.voice,
+            onClick: () =>
+              void run(
+                `/mode ${channel.name} ${isVoiced ? "-v" : "+v"} ${member.nick}`,
+              ),
+          },
+          {
+            kind: "action",
+            label: "Kick",
+            disabled: !allowed.kick,
+            onClick: () => void run(`/kick ${channel.name} ${member.nick}`),
+          },
+          {
+            kind: "action",
+            label: "Ban",
+            disabled: !allowed.ban,
+            onClick: () => void run(`/mode ${channel.name} +b ${member.nick}!*@*`),
+          },
+        ],
+      });
+    },
+    [channel, self, setSelectedNick],
+  );
+
+  // A query or a console has nobody to list, and an empty column standing in
+  // for a roster is worse than the space it costs.
+  if (channel === undefined) return null;
 
   return (
     <>
@@ -189,23 +269,30 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
           />
         )}
 
+        {actionError !== null && (
+          <p
+            role="alert"
+            className="border-b border-[var(--border-subtle)] px-2 py-1 text-[var(--danger)]"
+          >
+            {actionError}
+          </p>
+        )}
+
         {selected === undefined ? (
           <MemberList
             members={members}
-            selected={selectedNick}
-            onSelect={setSelectedNick}
+            onMenu={openMemberMenu}
             filter={filter ?? ""}
           />
         ) : (
           <UserInspector
             network={channel.network}
-            channel={channel.name}
             member={selected}
-            self={self}
             onBack={() => setSelectedNick(null)}
           />
         )}
       </aside>
+      {menu !== null && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
     </>
   );
 }

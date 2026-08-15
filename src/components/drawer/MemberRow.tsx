@@ -3,11 +3,10 @@ import { nickColor } from "@/lib/nickColor";
 
 interface MemberRowProps {
   member: Member;
-  selected: boolean;
-  onSelect: (nick: string) => void;
+  onMenu: (member: Member, x: number, y: number) => void;
 }
 
-export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
+export function MemberRow({ member, onMenu }: MemberRowProps) {
   const away = member.away !== null;
   const awayReason = member.away === null || member.away === "" ? "away" : member.away;
   /** Without `multi-prefix` this is all the server sent; the rest is in the
@@ -15,14 +14,24 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
   const sigil = member.prefixes[0];
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(member.nick)}
+    <div
+      tabIndex={0}
+      role="listitem"
+      aria-label={member.nick}
+      aria-haspopup="menu"
+      data-member={member.nick}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onMenu(member, event.clientX, event.clientY);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        onMenu(member, rect.left + 8, rect.top + 8);
+      }}
       title={away ? `Away: ${awayReason}` : undefined}
-      aria-pressed={selected}
-      className={`flex h-full w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left ${
-        selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]"
-      }`}
+      className="flex h-full w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)] focus-visible:outline-none"
     >
       {/* Away is a shape, not a shade. Dimming the nick colour by a fixed
        * fraction was tuned against a dark surface: the same fraction of a
@@ -38,7 +47,7 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
             : { background: nickColor(member.nick) }
         }
       />
-      {/* The name is on the element that truncates rather than on the button,
+      {/* The name is on the element that truncates rather than on the row,
        * which already carries the away reason and takes its accessible name
        * from this text — a title there would be read back as a description
        * repeating the name. A reader hovering a clipped nick gets the whole of
@@ -59,6 +68,6 @@ export function MemberRow({ member, selected, onSelect }: MemberRowProps) {
           {sigil}
         </span>
       )}
-    </button>
+    </div>
   );
 }

@@ -63,7 +63,7 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
     <header className="contents">
       <div
         data-ui="channel-header-row"
-        className="col-span-2 row-start-1 flex h-11 items-center gap-3 bg-[var(--surface-base)] px-3"
+        className="col-span-2 row-start-1 flex h-10 items-center gap-2.5 bg-[var(--surface-base)] px-3"
       >
         <h1
           className={clsx(
@@ -164,14 +164,14 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
       {topic !== null && (
         <div
           data-ui="topic-banner"
-          className="col-start-1 row-start-2 flex min-w-0 items-start gap-3 border-y border-r border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-2"
+          className="col-start-1 row-start-2 flex min-w-0 items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-1.5"
         >
-          <div className="min-w-0 flex-1">
-            <p title={topic.text} className="selectable truncate text-[var(--text-primary)]">
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <p title={topic.text} className="selectable min-w-0 truncate text-[var(--text-primary)]">
               {topic.text}
             </p>
             {topicExpanded && (topic.setBy !== null || topic.setAt !== null) && (
-              <p className="truncate text-[11px] text-[var(--text-muted)]">
+              <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
                 {topicMetadata(topic.setBy, topic.setAt)}
               </p>
             )}
@@ -181,7 +181,7 @@ export function ChannelHeader({ view }: { view: ViewId | null }) {
             aria-label={topicExpanded ? "Collapse topic" : "Expand topic"}
             aria-expanded={topicExpanded}
             onClick={() => setTopicExpanded((expanded) => !expanded)}
-            className="mt-0.5 shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
           >
             <span className={clsx("block", !topicExpanded && "rotate-[-90deg]")}>
               <ChevronIcon size={14} />

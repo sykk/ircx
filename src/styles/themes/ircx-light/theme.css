@@ -68,7 +68,7 @@
    * each one is for is written out in ircx-dark/theme.css; a theme that wants
    * study 05's compact or read density changes the first three. */
   --timeline-row-pad-y: 1px;
-  --timeline-block-gap: 14px;
+  --timeline-block-gap: 11px;
   --timeline-body-leading: 1.7;
 
   --timeline-rail-pad: 16px;

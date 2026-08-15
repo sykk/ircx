@@ -389,7 +389,7 @@ function ComposerFor({
       </div>
 
       <div
-        className="composer-field flex items-end gap-2 rounded-[var(--radius-lg)] border px-3 py-2 transition-[box-shadow]"
+        className="composer-field flex items-end gap-2 rounded-[var(--radius-md)] border px-3 py-2 transition-[box-shadow]"
         style={{ background: "var(--surface-raised)", borderColor: "var(--border-default)" }}
       >
         <textarea

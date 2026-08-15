@@ -78,7 +78,7 @@
 
   /* Comfortable, as every theme states its own. */
   --timeline-row-pad-y: 1px;
-  --timeline-block-gap: 14px;
+  --timeline-block-gap: 11px;
   --timeline-body-leading: 1.7;
 
   /* The rail is narrower than the other themes': with the spine off — which is

@@ -236,8 +236,8 @@ export function SidebarNetworks() {
         <div
           key={row.id}
           className={clsx(
-            "group flex items-center rounded-[var(--radius-sm)]",
-            selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",
+            "group flex items-center",
+            !selected && "hover:bg-[var(--surface-hover)]",
           )}
         >
           <NetworkRow
@@ -354,7 +354,7 @@ export function SidebarNetworks() {
               <div
                 key={panel.header.id}
                 role="none"
-                className="mx-2 mb-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-raised)] p-1"
+                className="mb-1"
               >
                 {renderRow(panel.header)}
                 {!panel.header.collapsed && (

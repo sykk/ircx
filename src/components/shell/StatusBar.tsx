@@ -34,12 +34,12 @@ export function StatusBar() {
     <footer
       aria-label="Connection status"
       data-ui="statusbar"
-      className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 text-[11px] text-[var(--text-secondary)]"
+      className="flex h-6 shrink-0 items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 text-[10px] text-[var(--text-muted)]"
     >
       {network ? (
         <span className="flex min-w-0 items-center gap-2">
           <span
-            className="h-2 w-2 shrink-0 rounded-full"
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ background: connectionColor(network.status) }}
           />
           <ConnectionSummary network={network} seconds={seconds} />

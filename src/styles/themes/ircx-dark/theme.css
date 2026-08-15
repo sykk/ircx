@@ -103,7 +103,7 @@
    * inline style beats any stylesheet: declared in the component, a theme
    * redefining them on :root was silently ignored. */
   --timeline-row-pad-y: 1px;
-  --timeline-block-gap: 14px;
+  --timeline-block-gap: 11px;
   --timeline-body-leading: 1.7;
 
   /* The horizontal ladder: a spine at the rail, then the one content column

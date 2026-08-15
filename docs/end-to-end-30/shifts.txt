@@ -1,0 +1,40 @@
+2026/08/14 22:47:23 database initialized:  ircd.db
+ergo listening on 127.0.0.1:6687, pid 4059445
+seeded 400 messages into #late
+run 1 late
+  1 page-backs asked, 202 lines held
+    still     +0px  (12 of 14 strips agree, spread 272px, 0 redrawn)
+    landing   +38px  (11 of 13 strips agree, spread 272px, 1 redrawn)
+    after     +0px  (12 of 14 strips agree, spread 272px, 0 redrawn)
+    (the landing is between frame-10.png and frame-11.png, 1.8s of slack)
+run 1 intime
+  1 page-backs asked, 202 lines held
+    still     +0px  (10 of 14 strips agree, spread 300px, 0 redrawn)
+    landing   +106px  (6 of 11 strips agree, spread 621px, 3 redrawn)
+    after     +0px  (13 of 14 strips agree, spread 130px, 0 redrawn)
+    (the landing is between frame-05.png and frame-06.png, 0.2s of slack)
+run 2 late
+  1 page-backs asked, 202 lines held
+    still     +0px  (11 of 14 strips agree, spread 285px, 0 redrawn)
+    landing   +22px  (11 of 14 strips agree, spread 285px, 0 redrawn)
+    after     +0px  (11 of 14 strips agree, spread 285px, 0 redrawn)
+    (the landing is between frame-09.png and frame-10.png, 0.4s of slack)
+run 2 intime
+  1 page-backs asked, 202 lines held
+    still     +0px  (11 of 14 strips agree, spread 447px, 0 redrawn)
+    landing   -2px  (11 of 14 strips agree, spread 447px, 0 redrawn)
+    after     +0px  (11 of 14 strips agree, spread 447px, 0 redrawn)
+    (the landing is between frame-05.png and frame-06.png, 0.6s of slack)
+run 3 late
+  1 page-backs asked, 202 lines held
+    still     +0px  (10 of 14 strips agree, spread 252px, 0 redrawn)
+    landing   +22px  (10 of 14 strips agree, spread 252px, 0 redrawn)
+    after     +0px  (12 of 14 strips agree, spread 252px, 0 redrawn)
+    (the landing is between frame-09.png and frame-10.png, 0.8s of slack)
+run 3 intime
+  1 page-backs asked, 202 lines held
+    still     +0px  (11 of 14 strips agree, spread 228px, 0 redrawn)
+    landing   +46px  (9 of 13 strips agree, spread 342px, 1 redrawn)
+    after     +0px  (12 of 14 strips agree, spread 366px, 0 redrawn)
+    (the landing is between frame-06.png and frame-07.png, 1.9s of slack)
+stopped

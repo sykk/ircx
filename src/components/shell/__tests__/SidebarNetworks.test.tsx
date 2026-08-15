@@ -133,10 +133,11 @@ describe("SidebarNetworks", () => {
 
     expect(group.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
-    // The queries are on the network too, so they go with its channels and
-    // their unread counts toward the one badge left on the row.
+    // Direct messages keep their count when the network is collapsed. Ordinary
+    // channel activity stays present without adding seven more to that badge.
     expect(screen.queryByRole("treeitem", { name: "phrack" })).toBeNull();
-    expect(within(group).getByText("9")).toBeTruthy();
+    expect(within(group).getByText("2")).toBeTruthy();
+    expect(within(group).queryByText("9")).toBeNull();
 
     openRowMenu("Libera.Chat");
     fireEvent.click(screen.getByRole("menuitem", { name: "Show conversations" }));
@@ -212,7 +213,7 @@ describe("SidebarNetworks", () => {
     });
   });
 
-  it("marks unread with the muted badge and highlights with the highlight badge", () => {
+  it("marks ordinary unread quietly and counts highlights", () => {
     seedStore(
       [makeNetwork("libera")],
       [
@@ -222,11 +223,26 @@ describe("SidebarNetworks", () => {
     );
     render(<SidebarNetworks />);
 
-    const quiet = within(screen.getByRole("treeitem", { name: "#quiet" })).getByText("6");
-    const loud = within(screen.getByRole("treeitem", { name: "#loud" })).getByText("36");
+    const quiet = within(screen.getByRole("treeitem", { name: "#quiet" }));
+    const loud = within(screen.getByRole("treeitem", { name: "#loud" })).getByText("2");
 
-    expect(quiet.className).toContain("bg-[var(--badge-bg)]");
+    expect(quiet.getByLabelText("6 unread messages").className).toContain("bg-[var(--accent)]");
+    expect(quiet.queryByText("6")).toBeNull();
     expect(loud.className).toContain("bg-[var(--badge-highlight-bg)]");
+    expect(within(screen.getByRole("treeitem", { name: "#loud" })).queryByText("36")).toBeNull();
+  });
+
+  it("marks ordinary unread on a collapsed network without a number", () => {
+    seedStore(
+      [makeNetwork("libera", { name: "Libera.Chat" })],
+      [makeChannel("libera", "#quiet", { unread: 6 })],
+    );
+    useAppStore.setState({ collapsedNetworks: { libera: true } });
+    render(<SidebarNetworks />);
+
+    const group = screen.getByRole("treeitem", { name: /^Libera\.Chat,/ });
+    expect(within(group).getByLabelText("6 unread messages")).toBeTruthy();
+    expect(within(group).queryByText("6")).toBeNull();
   });
 
   /** The row is where somebody asks why a channel never went loud. The settings
@@ -245,7 +261,7 @@ describe("SidebarNetworks", () => {
 
     const quiet = screen.getByRole("treeitem", { name: "#quiet" });
     expect(within(quiet).getByLabelText("Muted")).toBeTruthy();
-    expect(within(quiet).getByText("3")).toBeTruthy();
+    expect(within(quiet).getByLabelText("3 unread messages")).toBeTruthy();
 
     const loud = screen.getByRole("treeitem", { name: "#loud" });
     expect(within(loud).queryByLabelText("Muted")).toBeNull();

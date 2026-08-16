@@ -781,6 +781,7 @@ describe("a query whose other end renames", () => {
       },
       replyTo: { [OLD]: "msgid-1" },
       recent: [OLD],
+      drafts: { [OLD]: true },
     });
   }
 
@@ -819,6 +820,13 @@ describe("a query whose other end renames", () => {
     expect(replyTo[NEW]).toBe("msgid-1");
     expect(replyTo[OLD]).toBeUndefined();
     expect(recent).toEqual([NEW]);
+  });
+
+  it("takes its draft with it", () => {
+    withQuery();
+    rename();
+
+    expect(useAppStore.getState().drafts).toEqual({ [NEW]: true });
   });
 
   /** A pane reading the conversation keeps reading it rather than emptying. */
@@ -894,6 +902,16 @@ describe("the lines a conversation remembers", () => {
     expect(useAppStore.getState().inputHistory[targetKey("libera", "phrack")]).toEqual([
       "for the query",
     ]);
+  });
+});
+
+describe("draft presence", () => {
+  it("appears and clears with the composer", () => {
+    useAppStore.getState().setDraftPresence("libera", "#ctf-ops", true);
+    expect(useAppStore.getState().drafts[KEY]).toBe(true);
+
+    useAppStore.getState().setDraftPresence("libera", "#ctf-ops", false);
+    expect(useAppStore.getState().drafts[KEY]).toBeUndefined();
   });
 });
 

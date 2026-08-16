@@ -130,6 +130,11 @@ function ComposerFor({
 
   useEffect(() => {
     if (!hydrated) return;
+    useAppStore.getState().setDraftPresence(network, target, draft !== "");
+  }, [draft, hydrated, network, target]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     const id = setTimeout(() => void ipc.setDraft(network, target, draft), DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [hydrated, network, target, draft]);

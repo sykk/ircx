@@ -138,6 +138,8 @@ export interface AppState {
    * to still be there after it. Per conversation rather than one list for the
    * client, so recalling in a channel cannot surface what was said in a query. */
   inputHistory: Record<TargetKey, string[]>;
+  /** Conversations whose persisted composer holds unsent text. */
+  drafts: Record<TargetKey, boolean>;
   /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
   /** The last `LIST` a network answered, whole. Not `channels`: these are

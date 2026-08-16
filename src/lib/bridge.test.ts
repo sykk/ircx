@@ -18,10 +18,24 @@ const { startBridge } = await import("./bridge");
 beforeEach(() => {
   resetStore();
   vi.clearAllMocks();
-  ipcMock.getSnapshot.mockResolvedValue({ networks: [], channels: [], queries: [] });
+  ipcMock.getSnapshot.mockResolvedValue({ networks: [], channels: [], queries: [], drafts: [] });
   ipcMock.listMembers.mockResolvedValue([]);
   ipcMock.markRead.mockResolvedValue(undefined);
   onIrcxEvent.mockResolvedValue(() => {});
+});
+
+it("loads persisted draft identities without loading their text", async () => {
+  ipcMock.getSnapshot.mockResolvedValue({
+    networks: [],
+    channels: [],
+    queries: [],
+    drafts: [{ network: "libera", target: "#ctf-ops" }],
+  });
+
+  const stop = await startBridge();
+
+  expect(useAppStore.getState().drafts).toEqual({ "libera\0#ctf-ops": true });
+  stop();
 });
 
 /**

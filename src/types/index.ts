@@ -21,6 +21,7 @@ export type { ChatMessage } from "./generated/ChatMessage";
 export type { CommandOutcome } from "./generated/CommandOutcome";
 export type { ConnectionStatus } from "./generated/ConnectionStatus";
 export type { Delivery } from "./generated/Delivery";
+export type { DraftTarget } from "./generated/DraftTarget";
 export type { EncryptionState } from "./generated/EncryptionState";
 export type { HistoryRequest } from "./generated/HistoryRequest";
 export type { InstalledPlugin } from "./generated/InstalledPlugin";

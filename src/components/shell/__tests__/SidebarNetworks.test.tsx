@@ -103,6 +103,21 @@ describe("SidebarNetworks", () => {
     ).toEqual(["#ctf-ops", "#hackint", "phrack", "sable"]);
   });
 
+  it("marks channels and queries that hold unsent drafts", () => {
+    seedStore(
+      [makeNetwork("libera", { name: "Libera.Chat" })],
+      [makeChannel("libera", "#ctf-ops")],
+      [makeQuery("libera", "phrack")],
+    );
+    useAppStore.getState().setDraftPresence("libera", "#ctf-ops", true);
+    useAppStore.getState().setDraftPresence("libera", "phrack", true);
+    render(<SidebarNetworks />);
+
+    expect(screen.getByRole("treeitem", { name: "#ctf-ops, draft" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "phrack, draft" })).toBeTruthy();
+    expect(screen.getAllByTitle("Unsent draft")).toHaveLength(2);
+  });
+
   it("keeps the network order the store gives it", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);

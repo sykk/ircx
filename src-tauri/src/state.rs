@@ -151,6 +151,13 @@ impl App {
             networks: Vec::new(),
             channels: Vec::new(),
             queries: Vec::new(),
+            drafts: self
+                .store
+                .list_drafts()
+                .map_err(describe)?
+                .into_iter()
+                .map(|(network, target)| ircx_ipc::DraftTarget { network, target })
+                .collect(),
         };
 
         for config in configs {

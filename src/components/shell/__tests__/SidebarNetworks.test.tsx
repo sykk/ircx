@@ -30,6 +30,8 @@ vi.mock("@/lib/ipc", () => ({
 beforeEach(() => {
   resetStore();
   vi.mocked(ipc.closeTarget).mockClear();
+  vi.mocked(ipc.connectNetwork).mockReset().mockResolvedValue(undefined);
+  vi.mocked(ipc.disconnectNetwork).mockReset().mockResolvedValue(undefined);
   vi.mocked(ipc.removeNetwork).mockClear();
 });
 
@@ -125,7 +127,7 @@ describe("SidebarNetworks", () => {
     const groups = within(screen.getByRole("tree", { name: "Networks and conversations" }))
       .getAllByRole("treeitem")
       .filter((row) => row.getAttribute("aria-level") === "1")
-      .map((row) => row.textContent);
+      .map((row) => row.getAttribute("aria-label")?.split(",")[0]);
     expect(groups).toEqual(["Libera.Chat", "OFTC", "Rizon"]);
   });
 
@@ -499,6 +501,52 @@ describe("starting and stopping a network", () => {
     seedWith({ state: "failed", detail: { message: "connection refused" } });
     expect(screen.getByRole("menuitem", { name: "Disconnect" })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "Connect" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Reconnect now" })).toBeTruthy();
+  });
+
+  it("states the failed retry and its reason on the row", () => {
+    seedWith({ state: "failed", detail: { message: "Connection refused" } });
+    expect(
+      screen.getByRole("treeitem", {
+        name: "Libera.Chat, Connection failed, Retry failed: Connection refused",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("Retry failed: Connection refused")).toBeTruthy();
+  });
+
+  it("states when the next retry starts", () => {
+    seedWith({ state: "reconnecting", detail: { inSeconds: 12 } });
+    expect(
+      screen.getByRole("treeitem", {
+        name: "Libera.Chat, Reconnecting, Retry in 12s",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("Retry in 12s")).toBeTruthy();
+  });
+
+  it("restarts a failing network immediately", async () => {
+    vi.mocked(ipc.disconnectNetwork).mockImplementationOnce(async () => {
+      useAppStore.getState().applyEvent({
+        type: "connectionChanged",
+        network: "libera",
+        status: { state: "disconnected" },
+      });
+    });
+    vi.mocked(ipc.connectNetwork).mockImplementationOnce(async () => {
+      useAppStore.getState().applyEvent({
+        type: "connectionChanged",
+        network: "libera",
+        status: { state: "connected" },
+      });
+    });
+    seedWith({ state: "failed", detail: { message: "Connection refused" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Reconnect now" }));
+    });
+
+    expect(screen.getByRole("treeitem", { name: "Libera.Chat, Connected" })).toBeTruthy();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("offers to start one that is stopped", () => {

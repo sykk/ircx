@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { UIEvent } from "react";
+import type { CSSProperties, UIEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { probe } from "@/lib/probe";
 import { displayChord, DEFAULT_BINDINGS, type ActionId } from "@/lib/keybindings";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { readingMeasure } from "@/lib/theme";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
 import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
@@ -63,6 +64,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const active = useAppStore((s) => s.activeViewId === view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const highlightWords = useAppStore((s) => s.highlightWords);
+  const measure = useAppStore((s) => s.presentation.measure);
   // One object, so everything below decides loudness from the same pair rather
   // than half of it.
   const highlight = useMemo<HighlightRule>(
@@ -73,6 +75,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [focusedGroup, setFocusedGroup] = useState<string | null>(null);
   const requestedJump = useAppStore((s) => s.messageJump[view] ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // The message the server was asked the page behind, when that ask passed its
@@ -102,6 +105,11 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const members = useMembers(network, target);
   const present = useMemo(() => members.map((member) => member.nick), [members]);
   const groups = useMemo(() => assignGroups(messages, present), [messages, present]);
+  useEffect(() => {
+    if (focusedGroup !== null && ![...groups.values()].some((group) => group.id === focusedGroup)) {
+      setFocusedGroup(null);
+    }
+  }, [focusedGroup, groups]);
   // Folded once here rather than per message: who is in the conversation is
   // what tells somebody addressing the reader from a service talking about
   // them.
@@ -577,7 +585,11 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-ui="timeline">
+    <div
+      className="flex h-full min-h-0 flex-col"
+      data-ui="timeline"
+      style={{ "--timeline-reading-measure": readingMeasure(measure) } as CSSProperties}
+    >
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
@@ -622,6 +634,8 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
                   onReply: reply,
                   flashId,
                   present: roster,
+                  focusedGroup,
+                  onFocusGroup: (group) => setFocusedGroup(group === focusedGroup ? null : group),
                 })}
               </div>
             ))}
@@ -635,6 +649,15 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
             </div>
           )}
         </div>
+        {focusedGroup !== null && (
+          <button
+            type="button"
+            onClick={() => setFocusedGroup(null)}
+            className="absolute top-3 right-3 z-10 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-2.5 py-1 text-[12px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] hover:bg-[var(--surface-hover)]"
+          >
+            Show all conversations
+          </button>
+        )}
         {!caughtUp && seam !== null ? (
           <CatchUpControls
             messages={seam.messages}
@@ -798,6 +821,8 @@ export interface RowContext {
   onReply: (msgid: string) => void;
   flashId: string | null;
   present: ReadonlySet<string>;
+  focusedGroup: string | null;
+  onFocusGroup: (group: string | null) => void;
 }
 
 const IMPORTANT_CATCH_UP_KINDS = new Set<ChatMessage["kind"]>(["kick", "topic"]);

@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { useAppStore } from "@/store";
 import { plainText } from "./Markdown";
 
 interface Props {
@@ -18,6 +19,7 @@ const CONNECTOR = "var(--timeline-quote-width) solid var(--border-strong)";
 
 export function ReplyQuote({ msgid, parent, onJump }: Props) {
   const excerpt = parent ? plainText(parent.text) : "";
+  const nickColors = useAppStore((s) => s.presentation.nickColors);
 
   // A msgid names the message on the wire and nothing the reader has ever seen,
   // so the quote says the one thing it can: that this answers something the
@@ -44,7 +46,7 @@ export function ReplyQuote({ msgid, parent, onJump }: Props) {
     >
       <span
         className="shrink-0 font-[family-name:var(--font-mono)]"
-        style={{ color: nickColor(parent.sender.nick) }}
+        style={{ color: nickColors ? nickColor(parent.sender.nick) : "var(--text-primary)" }}
       >
         {parent.sender.nick}
       </span>

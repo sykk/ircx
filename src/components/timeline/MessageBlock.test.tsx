@@ -1,4 +1,4 @@
-import { render, within } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { nickColor } from "@/lib/nickColor";
 import { DEFAULT_PRESENTATION, type Presentation } from "@/lib/theme";
@@ -67,6 +67,48 @@ describe("the spine", () => {
 
     expect(spine(container).style.borderLeftColor).toBe("var(--border-strong)");
     expect(spine(container).dataset.spine).toBe("solid");
+  });
+
+  it("offers a group's identity from its spine and marks the focused one", () => {
+    const chosen: Array<string | null> = [];
+    const { container, rerender } = block({
+      group: declared(),
+      opensGroup: true,
+      onFocusGroup: (group) => chosen.push(group),
+    });
+
+    fireEvent.click(spine(container));
+    expect(chosen).toEqual(["a"]);
+
+    rerender(
+      <MessageBlock
+        messages={[makeMessage({ id: "a", nick: "phrack", text: "tags fail" })]}
+        ownNick={null}
+        highlight={{ nick: null, words: [] }}
+        parentOf={() => undefined}
+        onJump={() => {}}
+        canTag={false}
+        onReact={() => {}}
+        onReply={() => {}}
+        flashId={null}
+        group={declared()}
+        opensGroup
+        present={new Set()}
+        focusedGroup="a"
+        onFocusGroup={(group) => chosen.push(group)}
+      />,
+    );
+    fireEvent.click(spine(container));
+    expect(chosen).toEqual(["a", "a"]);
+    expect(spine(container).getAttribute("aria-label")).toBe("Show all conversations");
+  });
+
+  it("softens a block outside the focused group", () => {
+    const { container } = block({ group: declared(), focusedGroup: "another" });
+
+    expect((container.firstElementChild as HTMLElement).style.opacity).toBe(
+      "var(--disabled-opacity)",
+    );
   });
 
   /**
@@ -186,6 +228,13 @@ describe("what the reader turned off", () => {
 
     expect(container.querySelector("time")).toBeNull();
   });
+
+  it("makes a quiet clock faint", () => {
+    set({ clockEmphasis: "quiet" });
+    const { container } = block();
+
+    expect(container.querySelector<HTMLElement>("time")!.style.color).toBe("var(--text-faint)");
+  });
 });
 
 describe("the nickname at the head of a run", () => {
@@ -203,6 +252,15 @@ describe("the nickname at the head of a run", () => {
 
     expect(getByText("<phrack>")).toBeTruthy();
     expect(queryByText("phrack")).toBeNull();
+  });
+
+  it("keeps the written name when nickname colours are off", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickColors: false },
+    });
+    const { getByText } = block();
+
+    expect(getByText("phrack").style.color).toBe("var(--text-primary)");
   });
 
   it("opens the head of the run, the clock behind it", () => {

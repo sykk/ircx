@@ -20,6 +20,9 @@ describe("sanitisePresentation", () => {
         align: "rail",
         compactSingletons: true,
         messageSize: "15px",
+        measure: "wide",
+        nickColors: false,
+        clockEmphasis: "quiet",
       }),
     ).toEqual({
       spine: false,
@@ -30,6 +33,9 @@ describe("sanitisePresentation", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
   });
 
@@ -44,6 +50,9 @@ describe("sanitisePresentation", () => {
         align: "rail",
         compactSingletons: true,
         messageSize: "15px",
+        measure: "wide",
+        nickColors: false,
+        clockEmphasis: "quiet",
       }),
     ).toEqual({
       spine: false,
@@ -54,6 +63,9 @@ describe("sanitisePresentation", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
   });
 
@@ -81,6 +93,9 @@ describe("storedPresentation", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -91,6 +106,9 @@ describe("storedPresentation", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
   });
 

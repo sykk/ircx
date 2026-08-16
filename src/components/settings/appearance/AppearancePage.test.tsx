@@ -327,6 +327,9 @@ describe("AppearancePage", () => {
         align: "center",
         compactSingletons: false,
         messageSize: "14px",
+        measure: "theme",
+        nickColors: true,
+        clockEmphasis: "normal",
       });
     });
 
@@ -338,12 +341,28 @@ describe("AppearancePage", () => {
       expect(localStorage.getItem("ircx.presentation")).toContain('"clockSide":"left"');
     });
 
+    it("keeps the chosen timestamp emphasis", () => {
+      open();
+      fireEvent.change(field("Timestamp emphasis"), { target: { value: "quiet" } });
+
+      expect(useAppStore.getState().presentation.clockEmphasis).toBe("quiet");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"clockEmphasis":"quiet"');
+    });
+
     it("moves the conversation to the rail", () => {
       open();
       fireEvent.change(field("Conversation position"), { target: { value: "rail" } });
 
       expect(useAppStore.getState().presentation.align).toBe("rail");
       expect(localStorage.getItem("ircx.presentation")).toContain('"align":"rail"');
+    });
+
+    it("keeps the chosen line width", () => {
+      open();
+      fireEvent.change(field("Line width"), { target: { value: "wide" } });
+
+      expect(useAppStore.getState().presentation.measure).toBe("wide");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"measure":"wide"');
     });
 
     it("puts the nickname in front of every line", () => {
@@ -369,6 +388,14 @@ describe("AppearancePage", () => {
 
       fireEvent.click(field("Angle brackets around nicknames"));
       expect(useAppStore.getState().presentation.nickBrackets).toBe(false);
+    });
+
+    it("turns nickname colours off", () => {
+      open();
+      fireEvent.click(field("Nickname colours"));
+
+      expect(useAppStore.getState().presentation.nickColors).toBe(false);
+      expect(localStorage.getItem("ircx.presentation")).toContain('"nickColors":false');
     });
   });
 
@@ -468,6 +495,9 @@ describe("AppearancePage", () => {
         align: "rail",
         compactSingletons: false,
         messageSize: "14px",
+        measure: "theme",
+        nickColors: true,
+        clockEmphasis: "normal",
       });
       expect(token("--font-ui")).toBe(token("--font-mono"));
     });

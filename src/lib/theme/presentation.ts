@@ -9,6 +9,8 @@ export type ClockSide = "left" | "right";
 
 export type TimelineAlign = "rail" | "center";
 export type MessageSize = "13px" | "14px" | "15px";
+export type TimelineMeasure = "narrow" | "theme" | "wide";
+export type ClockEmphasis = "quiet" | "normal";
 
 /**
  * What the timeline draws, as against what colour it draws it in.
@@ -48,6 +50,9 @@ export interface Presentation {
    * front of the prose instead of spending a separate header line on them. */
   compactSingletons: boolean;
   messageSize: MessageSize;
+  measure: TimelineMeasure;
+  nickColors: boolean;
+  clockEmphasis: ClockEmphasis;
 }
 
 export const DEFAULT_PRESENTATION: Presentation = {
@@ -59,6 +64,9 @@ export const DEFAULT_PRESENTATION: Presentation = {
   align: "center",
   compactSingletons: false,
   messageSize: "14px",
+  measure: "theme",
+  nickColors: true,
+  clockEmphasis: "normal",
 };
 
 /**
@@ -106,6 +114,23 @@ export const MESSAGE_SIZES: readonly { id: MessageSize; name: string }[] = [
   { id: "15px", name: "Large · 15px" },
 ];
 
+export const TIMELINE_MEASURES: readonly { id: TimelineMeasure; name: string }[] = [
+  { id: "narrow", name: "Narrow" },
+  { id: "theme", name: "Theme default" },
+  { id: "wide", name: "Wide" },
+];
+
+export const CLOCK_EMPHASES: readonly { id: ClockEmphasis; name: string }[] = [
+  { id: "quiet", name: "Quiet" },
+  { id: "normal", name: "Normal" },
+];
+
+export function readingMeasure(measure: TimelineMeasure): string {
+  if (measure === "narrow") return "520px";
+  if (measure === "wide") return "680px";
+  return "var(--timeline-measure)";
+}
+
 /**
  * A usable setting from anything at all, field by field.
  *
@@ -143,6 +168,14 @@ export function sanitisePresentation(raw: unknown): Presentation {
     messageSize: MESSAGE_SIZES.some((size) => size.id === held.messageSize)
       ? (held.messageSize as MessageSize)
       : DEFAULT_PRESENTATION.messageSize,
+    measure: TIMELINE_MEASURES.some((measure) => measure.id === held.measure)
+      ? (held.measure as TimelineMeasure)
+      : DEFAULT_PRESENTATION.measure,
+    nickColors:
+      typeof held.nickColors === "boolean" ? held.nickColors : DEFAULT_PRESENTATION.nickColors,
+    clockEmphasis: CLOCK_EMPHASES.some((emphasis) => emphasis.id === held.clockEmphasis)
+      ? (held.clockEmphasis as ClockEmphasis)
+      : DEFAULT_PRESENTATION.clockEmphasis,
   };
 }
 

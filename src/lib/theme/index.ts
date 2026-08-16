@@ -26,19 +26,24 @@ export type { Preset } from "./presets";
 export {
   CLOCK_FORMATS,
   CLOCK_SIDES,
+  CLOCK_EMPHASES,
   MESSAGE_SIZES,
   TIMELINE_ALIGNS,
+  TIMELINE_MEASURES,
   DEFAULT_PRESENTATION,
   sanitisePresentation,
+  readingMeasure,
   storePresentation,
   storedPresentation,
 } from "./presentation";
 export type {
   ClockFormat,
   ClockSide,
+  ClockEmphasis,
   MessageSize,
   Presentation,
   TimelineAlign,
+  TimelineMeasure,
 } from "./presentation";
 export { applyUiStylesheet, clearUiStylesheet, uiStylesheetProblem } from "./ui-css";
 export {

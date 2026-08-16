@@ -63,6 +63,7 @@ export function MessageRow({
   // the same way: the row tinted, and the reason said in the words for it.
   const raised = (message.raisedBy ?? []).length > 0;
   const messageSize = useAppStore((s) => s.presentation.messageSize);
+  const nickColors = useAppStore((s) => s.presentation.nickColors);
   // A reaction and a reply both travel as a `+reply` naming a msgid. Until the
   // server has given this message one there is nothing to name it by, so it can
   // be answered by neither — which is the window between sending a line and its
@@ -90,7 +91,7 @@ export function MessageRow({
       }}
     >
       {message.replyTo && !quotedAbove && (
-        <div style={{ maxWidth: "var(--timeline-measure)" }}>
+        <div style={{ maxWidth: "var(--timeline-reading-measure, var(--timeline-measure))" }}>
           <ReplyQuote
             msgid={message.replyTo}
             parent={parentOf(message.replyTo)}
@@ -102,7 +103,8 @@ export function MessageRow({
       <div
         className="grid items-baseline"
         style={{
-          gridTemplateColumns: "minmax(0, var(--timeline-measure)) var(--timeline-actions-col)",
+          gridTemplateColumns:
+            "minmax(0, var(--timeline-reading-measure, var(--timeline-measure))) var(--timeline-actions-col)",
           columnGap: "var(--timeline-actions-gap)",
         }}
       >
@@ -125,8 +127,8 @@ export function MessageRow({
             className="selectable font-[family-name:var(--font-ui)]"
             style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
-            <SenderPrefix message={message} forced={prefixSender} />
-            <Body message={message} highlight={loud ? highlight : null} />
+            <SenderPrefix message={message} forced={prefixSender} nickColors={nickColors} />
+            <Body message={message} highlight={loud ? highlight : null} nickColors={nickColors} />
           </div>
 
           {message.attachments.map((attachment) => (
@@ -199,7 +201,15 @@ export function MessageRow({
  * An action and a notice are skipped: both write their own nick into the body,
  * so a prefix would name the sender twice on one line.
  */
-function SenderPrefix({ message, forced }: { message: ChatMessage; forced: boolean }) {
+function SenderPrefix({
+  message,
+  forced,
+  nickColors,
+}: {
+  message: ChatMessage;
+  forced: boolean;
+  nickColors: boolean;
+}) {
   const { clockSide, nickBrackets, nickEveryLine } = useAppStore((s) => s.presentation);
   if ((!nickEveryLine && !forced) || writesOwnNick(message.kind)) return null;
 
@@ -213,7 +223,10 @@ function SenderPrefix({ message, forced }: { message: ChatMessage; forced: boole
           <Clock at={message.timestamp} />{" "}
         </>
       )}
-      <span className="font-semibold" style={{ color: nickColor(nick) }}>
+      <span
+        className="font-semibold"
+        style={{ color: nickColors ? nickColor(nick) : "var(--text-primary)" }}
+      >
         {nickBrackets ? `<${nick}>` : nick}
       </span>
       {clockSide === "right" && (
@@ -241,13 +254,21 @@ function urlsOf(message: ChatMessage): string[] {
 /** `highlight` is the rule only where this message matched it; a line the
  * reader sent that happens to contain their own name is not addressed to
  * them, and isHighlight already says so. */
-function Body({ message, highlight }: { message: ChatMessage; highlight: HighlightRule | null }) {
+function Body({
+  message,
+  highlight,
+  nickColors,
+}: {
+  message: ChatMessage;
+  highlight: HighlightRule | null;
+  nickColors: boolean;
+}) {
   if (message.kind === "action") {
     return (
       <span>
         <span
           className="font-[family-name:var(--font-mono)]"
-          style={{ color: nickColor(message.sender.nick) }}
+          style={{ color: nickColors ? nickColor(message.sender.nick) : "var(--text-primary)" }}
         >
           * {message.sender.nick}{" "}
         </span>
@@ -261,7 +282,7 @@ function Body({ message, highlight }: { message: ChatMessage; highlight: Highlig
       <span style={{ color: "var(--text-secondary)" }}>
         <span
           className="font-[family-name:var(--font-mono)]"
-          style={{ color: nickColor(message.sender.nick) }}
+          style={{ color: nickColors ? nickColor(message.sender.nick) : "var(--text-primary)" }}
         >
           -{message.sender.nick}-{" "}
         </span>

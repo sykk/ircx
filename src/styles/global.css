@@ -59,6 +59,11 @@ body {
   outline: none;
 }
 
+[data-ui="group-spine"]:focus-visible {
+  outline: none;
+  background: var(--surface-hover);
+}
+
 /* The composer draws its own focus glow on the pill; the global ring reads as a
  * sharp blue box on the textarea inside it. */
 [data-ui="composer"] textarea:focus,

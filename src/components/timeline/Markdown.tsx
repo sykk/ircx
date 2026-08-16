@@ -21,7 +21,9 @@ export function plainText(text: string): string {
 }
 
 function blockText(block: Block): string {
-  return block.type === "code" ? block.text : spansText(block.spans);
+  if (block.type === "code") return block.text;
+  if (block.type === "list") return block.items.map(spansText).join(" ");
+  return spansText(block.spans);
 }
 
 function spansText(spans: Span[]): string {
@@ -49,7 +51,7 @@ export function Markdown({ text, urls = [], highlight = null }: MarkdownProps) {
   return (
     <>
       {parseMarkdown(stripIrcFormatting(text), urls).map((block, i) => (
-        <BlockView key={i} block={block} highlight={highlight} />
+        <BlockView key={i} block={block} highlight={highlight} separated={i > 0} />
       ))}
     </>
   );
@@ -59,12 +61,20 @@ export function Markdown({ text, urls = [], highlight = null }: MarkdownProps) {
  * conversation off screen. */
 const PASTE_MAX_PX = 260;
 
-function BlockView({ block, highlight }: { block: Block; highlight: HighlightRule | null }) {
+function BlockView({
+  block,
+  highlight,
+  separated,
+}: {
+  block: Block;
+  highlight: HighlightRule | null;
+  separated: boolean;
+}) {
   if (block.type === "code") {
     const lines = block.text === "" ? 0 : block.text.split("\n").length;
     return (
       <div
-        className="my-1 overflow-hidden rounded-[var(--radius-sm)] border"
+        className={`${separated ? "mt-2" : "mt-1"} overflow-hidden rounded-[var(--radius-sm)] border`}
         style={{ background: "var(--surface-raised)", borderColor: "var(--border-subtle)" }}
       >
         <div
@@ -85,10 +95,34 @@ function BlockView({ block, highlight }: { block: Block; highlight: HighlightRul
       </div>
     );
   }
+  if (block.type === "quote") {
+    return (
+      <blockquote
+        className={`${separated ? "mt-2" : "mt-1"} block whitespace-pre-wrap border-l pl-2`}
+        style={{ borderColor: "var(--border-strong)", color: "var(--text-secondary)" }}
+      >
+        <Spans spans={block.spans} highlight={highlight} />
+      </blockquote>
+    );
+  }
+  if (block.type === "list") {
+    const List = block.ordered ? "ol" : "ul";
+    return (
+      <List
+        className={`${separated ? "mt-2" : "mt-1"} block space-y-0.5 pl-5 ${block.ordered ? "list-decimal" : "list-disc"}`}
+      >
+        {block.items.map((item, i) => (
+          <li key={i}>
+            <Spans spans={item} highlight={highlight} />
+          </li>
+        ))}
+      </List>
+    );
+  }
   // Inline rather than a paragraph so a caller can put a prefix such as a
   // notice's `-nick-` on the same line as the first word.
   return (
-    <span className="whitespace-pre-wrap break-words">
+    <span className={`${separated ? "mt-2 block" : ""} whitespace-pre-wrap break-words`}>
       <Spans spans={block.spans} highlight={highlight} />
     </span>
   );

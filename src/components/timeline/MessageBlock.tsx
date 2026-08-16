@@ -22,6 +22,9 @@ interface BlockProps {
    * climb through the gap between them. Without it a group's rule breaks once
    * per author and a solid group reads as a dashed one. */
   spineContinues?: boolean;
+  dimmed?: boolean;
+  onSpineClick?: (() => void) | undefined;
+  spinePressed?: boolean;
   children: ReactNode;
 }
 
@@ -38,6 +41,9 @@ export function Block({
   spine,
   spineTint = "var(--border-strong)",
   spineContinues = false,
+  dimmed = false,
+  onSpineClick,
+  spinePressed = false,
   children,
 }: BlockProps) {
   const drawn = useAppStore((s) => s.presentation.spine);
@@ -53,8 +59,9 @@ export function Block({
       className="grid"
       style={{
         width: "100%",
-        maxWidth: "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-measure) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)",
+        maxWidth: "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)",
         marginInline: align === "center" ? "auto" : undefined,
+        opacity: dimmed ? "var(--disabled-opacity)" : undefined,
         gridTemplateColumns: drawn ? LADDER : FLAT,
         paddingLeft: "var(--timeline-rail-pad)",
         paddingRight: "16px",
@@ -66,11 +73,19 @@ export function Block({
         paddingTop: continues ? undefined : "var(--timeline-block-gap)",
       }}
     >
-      {spine && drawn && (
-        <div
+      {spine && drawn && onSpineClick !== undefined ? (
+        <button
+          type="button"
           data-spine="solid"
+          data-ui="group-spine"
+          className="rounded-[var(--radius-sm)] hover:bg-[var(--surface-hover)]"
+          aria-label={spinePressed ? "Show all conversations" : "Focus this conversation"}
+          aria-pressed={spinePressed}
+          title={spinePressed ? "Show all conversations" : "Focus this conversation"}
+          onClick={onSpineClick}
           style={{
             gridColumn: 1,
+            width: "calc(var(--timeline-spine-width) + var(--timeline-spine-gap))",
             // A border rather than a fill: only a border can be dashed.
             borderLeftWidth: "var(--timeline-spine-width)",
             borderLeftStyle: "solid",
@@ -82,9 +97,20 @@ export function Block({
             // because it reads as an accident rather than as a division.
             marginTop: continues ? "-1px" : undefined,
           }}
+        />
+      ) : spine && drawn ? (
+        <div
+          data-spine="solid"
+          style={{
+            gridColumn: 1,
+            borderLeftWidth: "var(--timeline-spine-width)",
+            borderLeftStyle: "solid",
+            borderLeftColor: spineTint,
+            marginTop: continues ? "-1px" : undefined,
+          }}
           aria-hidden="true"
         />
-      )}
+      ) : null}
       <div
         style={{
           gridColumn: 3,
@@ -112,6 +138,8 @@ interface Props {
   /** Who is in the conversation, folded. A sender who is not cannot be
    * addressing anybody in it. */
   present: ReadonlySet<string>;
+  focusedGroup?: string | null;
+  onFocusGroup?: (group: string | null) => void;
 }
 
 /**
@@ -170,6 +198,8 @@ export function MessageBlock({
   group,
   opensGroup,
   present,
+  focusedGroup = null,
+  onFocusGroup,
 }: Props) {
   const head = messages[0]!;
   const brackets = useAppStore((s) => s.presentation.nickBrackets);
@@ -177,6 +207,7 @@ export function MessageBlock({
   const clock = useAppStore((s) => s.presentation.clock);
   const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
   const compactSingletons = useAppStore((s) => s.presentation.compactSingletons);
+  const nickColors = useAppStore((s) => s.presentation.nickColors);
   const compactSingleton = compactSingletons && messages.length === 1 && !writesOwnNick(head.kind);
   const addressed = messages.some((message) => isHighlight(message, highlight, present));
   const failures = failureRuns(messages);
@@ -205,7 +236,7 @@ export function MessageBlock({
     writesOwnNick(head.kind) || everyLine || compactSingleton ? null : (
       <span
         className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
-        style={{ color: nickColor(head.sender.nick) }}
+        style={{ color: nickColors ? nickColor(head.sender.nick) : "var(--text-primary)" }}
       >
         {brackets ? `<${head.sender.nick}>` : head.sender.nick}
       </span>
@@ -237,6 +268,9 @@ export function MessageBlock({
       spine
       spineTint={spineTint}
       spineContinues={group !== null && !opensGroup}
+      dimmed={focusedGroup !== null && group?.id !== focusedGroup}
+      onSpineClick={group === null || onFocusGroup === undefined ? undefined : () => onFocusGroup(group.id)}
+      spinePressed={group !== null && group.id === focusedGroup}
     >
       {opensGroup && group !== null && group.name !== null && (
         <GroupName name={group.name} tint={groupTint ?? "var(--text-faint)"} />
@@ -248,7 +282,10 @@ export function MessageBlock({
           same pattern that decided to highlight the row at all. */}
       {addressed && (
         <div className="text-[11px]" style={{ color: "var(--text-faint)" }}>
-          <span style={{ color: nickColor(head.sender.nick) }}>{head.sender.nick}</span> addressed
+          <span style={{ color: nickColors ? nickColor(head.sender.nick) : "var(--text-primary)" }}>
+            {head.sender.nick}
+          </span>{" "}
+          addressed
           you by name
         </div>
       )}

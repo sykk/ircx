@@ -18,9 +18,13 @@ export type Span =
 
 export type Block =
   | { type: "paragraph"; spans: Span[] }
+  | { type: "quote"; spans: Span[] }
+  | { type: "list"; ordered: boolean; items: Span[][] }
   | { type: "code"; lang: string | null; text: string };
 
 const FENCE = /^\s*```(.*)$/;
+const QUOTE = /^>\s?(.*)$/;
+const LIST = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
 
 /**
  * `urls` are the links to write out as links. They are not found here: the
@@ -42,22 +46,57 @@ export function parseMarkdown(text: string, urls: readonly string[] = []): Block
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const open = FENCE.exec(lines[i]!);
-    if (!open) {
-      paragraph.push(lines[i]!);
+    if (lines[i]!.trim() === "") {
+      flushParagraph();
       continue;
     }
-    flushParagraph();
 
-    const lang = open[1]!.trim();
-    // An unclosed fence runs to the end of the message rather than reverting to
-    // literal text: half a code block is still code the sender meant to show.
-    const body: string[] = [];
-    for (i++; i < lines.length; i++) {
-      if (FENCE.test(lines[i]!)) break;
-      body.push(lines[i]!);
+    const open = FENCE.exec(lines[i]!);
+    if (open) {
+      flushParagraph();
+
+      const lang = open[1]!.trim();
+      // An unclosed fence runs to the end of the message rather than reverting to
+      // literal text: half a code block is still code the sender meant to show.
+      const body: string[] = [];
+      for (i++; i < lines.length; i++) {
+        if (FENCE.test(lines[i]!)) break;
+        body.push(lines[i]!);
+      }
+      blocks.push({ type: "code", lang: lang || null, text: body.join("\n") });
+      continue;
     }
-    blocks.push({ type: "code", lang: lang || null, text: body.join("\n") });
+
+    const quote = QUOTE.exec(lines[i]!);
+    if (quote) {
+      flushParagraph();
+      const quoted = [quote[1]!];
+      while (i + 1 < lines.length) {
+        const next = QUOTE.exec(lines[i + 1]!);
+        if (!next) break;
+        quoted.push(next[1]!);
+        i++;
+      }
+      blocks.push({ type: "quote", spans: parseSpans(quoted.join("\n"), urls) });
+      continue;
+    }
+
+    const item = LIST.exec(lines[i]!);
+    if (item) {
+      flushParagraph();
+      const ordered = item[2]!.endsWith(".");
+      const items = [parseSpans(item[3]!, urls)];
+      while (i + 1 < lines.length) {
+        const next = LIST.exec(lines[i + 1]!);
+        if (!next || next[2]!.endsWith(".") !== ordered) break;
+        items.push(parseSpans(next[3]!, urls));
+        i++;
+      }
+      blocks.push({ type: "list", ordered, items });
+      continue;
+    }
+
+    paragraph.push(lines[i]!);
   }
 
   flushParagraph();

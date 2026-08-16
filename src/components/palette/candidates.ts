@@ -29,6 +29,7 @@ export type CandidateAction =
   | { type: "split"; direction: SplitDirection }
   | { type: "closePane" }
   | { type: "search" }
+  | { type: "unread"; direction: 1 | -1 }
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
@@ -321,6 +322,16 @@ function withChord(detail: string, action: ActionId): string {
 }
 
 const STATIC_ACTIONS: readonly { label: string; detail: string; action: CandidateAction }[] = [
+  {
+    label: "Next unread conversation",
+    detail: withChord("Highlights first, then other unread conversations", "target.nextUnread"),
+    action: { type: "unread", direction: 1 },
+  },
+  {
+    label: "Previous unread conversation",
+    detail: withChord("Highlights first, then other unread conversations", "target.previousUnread"),
+    action: { type: "unread", direction: -1 },
+  },
   {
     label: "Split pane side by side",
     detail: withChord("A second pane on this conversation, beside this one", "pane.splitVertical"),

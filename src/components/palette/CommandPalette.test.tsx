@@ -115,6 +115,17 @@ describe("CommandPalette", () => {
     expect(optionLabels().some((l) => l.includes("#linux"))).toBe(false);
   });
 
+  it("opens the next unread conversation", () => {
+    useAppStore.setState(oneView({ network: "libera", target: "#ctf-web" }));
+    render(<CommandPalette />);
+    type("next unread conversation");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("marks the matched characters in the result", () => {
     const { container } = render(<CommandPalette />);
     type("ctfo");

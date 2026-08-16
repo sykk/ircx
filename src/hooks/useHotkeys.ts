@@ -10,6 +10,7 @@ import {
 import { selectPresentation } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
+import { nextUnreadTarget, orderedTargets } from "@/store/unreadNavigation";
 import type { ActiveTarget, AppState, ViewId } from "@/store/types";
 
 const HISTORY_CAP = 100;
@@ -90,8 +91,13 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       useAppStore.getState().setActive(splitTargetKey(key));
     };
 
-    const step = (delta: number, wantsUnread: boolean) => {
+    const step = (delta: 1 | -1, wantsUnread: boolean) => {
       const state = useAppStore.getState();
+      if (wantsUnread) {
+        const active = activeTarget(state);
+        go(nextUnreadTarget(state, active ? targetKey(active.network, active.target) : null, delta) ?? undefined);
+        return;
+      }
       const order = orderedTargets(state);
       if (order.length === 0) return;
       const start = startIndex(state, order, delta);
@@ -100,10 +106,8 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
         const at = (((start + delta * n) % order.length) + order.length) % order.length;
         const key = order[at];
         if (!key) continue;
-        if (!wantsUnread || unreadCount(state, key) > 0) {
-          go(key);
-          return;
-        }
+        go(key);
+        return;
       }
     };
 
@@ -116,7 +120,7 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       go(h.entries[next]);
     };
 
-    const walk = (delta: number) => {
+    const walk = (delta: 1 | -1) => {
       const state = useAppStore.getState();
       if (state.viewOrder.length < 2) {
         step(delta, false);
@@ -178,23 +182,6 @@ function focusPane(id: ViewId): void {
   document.querySelector<HTMLTextAreaElement>(`[data-view="${id}"] textarea`)?.focus();
 }
 
-/** Sidebar order: networks as configured, each one's channels then its queries,
- * both by name. Ctrl+1..9 count through this list. */
-function orderedTargets(state: AppState): TargetKey[] {
-  const order: TargetKey[] = [];
-  for (const network of state.networkOrder) {
-    const channels = Object.values(state.channels)
-      .filter((c) => c.network === network)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const queries = Object.values(state.queries)
-      .filter((q) => q.network === network)
-      .sort((a, b) => a.nick.localeCompare(b.nick));
-    for (const c of channels) order.push(targetKey(network, c.name));
-    for (const q of queries) order.push(targetKey(network, q.nick));
-  }
-  return order;
-}
-
 /** Position to count from. With nothing active, stepping forward starts before
  * the first target and stepping back starts after the last. */
 function startIndex(state: AppState, order: TargetKey[], delta: number): number {
@@ -210,8 +197,4 @@ function activeTarget(state: AppState): ActiveTarget | null {
   const view = state.activeViewId ? state.views[state.activeViewId] : undefined;
   if (!view || !view.network) return null;
   return { network: view.network, target: view.target };
-}
-
-function unreadCount(state: AppState, key: TargetKey): number {
-  return state.channels[key]?.unread ?? state.queries[key]?.unread ?? 0;
 }

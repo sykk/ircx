@@ -131,7 +131,7 @@ const network: Network = {
   lagMs: null,
 };
 
-function channel(name: string, unread = 0): Channel {
+function channel(name: string, unread = 0, highlights = 0): Channel {
   return {
     network: "libera",
     name,
@@ -140,7 +140,7 @@ function channel(name: string, unread = 0): Channel {
     joined: true,
     memberCount: 2,
     unread,
-    highlights: 0,
+    highlights,
     muted: false,
   };
 }
@@ -229,6 +229,22 @@ describe("useAppHotkeys", () => {
     press(document, { key: "ArrowDown", altKey: true, shiftKey: true });
 
     expect(activeKey()).toBe(targetKey("libera", "#hackint"));
+  });
+
+  it("visits highlights before nearer unread targets", () => {
+    render(<AppHost />);
+    useAppStore.setState((state) => ({
+      channels: {
+        ...state.channels,
+        [targetKey("libera", "#linux")]: channel("#linux", 3),
+        [targetKey("libera", "#ctf-ops")]: channel("#ctf-ops", 2, 1),
+      },
+    }));
+    useAppStore.getState().setActive({ network: "libera", target: "#hackint" });
+
+    press(document, { key: "ArrowDown", altKey: true, shiftKey: true });
+
+    expect(activeKey()).toBe(targetKey("libera", "#ctf-ops"));
   });
 
   it("walks visit history with Alt+Left and Alt+Right", () => {

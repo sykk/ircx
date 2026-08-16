@@ -1393,6 +1393,8 @@ async fn archive(report: &mut Report, db: &Path, marker: &str, store: Arc<Store>
             query: marker.into(),
             network: Some("libera".into()),
             target: None,
+            sender: None,
+            after: None,
             limit: 20,
         })
         .unwrap_or_default();

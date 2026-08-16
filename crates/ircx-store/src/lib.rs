@@ -633,15 +633,24 @@ impl Store {
              WHERE {index} MATCH ?1
                AND (?2 IS NULL OR m.network = ?2)
                AND (?3 IS NULL OR m.target = ?3 COLLATE NOCASE)
+               AND (?4 IS NULL OR m.sender_nick = ?4 COLLATE NOCASE)
+               AND (?5 IS NULL OR m.timestamp >= ?5)
              ORDER BY m.timestamp DESC, m.id DESC
-             LIMIT ?4",
+             LIMIT ?6",
             columns = message::COLUMNS,
         );
 
         let conn = self.reading();
         let mut stmt = conn.prepare(&sql).map_err(search_error)?;
         let mut rows = stmt
-            .query(params![query, req.network, req.target, req.limit])
+            .query(params![
+                query,
+                req.network,
+                req.target,
+                req.sender,
+                req.after,
+                req.limit
+            ])
             .map_err(search_error)?;
         let mut found = Vec::new();
         let mut snippets: Vec<String> = Vec::new();
@@ -672,22 +681,30 @@ impl Store {
         // their phrases. `instr` is case-sensitive and `LIKE` is not, for ASCII;
         // neither folds case in Japanese, which has none.
         let conditions = (0..terms.len())
-            .map(|index| format!("m.text LIKE '%' || ?{} || '%' ESCAPE '\\'", index + 4))
+            .map(|index| format!("m.text LIKE '%' || ?{} || '%' ESCAPE '\\'", index + 6))
             .collect::<Vec<_>>()
             .join(" AND ");
         let sql = format!(
             "SELECT {columns} FROM messages m
              WHERE (?1 IS NULL OR m.network = ?1)
                AND (?2 IS NULL OR m.target = ?2)
+               AND (?3 IS NULL OR m.sender_nick = ?3 COLLATE NOCASE)
+               AND (?4 IS NULL OR m.timestamp >= ?4)
                AND {conditions}
              ORDER BY m.timestamp DESC, m.id DESC
-             LIMIT ?3",
+             LIMIT ?5",
             columns = message::COLUMNS,
         );
 
         let conn = self.reading();
         let mut stmt = conn.prepare(&sql)?;
-        let mut bound: Vec<&dyn rusqlite::ToSql> = vec![&req.network, &req.target, &req.limit];
+        let mut bound: Vec<&dyn rusqlite::ToSql> = vec![
+            &req.network,
+            &req.target,
+            &req.sender,
+            &req.after,
+            &req.limit,
+        ];
         let escaped: Vec<String> = terms.iter().map(|term| like_literal(term)).collect();
         bound.extend(escaped.iter().map(|term| term as &dyn rusqlite::ToSql));
 

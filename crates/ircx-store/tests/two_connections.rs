@@ -66,6 +66,8 @@ fn search_for(query: &str) -> SearchRequest {
         query: query.into(),
         network: None,
         target: None,
+        sender: None,
+        after: None,
         limit: 50,
     }
 }

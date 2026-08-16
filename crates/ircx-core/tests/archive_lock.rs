@@ -272,6 +272,8 @@ fn rare(index: usize) -> SearchRequest {
         query: format!("{index}"),
         network: None,
         target: None,
+        sender: None,
+        after: None,
         limit: 50,
     }
 }
@@ -284,6 +286,8 @@ fn common() -> SearchRequest {
         query: "something".into(),
         network: None,
         target: None,
+        sender: None,
+        after: None,
         limit: 50,
     }
 }

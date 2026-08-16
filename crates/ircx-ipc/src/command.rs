@@ -152,6 +152,8 @@ pub struct SearchRequest {
     pub query: String,
     pub network: Option<NetworkId>,
     pub target: Option<TargetName>,
+    pub sender: Option<String>,
+    pub after: Option<String>,
     pub limit: u32,
 }
 

@@ -25,6 +25,7 @@ const DEBOUNCE_MS = 150;
  * 15 ms against 100,000 messages and happens after the debounce below.
  */
 const MIN_QUERY = 1;
+type SearchAge = "any" | "day" | "week" | "month";
 
 export function SearchOverlay() {
   const open = useAppStore((s) => s.searchOpen);
@@ -37,6 +38,9 @@ function Search() {
 
   const active = useActiveTarget();
   const [query, setQuery] = useState("");
+  const [sender, setSender] = useState("");
+  const [age, setAge] = useState<SearchAge>("any");
+  const [openedAt] = useState(Date.now);
   const [saved, setSaved] = useState(loadSavedSearches);
   const [mode, setMode] = useState<"search" | "bookmarks">("search");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -48,6 +52,8 @@ function Search() {
   const network = active?.network ?? null;
   const target = active?.target ?? null;
   const text = query.trim();
+  const senderFilter = sender.trim() || null;
+  const after = searchAfter(age, openedAt);
   // Too short to search: the last answer stays in state but is not shown, so
   // clearing it would only cost a render.
   const shown = mode === "search" && [...text].length < MIN_QUERY ? [] : hits;
@@ -59,7 +65,14 @@ function Search() {
     const timer = setTimeout(() => {
       const request = mode === "bookmarks"
         ? ipc.listBookmarks(network, target, HIT_LIMIT)
-        : ipc.searchHistory({ query: text, network, target, limit: HIT_LIMIT });
+        : ipc.searchHistory({
+            query: text,
+            network,
+            target,
+            sender: senderFilter,
+            after,
+            limit: HIT_LIMIT,
+          });
       request.then(
         (found) => {
           if (!live) return;
@@ -79,7 +92,7 @@ function Search() {
       live = false;
       clearTimeout(timer);
     };
-  }, [text, network, target, mode]);
+  }, [text, network, target, senderFilter, after, mode]);
 
   const close = () => useAppStore.getState().toggleSearch(false);
 
@@ -189,6 +202,32 @@ function Search() {
                 Save
               </button>
             </div>
+            <div className="flex gap-2 border-b border-[var(--border-subtle)] px-3 py-2">
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                From
+                <select
+                  aria-label="Search age"
+                  value={age}
+                  onChange={(event) => setAge(event.target.value as SearchAge)}
+                  className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-2 py-1 text-[12px] text-[var(--text-secondary)] outline-none"
+                >
+                  <option value="any">Any time</option>
+                  <option value="day">Past 24 hours</option>
+                  <option value="week">Past 7 days</option>
+                  <option value="month">Past 30 days</option>
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                Nick
+                <input
+                  aria-label="Search sender"
+                  value={sender}
+                  onChange={(event) => setSender(event.target.value)}
+                  placeholder="Anyone"
+                  className="selectable min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-2 py-1 text-[12px] text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-muted)]"
+                />
+              </label>
+            </div>
             {saved.length > 0 && (
               <div aria-label="Saved searches" className="flex flex-wrap gap-1.5 border-b border-[var(--border-subtle)] px-3 py-2">
                 {saved.map((held) => (
@@ -253,6 +292,11 @@ function Search() {
       </div>
     </div>
   );
+}
+
+export function searchAfter(age: SearchAge, now = Date.now()): string | null {
+  const days = age === "day" ? 1 : age === "week" ? 7 : age === "month" ? 30 : 0;
+  return days === 0 ? null : new Date(now - days * 86_400_000).toISOString();
 }
 
 /** The backend hands back an FTS5 snippet with `<mark>` around the hits. It is

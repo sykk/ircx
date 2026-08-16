@@ -236,6 +236,28 @@ describe("Timeline", () => {
     ).toBeTruthy();
   });
 
+  it("walks mentions in the unread messages and returns to the live edge", () => {
+    const messages = makeConversation({ count: 20 }).map((message, index) =>
+      index === 6 || index === 9
+        ? { ...message, text: `sable: unread mention ${index}`, sender: { ...message.sender, isSelf: false } }
+        : message,
+    );
+    seed(messages, messages[4]!.id);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const controls = screen.getByLabelText("Unread messages");
+    expect(within(controls).getByText("11 unread")).toBeTruthy();
+    expect(within(controls).getByText("2 mentions")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "H", code: "KeyH", ctrlKey: true, shiftKey: true });
+    expect(document.querySelector(`[data-msgid="${messages[6]!.id}"]`)?.getAttribute("style"))
+      .toContain("var(--surface-active)");
+
+    fireEvent.keyDown(document, { key: "L", code: "KeyL", ctrlKey: true, shiftKey: true });
+    expect(screen.queryByLabelText("Unread messages")).toBeNull();
+    expect(useAppStore.getState().viewAnchor[TEST_VIEW]).toBeNull();
+  });
+
   it("marks a message that mentions the user and leaves a longer nick alone", () => {
     seed([
       makeMessage({ id: "a", nick: "phrack", text: "sable: look at this" }),

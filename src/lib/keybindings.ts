@@ -13,6 +13,9 @@ export type ActionId =
   | "settings.open"
   | "roster.toggle"
   | "timeline.nickEveryLine"
+  | "timeline.unread"
+  | "timeline.nextMention"
+  | "timeline.latest"
   | "pane.splitVertical"
   | "pane.splitHorizontal"
   | "pane.close"
@@ -49,6 +52,9 @@ export const DEFAULT_BINDINGS: readonly Binding[] = [
   // composer holds the caret; two modifiers and a letter cannot arrive in the
   // middle of a message by accident.
   { chord: "Mod+Shift+N", action: "timeline.nickEveryLine", whenTyping: true, description: "Nickname on every line" },
+  { chord: "Mod+Shift+U", action: "timeline.unread", whenTyping: true, description: "Unread messages" },
+  { chord: "Mod+Shift+H", action: "timeline.nextMention", whenTyping: true, description: "Next mention" },
+  { chord: "Mod+Shift+L", action: "timeline.latest", whenTyping: true, description: "Latest message" },
 
   { chord: "Mod+\\", action: "pane.splitVertical", whenTyping: true, description: "Split pane side by side" },
   { chord: "Mod+Shift+\\", action: "pane.splitHorizontal", whenTyping: true, description: "Split pane top and bottom" },

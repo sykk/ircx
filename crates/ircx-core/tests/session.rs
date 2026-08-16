@@ -876,6 +876,113 @@ fn a_message_on_several_lines_goes_as_one_message_per_line() {
     assert_eq!(appended, vec!["second line", "third line"]);
 }
 
+#[test]
+fn multiline_sends_one_batch_and_one_optimistic_message() {
+    let mut session = registered(
+        "batch draft/multiline=max-bytes=4096,max-lines=10 labeled-response message-tags",
+    );
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.sent();
+
+    let CommandOutcome::Sent(message) = session.reply("#ircx", "first line\n\nsecond", "parent")
+    else {
+        panic!("the multiline message was refused");
+    };
+    assert_eq!(message.text, "first line\n\nsecond");
+    assert_eq!(message.reply_to.as_deref(), Some("parent"));
+
+    let sent = session.sent();
+    assert_eq!(sent.len(), 5);
+    let opening = sent.first().unwrap();
+    assert!(opening.starts_with("@label=ircx-1;+reply=parent BATCH +"));
+    assert!(opening.ends_with(" draft/multiline #ircx"));
+    let reference = opening
+        .split(" BATCH +")
+        .nth(1)
+        .and_then(|tail| tail.split_whitespace().next())
+        .unwrap();
+    assert_eq!(
+        &sent[1..4],
+        [
+            format!("@batch={reference} PRIVMSG #ircx :first line"),
+            format!("@batch={reference} PRIVMSG #ircx :"),
+            format!("@batch={reference} PRIVMSG #ircx second"),
+        ]
+    );
+    assert_eq!(sent[4], format!("BATCH -{reference}"));
+}
+
+#[test]
+fn multiline_falls_back_when_the_server_limit_is_too_small() {
+    let mut session = registered("batch draft/multiline=max-bytes=5,max-lines=2");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.sent();
+
+    session.submit("#ircx", "first\nsecond");
+
+    assert_eq!(
+        session.sent(),
+        vec!["PRIVMSG #ircx first", "PRIVMSG #ircx second"]
+    );
+}
+
+#[test]
+fn an_incoming_multiline_batch_becomes_one_message() {
+    let mut session = registered("batch draft/multiline=max-bytes=4096 message-tags server-time");
+    session.feed(":sable!~s@example JOIN #ircx");
+    session.events.clear();
+
+    session.feed(
+        "@msgid=whole;time=2026-08-15T12:00:00.000Z :sable!~s@example BATCH +ml draft/multiline #ircx",
+    );
+    session.feed("@batch=ml :sable!~s@example PRIVMSG #ircx :first ");
+    session.feed("@batch=ml;draft/multiline-concat :sable!~s@example PRIVMSG #ircx :line");
+    session.feed("@batch=ml :sable!~s@example PRIVMSG #ircx :second");
+    assert!(session.messages().is_empty());
+    session.feed(":sable!~s@example BATCH -ml");
+
+    let messages = session.messages();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].text, "first line\nsecond");
+    assert_eq!(messages[0].id, "whole");
+    assert_eq!(messages[0].timestamp, "2026-08-15T12:00:00.000Z");
+    assert_eq!(messages[0].sender.nick, "sable");
+}
+
+#[test]
+fn a_multiline_echo_delivers_the_one_optimistic_message() {
+    let mut session = registered(
+        "batch draft/multiline=max-bytes=4096 echo-message labeled-response message-tags",
+    );
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.sent();
+    session.events.clear();
+
+    let CommandOutcome::Sent(local) = session.submit("#ircx", "first\nsecond") else {
+        panic!("the multiline message was refused");
+    };
+    session.sent();
+    session
+        .feed("@label=ircx-1;msgid=echo :sykk!~sykk@user/sykk BATCH +echo draft/multiline #ircx");
+    session.feed("@batch=echo :sykk!~sykk@user/sykk PRIVMSG #ircx first");
+    session.feed("@batch=echo :sykk!~sykk@user/sykk PRIVMSG #ircx second");
+    session.feed(":sykk!~sykk@user/sykk BATCH -echo");
+
+    assert!(
+        session.messages().is_empty(),
+        "the echo is not appended again"
+    );
+    let delivered = session
+        .updated(&local.id)
+        .expect("the local copy is settled");
+    assert_eq!(delivered.delivery, Delivery::Delivered);
+    assert_eq!(delivered.text, "first\nsecond");
+    assert!(delivered
+        .tags
+        .iter()
+        .any(|(name, value)| name == "msgid" && value.as_deref() == Some("echo")));
+}
+
 /// A NUL cannot be sent and nobody can see one. Dropping it costs the reader
 /// nothing; refusing the line it sits in loses what they wrote.
 #[test]

@@ -19,6 +19,7 @@ mod dispatch;
 mod history;
 mod isupport;
 mod message;
+mod multiline;
 mod numeric;
 pub mod plugins;
 mod sasl;

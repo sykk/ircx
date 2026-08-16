@@ -404,6 +404,8 @@ fn search_marks_the_match_and_filters_by_target() {
             query: "migration".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
@@ -418,6 +420,8 @@ fn search_marks_the_match_and_filters_by_target() {
             query: "migration".into(),
             network: Some("libera".into()),
             target: Some("#ircx".into()),
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
@@ -429,10 +433,41 @@ fn search_marks_the_match_and_filters_by_target() {
             query: "absent".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
     assert!(missing.is_empty());
+}
+
+#[test]
+fn search_filters_by_sender_and_time_before_limiting() {
+    let store = Store::open_in_memory().unwrap();
+    let mut wanted = message("wanted", "#ircx", "2026-02-01T00:00:00Z", "deploy_marker");
+    wanted.sender.nick = "sable".into();
+    let mut too_old = message("old", "#ircx", "2025-02-01T00:00:00Z", "deploy_marker");
+    too_old.sender.nick = "sable".into();
+    let mut other_sender = message("other", "#ircx", "2026-03-01T00:00:00Z", "deploy_marker");
+    other_sender.sender.nick = "moss".into();
+    store
+        .append_messages(&[wanted, too_old, other_sender])
+        .unwrap();
+
+    for query in ["deploy", "_"] {
+        let hits = store
+            .search(&SearchRequest {
+                query: query.into(),
+                network: None,
+                target: None,
+                sender: Some("SABLE".into()),
+                after: Some("2026-01-01T00:00:00Z".into()),
+                limit: 1,
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].message.id, "wanted");
+    }
 }
 
 #[test]
@@ -511,6 +546,8 @@ fn search_does_not_see_deleted_messages() {
             query: "ephemeral".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
@@ -546,6 +583,8 @@ fn punctuation_and_operators_are_searched_for_rather_than_obeyed() {
                 query: query.into(),
                 network: None,
                 target: None,
+                sender: None,
+                after: None,
                 limit: 10,
             })
             .unwrap_or_else(|err| panic!("searching for {query:?} failed: {err}"))
@@ -586,6 +625,8 @@ fn an_empty_search_finds_nothing_rather_than_failing() {
             query: "   ".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
@@ -700,6 +741,8 @@ mod a_target_is_one_conversation_whatever_its_casing {
                 query: "findable".into(),
                 network: None,
                 target: Some("#chan".into()),
+                sender: None,
+                after: None,
                 limit: 10,
             })
             .unwrap();
@@ -1625,6 +1668,8 @@ fn one_msgid_on_two_networks_keeps_its_reactions_apart() {
             query: "msgid".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap();
@@ -2097,6 +2142,8 @@ mod archive_controls {
                 query: "morning".into(),
                 network: None,
                 target: None,
+                sender: None,
+                after: None,
                 limit: 20,
             })
             .unwrap();
@@ -2520,6 +2567,8 @@ fn nothing_a_person_can_type_is_a_syntax_error() {
             query: query.into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         });
         assert!(
@@ -2550,6 +2599,8 @@ fn a_substring_is_found_only_where_a_whole_word_was_not() {
                 query: query.into(),
                 network: None,
                 target: None,
+                sender: None,
+                after: None,
                 limit: 10,
             })
             .unwrap()
@@ -2612,6 +2663,8 @@ fn an_emoji_is_findable_and_does_not_join_the_words_around_it() {
                 query: query.into(),
                 network: None,
                 target: None,
+                sender: None,
+                after: None,
                 limit: 10,
             })
             .unwrap()
@@ -2646,6 +2699,8 @@ fn the_scanned_hit_marks_what_matched() {
             query: "🔥".into(),
             network: None,
             target: None,
+            sender: None,
+            after: None,
             limit: 10,
         })
         .unwrap()
@@ -2688,6 +2743,8 @@ fn a_wildcard_typed_into_the_search_box_is_a_character_to_look_for() {
                 query: query.into(),
                 network: None,
                 target: None,
+                sender: None,
+                after: None,
                 limit: 10,
             })
             .unwrap()

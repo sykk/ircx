@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { activeTarget, oneView } from "@/components/shell/fixtures";
 import type { ChatMessage, SearchHit } from "@/types";
-import { SearchOverlay, snippetSegments } from "./SearchOverlay";
+import { SearchOverlay, searchAfter, snippetSegments } from "./SearchOverlay";
 
 const searchHistory = vi.fn();
 const loadHistoryAround = vi.fn();
@@ -94,6 +94,8 @@ describe("SearchOverlay", () => {
         query,
         network: "libera",
         target: "#ctf-ops",
+        sender: null,
+        after: null,
         limit: 50,
       }),
     );
@@ -108,6 +110,8 @@ describe("SearchOverlay", () => {
         query: "lfi",
         network: "libera",
         target: "#ctf-ops",
+        sender: null,
+        after: null,
         limit: 50,
       }),
     );
@@ -126,11 +130,29 @@ describe("SearchOverlay", () => {
       query: "deployment",
       network: "libera",
       target: "#ctf-ops",
+      sender: null,
+      after: null,
       limit: 50,
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove saved search deployment" }));
     expect(screen.queryByRole("button", { name: "deployment" })).toBeNull();
+  });
+
+  it("narrows a search by sender and age", async () => {
+    render(<SearchOverlay />);
+    type("deploy");
+    fireEvent.change(screen.getByLabelText("Search sender"), { target: { value: "sable" } });
+    fireEvent.change(screen.getByLabelText("Search age"), { target: { value: "week" } });
+
+    await waitFor(() => expect(searchHistory).toHaveBeenLastCalledWith({
+      query: "deploy",
+      network: "libera",
+      target: "#ctf-ops",
+      sender: "sable",
+      after: expect.any(String),
+      limit: 50,
+    }));
   });
 
   it("lists bookmarks for the active target", async () => {
@@ -144,7 +166,7 @@ describe("SearchOverlay", () => {
     const { container } = render(<SearchOverlay />);
     type("lfi");
 
-    await screen.findAllByRole("option");
+    await screen.findByText(/got the/);
 
     const marks = Array.from(container.querySelectorAll("mark")).map((m) => m.textContent);
     expect(marks).toEqual(["LFI", "LFI", "double"]);
@@ -154,10 +176,14 @@ describe("SearchOverlay", () => {
   it("moves through hits and jumps to the exact message chosen", async () => {
     render(<SearchOverlay />);
     type("lfi");
-    await screen.findAllByRole("option");
+    await screen.findByText(/got the/);
 
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
-    expect(screen.getByRole("option", { selected: true }).textContent).toContain("double");
+    expect(
+      screen
+        .getByRole("listbox", { name: "Search results" })
+        .querySelector('[role="option"][aria-selected="true"]')?.textContent,
+    ).toContain("double");
 
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
 
@@ -208,5 +234,15 @@ describe("snippetSegments", () => {
     expect(snippetSegments("try <script>alert(1)</script>")).toEqual([
       { text: "try <script>alert(1)</script>", mark: false },
     ]);
+  });
+});
+
+describe("searchAfter", () => {
+  it("turns age choices into inclusive timestamps", () => {
+    const now = Date.parse("2026-08-16T12:00:00Z");
+    expect(searchAfter("any", now)).toBeNull();
+    expect(searchAfter("day", now)).toBe("2026-08-15T12:00:00.000Z");
+    expect(searchAfter("week", now)).toBe("2026-08-09T12:00:00.000Z");
+    expect(searchAfter("month", now)).toBe("2026-07-17T12:00:00.000Z");
   });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
+import { ChevronIcon } from "@/components/header/icons";
 import { Clock } from "./Clock";
 import { Block } from "./MessageBlock";
 import { describePresenceRun, partitionSystemRun } from "./rows";
@@ -75,19 +76,23 @@ export function SystemMessage({
           </span>
         )}
         {presence.length > 0 && (
-          <>
-            <span className="min-w-0 flex-1" style={{ color: "var(--text-muted)" }}>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((open) => !open)}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <span className="min-w-0">
               {describePresenceRun(presence, ownNick)}
             </span>
-            <button
-              type="button"
-              onClick={() => setExpanded((open) => !open)}
-              className="shrink-0 text-[11px]"
-              style={{ color: "var(--accent)" }}
+            <span
+              className={clsx("shrink-0 transition-transform", expanded && "rotate-180")}
+              style={{ color: "var(--text-faint)" }}
             >
-              {expanded ? "hide" : "show all"}
-            </button>
-          </>
+              <ChevronIcon size={12} />
+            </span>
+          </button>
         )}
       </div>
 

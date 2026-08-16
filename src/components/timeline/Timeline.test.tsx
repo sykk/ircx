@@ -374,8 +374,11 @@ describe("Timeline", () => {
     expect(screen.getByText(/7 joined/)).toBeTruthy();
     expect(screen.queryByText("user0 joined")).toBe(null);
 
-    fireEvent.click(screen.getByText("show all"));
+    fireEvent.click(screen.getByRole("button", { name: /7 joined/ }));
     expect(screen.getByText("user0 joined")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /7 joined/ }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
   });
 
   /** Weather is skippable exactly when none of it was about you, and a digest
@@ -448,7 +451,7 @@ describe("Timeline", () => {
 
     // Counted with the rest, in the words core wrote rather than in `+o`.
     expect(screen.getByText(/joined/).textContent).toBe("1 joined, 1 took ops, 1 quit.");
-    fireEvent.click(screen.getByText("show all"));
+    fireEvent.click(screen.getByRole("button", { name: /1 joined, 1 took ops, 1 quit/ }));
     // Opened, the line names who holds it — which the count cannot.
     expect(screen.getByText("ChanServ took ops")).toBeTruthy();
     expect(screen.getByText("kade joined")).toBeTruthy();

@@ -2502,18 +2502,13 @@ mod numerics_that_read_as_data {
             .collect()
     }
 
-    /// `#libera 1619211933` is two facts with no sentence between them, and it
-    /// arrives on every join.
     #[test]
-    fn says_when_a_channel_was_made_in_words() {
+    fn does_not_add_channel_creation_time_to_the_timeline() {
         let mut session = registered("");
         session.events.clear();
         session.feed(":silver.libera.chat 329 sykk #libera 1619211933");
 
-        assert_eq!(
-            said(&session),
-            vec!["#libera was created on 2021-04-23 at 21:05 UTC"]
-        );
+        assert!(said(&session).is_empty());
     }
 
     /// The count is in the parameters and in the sentence, so joining them
@@ -2550,14 +2545,13 @@ mod numerics_that_read_as_data {
         );
     }
 
-    /// A timestamp that will not parse is still the server saying something.
     #[test]
-    fn keeps_the_servers_words_when_the_clock_makes_no_sense() {
+    fn hides_an_unreadable_creation_time_too() {
         let mut session = registered("");
         session.events.clear();
         session.feed(":silver.libera.chat 329 sykk #libera later");
 
-        assert_eq!(said(&session), vec!["#libera later"]);
+        assert!(said(&session).is_empty());
     }
 }
 
@@ -2627,9 +2621,6 @@ fn a_new_listing_starts_from_nothing() {
     assert_eq!(names, vec!["#second".to_string()]);
 }
 
-/// #153. The topic of a channel you have just joined was tracked on the
-/// channel and drawn nowhere: the header leaves it out on purpose and no
-/// message carried it, so it was invisible until somebody changed it.
 mod topic_on_join {
     use super::*;
 
@@ -2650,32 +2641,12 @@ mod topic_on_join {
     }
 
     #[test]
-    fn the_topic_is_said_in_the_channel() {
-        let mut session = joined();
-        session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ before asking");
-
-        assert_eq!(
-            said(&session),
-            ["The topic of #ircx is: read the FAQ before asking"]
-        );
-    }
-
-    /// The server sends who and when straight after, so it is a second line
-    /// rather than a rewrite of the first — which would need the first to be
-    /// held back for a reply that not every server sends.
-    #[test]
-    fn who_set_it_and_when_follows_it() {
+    fn the_topic_is_not_added_to_the_timeline() {
         let mut session = joined();
         session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
         session.feed(":irc.libera.chat 333 sykk #ircx sable 1769683200");
 
-        assert_eq!(
-            said(&session),
-            [
-                "The topic of #ircx is: read the FAQ",
-                "Set by sable on 2026-01-29 at 10:40 UTC",
-            ]
-        );
+        assert!(said(&session).is_empty());
     }
 
     /// `333` carries whole seconds since the epoch and the live path stores
@@ -2709,7 +2680,22 @@ mod topic_on_join {
         session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
         session.feed(":irc.libera.chat 333 sykk #ircx sable!~s@user/sable 1769683200");
 
-        assert_eq!(said(&session)[1], "Set by sable on 2026-01-29 at 10:40 UTC");
+        let channel = session
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                IrcxEvent::ChannelUpdated { channel } => Some(channel),
+                _ => None,
+            })
+            .expect("the channel is updated");
+        assert_eq!(
+            channel
+                .topic
+                .as_ref()
+                .and_then(|topic| topic.set_by.as_deref()),
+            Some("sable")
+        );
     }
 
     #[test]
@@ -2728,7 +2714,29 @@ mod topic_on_join {
         session.feed(":irc.libera.chat 332 sykk #ircx :read the FAQ");
         session.feed(":irc.libera.chat 333 sykk #ircx sable notatimestamp");
 
-        assert_eq!(said(&session)[1], "Set by sable");
+        let channel = session
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                IrcxEvent::ChannelUpdated { channel } => Some(channel),
+                _ => None,
+            })
+            .expect("the channel is updated");
+        assert_eq!(
+            channel
+                .topic
+                .as_ref()
+                .and_then(|topic| topic.set_by.as_deref()),
+            Some("sable")
+        );
+        assert_eq!(
+            channel
+                .topic
+                .as_ref()
+                .and_then(|topic| topic.set_at.as_deref()),
+            None
+        );
     }
 }
 
@@ -4900,9 +4908,6 @@ mod paging_a_gap {
     }
 }
 
-/// #243. The modes were tracked, used to draw a lock in the sidebar, and shown
-/// nowhere a reader could check the lock against. They are said in the
-/// conversation now, which is where the topic goes and for the same reason.
 mod what_a_channel_is {
     use super::*;
 
@@ -4924,45 +4929,20 @@ mod what_a_channel_is {
     }
 
     #[test]
-    fn the_rules_are_said_on_the_way_in() {
+    fn the_modes_are_stored_without_being_added_to_the_timeline() {
         let session = joined_with("+int");
+        let channel = session
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                IrcxEvent::ChannelUpdated { channel } => Some(channel),
+                _ => None,
+            })
+            .expect("the channel is updated");
 
-        assert_eq!(
-            said(&session),
-            ["#ircx is invite only, closed to messages from outside and topic-locked to ops."]
-        );
-    }
-
-    #[test]
-    fn one_rule_needs_no_list() {
-        let session = joined_with("+m");
-
-        assert_eq!(said(&session), ["#ircx is moderated."]);
-    }
-
-    /// A sentence ending in "and +C" helps nobody, and the raw log has the
-    /// letters for whoever wants them.
-    #[test]
-    fn a_mode_with_no_name_is_left_out_rather_than_spelled() {
-        let session = joined_with("+Cm");
-
-        assert_eq!(said(&session), ["#ircx is moderated."]);
-    }
-
-    #[test]
-    fn a_channel_with_nothing_worth_saying_says_nothing() {
-        let session = joined_with("+C");
-
+        assert_eq!(channel.modes, "int");
         assert!(said(&session).is_empty());
-    }
-
-    /// A key is a mode parameter and may hold any letter, which is the reason
-    /// `isRestricted` only ever reads the flag token.
-    #[test]
-    fn a_key_does_not_read_as_more_modes() {
-        let session = joined_with("+k mistletoe");
-
-        assert_eq!(said(&session), ["#ircx is behind a key."]);
     }
 }
 

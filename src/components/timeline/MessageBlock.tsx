@@ -41,6 +41,7 @@ export function Block({
   children,
 }: BlockProps) {
   const drawn = useAppStore((s) => s.presentation.spine);
+  const align = useAppStore((s) => s.presentation.align);
   // Closing the gap between two blocks of one group is the spine's doing: it is
   // what spans the gap and says they are one thing. With no spine to span it
   // the blocks would run together with nothing accounting for it, so the gap
@@ -51,6 +52,9 @@ export function Block({
     <div
       className="grid"
       style={{
+        width: "100%",
+        maxWidth: "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-measure) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)",
+        marginInline: align === "center" ? "auto" : undefined,
         gridTemplateColumns: drawn ? LADDER : FLAT,
         paddingLeft: "var(--timeline-rail-pad)",
         paddingRight: "16px",
@@ -172,6 +176,8 @@ export function MessageBlock({
   const clockSide = useAppStore((s) => s.presentation.clockSide);
   const clock = useAppStore((s) => s.presentation.clock);
   const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
+  const compactSingletons = useAppStore((s) => s.presentation.compactSingletons);
+  const compactSingleton = compactSingletons && messages.length === 1 && !writesOwnNick(head.kind);
   const addressed = messages.some((message) => isHighlight(message, highlight, present));
   const failures = failureRuns(messages);
   // A rule raises a message to the same loudness a mention has — the badge
@@ -196,7 +202,7 @@ export function MessageBlock({
   const spineTint = groupTint ?? (addressed || raised ? "var(--accent)" : undefined);
 
   const name =
-    writesOwnNick(head.kind) || everyLine ? null : (
+    writesOwnNick(head.kind) || everyLine || compactSingleton ? null : (
       <span
         className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
         style={{ color: nickColor(head.sender.nick) }}
@@ -222,6 +228,7 @@ export function MessageBlock({
       onReply={onReply}
       present={present}
       flashing={message.id === flashId}
+      prefixSender={compactSingleton}
     />
   ));
 

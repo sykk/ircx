@@ -324,6 +324,9 @@ describe("AppearancePage", () => {
         clockSide: "right",
         nickBrackets: false,
         nickEveryLine: false,
+        align: "center",
+        compactSingletons: false,
+        messageSize: "14px",
       });
     });
 
@@ -335,12 +338,28 @@ describe("AppearancePage", () => {
       expect(localStorage.getItem("ircx.presentation")).toContain('"clockSide":"left"');
     });
 
+    it("moves the conversation to the rail", () => {
+      open();
+      fireEvent.change(field("Conversation position"), { target: { value: "rail" } });
+
+      expect(useAppStore.getState().presentation.align).toBe("rail");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"align":"rail"');
+    });
+
     it("puts the nickname in front of every line", () => {
       open();
       fireEvent.click(field("Nickname on every line"));
 
       expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
       expect(localStorage.getItem("ircx.presentation")).toContain('"nickEveryLine":true');
+    });
+
+    it("compacts single-message runs", () => {
+      open();
+      fireEvent.click(field("Compact single-message runs"));
+
+      expect(useAppStore.getState().presentation.compactSingletons).toBe(true);
+      expect(localStorage.getItem("ircx.presentation")).toContain('"compactSingletons":true');
     });
 
     it("turns the nickname brackets on and off again", () => {
@@ -354,6 +373,14 @@ describe("AppearancePage", () => {
   });
 
   describe("type", () => {
+    it("keeps the chosen message size for the next launch", () => {
+      open();
+      fireEvent.change(field("Message text"), { target: { value: "15px" } });
+
+      expect(useAppStore.getState().presentation.messageSize).toBe("15px");
+      expect(localStorage.getItem("ircx.presentation")).toContain('"messageSize":"15px"');
+    });
+
     it("paints the face that was chosen", () => {
       open();
       fireEvent.change(field("Prose"), { target: { value: "georgia" } });
@@ -438,6 +465,9 @@ describe("AppearancePage", () => {
         clockSide: "left",
         nickBrackets: true,
         nickEveryLine: false,
+        align: "rail",
+        compactSingletons: false,
+        messageSize: "14px",
       });
       expect(token("--font-ui")).toBe(token("--font-mono"));
     });

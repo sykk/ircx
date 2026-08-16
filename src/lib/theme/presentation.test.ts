@@ -17,6 +17,9 @@ describe("sanitisePresentation", () => {
         clockSide: "left",
         nickBrackets: true,
         nickEveryLine: true,
+        align: "rail",
+        compactSingletons: true,
+        messageSize: "15px",
       }),
     ).toEqual({
       spine: false,
@@ -24,6 +27,9 @@ describe("sanitisePresentation", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
   });
 
@@ -35,6 +41,9 @@ describe("sanitisePresentation", () => {
         clockSide: "left",
         nickBrackets: true,
         nickEveryLine: true,
+        align: "rail",
+        compactSingletons: true,
+        messageSize: "15px",
       }),
     ).toEqual({
       spine: false,
@@ -42,6 +51,9 @@ describe("sanitisePresentation", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
   });
 
@@ -66,6 +78,9 @@ describe("storedPresentation", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -73,6 +88,9 @@ describe("storedPresentation", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
   });
 

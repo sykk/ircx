@@ -26,7 +26,7 @@ export interface Preset {
    * every line stays where the reader left it: it decides how much of the
    * window a conversation takes rather than what it looks like, and somebody
    * who reads a channel that way reads every look that way. */
-  presentation: Omit<Presentation, "nickEveryLine">;
+  presentation: Omit<Presentation, "nickEveryLine" | "compactSingletons" | "messageSize">;
   /** The faces only. A preset does not touch the window scale: that is an
    * accessibility setting somebody chose for their eyes, and no look is worth
    * resizing the window somebody else set. */
@@ -44,6 +44,7 @@ export const PRESETS: readonly Preset[] = [
       clock: "24h-seconds",
       clockSide: "left",
       nickBrackets: true,
+      align: "rail",
     },
     faces: { prose: "mono", mono: "courier" },
   },
@@ -57,6 +58,7 @@ export const PRESETS: readonly Preset[] = [
       clock: "24h",
       clockSide: "right",
       nickBrackets: false,
+      align: "center",
     },
     faces: { prose: "inter", mono: "jetbrains" },
   },

@@ -353,6 +353,62 @@ describe("the nickname in front of every line", () => {
   });
 });
 
+describe("a compact single-message run", () => {
+  beforeEach(() =>
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, compactSingletons: true },
+    }),
+  );
+
+  it("puts the sender and clock in front of an ordinary message", () => {
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: "phrack", text: "hi" })],
+    });
+
+    expect(container.textContent).toContain("phrack");
+    expect(container.textContent).toMatch(/phrack \d{2}:\d{2}: hi/);
+    expect(container.querySelectorAll("time")).toHaveLength(1);
+  });
+
+  it("keeps a multi-message run under one header", () => {
+    const { container, getAllByText } = block({
+      messages: [
+        makeMessage({ id: "a", nick: "phrack", text: "hi" }),
+        makeMessage({ id: "b", nick: "phrack", text: "again" }),
+      ],
+    });
+
+    expect(getAllByText("phrack")).toHaveLength(1);
+    expect(container.textContent).not.toContain("phrack: hi");
+  });
+});
+
+describe("conversation position", () => {
+  it("centers the bounded block by default", () => {
+    const { container } = block();
+
+    expect((container.firstElementChild as HTMLElement).style.marginInline).toBe("auto");
+  });
+
+  it("returns the block to the rail when asked", () => {
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, align: "rail" } });
+    const { container } = block();
+
+    expect((container.firstElementChild as HTMLElement).style.marginInline).toBe("");
+  });
+});
+
+describe("message text size", () => {
+  it("uses the size chosen in Appearance", () => {
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, messageSize: "15px" } });
+    const { container } = block();
+
+    expect(container.querySelector<HTMLElement>("[data-ui='message-row']")!.style.fontSize).toBe(
+      "15px",
+    );
+  });
+});
+
 describe("a declared name is not printed twice", () => {
   it("keeps the bracket out of the body", () => {
     const { getByText, queryByText } = block({

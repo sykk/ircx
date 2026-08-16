@@ -122,6 +122,7 @@ export interface AppActions {
 
   /** Records a line as sent in this conversation, for the composer to recall. */
   rememberInput: (network: string, target: string, text: string) => void;
+  setDraftPresence: (network: string, target: string, present: boolean) => void;
 
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
@@ -178,6 +179,7 @@ const initialState: AppState = {
   typing: {},
   replyTo: {},
   inputHistory: {},
+  drafts: {},
   rawLog: {},
   channelList: {},
   views: {},
@@ -618,6 +620,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           [key]: [text, ...history].slice(0, INPUT_HISTORY_CAP),
         },
       };
+    }),
+
+  setDraftPresence: (network, target, present) =>
+    set((s) => {
+      const key = targetKey(network, target);
+      if (present) {
+        if (s.drafts[key]) return {};
+        return { drafts: { ...s.drafts, [key]: true } };
+      }
+      if (!s.drafts[key]) return {};
+      const { [key]: _cleared, ...drafts } = s.drafts;
+      return { drafts };
     }),
 
   toggleRoster: (view, shown) =>
@@ -1082,6 +1096,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         typing: dropByNetwork(s.typing, event.network),
         replyTo: dropByNetwork(s.replyTo, event.network),
         inputHistory: dropByNetwork(s.inputHistory, event.network),
+        drafts: dropByNetwork(s.drafts, event.network),
         rawLog,
         channelList,
         recent: s.recent.filter((key) => !key.startsWith(prefix)),
@@ -1242,13 +1257,15 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
     case "channelRemoved": {
       const key = targetKey(event.network, event.name);
       const { [key]: _dropped, ...channels } = s.channels;
-      return { channels, ...dropPanesOn(s, event.network, event.name) };
+      const { [key]: _draft, ...drafts } = s.drafts;
+      return { channels, drafts, ...dropPanesOn(s, event.network, event.name) };
     }
 
     case "queryRemoved": {
       const key = targetKey(event.network, event.nick);
       const { [key]: _dropped, ...queries } = s.queries;
-      return { queries, ...dropPanesOn(s, event.network, event.nick) };
+      const { [key]: _draft, ...drafts } = s.drafts;
+      return { queries, drafts, ...dropPanesOn(s, event.network, event.nick) };
     }
 
     /**
@@ -1276,6 +1293,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         timelines: moveKey(s.timelines, from, to),
         typing: moveKey(s.typing, from, to),
         replyTo: moveKey(s.replyTo, from, to),
+        drafts: moveKey(s.drafts, from, to),
         recent: s.recent.map((held) => (held === from ? to : held)),
         views: Object.fromEntries(
           Object.entries(s.views).map(([id, view]) => [

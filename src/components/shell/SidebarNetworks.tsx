@@ -19,9 +19,10 @@ type Row =
       collapsed: boolean;
       unread: number;
       highlights: number;
+      draft: boolean;
     }
-  | { id: string; kind: "channel"; channel: Channel }
-  | { id: string; kind: "query"; query: Query };
+  | { id: string; kind: "channel"; channel: Channel; draft: boolean }
+  | { id: string; kind: "query"; query: Query; draft: boolean };
 
 /** One network's panel: the server's own row and every conversation on it.
  * Two networks both hosting a NickServ is what the flat list could not draw —
@@ -50,6 +51,7 @@ export function SidebarNetworks() {
   const networkOrder = useAppStore((s) => s.networkOrder);
   const channels = useAppStore((s) => s.channels);
   const queries = useAppStore((s) => s.queries);
+  const drafts = useAppStore((s) => s.drafts);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const active = useActiveTarget();
   const showTarget = useAppStore((s) => s.showTarget);
@@ -84,21 +86,26 @@ export function SidebarNetworks() {
           unread:
             own.reduce((n, c) => n + c.unread, 0) + talks.reduce((n, q) => n + q.unread, 0),
           highlights: own.reduce((n, c) => n + c.highlights, 0),
+          draft: [...own, ...talks].some((target) =>
+            Boolean(drafts[targetKey(id, "name" in target ? target.name : target.nick)]),
+          ),
         },
         channels: own.map((channel) => ({
           id: targetKey(id, channel.name),
           kind: "channel" as const,
           channel,
+          draft: Boolean(drafts[targetKey(id, channel.name)]),
         })),
         queries: talks.map((query) => ({
           id: targetKey(id, query.nick),
           kind: "query" as const,
           query,
+          draft: Boolean(drafts[targetKey(id, query.nick)]),
         })),
       });
     }
     return out;
-  }, [networks, networkOrder, channels, queries, collapsedNetworks]);
+  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks]);
 
   /** The panels flattened into what the arrow keys walk. */
   const rows = useMemo<Row[]>(
@@ -415,6 +422,7 @@ function NetworkRow({
       <StatusDot network={row.network} />
       <span className="truncate">{row.network.name}</span>
       <span className="flex-1" />
+      {row.collapsed && row.draft && <DraftMark />}
       {row.collapsed && row.unread > 0 && (
         <Badge count={row.unread} highlight={row.highlights > 0} />
       )}
@@ -444,7 +452,7 @@ function SidebarRow({
         {...shared}
         aria-level={2}
         aria-selected={selected}
-        aria-label={row.query.online ? row.query.nick : `${row.query.nick}, offline`}
+        aria-label={`${row.query.nick}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}`}
         className={rowClass(selected)}
       >
         {/* Where a channel draws its sigil, a query draws whether the other
@@ -462,6 +470,7 @@ function SidebarRow({
           {row.query.nick}
         </span>
         <span className="flex-1" />
+        {row.draft && <DraftMark />}
         {row.query.muted && <MutedMark />}
         {row.query.unread > 0 && <Badge count={row.query.unread} />}
       </button>
@@ -476,7 +485,7 @@ function SidebarRow({
       {...shared}
       aria-level={2}
       aria-selected={selected}
-      aria-label={restricted ? `${name}, restricted` : name}
+      aria-label={`${name}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}`}
       className={rowClass(selected)}
     >
       <span className="flex w-2 shrink-0 justify-center text-[var(--text-faint)]">
@@ -484,6 +493,7 @@ function SidebarRow({
       </span>
       <span className="truncate">{stripSigil(name)}</span>
       <span className="flex-1" />
+      {row.draft && <DraftMark />}
       {restricted && (
         <span className="text-[var(--text-faint)]">
           <Icon name="lock" size={12} />
@@ -494,6 +504,14 @@ function SidebarRow({
         <Badge count={row.channel.unread} highlight={row.channel.highlights > 0} />
       )}
     </button>
+  );
+}
+
+function DraftMark() {
+  return (
+    <span className="text-[var(--text-faint)]" title="Unsent draft" aria-label="Draft" role="img">
+      <Icon name="draft" size={12} />
+    </span>
   );
 }
 

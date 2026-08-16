@@ -4,6 +4,8 @@ import { displayChord } from "@/lib/keybindings";
 import { runConnectionCommand } from "@/components/composer/commands";
 import { applyTheme, selectDensity, selectPresentation, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
+import { splitTargetKey, targetKey } from "@/store/keys";
+import { nextUnreadTarget } from "@/store/unreadNavigation";
 import { SERVER_TARGET } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
@@ -40,6 +42,7 @@ function Palette() {
 
   const channels = useAppStore((s) => s.channels);
   const queries = useAppStore((s) => s.queries);
+  const drafts = useAppStore((s) => s.drafts);
   const networks = useAppStore((s) => s.networks);
   const networkOrder = useAppStore((s) => s.networkOrder);
   const recent = useAppStore((s) => s.recent);
@@ -56,6 +59,7 @@ function Palette() {
       buildCandidates({
         channels,
         queries,
+        drafts,
         networks,
         networkOrder,
         themes,
@@ -67,6 +71,7 @@ function Palette() {
     [
       channels,
       queries,
+      drafts,
       networks,
       networkOrder,
       themes,
@@ -184,6 +189,13 @@ function Palette() {
       case "search":
         store.toggleSearch(true);
         break;
+      case "unread": {
+        const view = store.activeViewId ? store.views[store.activeViewId] : undefined;
+        const current = view?.network ? targetKey(view.network, view.target) : null;
+        const next = nextUnreadTarget(store, current, action.direction);
+        if (next) store.showTarget(splitTargetKey(next));
+        break;
+      }
       case "openSetup":
         store.openSetup(action.network);
         break;

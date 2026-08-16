@@ -790,6 +790,25 @@ fn drafts_upsert_and_clear() {
 }
 
 #[test]
+fn drafts_list_without_exposing_their_text() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_draft("libera", "#ircx", "half a thought")
+        .unwrap();
+    store.set_draft("oftc", "sable", "private words").unwrap();
+
+    let mut drafts = store.list_drafts().unwrap();
+    drafts.sort();
+    assert_eq!(
+        drafts,
+        [
+            ("libera".into(), "#ircx".into()),
+            ("oftc".into(), "sable".into())
+        ]
+    );
+}
+
+#[test]
 fn networks_round_trip_without_the_password() {
     let store = Store::open_in_memory().unwrap();
     let mut config = network("Libera");

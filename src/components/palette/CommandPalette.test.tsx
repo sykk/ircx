@@ -64,6 +64,7 @@ beforeEach(() => {
       [targetKey("libera", "#linux")]: channel("#linux"),
     },
     queries: { [targetKey("libera", "phrack")]: query("phrack") },
+    drafts: {},
     ...oneView(null),
     recent: [],
     paletteOpen: true,
@@ -102,6 +103,26 @@ describe("CommandPalette", () => {
     expect(screen.getByRole("group", { name: "Commands" })).toBeTruthy();
   });
 
+  it("lists and reopens conversations with drafts", () => {
+    useAppStore.setState({
+      drafts: { [targetKey("libera", "#linux")]: true },
+      ...oneView({ network: "libera", target: "#ctf-web" }),
+    });
+    render(<CommandPalette />);
+
+    expect(screen.getByRole("group", { name: "Drafts" })).toBeTruthy();
+    type("draft linux");
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(activeTarget()).toEqual({ network: "libera", target: "#linux" });
+    expect(useAppStore.getState().drafts[targetKey("libera", "#linux")]).toBe(true);
+  });
+
+  it("does not show a Drafts group when there are no drafts", () => {
+    render(<CommandPalette />);
+    expect(screen.queryByRole("group", { name: "Drafts" })).toBeNull();
+  });
+
   it("puts recently visited targets first before anything is typed", () => {
     useAppStore.setState({ recent: [targetKey("libera", "#linux")] });
     render(<CommandPalette />);
@@ -113,6 +134,17 @@ describe("CommandPalette", () => {
     type("ctfo");
     expect(selectedLabel()).toContain("#ctf-ops");
     expect(optionLabels().some((l) => l.includes("#linux"))).toBe(false);
+  });
+
+  it("opens the next unread conversation", () => {
+    useAppStore.setState(oneView({ network: "libera", target: "#ctf-web" }));
+    render(<CommandPalette />);
+    type("next unread conversation");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
+    expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
   it("marks the matched characters in the result", () => {

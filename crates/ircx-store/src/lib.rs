@@ -748,6 +748,15 @@ impl Store {
         Ok(draft)
     }
 
+    pub fn list_drafts(&self) -> Result<Vec<(String, String)>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare("SELECT network, target FROM drafts")?;
+        let drafts = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(drafts)
+    }
+
     /// Empty text clears the draft rather than storing a blank one.
     /// Takes a half-written message with the person it was being written to.
     ///

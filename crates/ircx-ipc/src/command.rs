@@ -186,6 +186,15 @@ pub struct AppSnapshot {
     pub networks: Vec<Network>,
     pub channels: Vec<Channel>,
     pub queries: Vec<Query>,
+    pub drafts: Vec<DraftTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftTarget {
+    pub network: NetworkId,
+    pub target: TargetName,
 }
 
 /// A file the user has offered to upload, as the confirmation needs it.

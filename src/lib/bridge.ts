@@ -82,6 +82,9 @@ async function loadSnapshot(): Promise<void> {
   for (const network of snapshot.networks) applyEvent({ type: "networkUpdated", network });
   for (const channel of snapshot.channels) applyEvent({ type: "channelUpdated", channel });
   for (const query of snapshot.queries) applyEvent({ type: "queryUpdated", query });
+  for (const draft of snapshot.drafts) {
+    useAppStore.getState().setDraftPresence(draft.network, draft.target, true);
+  }
 
   // Member lists are not part of the snapshot. Without this a reload while
   // connected leaves the drawer empty until the next NAMES.

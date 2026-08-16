@@ -327,6 +327,16 @@ describe("Composer drafts and typing", () => {
     ipcMock.getDraft.mockResolvedValue("half a thought");
     const box = await mount();
     await waitFor(() => expect(box.value).toBe("half a thought"));
+    await waitFor(() => expect(useAppStore.getState().drafts[KEY]).toBe(true));
+  });
+
+  it("marks a typed draft immediately and clears the mark on send", async () => {
+    const box = await mount();
+    type(box, "half a thought");
+    await waitFor(() => expect(useAppStore.getState().drafts[KEY]).toBe(true));
+
+    press(box, "Enter");
+    await waitFor(() => expect(useAppStore.getState().drafts[KEY]).toBeUndefined());
   });
 
   it("saves the draft after a pause, not on every keystroke", async () => {

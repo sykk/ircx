@@ -3217,6 +3217,38 @@ mod monitor {
     }
 }
 
+mod extended_monitor {
+    use super::*;
+
+    #[test]
+    fn a_monitored_query_receives_account_changes_without_a_shared_channel() {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Query("sable".into()),
+            newest: None,
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.sent();
+
+        session.feed(":irc.example CAP * LS :account-notify extended-monitor");
+        assert_eq!(session.sent(), ["CAP REQ :account-notify extended-monitor"]);
+        session.feed(":irc.example CAP * ACK :account-notify extended-monitor");
+        session.feed(":irc.example 001 sykk :Welcome");
+        session.feed(":irc.example 005 sykk MONITOR=100 :are supported");
+        session.events.clear();
+
+        session.feed(":sable!s@host ACCOUNT sable-account");
+
+        let account = session.events.iter().rev().find_map(|event| match event {
+            IrcxEvent::QueryUpdated { query } if query.nick == "sable" => query.account.as_deref(),
+            _ => None,
+        });
+        assert_eq!(account, Some("sable-account"));
+        assert!(session.last_members().is_empty());
+    }
+}
+
 /// #158. The palette offered `/close` and the dispatch table had no arm for it,
 /// so typing it got "not a command ircx knows" from a list the client drew.
 mod closing {

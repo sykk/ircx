@@ -18,6 +18,9 @@ pub struct ISupport {
     /// The most history one `CHATHISTORY` may ask for. `None` is the server
     /// stating no limit, not a limit of zero.
     pub chathistory: Option<u32>,
+    /// `None` when MONITOR was not advertised; `Some(None)` when the server
+    /// states no limit; otherwise the most nicks it will hold.
+    pub monitor: Option<Option<u32>>,
     targmax: Vec<(String, Option<u32>)>,
 }
 
@@ -31,6 +34,7 @@ impl Default for ISupport {
             network: None,
             statusmsg: String::new(),
             chathistory: None,
+            monitor: None,
             targmax: Vec::new(),
         }
     }
@@ -72,6 +76,7 @@ impl ISupport {
             // Ergo sends `CHATHISTORY=1000` and `draft/CHATHISTORY=1000` while
             // the capability is still a draft; either is the same statement.
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = value.parse().ok(),
+            "MONITOR" => self.monitor = Some(value.parse().ok()),
             "TARGMAX" => self.targmax = parse_targmax(value),
             _ => {}
         }
@@ -87,6 +92,7 @@ impl ISupport {
             "NETWORK" => self.network = None,
             "STATUSMSG" => self.statusmsg = defaults.statusmsg,
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = None,
+            "MONITOR" => self.monitor = None,
             "TARGMAX" => self.targmax = Vec::new(),
             _ => {}
         }
@@ -207,6 +213,7 @@ mod tests {
         assert_eq!(isupport.casemapping, CaseMapping::Rfc1459);
         assert_eq!(isupport.network.as_deref(), Some("Libera.Chat"));
         assert_eq!(isupport.statusmsg, "@+");
+        assert_eq!(isupport.monitor, Some(Some(100)));
         assert_eq!(isupport.statusmsg_channel("@#chan"), Some("#chan"));
         assert_eq!(isupport.statusmsg_channel("+#chan"), Some("#chan"));
         // A prefix has to leave a channel behind, and a bare channel or nick
@@ -223,11 +230,12 @@ mod tests {
     #[test]
     fn a_negated_token_restores_the_default() {
         let mut isupport = ISupport::default();
-        isupport.apply(&tokens("CHANTYPES=#&! NETWORK=Example"));
-        isupport.apply(&tokens("-CHANTYPES -NETWORK"));
+        isupport.apply(&tokens("CHANTYPES=#&! NETWORK=Example MONITOR"));
+        isupport.apply(&tokens("-CHANTYPES -NETWORK -MONITOR"));
 
         assert_eq!(isupport.chantypes, "#&");
         assert_eq!(isupport.network, None);
+        assert_eq!(isupport.monitor, None);
     }
 
     #[test]

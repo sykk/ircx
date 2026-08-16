@@ -3106,6 +3106,117 @@ mod query_presence {
     }
 }
 
+/// MONITOR replaces presence inferred only from shared-channel traffic with
+/// the server's answer for every open query.
+mod monitor {
+    use super::*;
+
+    fn with_queries(token: &str, nicks: &[&str]) -> Harness {
+        let mut session = Harness::new(config());
+        let targets = nicks
+            .iter()
+            .map(|nick| Restored {
+                target: OpenTarget::Query((*nick).into()),
+                newest: None,
+            })
+            .collect();
+        let actions = session.state.restore(targets);
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.example 001 sykk :Welcome");
+        session.feed(&format!(
+            ":irc.example 005 sykk {token} CASEMAPPING=rfc1459 :are supported"
+        ));
+        session
+    }
+
+    fn online(session: &Harness, nick: &str) -> Option<bool> {
+        session.events.iter().rev().find_map(|event| match event {
+            IrcxEvent::QueryUpdated { query } if query.nick == nick => Some(query.online),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn registration_subscribes_open_queries_in_a_stable_order() {
+        let mut session = with_queries("MONITOR=100", &["willow", "sable"]);
+
+        assert_eq!(
+            session.sent_starting("MONITOR"),
+            ["MONITOR + sable", "MONITOR + willow"]
+        );
+
+        session.sent();
+        let (_, actions) = session.state.open_query("aster");
+        session.apply(actions);
+        assert_eq!(session.sent(), ["MONITOR + aster"]);
+    }
+
+    #[test]
+    fn an_unlimited_monitor_token_is_supported() {
+        let session = with_queries("MONITOR", &["sable"]);
+        assert_eq!(session.sent_starting("MONITOR"), ["MONITOR + sable"]);
+    }
+
+    #[test]
+    fn closing_a_monitored_query_frees_its_slot() {
+        let mut session = with_queries("MONITOR=1", &["sable", "willow"]);
+        session.sent();
+
+        let actions = session.state.close_target("sable");
+        session.apply(actions);
+
+        assert_eq!(session.sent(), ["MONITOR - sable", "MONITOR + willow"]);
+    }
+
+    #[test]
+    fn a_query_rename_moves_the_subscription() {
+        let mut session = with_queries("MONITOR=100", &["sable"]);
+        session.sent();
+
+        session.feed(":sable!s@h NICK willow");
+
+        assert_eq!(session.sent(), ["MONITOR - sable", "MONITOR + willow"]);
+    }
+
+    #[test]
+    fn online_and_offline_replies_update_every_named_query() {
+        let mut session = with_queries("MONITOR=100", &["sable", "willow"]);
+        session.events.clear();
+
+        session.feed(":irc.example 731 sykk :sable,willow");
+        assert_eq!(online(&session, "sable"), Some(false));
+        assert_eq!(online(&session, "willow"), Some(false));
+
+        session.feed(":irc.example 730 * :sable!s@host");
+        assert_eq!(online(&session, "sable"), Some(true));
+    }
+
+    #[test]
+    fn reconnecting_rebuilds_the_servers_list() {
+        let mut session = with_queries("MONITOR=100", &["sable"]);
+        session.sent();
+        let actions = session.state.on_disconnected("the socket closed");
+        session.apply(actions);
+        session.connect();
+        session.sent();
+
+        session.feed(":irc.example 005 sykk MONITOR=100 :are supported");
+        session.feed(":irc.example 001 sykk :Welcome back");
+
+        assert_eq!(session.sent_starting("MONITOR"), ["MONITOR + sable"]);
+    }
+
+    #[test]
+    fn unsupported_servers_keep_queries_without_protocol_traffic() {
+        let mut session = registered("");
+        let (_, actions) = session.state.open_query("sable");
+        session.apply(actions);
+
+        assert!(session.sent_starting("MONITOR").is_empty());
+    }
+}
+
 /// #158. The palette offered `/close` and the dispatch table had no arm for it,
 /// so typing it got "not a command ircx knows" from a list the client drew.
 mod closing {

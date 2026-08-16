@@ -22,6 +22,7 @@ mod message;
 mod multiline;
 mod numeric;
 pub mod plugins;
+mod read_marker;
 mod sasl;
 mod scram;
 mod session;

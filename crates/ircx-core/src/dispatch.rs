@@ -96,6 +96,8 @@ impl SessionState {
 
     fn cmd_close(&mut self, target: &str) {
         let key = self.fold(target);
+        self.read_markers.remove(&key);
+        self.unread_at.remove(&key);
         if let Some(channel) = self.channels.remove(&key) {
             if channel.joined {
                 self.send_command("PART", &[&channel.name]);

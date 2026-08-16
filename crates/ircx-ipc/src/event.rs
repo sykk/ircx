@@ -72,6 +72,11 @@ pub enum IrcxEvent {
     QueryUpdated {
         query: Query,
     },
+    ReadMarkerUpdated {
+        network: NetworkId,
+        target: TargetName,
+        timestamp: String,
+    },
     /// A query the user closed. Channels have `ChannelRemoved`; without the
     /// matching event a closed query stayed on screen until the next launch.
     QueryRemoved {

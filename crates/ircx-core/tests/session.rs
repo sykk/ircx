@@ -1131,6 +1131,100 @@ fn a_private_message_opens_a_query_and_counts_as_unread() {
     assert_eq!(session.state.queries()[0].unread, 0);
 }
 
+#[test]
+fn a_new_query_requests_its_initial_read_marker() {
+    let mut session = registered("draft/read-marker");
+
+    let (_, actions) = session.state.open_query("sable");
+    session.apply(actions);
+
+    assert_eq!(session.sent(), vec!["MARKREAD sable"]);
+}
+
+#[test]
+fn restored_queries_request_their_marker_when_the_capability_is_acked() {
+    let mut session = Harness::new(config());
+    let actions = session.state.restore(vec![Restored {
+        target: OpenTarget::Query("sable".into()),
+        newest: None,
+    }]);
+    session.apply(actions);
+    session.connect();
+    session.feed(":irc.example CAP * LS :draft/read-marker");
+    session.feed(":irc.example CAP * ACK :draft/read-marker");
+    assert!(session.sent_starting("MARKREAD").is_empty());
+    session.feed(":irc.example 001 sykk :Welcome");
+
+    assert_eq!(session.sent_starting("MARKREAD"), vec!["MARKREAD sable"]);
+}
+
+#[test]
+fn marking_a_conversation_read_sends_its_newest_server_timestamp() {
+    let mut session = registered("draft/read-marker server-time");
+    session.feed("@time=2026-08-15T12:00:00.000Z :sable!~s@example PRIVMSG sykk :are you there");
+    session.sent();
+
+    let actions = session.state.mark_read("SABLE");
+    session.apply(actions);
+
+    assert_eq!(
+        session.sent(),
+        vec!["MARKREAD sable timestamp=2026-08-15T12:00:00.000Z"]
+    );
+    assert_eq!(session.state.queries()[0].unread, 0);
+}
+
+#[test]
+fn marking_read_without_the_capability_stays_local() {
+    let mut session = registered("server-time");
+    session.feed("@time=2026-08-15T12:00:00.000Z :sable!~s@example PRIVMSG sykk :are you there");
+    session.sent();
+
+    let actions = session.state.mark_read("sable");
+    session.apply(actions);
+
+    assert!(session.sent().is_empty());
+    assert_eq!(session.state.queries()[0].unread, 0);
+}
+
+#[test]
+fn a_server_read_marker_clears_only_messages_at_or_before_it() {
+    let mut session = registered("draft/read-marker server-time");
+    session.feed("@time=2026-08-15T12:00:00.000Z :sable!~s@example PRIVMSG sykk :first");
+    session.feed("@time=2026-08-15T12:01:00.000Z :sable!~s@example PRIVMSG sykk :second");
+    assert_eq!(session.state.queries()[0].unread, 2);
+
+    session.feed(":irc.example MARKREAD sable timestamp=2026-08-15T12:00:00.000Z");
+
+    assert_eq!(session.state.queries()[0].unread, 1);
+}
+
+#[test]
+fn a_known_read_marker_keeps_an_older_delayed_message_out_of_unread() {
+    let mut session = registered("draft/read-marker server-time");
+    let (_, actions) = session.state.open_query("sable");
+    session.apply(actions);
+    session.feed(":irc.example MARKREAD sable timestamp=2026-08-15T12:00:00.000Z");
+
+    session.feed("@time=2026-08-15T11:59:00.000Z :sable!~s@example PRIVMSG sykk :already read");
+    session.feed("@time=2026-08-15T12:01:00.000Z :sable!~s@example PRIVMSG sykk :new");
+
+    assert_eq!(session.state.queries()[0].unread, 1);
+}
+
+#[test]
+fn an_unnegotiated_or_user_prefixed_marker_cannot_clear_unread() {
+    let mut session = registered("server-time");
+    session.feed("@time=2026-08-15T12:00:00.000Z :sable!~s@example PRIVMSG sykk :first");
+    session.feed(":irc.example MARKREAD sable timestamp=2026-08-15T12:00:00.000Z");
+    assert_eq!(session.state.queries()[0].unread, 1);
+
+    let mut session = registered("draft/read-marker server-time");
+    session.feed("@time=2026-08-15T12:00:00.000Z :sable!~s@example PRIVMSG sykk :first");
+    session.feed(":mallory!m@example MARKREAD sable timestamp=2026-08-15T12:00:00.000Z");
+    assert_eq!(session.state.queries()[0].unread, 1);
+}
+
 /// Libera advertises `STATUSMSG=@+`, and a common ops tool is `NOTICE
 /// @#chan`. Classified by first character the target read as a nick, so
 /// every such broadcast opened a query on the op who sent it — one per op,

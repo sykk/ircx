@@ -37,6 +37,8 @@ pub const RPL_LOCALUSERS: u16 = 265;
 pub const RPL_GLOBALUSERS: u16 = 266;
 pub const ERR_NOSUCHNICK: u16 = 401;
 pub const ERR_UNKNOWNCOMMAND: u16 = 421;
+pub const RPL_MONONLINE: u16 = 730;
+pub const RPL_MONOFFLINE: u16 = 731;
 
 /// A sentence a user can act on, or `None` when the numeric is better rendered
 /// as the server's own words.

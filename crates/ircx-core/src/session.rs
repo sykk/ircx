@@ -282,6 +282,8 @@ pub struct SessionState {
     pub(crate) account: Option<String>,
     pub(crate) channels: HashMap<String, ChannelState>,
     pub(crate) queries: HashMap<String, QueryState>,
+    /// Folded nicks subscribed on this connection's server-side MONITOR list.
+    monitored: HashSet<String>,
     pub(crate) batches: HashMap<String, BatchState>,
     pub(crate) actions: Vec<Action>,
     pub(crate) registered: bool,
@@ -374,6 +376,7 @@ impl SessionState {
             account: None,
             channels: HashMap::new(),
             queries: HashMap::new(),
+            monitored: HashSet::new(),
             batches: HashMap::new(),
             actions: Vec::new(),
             registered: false,
@@ -1131,6 +1134,8 @@ impl SessionState {
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(params),
             RPL_AWAY => self.on_away_reply(params),
+            RPL_MONONLINE => self.on_monitor_status(params, true),
+            RPL_MONOFFLINE => self.on_monitor_status(params, false),
             ERR_NICKNAMEINUSE => self.on_nick_refused(params, message, "is taken"),
             // As final as 433 while registering: without the same fallback the
             // session sat at `Registering` forever, no alternate tried and no
@@ -1220,6 +1225,7 @@ impl SessionState {
         for channel in self.channels_to_join() {
             self.send_command("JOIN", &[&channel]);
         }
+        self.sync_monitor();
         self.request_query_markers();
         self.find_missed_queries();
     }
@@ -1484,6 +1490,7 @@ impl SessionState {
         if previous != self.isupport.casemapping {
             self.rekey(previous);
         }
+        self.sync_monitor();
     }
 
     /// Keys are folded names, so a late `CASEMAPPING` invalidates every one of
@@ -1498,6 +1505,16 @@ impl SessionState {
         self.queries = queries
             .into_values()
             .map(|query| (self.fold(&query.nick), query))
+            .collect();
+        let monitored = std::mem::take(&mut self.monitored);
+        self.monitored = monitored
+            .into_iter()
+            .filter_map(|old| {
+                self.queries
+                    .values()
+                    .find(|query| previous.fold(&query.nick) == old)
+                    .map(|query| self.fold(&query.nick))
+            })
             .collect();
         // `archived` and `gap_fills` key on the same folded names — `restore`
         // seeds them under the default fold before any 005 exists — but hold
@@ -2286,6 +2303,7 @@ impl SessionState {
         }
 
         if let Some(mut query) = self.queries.remove(&old) {
+            self.unmonitor(&old, &query.nick);
             // Before the nick is overwritten: the conversation is moved by the
             // name it was under, and this is the last place that holds it.
             let was = std::mem::replace(&mut query.nick, new_nick.clone());
@@ -2306,6 +2324,7 @@ impl SessionState {
                 to: new_nick.clone(),
             });
             self.emit_query(&folded);
+            self.sync_monitor();
         }
 
         if sender.is_self {
@@ -2639,6 +2658,57 @@ impl SessionState {
         self.emit_query(&key);
     }
 
+    fn on_monitor_status(&mut self, params: &[String], online: bool) {
+        let Some(targets) = params.last() else {
+            return;
+        };
+        for target in targets.split(',') {
+            let nick = target.split_once('!').map_or(target, |(nick, _)| nick);
+            let key = self.fold(nick);
+            let Some(query) = self.queries.get_mut(&key) else {
+                continue;
+            };
+            if query.online != online {
+                query.online = online;
+                self.emit_query(&key);
+            }
+        }
+    }
+
+    pub(crate) fn sync_monitor(&mut self) {
+        let Some(limit) = self.isupport.monitor else {
+            self.monitored.clear();
+            return;
+        };
+        if !self.registered {
+            return;
+        }
+
+        let available = limit
+            .map(|limit| limit.saturating_sub(self.monitored.len() as u32) as usize)
+            .unwrap_or(usize::MAX);
+        let mut queries: Vec<(String, String)> = self
+            .queries
+            .iter()
+            .filter(|(key, _)| !self.monitored.contains(*key))
+            .map(|(key, query)| (key.clone(), query.nick.clone()))
+            .collect();
+        queries.sort_by(|a, b| a.1.cmp(&b.1));
+
+        for (key, nick) in queries.into_iter().take(available) {
+            if let Some(line) = build("MONITOR", &["+", &nick]) {
+                self.send_line(line);
+                self.monitored.insert(key);
+            }
+        }
+    }
+
+    pub(crate) fn unmonitor(&mut self, key: &str, nick: &str) {
+        if self.monitored.remove(key) {
+            self.send_command("MONITOR", &["-", nick]);
+        }
+    }
+
     pub(crate) fn touch_query(&mut self, nick: &str, account: Option<String>) {
         let key = self.fold(nick);
         let fresh = !self.queries.contains_key(&key);
@@ -2661,6 +2731,7 @@ impl SessionState {
             if self.caps.is_enabled("draft/read-marker") {
                 self.send_command("MARKREAD", &[nick]);
             }
+            self.sync_monitor();
         }
     }
 
@@ -2918,6 +2989,7 @@ impl SessionState {
     fn reset_connection_state(&mut self) {
         self.caps.forget_all();
         self.isupport = ISupport::default();
+        self.monitored.clear();
         self.registered = false;
         self.cap_ended = false;
         self.sts_verified_transport = false;

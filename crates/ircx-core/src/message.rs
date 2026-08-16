@@ -236,17 +236,20 @@ impl SessionState {
     pub(crate) fn open_batch(
         &mut self,
         reference: &str,
-        kind: &str,
+        kind: String,
         target: Option<String>,
         label: Option<String>,
+        opening: Message,
     ) {
-        let source = match kind {
+        let source = match kind.as_str() {
             "chathistory" | "draft/chathistory" => MessageSource::ServerHistory,
             _ => MessageSource::Live,
         };
         self.batches.insert(
             reference.to_string(),
             BatchState {
+                kind,
+                opening,
                 source,
                 label,
                 target,
@@ -255,12 +258,82 @@ impl SessionState {
         );
     }
 
+    fn multiline_message(&self, reference: &str, batch: &BatchState) -> Option<ChatMessage> {
+        let first = batch.messages.first()?;
+        if !matches!(first.kind, MessageKind::Privmsg | MessageKind::Notice)
+            || first
+                .tags
+                .iter()
+                .any(|(name, _)| name == "draft/multiline-concat")
+            || batch.messages.iter().any(|message| {
+                message.kind != first.kind
+                    || !self
+                        .isupport
+                        .casemapping
+                        .equal(&message.target, &first.target)
+            })
+        {
+            return None;
+        }
+
+        let mut text = String::new();
+        for (index, message) in batch.messages.iter().enumerate() {
+            let concat = message
+                .tags
+                .iter()
+                .any(|(name, _)| name == "draft/multiline-concat");
+            if index > 0 && !concat {
+                text.push('\n');
+            }
+            text.push_str(&message.text);
+        }
+        if text.trim().is_empty() {
+            return None;
+        }
+
+        let mut combined = first.clone();
+        combined.text = text;
+        combined.attachments = text::attachments(&combined.text);
+        combined.tags = batch.opening.tags.clone();
+        combined
+            .tags
+            .push(("batch".to_string(), Some(reference.to_string())));
+        combined.batch = Some(reference.to_string());
+        combined.source = batch.source;
+        combined.raw = batch.opening.raw.clone();
+        combined.reply_to = reply_to(&batch.opening);
+        if matches!(batch.opening.prefix, Some(Prefix::User { .. })) {
+            combined.sender = self.sender_of(&batch.opening);
+        }
+        if let Some(msgid) = batch.opening.tag("msgid").filter(|id| !id.is_empty()) {
+            combined.id = msgid.to_string();
+            combined.id_is_local = false;
+        }
+        if let Some(time) = batch.opening.tag("time").filter(|time| !time.is_empty()) {
+            combined.timestamp = time.to_string();
+            combined.timestamp_is_local = false;
+        }
+        Some(combined)
+    }
+
     /// One `MessagesAppended` per run of messages sharing a target, so a
     /// netjoin batch spanning channels still arrives as few events, in order.
     pub(crate) fn close_batch(&mut self, reference: &str) {
-        let Some(batch) = self.batches.remove(reference) else {
+        let Some(mut batch) = self.batches.remove(reference) else {
             return;
         };
+        if batch.kind == "draft/multiline" {
+            if let Some(message) = self.multiline_message(reference, &batch) {
+                let label = batch.label.as_deref();
+                if message.sender.is_self
+                    && self.caps.is_enabled("echo-message")
+                    && self.deliver(&batch.opening, label, &message.target, &message.text)
+                {
+                    return;
+                }
+                batch.messages = vec![message];
+            }
+        }
         let mut run: Vec<ChatMessage> = Vec::new();
         let live = batch.source == MessageSource::Live;
         // Off the batch's own parameter rather than off what came inside it: a

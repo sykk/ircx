@@ -1,6 +1,8 @@
 use ircx_ipc::{ChatMessage, CommandOutcome, Delivery, MessageKind, Query};
 use ircx_proto::{MessageBuilder, MAX_MESSAGE_BYTES};
+use uuid::Uuid;
 
+use crate::multiline;
 use crate::session::{build, Action, SessionState, SERVER_TARGET};
 use crate::text;
 
@@ -577,6 +579,60 @@ impl SessionState {
         // Without `message-tags` the tag cannot travel, and a quote drawn only
         // here names a parent nobody else was shown.
         let parent = reply_to.filter(|_| self.caps.is_enabled("message-tags"));
+
+        if !action && self.caps.is_enabled("batch") && self.caps.is_enabled("draft/multiline") {
+            if let Some(limits) = self
+                .caps
+                .value("draft/multiline")
+                .and_then(multiline::limits)
+            {
+                if let Some((text, components)) = multiline::components(text, budget, limits) {
+                    let reference = Uuid::new_v4().simple().to_string();
+                    let label = labels.then(|| self.next_label());
+                    let mut opening = MessageBuilder::new("BATCH")
+                        .param(format!("+{reference}"))
+                        .param("draft/multiline")
+                        .param(target);
+                    if let Some(label) = label.clone() {
+                        opening = opening.tag("label", Some(label));
+                    }
+                    if let Some(parent) = parent {
+                        opening = opening.tag("+reply", Some(parent.to_string()));
+                    }
+                    let Ok(opening) = opening.build() else {
+                        return Vec::new();
+                    };
+                    self.send_line(opening.to_line());
+
+                    for component in components {
+                        let mut builder = MessageBuilder::new(command)
+                            .tag("batch", Some(reference.clone()))
+                            .param(target)
+                            .param(component.text);
+                        if component.concat {
+                            builder = builder.tag("draft/multiline-concat", None);
+                        }
+                        let Ok(line) = builder.build() else {
+                            return Vec::new();
+                        };
+                        self.send_line(line.to_line());
+                    }
+                    let Ok(closing) = MessageBuilder::new("BATCH")
+                        .param(format!("-{reference}"))
+                        .build()
+                    else {
+                        return Vec::new();
+                    };
+                    let ticket = self.send_line(closing.to_line());
+
+                    let mut message = self.local_message(&filed, kind, text);
+                    message.reply_to = parent.map(str::to_string);
+                    message.delivery = Delivery::Pending;
+                    self.track_pending(ticket, label, message.clone());
+                    return vec![message];
+                }
+            }
+        }
 
         // A line break cannot travel inside a parameter — it would end the line
         // early and let what follows be read as another command — so each line

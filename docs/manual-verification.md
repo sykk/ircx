@@ -3,6 +3,16 @@
 Things no agent can check, because they need a real account or a human watching
 the assembled app. Nothing here is covered by `cargo test` or `npm test`.
 
+## IRCv3 multiline
+
+The negotiated limits, outbound batch framing, fallback, inbound assembly and
+echo matching are scripted. A live server that advertises `draft/multiline`
+still needs an end-to-end walk with two clients: paste paragraphs containing a
+blank line and a line longer than 512 bytes, then confirm both clients draw one
+message with the same text and that a reply remains attached to the whole
+message. Repeat with `draft/multiline` disabled and confirm each nonblank line
+arrives as a separate message.
+
 ## Strict Transport Security
 
 The parser, policy expiry, plaintext upgrade decision and cached-policy

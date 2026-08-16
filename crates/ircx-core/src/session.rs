@@ -226,6 +226,8 @@ pub(crate) struct GapPage {
 
 #[derive(Debug)]
 pub(crate) struct BatchState {
+    pub(crate) kind: String,
+    pub(crate) opening: Message,
     pub(crate) source: MessageSource,
     /// The `label` of the request this batch answers, where the server sent one.
     /// It is how a page a reader is waiting for is told from a gap fill of the
@@ -1937,7 +1939,13 @@ impl SessionState {
     /// leaves the echo's tags to carry the server's `msgid`. Something has to:
     /// it is what a later history replay of this message is recognised by, and
     /// without it the user's own history comes back doubled.
-    fn deliver(&mut self, echo: &Message, label: Option<&str>, target: &str, text: &str) -> bool {
+    pub(crate) fn deliver(
+        &mut self,
+        echo: &Message,
+        label: Option<&str>,
+        target: &str,
+        text: &str,
+    ) -> bool {
         let found = self.pending.iter().position(|pending| match label {
             Some(label) => pending.label.as_deref() == Some(label),
             None => {
@@ -2466,7 +2474,7 @@ impl SessionState {
             let kind = message.param(1).unwrap_or_default().to_string();
             let target = message.param(2).map(str::to_string);
             let label = message.tag("label").map(str::to_string);
-            self.open_batch(reference, &kind, target, label);
+            self.open_batch(reference, kind, target, label, message.clone());
         } else if let Some(reference) = reference.strip_prefix('-') {
             self.close_batch(reference);
         }

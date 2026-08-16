@@ -8,6 +8,7 @@ pub const SUPPORTED: &[&str] = &[
     "batch",
     "chghost",
     "draft/chathistory",
+    "draft/multiline",
     "echo-message",
     "extended-join",
     "invite-notify",
@@ -107,6 +108,7 @@ impl Caps {
     pub fn ack(&mut self, list: &str) {
         self.outstanding = self.outstanding.saturating_sub(1);
         for entry in list.split_whitespace() {
+            let (entry, _) = entry.split_once('=').unwrap_or((entry, ""));
             match entry.strip_prefix('-') {
                 Some(name) => self.enabled.retain(|cap| cap != name),
                 None => {
@@ -152,6 +154,21 @@ mod tests {
         );
         assert_eq!(caps.value("sasl"), Some("PLAIN"));
         assert!(caps.negotiating());
+    }
+
+    #[test]
+    fn an_ack_with_a_value_enables_the_capability_name() {
+        let mut caps = Caps::default();
+        caps.record_available("draft/multiline=max-bytes=4096,max-lines=100");
+        caps.request_lines();
+
+        caps.ack("draft/multiline=max-bytes=4096,max-lines=100");
+
+        assert!(caps.is_enabled("draft/multiline"));
+        assert_eq!(
+            caps.value("draft/multiline"),
+            Some("max-bytes=4096,max-lines=100")
+        );
     }
 
     #[test]

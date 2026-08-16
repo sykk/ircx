@@ -26,7 +26,7 @@ export function Clock({ at, column = false }: { at: string; column?: boolean }) 
       dateTime={at}
       className="shrink-0 font-[family-name:var(--font-mono)] text-[12px] tabular-nums"
       style={{
-        color: "var(--text-faint)",
+        color: "var(--text-muted)",
         minWidth: column && columns !== null ? `${columns}ch` : undefined,
       }}
     >

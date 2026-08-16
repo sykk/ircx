@@ -7,6 +7,9 @@ export type ClockFormat = "24h" | "24h-seconds" | "12h" | "12h-bare" | "off";
 /** Which side of the nickname the clock is set on. */
 export type ClockSide = "left" | "right";
 
+export type TimelineAlign = "rail" | "center";
+export type MessageSize = "13px" | "14px" | "15px";
+
 /**
  * What the timeline draws, as against what colour it draws it in.
  *
@@ -38,6 +41,13 @@ export interface Presentation {
    * of a run replaced, and it moved the left edge of the prose every time a
    * longer name spoke. */
   nickEveryLine: boolean;
+  /** Sets the bounded conversation column against the rail or in the room left
+   * between the sidebar and context panel. */
+  align: TimelineAlign;
+  /** A run containing one ordinary message writes its sender and clock in
+   * front of the prose instead of spending a separate header line on them. */
+  compactSingletons: boolean;
+  messageSize: MessageSize;
 }
 
 export const DEFAULT_PRESENTATION: Presentation = {
@@ -46,6 +56,9 @@ export const DEFAULT_PRESENTATION: Presentation = {
   clockSide: "right",
   nickBrackets: false,
   nickEveryLine: false,
+  align: "center",
+  compactSingletons: false,
+  messageSize: "14px",
 };
 
 /**
@@ -82,6 +95,17 @@ export const CLOCK_SIDES: readonly { id: ClockSide; name: string }[] = [
   { id: "right", name: "After the nickname" },
 ];
 
+export const TIMELINE_ALIGNS: readonly { id: TimelineAlign; name: string }[] = [
+  { id: "center", name: "Centered" },
+  { id: "rail", name: "At the rail" },
+];
+
+export const MESSAGE_SIZES: readonly { id: MessageSize; name: string }[] = [
+  { id: "13px", name: "Small · 13px" },
+  { id: "14px", name: "Default · 14px" },
+  { id: "15px", name: "Large · 15px" },
+];
+
 /**
  * A usable setting from anything at all, field by field.
  *
@@ -109,6 +133,16 @@ export function sanitisePresentation(raw: unknown): Presentation {
       typeof held.nickEveryLine === "boolean"
         ? held.nickEveryLine
         : DEFAULT_PRESENTATION.nickEveryLine,
+    align: TIMELINE_ALIGNS.some((alignment) => alignment.id === held.align)
+      ? (held.align as TimelineAlign)
+      : DEFAULT_PRESENTATION.align,
+    compactSingletons:
+      typeof held.compactSingletons === "boolean"
+        ? held.compactSingletons
+        : DEFAULT_PRESENTATION.compactSingletons,
+    messageSize: MESSAGE_SIZES.some((size) => size.id === held.messageSize)
+      ? (held.messageSize as MessageSize)
+      : DEFAULT_PRESENTATION.messageSize,
   };
 }
 

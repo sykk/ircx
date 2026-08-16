@@ -45,6 +45,7 @@ describe("the classic preset", () => {
       clock: "24h-seconds",
       clockSide: "left",
       nickBrackets: true,
+      align: "rail",
     });
     expect(classic.faces.prose).toBe("mono");
   });

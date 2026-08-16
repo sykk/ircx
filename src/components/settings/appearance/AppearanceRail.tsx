@@ -10,9 +10,11 @@ import {
   CLOCK_FORMATS,
   CLOCK_SIDES,
   DENSITIES,
+  MESSAGE_SIZES,
   MONO_FACES,
   PRESETS,
   PROSE_FACES,
+  TIMELINE_ALIGNS,
   ZOOM_LEVELS,
   selectDensity,
   selectOverrides,
@@ -23,9 +25,11 @@ import {
   type ClockFormat,
   type ClockSide,
   type DensityId,
+  type MessageSize,
   type Overrides,
   type Presentation,
   type Theme,
+  type TimelineAlign,
   type Typography,
 } from "@/lib/theme";
 import { ACCENTS, accentTokens, type Accent } from "./accents";
@@ -107,6 +111,13 @@ export function AppearanceRail({
           onChange={(clockSide) => selectPresentation({ clockSide })}
         />
 
+        <SelectField<TimelineAlign>
+          label="Conversation position"
+          value={presentation.align}
+          options={TIMELINE_ALIGNS.map(({ id, name }) => ({ value: id, label: name }))}
+          onChange={(align) => selectPresentation({ align })}
+        />
+
         <CheckField
           label="Spine"
           hint="The rule at the rail. Its colour names the conversation a run belongs to, which nothing else on the row says."
@@ -122,6 +133,13 @@ export function AppearanceRail({
         />
 
         <CheckField
+          label="Compact single-message runs"
+          hint="Puts the nickname and time in front of the message when a run has only one line."
+          checked={presentation.compactSingletons}
+          onChange={(compactSingletons) => selectPresentation({ compactSingletons })}
+        />
+
+        <CheckField
           label="Angle brackets around nicknames"
           hint="<alice> rather than alice, wherever the name is written, as clients that named every line wrote it."
           checked={presentation.nickBrackets}
@@ -130,6 +148,13 @@ export function AppearanceRail({
       </Group>
 
       <Group title="Type">
+        <SelectField<MessageSize>
+          label="Message text"
+          value={presentation.messageSize}
+          options={MESSAGE_SIZES.map(({ id, name }) => ({ value: id, label: name }))}
+          onChange={(messageSize) => selectPresentation({ messageSize })}
+        />
+
         <SelectField
           label="Prose"
           value={typography.prose}

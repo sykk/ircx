@@ -38,6 +38,9 @@ interface MessageRowProps {
   /** Null unless this message failed. The run it failed with, and whether this
    * is the row carrying the notice for it. */
   failure: FailureRun | null;
+  /** Use the every-line sender prefix for this row even when the reader has
+   * not asked for it globally. */
+  prefixSender?: boolean;
 }
 
 export function MessageRow({
@@ -53,11 +56,13 @@ export function MessageRow({
   present,
   flashing,
   failure,
+  prefixSender = false,
 }: MessageRowProps) {
   const loud = isHighlight(message, highlight, present);
   // A rule raised this line to the same loudness a mention has, so it is marked
   // the same way: the row tinted, and the reason said in the words for it.
   const raised = (message.raisedBy ?? []).length > 0;
+  const messageSize = useAppStore((s) => s.presentation.messageSize);
   // A reaction and a reply both travel as a `+reply` naming a msgid. Until the
   // server has given this message one there is nothing to name it by, so it can
   // be answered by neither — which is the window between sending a line and its
@@ -69,8 +74,9 @@ export function MessageRow({
       data-msgid={message.id}
       data-highlight={loud || undefined}
       data-ui="message-row"
-      className="group text-[13px]"
+      className="group"
       style={{
+        fontSize: messageSize,
         paddingBlock: "var(--timeline-row-pad-y)",
         background: flashing
           ? "var(--surface-active)"
@@ -119,7 +125,7 @@ export function MessageRow({
             className="selectable font-[family-name:var(--font-ui)]"
             style={{ lineHeight: "var(--timeline-body-leading)" }}
           >
-            <SenderPrefix message={message} />
+            <SenderPrefix message={message} forced={prefixSender} />
             <Body message={message} highlight={loud ? highlight : null} />
           </div>
 
@@ -193,9 +199,9 @@ export function MessageRow({
  * An action and a notice are skipped: both write their own nick into the body,
  * so a prefix would name the sender twice on one line.
  */
-function SenderPrefix({ message }: { message: ChatMessage }) {
+function SenderPrefix({ message, forced }: { message: ChatMessage; forced: boolean }) {
   const { clockSide, nickBrackets, nickEveryLine } = useAppStore((s) => s.presentation);
-  if (!nickEveryLine || writesOwnNick(message.kind)) return null;
+  if ((!nickEveryLine && !forced) || writesOwnNick(message.kind)) return null;
 
   const nick = message.sender.nick;
   return (

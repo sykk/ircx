@@ -101,6 +101,9 @@ describe("what the timeline draws", () => {
         clockSide: "left",
         nickBrackets: true,
         nickEveryLine: true,
+        align: "rail",
+        compactSingletons: true,
+        messageSize: "15px",
       }),
     );
 
@@ -112,6 +115,9 @@ describe("what the timeline draws", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
   });
 
@@ -125,6 +131,9 @@ describe("what the timeline draws", () => {
         clockSide: "left",
         nickBrackets: true,
         nickEveryLine: true,
+        align: "rail",
+        compactSingletons: true,
+        messageSize: "15px",
       },
     });
 
@@ -136,6 +145,9 @@ describe("what the timeline draws", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -143,6 +155,9 @@ describe("what the timeline draws", () => {
       clockSide: "left",
       nickBrackets: true,
       nickEveryLine: true,
+      align: "rail",
+      compactSingletons: true,
+      messageSize: "15px",
     });
   });
 });

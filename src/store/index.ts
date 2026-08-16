@@ -1297,6 +1297,25 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { channels: { ...s.channels, [key]: event.channel } };
     }
 
+    case "readMarkerUpdated": {
+      const key = targetKey(event.network, event.target);
+      const timeline = s.timelines[key];
+      if (!timeline || timeline.unreadFrom === null) return {};
+      const unread = timeline.messages.findIndex((message) => message.id === timeline.unreadFrom);
+      if (unread === -1) return {};
+      const marker = Date.parse(event.timestamp);
+      if (Date.parse(timeline.messages[unread]!.timestamp) > marker) return {};
+      const next = timeline.messages
+        .slice(unread + 1)
+        .find((message) => !message.sender.isSelf && Date.parse(message.timestamp) > marker);
+      return {
+        timelines: {
+          ...s.timelines,
+          [key]: { ...timeline, unreadFrom: next?.id ?? null },
+        },
+      };
+    }
+
     case "channelRemoved": {
       const key = targetKey(event.network, event.name);
       const { [key]: _dropped, ...channels } = s.channels;

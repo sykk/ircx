@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::plugins;
-use crate::session::{Action, BatchState, GapPage, SessionState};
+use crate::session::{Action, BatchState, GapPage, SessionState, UnreadAt};
 use crate::text;
 
 impl SessionState {
@@ -581,20 +581,44 @@ impl SessionState {
             return None;
         }
 
-        let highlight = text::raises(&message.text, &self.nick, &self.highlight_words);
+        let timestamp = (!message.timestamp_is_local)
+            .then(|| crate::read_marker::timestamp(&message.timestamp))
+            .flatten();
         let key = self.fold(&message.target);
+        if timestamp.is_some_and(|timestamp| {
+            self.read_markers
+                .get(&key)
+                .is_some_and(|read| *read >= timestamp)
+        }) {
+            return None;
+        }
+
+        let highlight = text::raises(&message.text, &self.nick, &self.highlight_words);
         // Muted suppresses the badge going loud and nothing else. The answer
         // returned below is the rule's, not the badge's: it is what keeps a
         // notification rule from being asked about a message the host already
         // raised, and mute is not the host changing its mind about that.
         let quiet = self.is_muted(&key);
+        let mut counted = false;
+        let mut counted_highlight = false;
         if let Some(channel) = self.channels.get_mut(&key) {
             channel.unread += 1;
-            channel.highlights += u32::from(highlight && !quiet);
+            counted_highlight = highlight && !quiet;
+            channel.highlights += u32::from(counted_highlight);
+            counted = true;
             self.emit_channel(&key);
         } else if let Some(query) = self.queries.get_mut(&key) {
             query.unread += 1;
+            counted = true;
             self.emit_query(&key);
+        }
+        if counted {
+            if let Some(timestamp) = timestamp {
+                self.unread_at.entry(key).or_default().push(UnreadAt {
+                    timestamp,
+                    highlight: counted_highlight,
+                });
+            }
         }
         Some(highlight)
     }

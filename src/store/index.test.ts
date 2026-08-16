@@ -96,6 +96,61 @@ describe("the echo of a message you sent", () => {
   });
 });
 
+describe("a read marker from another client", () => {
+  it("moves the unread seam past the messages it covers", () => {
+    const first = makeMessage({ id: "first", timestamp: "2026-08-15T12:00:00.000Z" });
+    const ours = makeMessage({ id: "ours", timestamp: "2026-08-15T12:01:00.000Z" });
+    ours.sender.isSelf = true;
+    const later = makeMessage({ id: "later", timestamp: "2026-08-15T12:02:00.000Z" });
+    useAppStore.setState((state) => ({
+      timelines: {
+        ...state.timelines,
+        [KEY]: {
+          messages: [first, ours, later],
+          unreadFrom: "first",
+          hasMore: false,
+          loadingOlder: false,
+          askedBehind: null,
+        },
+      },
+    }));
+
+    useAppStore.getState().applyEvent({
+      type: "readMarkerUpdated",
+      network: "libera",
+      target: "#ctf-ops",
+      timestamp: "2026-08-15T12:01:30.000Z",
+    });
+
+    expect(timeline()?.unreadFrom).toBe("later");
+  });
+
+  it("leaves a newer unread seam where it is", () => {
+    const message = makeMessage({ id: "later", timestamp: "2026-08-15T12:02:00.000Z" });
+    useAppStore.setState((state) => ({
+      timelines: {
+        ...state.timelines,
+        [KEY]: {
+          messages: [message],
+          unreadFrom: "later",
+          hasMore: false,
+          loadingOlder: false,
+          askedBehind: null,
+        },
+      },
+    }));
+
+    useAppStore.getState().applyEvent({
+      type: "readMarkerUpdated",
+      network: "libera",
+      target: "#ctf-ops",
+      timestamp: "2026-08-15T12:01:30.000Z",
+    });
+
+    expect(timeline()?.unreadFrom).toBe("later");
+  });
+});
+
 /** The raw log had the shape #321 fixed for rosters: a `/list` delivers tens
  * of thousands of `rawLine` events in one batch, and each copied the whole
  * capped log on its way in. Coalesced now, and `reduce` stays the one to

@@ -101,6 +101,9 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
             message.network.clone(),
             message.target.clone(),
         )),
+        IrcxEvent::ReadMarkerUpdated {
+            network, target, ..
+        } => Some(Lane::Messages(network.clone(), target.clone())),
         IrcxEvent::ChannelUpdated { channel } => {
             Some(Lane::Channel(channel.network.clone(), channel.name.clone()))
         }
@@ -322,6 +325,14 @@ mod tests {
         }
     }
 
+    fn read_marker(target: &str) -> IrcxEvent {
+        IrcxEvent::ReadMarkerUpdated {
+            network: "net".into(),
+            target: target.into(),
+            timestamp: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
     fn channel(name: &str, unread: u32) -> IrcxEvent {
         IrcxEvent::ChannelUpdated {
             channel: Channel {
@@ -385,6 +396,21 @@ mod tests {
         };
         assert_eq!(target, "#ircx");
         assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn a_read_marker_stays_between_the_messages_it_separates() {
+        let mut batch = Batch::default();
+        batch.push(appended("a", "#ircx"));
+        batch.push(read_marker("#ircx"));
+        batch.push(appended("b", "#ircx"));
+
+        let events = batch.take();
+
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], IrcxEvent::MessagesAppended { .. }));
+        assert!(matches!(events[1], IrcxEvent::ReadMarkerUpdated { .. }));
+        assert!(matches!(events[2], IrcxEvent::MessagesAppended { .. }));
     }
 
     /// A page-back's answer says which ask it belongs to, and the frontend

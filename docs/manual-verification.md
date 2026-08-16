@@ -13,6 +13,15 @@ message with the same text and that a reply remains attached to the whole
 message. Repeat with `draft/multiline` disabled and confirm each nonblank line
 arrives as a separate message.
 
+## IRCv3 read markers
+
+Capability negotiation, query marker requests, local updates, remote partial
+updates and unread-seam movement are scripted. A live server or bouncer with
+two sessions for one account still needs to verify the whole exchange: read a
+channel and a query in one client, confirm the other client loses only the
+covered unread messages, then reconnect both clients and confirm the initial
+channel and query markers restore the same boundary.
+
 ## Strict Transport Security
 
 The parser, policy expiry, plaintext upgrade decision and cached-policy

@@ -9,6 +9,7 @@ pub const SUPPORTED: &[&str] = &[
     "chghost",
     "draft/chathistory",
     "draft/multiline",
+    "draft/read-marker",
     "echo-message",
     "extended-join",
     "invite-notify",

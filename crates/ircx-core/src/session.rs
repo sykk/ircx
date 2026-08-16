@@ -10,6 +10,7 @@ use ircx_net::TlsInfo;
 use ircx_plugin::ArrivedMessage;
 use ircx_proto::{Command, Message, MessageBuilder, Prefix};
 use ircx_store::OpenTarget;
+use time::OffsetDateTime;
 use tracing::debug;
 
 use crate::caps::Caps;
@@ -177,6 +178,12 @@ pub(crate) struct QueryState {
     pub(crate) online: bool,
 }
 
+#[derive(Debug)]
+pub(crate) struct UnreadAt {
+    pub(crate) timestamp: OffsetDateTime,
+    pub(crate) highlight: bool,
+}
+
 /// What became of a reader's ask for the page behind what they hold.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PageBack {
@@ -306,6 +313,8 @@ pub struct SessionState {
     /// seeded from the archive at restore and moved on by every message that
     /// arrives. It is what a `CHATHISTORY` request asks for everything after.
     pub(crate) archived: HashMap<String, String>,
+    pub(crate) read_markers: HashMap<String, OffsetDateTime>,
+    pub(crate) unread_at: HashMap<String, Vec<UnreadAt>>,
     /// The near side of "while I was away": where this client's record left off
     /// the last time it had a connection.
     ///
@@ -384,6 +393,8 @@ impl SessionState {
             lag_ms: None,
             listing: Vec::new(),
             archived: HashMap::new(),
+            read_markers: HashMap::new(),
+            unread_at: HashMap::new(),
             away_since: None,
             gap_fills: HashMap::new(),
             page_backs: HashMap::new(),
@@ -633,17 +644,40 @@ impl SessionState {
 
     pub fn mark_read(&mut self, target: &str) -> Vec<Action> {
         let key = self.fold(target);
+        let mut conversation = None;
         if let Some(channel) = self.channels.get_mut(&key) {
+            conversation = Some(channel.name.clone());
             if channel.unread != 0 || channel.highlights != 0 {
                 channel.unread = 0;
                 channel.highlights = 0;
                 self.emit_channel(&key);
             }
         } else if let Some(query) = self.queries.get_mut(&key) {
+            conversation = Some(query.nick.clone());
             if query.unread != 0 {
                 query.unread = 0;
                 self.emit_query(&key);
             }
+        }
+        self.unread_at.remove(&key);
+        if let Some((target, timestamp, parameter)) = conversation
+            .filter(|_| self.caps.is_enabled("draft/read-marker"))
+            .and_then(|target| {
+                let value = self.archived.get(&key)?;
+                Some((
+                    target,
+                    crate::read_marker::timestamp(value)?,
+                    crate::read_marker::parameter(value)?,
+                ))
+            })
+            .filter(|(_, timestamp, _)| {
+                self.read_markers
+                    .get(&key)
+                    .is_none_or(|read| read < timestamp)
+            })
+        {
+            self.read_markers.insert(key, timestamp);
+            self.send_command("MARKREAD", &[&target, &parameter]);
         }
         self.drain()
     }
@@ -687,6 +721,7 @@ impl SessionState {
                     "ACCOUNT" => self.handle_account(message),
                     "CHGHOST" => self.handle_chghost(message),
                     "BATCH" => self.handle_batch(message),
+                    "MARKREAD" => self.handle_markread(message),
                     "FAIL" | "WARN" | "NOTE" => self.handle_standard_reply(&name, message),
                     _ => debug!(command = name, "no handler for this command"),
                 }
@@ -742,7 +777,12 @@ impl SessionState {
                 }
             }
             "ACK" => {
+                let had_read_marker = self.caps.is_enabled("draft/read-marker");
                 self.caps.ack(list);
+                if self.registered && !had_read_marker && self.caps.is_enabled("draft/read-marker")
+                {
+                    self.request_query_markers();
+                }
                 self.emit_caps();
                 if !self.caps.negotiating() {
                     self.finish_negotiation();
@@ -1180,6 +1220,7 @@ impl SessionState {
         for channel in self.channels_to_join() {
             self.send_command("JOIN", &[&channel]);
         }
+        self.request_query_markers();
         self.find_missed_queries();
     }
 
@@ -1481,7 +1522,13 @@ impl SessionState {
                 self.archived.insert(new.clone(), newest);
             }
             if let Some(pages) = self.gap_fills.remove(&old) {
-                self.gap_fills.insert(new, pages);
+                self.gap_fills.insert(new.clone(), pages);
+            }
+            if let Some(marker) = self.read_markers.remove(&old) {
+                self.read_markers.insert(new.clone(), marker);
+            }
+            if let Some(unread) = self.unread_at.remove(&old) {
+                self.unread_at.insert(new, unread);
             }
         }
     }
@@ -2244,6 +2291,15 @@ impl SessionState {
             let was = std::mem::replace(&mut query.nick, new_nick.clone());
             let folded = self.fold(&new_nick);
             self.queries.insert(folded.clone(), query);
+            if let Some(newest) = self.archived.remove(&old) {
+                self.archived.insert(folded.clone(), newest);
+            }
+            if let Some(marker) = self.read_markers.remove(&old) {
+                self.read_markers.insert(folded.clone(), marker);
+            }
+            if let Some(unread) = self.unread_at.remove(&old) {
+                self.unread_at.insert(folded.clone(), unread);
+            }
             self.emit(IrcxEvent::QueryRenamed {
                 network: self.config.network.clone(),
                 from: was,
@@ -2480,6 +2536,90 @@ impl SessionState {
         }
     }
 
+    fn handle_markread(&mut self, message: &Message) {
+        if !self.caps.is_enabled("draft/read-marker")
+            || matches!(message.prefix, Some(Prefix::User { .. }))
+        {
+            return;
+        }
+        let (Some(target), Some(parameter)) = (message.param(0), message.param(1)) else {
+            return;
+        };
+        let Some(timestamp) = crate::read_marker::parse(parameter) else {
+            return;
+        };
+        let key = self.fold(target);
+        if !self.channels.contains_key(&key) && !self.queries.contains_key(&key) {
+            return;
+        }
+        if self
+            .read_markers
+            .get(&key)
+            .is_some_and(|read| *read >= timestamp)
+        {
+            return;
+        }
+        self.read_markers.insert(key.clone(), timestamp);
+        self.emit(IrcxEvent::ReadMarkerUpdated {
+            network: self.config.network.clone(),
+            target: target.to_string(),
+            timestamp: parameter
+                .strip_prefix("timestamp=")
+                .unwrap_or_default()
+                .to_string(),
+        });
+
+        let reaches_newest = self
+            .archived
+            .get(&key)
+            .and_then(|value| crate::read_marker::timestamp(value))
+            .is_some_and(|newest| timestamp >= newest);
+        let (removed, highlights) = match self.unread_at.get_mut(&key) {
+            Some(unread) => {
+                let before = unread.len();
+                let highlights = unread
+                    .iter()
+                    .filter(|item| item.timestamp <= timestamp && item.highlight)
+                    .count();
+                unread.retain(|item| item.timestamp > timestamp);
+                ((before - unread.len()) as u32, highlights as u32)
+            }
+            None => (0, 0),
+        };
+
+        if let Some(channel) = self.channels.get_mut(&key) {
+            let previous = (channel.unread, channel.highlights);
+            if reaches_newest {
+                channel.unread = 0;
+                channel.highlights = 0;
+            } else {
+                channel.unread = channel.unread.saturating_sub(removed);
+                channel.highlights = channel.highlights.saturating_sub(highlights);
+                if channel.unread == 0 {
+                    channel.highlights = 0;
+                }
+            }
+            let changed = previous != (channel.unread, channel.highlights);
+            if changed {
+                self.emit_channel(&key);
+            }
+        } else if let Some(query) = self.queries.get_mut(&key) {
+            let previous = query.unread;
+            query.unread = if reaches_newest {
+                0
+            } else {
+                query.unread.saturating_sub(removed)
+            };
+            let changed = previous != query.unread;
+            if changed {
+                self.emit_query(&key);
+            }
+        }
+        if reaches_newest {
+            self.unread_at.remove(&key);
+        }
+    }
+
     /// Records that this nick was heard from, which is what takes back a quit.
     ///
     /// `online` latched: it was set once when the query was created and
@@ -2518,6 +2658,23 @@ impl SessionState {
             self.actions
                 .push(Action::Remember(OpenTarget::Query(nick.to_string())));
             self.emit_query(&key);
+            if self.caps.is_enabled("draft/read-marker") {
+                self.send_command("MARKREAD", &[nick]);
+            }
+        }
+    }
+
+    fn request_query_markers(&mut self) {
+        if !self.caps.is_enabled("draft/read-marker") {
+            return;
+        }
+        let queries: Vec<String> = self
+            .queries
+            .values()
+            .map(|query| query.nick.clone())
+            .collect();
+        for query in queries {
+            self.send_command("MARKREAD", &[&query]);
         }
     }
 

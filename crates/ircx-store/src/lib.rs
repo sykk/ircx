@@ -550,6 +550,73 @@ impl Store {
         }
     }
 
+    pub fn set_bookmark(
+        &self,
+        network: &str,
+        target: &str,
+        message_id: &str,
+        active: bool,
+    ) -> Result<bool, StoreError> {
+        let conn = self.writing();
+        let found: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages
+             WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3)",
+            params![network, target, message_id],
+            |row| row.get(0),
+        )?;
+        if !found {
+            return Ok(false);
+        }
+        if active {
+            conn.execute(
+                "INSERT OR IGNORE INTO bookmarks(message)
+                 SELECT id FROM messages
+                 WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3",
+                params![network, target, message_id],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM bookmarks WHERE message IN (
+                     SELECT id FROM messages
+                     WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3
+                 )",
+                params![network, target, message_id],
+            )?;
+        }
+        Ok(true)
+    }
+
+    pub fn bookmarks(
+        &self,
+        network: Option<&str>,
+        target: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<SearchHit>, StoreError> {
+        let sql = format!(
+            "SELECT {columns}, m.text FROM bookmarks b
+             JOIN messages m ON m.id = b.message
+             WHERE (?1 IS NULL OR m.network = ?1)
+               AND (?2 IS NULL OR m.target = ?2 COLLATE NOCASE)
+             ORDER BY m.timestamp DESC, m.id DESC LIMIT ?3",
+            columns = message::COLUMNS,
+        );
+        let conn = self.reading();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![network, target, limit])?;
+        let mut messages = Vec::new();
+        let mut snippets = Vec::new();
+        while let Some(row) = rows.next()? {
+            messages.push(message::from_row(row)?);
+            snippets.push(row.get(message::COLUMN_COUNT)?);
+        }
+        message::attach_reactions(&conn, &mut messages)?;
+        Ok(messages
+            .into_iter()
+            .zip(snippets)
+            .map(|(message, snippet)| SearchHit { message, snippet })
+            .collect())
+    }
+
     /// One of the two FTS tables, asked the same question. The table name is
     /// interpolated because SQLite takes no parameter there; both names are
     /// this function's own literals, never anything the user typed.

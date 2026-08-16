@@ -188,6 +188,8 @@ pub fn run() {
             commands::load_history_around,
             commands::page_back,
             commands::search_history,
+            commands::list_bookmarks,
+            commands::set_bookmark,
             commands::mark_read,
             commands::set_typing,
             commands::load_preview,

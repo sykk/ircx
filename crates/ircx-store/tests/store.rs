@@ -436,6 +436,30 @@ fn search_marks_the_match_and_filters_by_target() {
 }
 
 #[test]
+fn bookmarks_are_idempotent_and_scoped() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message("a", "#ircx", FUTURE, "save this"),
+            message("b", "#other", FUTURE, "not this"),
+        ])
+        .unwrap();
+
+    assert!(store.set_bookmark("libera", "#IRCX", "a", true).unwrap());
+    assert!(store.set_bookmark("libera", "#ircx", "a", true).unwrap());
+    let hits = store.bookmarks(Some("libera"), Some("#ircx"), 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].message.id, "a");
+    assert_eq!(hits[0].snippet, "save this");
+
+    assert!(store.set_bookmark("libera", "#ircx", "a", false).unwrap());
+    assert!(store.bookmarks(None, None, 10).unwrap().is_empty());
+    assert!(!store
+        .set_bookmark("libera", "#ircx", "missing", true)
+        .unwrap());
+}
+
+#[test]
 fn history_around_centers_the_named_archived_message() {
     let store = Store::open_in_memory().unwrap();
     let messages = (0..7)

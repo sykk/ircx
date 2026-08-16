@@ -7,6 +7,7 @@ const { ipcMock, onIrcxEvent } = vi.hoisted(() => ({
     getSnapshot: vi.fn(),
     listMembers: vi.fn(),
     markRead: vi.fn(),
+    listBookmarks: vi.fn(),
   },
   onIrcxEvent: vi.fn(),
 }));
@@ -21,6 +22,7 @@ beforeEach(() => {
   ipcMock.getSnapshot.mockResolvedValue({ networks: [], channels: [], queries: [], drafts: [] });
   ipcMock.listMembers.mockResolvedValue([]);
   ipcMock.markRead.mockResolvedValue(undefined);
+  ipcMock.listBookmarks.mockResolvedValue([]);
   onIrcxEvent.mockResolvedValue(() => {});
 });
 

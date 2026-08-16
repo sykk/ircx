@@ -12,6 +12,7 @@ import { Markdown, Mentioned } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
 import { writesOwnNick, type FailureRun } from "./rows";
+import { targetKey } from "@/store/keys";
 
 interface MessageRowProps {
   message: ChatMessage;
@@ -69,6 +70,15 @@ export function MessageRow({
   // be answered by neither — which is the window between sending a line and its
   // echo arriving.
   const msgid = canTag ? serverMsgid(message) : null;
+  const bookmarked = useAppStore((s) => (s.bookmarks[targetKey(message.network, message.target)] ?? []).includes(message.id));
+  const [bookmarkError, setBookmarkError] = useState<string | null>(null);
+  const toggleBookmark = () => {
+    const active = !bookmarked;
+    void ipc.setBookmark(message.network, message.target, message.id, active).then(() => {
+      useAppStore.getState().setBookmarked(message.network, message.target, message.id, active);
+      setBookmarkError(null);
+    }, (reason: unknown) => setBookmarkError(String(reason)));
+  };
 
   return (
     <div
@@ -148,6 +158,7 @@ export function MessageRow({
           {(message.annotations ?? []).map((note) => (
             <AnnotationLine key={note.plugin} note={note} />
           ))}
+          {bookmarkError && <p role="alert" className="text-[11px] text-[var(--danger)]">{bookmarkError}</p>}
 
           {/* One notice for the run rather than one for each of its lines:
               the reason belongs to the connection, not to the message, and a
@@ -170,15 +181,17 @@ export function MessageRow({
               Not sent
             </span>
           )}
-          {msgid !== null && (
+          {(msgid !== null || message.delivery.state !== "pending") && (
             <RowControls
               alone
-              onReply={() => onReply(msgid)}
+              onReply={msgid === null ? null : () => onReply(msgid)}
               onPick={
                 (message.reactions ?? []).length === 0
-                  ? (emoji) => onReact(msgid, emoji, true)
+                  ? msgid === null ? null : (emoji) => onReact(msgid, emoji, true)
                   : null
               }
+              bookmarked={bookmarked}
+              onBookmark={message.delivery.state === "pending" ? null : toggleBookmark}
             />
           )}
         </div>

@@ -127,6 +127,7 @@ export interface AppActions {
   /** Records a line as sent in this conversation, for the composer to recall. */
   rememberInput: (network: string, target: string, text: string) => void;
   setDraftPresence: (network: string, target: string, present: boolean) => void;
+  setBookmarked: (network: string, target: string, message: string, active: boolean) => void;
 
   /** Hides or shows one pane's member list, leaving every other pane alone. */
   toggleRoster: (view: ViewId, shown?: boolean) => void;
@@ -187,6 +188,7 @@ const initialState: AppState = {
   replyTo: {},
   inputHistory: {},
   drafts: {},
+  bookmarks: {},
   rawLog: {},
   channelList: {},
   views: {},
@@ -668,6 +670,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       if (!s.drafts[key]) return {};
       const { [key]: _cleared, ...drafts } = s.drafts;
       return { drafts };
+    }),
+
+  setBookmarked: (network, target, message, active) =>
+    set((s) => {
+      const key = targetKey(network, target);
+      const current = s.bookmarks[key] ?? [];
+      const next = active
+        ? current.includes(message) ? current : [...current, message]
+        : current.filter((id) => id !== message);
+      return { bookmarks: { ...s.bookmarks, [key]: next } };
     }),
 
   toggleRoster: (view, shown) =>

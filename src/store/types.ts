@@ -141,6 +141,7 @@ export interface AppState {
   inputHistory: Record<TargetKey, string[]>;
   /** Conversations whose persisted composer holds unsent text. */
   drafts: Record<TargetKey, boolean>;
+  bookmarks: Record<TargetKey, string[]>;
   /** Raw protocol log per network, capped; the console pane's raw view. */
   rawLog: Record<string, string[]>;
   /** The last `LIST` a network answered, whole. Not `channels`: these are

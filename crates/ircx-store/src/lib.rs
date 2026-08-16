@@ -29,6 +29,12 @@ const NETWORK_COLUMNS: &str = "id, name, host, port, tls, tls_verify, nick, alt_
 /// A network-wide retention rule is stored as a target override with no target.
 const DEFAULT_TARGET: &str = "";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StsPolicy {
+    pub port: Option<u16>,
+    pub expires_at: i64,
+}
+
 /// One SQLite database, reached by more than one connection so that reading it
 /// and changing it are not the same queue.
 ///
@@ -645,6 +651,45 @@ impl Store {
             networks.push(network_from_row(row)?);
         }
         Ok(networks)
+    }
+
+    pub fn sts_policy(&self, host: &str, now: i64) -> Result<Option<StsPolicy>, StoreError> {
+        self.reading()
+            .query_row(
+                "SELECT port, expires_at FROM sts_policy
+                 WHERE host = ?1 AND expires_at > ?2",
+                params![host, now],
+                |row| {
+                    Ok(StsPolicy {
+                        port: row.get(0)?,
+                        expires_at: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn save_sts_policy(
+        &self,
+        host: &str,
+        port: Option<u16>,
+        expires_at: i64,
+    ) -> Result<(), StoreError> {
+        self.writing().execute(
+            "INSERT INTO sts_policy (host, port, expires_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (host) DO UPDATE SET
+                 port = excluded.port,
+                 expires_at = excluded.expires_at",
+            params![host, port, expires_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_sts_policy(&self, host: &str) -> Result<(), StoreError> {
+        self.writing()
+            .execute("DELETE FROM sts_policy WHERE host = ?1", [host])?;
+        Ok(())
     }
 
     /// The SASL password goes to the keyring and never to SQLite. A config

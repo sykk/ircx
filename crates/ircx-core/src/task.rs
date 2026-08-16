@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ircx_ipc::HistoryRequest;
 use ircx_ipc::{
@@ -10,7 +10,7 @@ use ircx_ipc::{
 };
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
 use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, NotifyRequest, PluginRuntime};
-use ircx_store::Store;
+use ircx_store::{Store, StsPolicy};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
@@ -21,6 +21,25 @@ use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
 use crate::session::{Action, PageBack, Restored, SessionConfig, SessionState};
 
 const COMMAND_QUEUE: usize = 64;
+
+enum Control {
+    Continue,
+    Stop,
+    Upgrade(u16),
+}
+
+fn unix_time() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_secs()).unwrap_or(i64::MAX))
+        .unwrap_or_default()
+}
+
+fn enforce_stored_sts(config: &mut SessionConfig, policy: StsPolicy) {
+    config.port = policy.port.unwrap_or(config.port);
+    config.tls = true;
+    config.tls_verify = true;
+}
 
 /// Which on-arrival hook a strike is against. A plugin can hold both, and one
 /// of them failing says nothing about the other: a rule that throws should not
@@ -375,7 +394,7 @@ async fn supervise(
 }
 
 async fn run(
-    config: SessionConfig,
+    mut config: SessionConfig,
     store: Arc<Store>,
     events: mpsc::Sender<IrcxEvent>,
     inbox: mpsc::Receiver<SessionCommand>,
@@ -383,6 +402,13 @@ async fn run(
     own_inbox: mpsc::WeakSender<SessionCommand>,
     archive: Archive,
 ) {
+    match store.sts_policy(&config.host, unix_time()) {
+        Ok(Some(policy)) => {
+            enforce_stored_sts(&mut config, policy);
+        }
+        Ok(None) => {}
+        Err(error) => warn!(%error, host = %config.host, "could not read the STS policy"),
+    }
     let endpoint = (
         config.host.clone(),
         config.port,
@@ -415,7 +441,7 @@ async fn run(
 /// A session's whole life between construction and the final drain: connect,
 /// read, reconnect, until told to stop for good.
 async fn drive(
-    endpoint: (String, u16, bool, bool),
+    mut endpoint: (String, u16, bool, bool),
     client_certificate: Option<PathBuf>,
     mut session: SessionState,
     mut inbox: mpsc::Receiver<SessionCommand>,
@@ -465,13 +491,13 @@ async fn drive(
         })
         .collect();
     let actions = session.restore(remembered);
-    if context.deliver(actions, None).await {
+    if matches!(context.deliver(actions, None).await, Control::Stop) {
         return;
     }
 
     loop {
         let actions = session.on_connecting();
-        if context.deliver(actions, None).await {
+        if matches!(context.deliver(actions, None).await, Control::Stop) {
             return;
         }
 
@@ -488,7 +514,7 @@ async fn drive(
             Ok(connected) => connected,
             Err(error) => {
                 let actions = session.on_disconnected(&error.to_string());
-                if context.deliver(actions, None).await {
+                if matches!(context.deliver(actions, None).await, Control::Stop) {
                     return;
                 }
                 if !wait_to_retry(&mut backoff, &mut session, context, &mut inbox).await {
@@ -503,6 +529,7 @@ async fn drive(
         let mut written = transport.written();
         let mut keepalive = interval_at(Instant::now() + KEEPALIVE, KEEPALIVE);
         let mut stop = false;
+        let mut upgraded = false;
         let mut reason = String::from("the connection ended");
 
         loop {
@@ -532,9 +559,20 @@ async fn drive(
                 _ = keepalive.tick() => session.keepalive(),
             };
 
-            if context.deliver(actions, Some(&sender)).await {
-                stop = true;
-                break;
+            match context.deliver(actions, Some(&sender)).await {
+                Control::Continue => {}
+                Control::Stop => {
+                    stop = true;
+                    break;
+                }
+                Control::Upgrade(port) => {
+                    endpoint.1 = port;
+                    endpoint.2 = true;
+                    endpoint.3 = true;
+                    session.enforce_sts(port);
+                    upgraded = true;
+                    break;
+                }
             }
         }
 
@@ -545,8 +583,11 @@ async fn drive(
         if stop {
             return;
         }
+        if upgraded {
+            continue;
+        }
         let actions = session.on_disconnected(&reason);
-        if context.deliver(actions, None).await {
+        if matches!(context.deliver(actions, None).await, Control::Stop) {
             return;
         }
         if !wait_to_retry(&mut backoff, &mut session, context, &mut inbox).await {
@@ -565,7 +606,7 @@ async fn wait_to_retry(
 ) -> bool {
     let delay = backoff.next_delay();
     let actions = session.on_reconnect_wait(delay.as_secs().min(u64::from(u32::MAX)) as u32);
-    if context.deliver(actions, None).await {
+    if matches!(context.deliver(actions, None).await, Control::Stop) {
         return false;
     }
 
@@ -576,7 +617,7 @@ async fn wait_to_retry(
             command = inbox.recv() => match command {
                 Some(command) => {
                     let actions = apply(command, session, context).await;
-                    if context.deliver(actions, None).await {
+                    if matches!(context.deliver(actions, None).await, Control::Stop) {
                         return false;
                     }
                 }
@@ -824,9 +865,8 @@ impl Context {
         session.apply_plugin(&call, answer)
     }
 
-    /// Returns `true` when the session asked to stop for good.
-    async fn deliver(&self, actions: Vec<Action>, sender: Option<&LineSender>) -> bool {
-        let mut close = false;
+    async fn deliver(&self, actions: Vec<Action>, sender: Option<&LineSender>) -> Control {
+        let mut control = Control::Continue;
         for action in actions {
             match action {
                 Action::Send { line, ticket } => {
@@ -872,7 +912,7 @@ impl Context {
                         _ => {}
                     }
                     if self.events.send(*event).await.is_err() {
-                        close = true;
+                        control = Control::Stop;
                     }
                     // After the send, which is what makes the message drawn
                     // before any annotator runs.
@@ -899,10 +939,30 @@ impl Context {
                         });
                     }
                 }
-                Action::Close => close = true,
+                Action::StsPolicy {
+                    host,
+                    port,
+                    duration,
+                } => {
+                    let result = if duration == 0 {
+                        self.store.delete_sts_policy(&host)
+                    } else {
+                        let expires_at =
+                            unix_time().saturating_add(i64::try_from(duration).unwrap_or(i64::MAX));
+                        self.store.save_sts_policy(&host, port, expires_at)
+                    };
+                    if let Err(error) = result {
+                        warn!(%error, %host, "could not store the STS policy");
+                    }
+                }
+                Action::StsUpgrade { port } if !matches!(control, Control::Stop) => {
+                    control = Control::Upgrade(port);
+                }
+                Action::StsUpgrade { .. } => {}
+                Action::Close => control = Control::Stop,
             }
         }
-        close
+        control
     }
 
     /// Hands a batch to every annotator that reaches this conversation.
@@ -1467,6 +1527,22 @@ mod tests {
             connect_commands: Vec::new(),
             autojoin: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_stored_sts_policy_overrides_an_insecure_network_config() {
+        let mut config = config();
+        enforce_stored_sts(
+            &mut config,
+            StsPolicy {
+                port: Some(6697),
+                expires_at: 2_000,
+            },
+        );
+
+        assert_eq!(config.port, 6697);
+        assert!(config.tls);
+        assert!(config.tls_verify);
     }
 
     /// #328. A burst hands `persist` one message at a time and each write is a

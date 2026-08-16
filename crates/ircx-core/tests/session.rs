@@ -54,6 +54,14 @@ fn sasl_config(mechanism: SaslMechanism, password: Option<&str>) -> SessionConfi
     config
 }
 
+fn tls_info() -> TlsInfo {
+    TlsInfo {
+        protocol: "TLS 1.3".into(),
+        cipher_suite: "TLS13_AES_256_GCM_SHA384".into(),
+        peer_cert_subject: Some("CN=irc.example.com".into()),
+    }
+}
+
 struct Harness {
     state: SessionState,
     sent: Vec<String>,
@@ -67,6 +75,8 @@ struct Harness {
     /// What each reader waiting on a page of history was told, by the label
     /// their request went out with.
     paged_back: Vec<(String, bool)>,
+    sts_policies: Vec<(String, Option<u16>, u64)>,
+    sts_upgrades: Vec<u16>,
     closed: bool,
 }
 
@@ -79,6 +89,8 @@ impl Harness {
             events: Vec::new(),
             open: Vec::new(),
             paged_back: Vec::new(),
+            sts_policies: Vec::new(),
+            sts_upgrades: Vec::new(),
             closed: false,
         }
     }
@@ -104,6 +116,12 @@ impl Harness {
                 // rule is not something this harness can act on.
                 Action::Notify { .. } => {}
                 Action::PagedBack { label, more } => self.paged_back.push((label, more)),
+                Action::StsPolicy {
+                    host,
+                    port,
+                    duration,
+                } => self.sts_policies.push((host, port, duration)),
+                Action::StsUpgrade { port } => self.sts_upgrades.push(port),
                 Action::Close => self.closed = true,
             }
         }
@@ -1255,6 +1273,99 @@ fn a_capability_offered_later_is_requested_and_one_withdrawn_is_dropped() {
         })
         .unwrap_or_default();
     assert_eq!(enabled, vec!["chghost", "invite-notify"]);
+}
+
+#[test]
+fn an_insecure_connection_upgrades_to_the_advertised_sts_port() {
+    let mut config = config();
+    config.port = 6667;
+    config.tls = false;
+    let mut session = Harness::new(config);
+    session.connect();
+    session.sent();
+
+    session.feed(":irc.example.com CAP * LS :sts=port=6697,duration=3600 standard-replies");
+
+    assert_eq!(session.sts_upgrades, [6697]);
+    assert!(
+        session.sent().is_empty(),
+        "registration stops before CAP REQ"
+    );
+    assert!(session.sts_policies.is_empty());
+}
+
+#[test]
+fn a_verified_tls_connection_persists_the_sts_duration() {
+    let mut session = Harness::new(config());
+    session.connect_over_tls(tls_info());
+    session.sent();
+
+    session.feed(":irc.example.com CAP * LS :sts=duration=3600 standard-replies");
+
+    assert_eq!(
+        session.sts_policies,
+        [("irc.libera.chat".into(), None, 3600)]
+    );
+    assert_eq!(session.sent(), ["CAP REQ :standard-replies"]);
+}
+
+#[test]
+fn an_sts_upgrade_keeps_the_secure_port_with_the_policy() {
+    let mut config = config();
+    config.port = 6667;
+    config.tls = false;
+    let mut session = Harness::new(config);
+    session.connect();
+    session.feed(":irc.example.com CAP * LS :sts=port=6697");
+    session.state.enforce_sts(6697);
+    session.connect_over_tls(tls_info());
+    session.sts_policies.clear();
+
+    session.feed(":irc.example.com CAP * LS :sts=duration=3600");
+
+    assert_eq!(
+        session.sts_policies,
+        [("irc.libera.chat".into(), Some(6697), 3600)]
+    );
+}
+
+#[test]
+fn an_unverified_tls_connection_does_not_persist_sts() {
+    let mut config = config();
+    config.tls_verify = false;
+    let mut session = Harness::new(config);
+    session.connect_over_tls(tls_info());
+    session.sent();
+
+    session.feed(":irc.example.com CAP * LS :sts=duration=3600");
+
+    assert!(session.sts_policies.is_empty());
+    assert_eq!(session.sent(), ["CAP END"]);
+}
+
+#[test]
+fn duration_zero_removes_a_verified_sts_policy() {
+    let mut session = Harness::new(config());
+    session.connect_over_tls(tls_info());
+    session.sent();
+
+    session.feed(":irc.example.com CAP * LS :sts=duration=0");
+
+    assert_eq!(session.sts_policies, [("irc.libera.chat".into(), None, 0)]);
+}
+
+#[test]
+fn another_capability_becoming_available_does_not_renew_sts() {
+    let mut session = Harness::new(config());
+    session.connect_over_tls(tls_info());
+    session.sent();
+    session.feed(":irc.example.com CAP * LS :sts=duration=3600");
+    session.sts_policies.clear();
+
+    session.feed(":irc.example.com CAP sykk NEW :chghost");
+
+    assert!(session.sts_policies.is_empty());
+    assert_eq!(session.sent(), ["CAP END", "CAP REQ :chghost"]);
 }
 
 #[test]

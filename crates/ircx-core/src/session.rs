@@ -20,6 +20,7 @@ use crate::isupport::ISupport;
 use crate::numeric::{self, *};
 use crate::sasl;
 use crate::scram;
+use crate::sts;
 use crate::text;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -36,7 +37,10 @@ const MAX_LISTING: usize = 50_000;
 #[derive(Debug)]
 pub enum Action {
     /// `ticket` is what the transport reports back once the line is written.
-    Send { line: String, ticket: u64 },
+    Send {
+        line: String,
+        ticket: u64,
+    },
     /// Boxed so an action is the size of a line, not of the largest event.
     Emit(Box<IrcxEvent>),
     /// The user is in this conversation. Kept across restarts so the next
@@ -58,7 +62,18 @@ pub enum Action {
     /// page came back full, which is the server saying there is another behind
     /// it; the messages themselves went out as `MessagesAppended` and are
     /// already drawn and archived by the time this is read.
-    PagedBack { label: String, more: bool },
+    PagedBack {
+        label: String,
+        more: bool,
+    },
+    StsPolicy {
+        host: String,
+        port: Option<u16>,
+        duration: u64,
+    },
+    StsUpgrade {
+        port: u16,
+    },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -269,6 +284,8 @@ pub struct SessionState {
     scram: Option<scram::Scram>,
     challenge: String,
     cap_ended: bool,
+    sts_verified_transport: bool,
+    sts_upgrade_port: Option<u16>,
     nick_attempt: usize,
     pending: Vec<PendingSend>,
     /// Numbers every line handed to the transport. Never reset: a ticket from
@@ -354,6 +371,8 @@ impl SessionState {
             scram: None,
             challenge: String::new(),
             cap_ended: false,
+            sts_verified_transport: false,
+            sts_upgrade_port: None,
             nick_attempt: 0,
             pending: Vec::new(),
             next_ticket: 1,
@@ -443,6 +462,13 @@ impl SessionState {
         self.drain()
     }
 
+    pub fn enforce_sts(&mut self, port: u16) {
+        self.config.port = port;
+        self.config.tls = true;
+        self.config.tls_verify = true;
+        self.sts_upgrade_port = Some(port);
+    }
+
     pub fn on_reconnect_wait(&mut self, seconds: u32) -> Vec<Action> {
         self.set_status(ConnectionStatus::Reconnecting {
             in_seconds: seconds,
@@ -456,6 +482,7 @@ impl SessionState {
     /// a way to see what they got.
     pub fn on_connected(&mut self, tls: Option<TlsInfo>) -> Vec<Action> {
         self.reset_connection_state();
+        self.sts_verified_transport = tls.is_some() && self.config.tls_verify;
         self.set_status(ConnectionStatus::Registering);
         let host = self.config.host.clone();
         let text = match tls {
@@ -700,6 +727,9 @@ impl SessionState {
                 let more = message.param(2) == Some("*");
                 self.caps.record_available(list);
                 if !more {
+                    if self.handle_sts() {
+                        return;
+                    }
                     let lines = self.caps.request_lines();
                     if lines.is_empty() {
                         self.finish_negotiation();
@@ -728,14 +758,58 @@ impl SessionState {
                 }
             }
             "NEW" => {
+                let includes_sts = list.split_whitespace().any(|entry| {
+                    entry
+                        .split_once('=')
+                        .map_or(entry, |(name, _)| name)
+                        .eq_ignore_ascii_case("sts")
+                });
                 self.caps.record_available(list);
+                if includes_sts && self.handle_sts() {
+                    return;
+                }
                 for line in self.caps.request_lines() {
                     self.send_line(line);
                 }
             }
-            "DEL" if !self.caps.remove(list).is_empty() => self.emit_caps(),
+            "DEL" => {
+                let removable = list
+                    .split_whitespace()
+                    .filter(|cap| !cap.eq_ignore_ascii_case("sts"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if !self.caps.remove(&removable).is_empty() {
+                    self.emit_caps();
+                }
+            }
             _ => {}
         }
+    }
+
+    fn handle_sts(&mut self) -> bool {
+        let Some(advertisement) = self.caps.value("sts").and_then(sts::parse) else {
+            return false;
+        };
+
+        if !self.sts_verified_transport {
+            if self.config.tls {
+                return false;
+            }
+            if let Some(port) = advertisement.port {
+                self.actions.push(Action::StsUpgrade { port });
+                return true;
+            }
+            return false;
+        }
+
+        if let Some(duration) = advertisement.duration {
+            self.actions.push(Action::StsPolicy {
+                host: self.config.host.clone(),
+                port: self.sts_upgrade_port,
+                duration,
+            });
+        }
+        false
     }
 
     /// Registration cannot finish until SASL has, so `CAP END` waits for the
@@ -2681,6 +2755,7 @@ impl SessionState {
         self.isupport = ISupport::default();
         self.registered = false;
         self.cap_ended = false;
+        self.sts_verified_transport = false;
         self.nick_attempt = 0;
         self.nick = self.config.nick.clone();
         self.user = None;

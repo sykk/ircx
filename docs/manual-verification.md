@@ -3,6 +3,17 @@
 Things no agent can check, because they need a real account or a human watching
 the assembled app. Nothing here is covered by `cargo test` or `npm test`.
 
+## Strict Transport Security
+
+The parser, policy expiry, plaintext upgrade decision and cached-policy
+enforcement are covered by unit tests. A live server with a publicly trusted
+certificate still needs to verify the whole exchange: advertise `sts=port` on
+the plaintext listener, advertise `sts=duration` on TLS, restart ircx, and
+confirm it connects to the TLS port without touching the plaintext listener.
+
+Also expire or remove the TLS listener while the policy is current and confirm
+ircx keeps retrying TLS rather than falling back to plaintext.
+
 ## SASL against real services
 
 **The rejection path is verified.** `crates/ircx-core/tests/sasl_probe.rs` connects

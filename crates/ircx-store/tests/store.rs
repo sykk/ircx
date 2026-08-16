@@ -882,6 +882,45 @@ fn networks_round_trip_without_the_password() {
     );
 }
 
+#[test]
+fn an_sts_policy_is_scoped_to_the_hostname_and_expires() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .save_sts_policy("irc.example.com", Some(6697), 2_000)
+        .unwrap();
+
+    assert_eq!(
+        store.sts_policy("IRC.EXAMPLE.COM", 1_999).unwrap(),
+        Some(ircx_store::StsPolicy {
+            port: Some(6697),
+            expires_at: 2_000,
+        })
+    );
+    assert_eq!(store.sts_policy("irc.example.com", 2_000).unwrap(), None);
+    assert_eq!(store.sts_policy("other.example.com", 1_999).unwrap(), None);
+}
+
+#[test]
+fn an_sts_policy_can_be_replaced_and_removed() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .save_sts_policy("irc.example.com", Some(6697), 2_000)
+        .unwrap();
+    store
+        .save_sts_policy("irc.example.com", None, 3_000)
+        .unwrap();
+
+    assert_eq!(
+        store.sts_policy("irc.example.com", 2_500).unwrap(),
+        Some(ircx_store::StsPolicy {
+            port: None,
+            expires_at: 3_000,
+        })
+    );
+    store.delete_sts_policy("irc.example.com").unwrap();
+    assert_eq!(store.sts_policy("irc.example.com", 2_500).unwrap(), None);
+}
+
 /// #401. The path is the whole of what is stored — a certificate that came back
 /// as `None` would be a network that silently stopped presenting one, and the
 /// login it authenticates would fail with nothing to point at.

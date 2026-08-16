@@ -19,6 +19,7 @@ const MIGRATIONS: &[&str] = &[
     UPLOAD_FORM,
     HIGHLIGHT_WORDS,
     MUTED,
+    STS_POLICY,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -358,6 +359,14 @@ CREATE TABLE muted (
     network TEXT NOT NULL,
     target  TEXT NOT NULL,
     PRIMARY KEY (network, target)
+);
+"#;
+
+const STS_POLICY: &str = r#"
+CREATE TABLE sts_policy (
+    host       TEXT PRIMARY KEY COLLATE NOCASE,
+    port       INTEGER,
+    expires_at INTEGER NOT NULL
 );
 "#;
 

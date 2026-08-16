@@ -24,6 +24,7 @@ pub mod plugins;
 mod sasl;
 mod scram;
 mod session;
+mod sts;
 mod task;
 mod text;
 

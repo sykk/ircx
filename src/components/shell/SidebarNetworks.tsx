@@ -18,8 +18,8 @@ type Row =
       network: Network;
       collapsed: boolean;
       unread: number;
-      highlights: number;
       draft: boolean;
+      attention: number;
     }
   | { id: string; kind: "channel"; channel: Channel; draft: boolean }
   | { id: string; kind: "query"; query: Query; draft: boolean };
@@ -85,10 +85,12 @@ export function SidebarNetworks() {
           // on the row has to answer for both.
           unread:
             own.reduce((n, c) => n + c.unread, 0) + talks.reduce((n, q) => n + q.unread, 0),
-          highlights: own.reduce((n, c) => n + c.highlights, 0),
           draft: [...own, ...talks].some((target) =>
             Boolean(drafts[targetKey(id, "name" in target ? target.name : target.nick)]),
           ),
+          attention:
+            own.reduce((n, c) => n + c.highlights, 0) +
+            talks.reduce((n, q) => n + q.unread, 0),
         },
         channels: own.map((channel) => ({
           id: targetKey(id, channel.name),
@@ -423,8 +425,9 @@ function NetworkRow({
       <span className="truncate">{row.network.name}</span>
       <span className="flex-1" />
       {row.collapsed && row.draft && <DraftMark />}
-      {row.collapsed && row.unread > 0 && (
-        <Badge count={row.unread} highlight={row.highlights > 0} />
+      {row.collapsed && row.attention > 0 && <Badge count={row.attention} highlight />}
+      {row.collapsed && row.attention === 0 && row.unread > 0 && (
+        <UnreadMark count={row.unread} />
       )}
     </button>
   );
@@ -500,8 +503,9 @@ function SidebarRow({
         </span>
       )}
       {row.channel.muted && <MutedMark />}
-      {row.channel.unread > 0 && (
-        <Badge count={row.channel.unread} highlight={row.channel.highlights > 0} />
+      {row.channel.highlights > 0 && <Badge count={row.channel.highlights} highlight />}
+      {row.channel.highlights === 0 && row.channel.unread > 0 && (
+        <UnreadMark count={row.channel.unread} />
       )}
     </button>
   );
@@ -757,6 +761,18 @@ function StatusDot({ network }: { network: Network }) {
 
 function Dot({ color }: { color: string }) {
   return <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />;
+}
+
+function UnreadMark({ count }: { count: number }) {
+  const label = `${count} unread message${count === 1 ? "" : "s"}`;
+  return (
+    <span
+      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"
+      role="img"
+      aria-label={label}
+      title={label}
+    />
+  );
 }
 
 function channelSigil(name: string): string {

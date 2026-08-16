@@ -35,6 +35,14 @@ export function SearchIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function CatchUpIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="M2 3h12L9.5 8v4l-3 1V8z" />
+    </svg>
+  );
+}
+
 export function WireIcon({ size = 14 }: IconProps) {
   return (
     <svg {...svgProps(size)}>

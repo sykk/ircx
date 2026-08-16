@@ -249,6 +249,30 @@ describe("Timeline", () => {
     expect(other?.getAttribute("data-highlight")).toBe(null);
   });
 
+  it("filters catch-up to mentions, replies, reactions, and important events", () => {
+    seed([
+      makeMessage({ id: "ordinary", text: "ordinary line" }),
+      makeMessage({ id: "mention", nick: "phrack", text: "sable: look at this" }),
+      makeMessage({ id: "reply", text: "reply line", replyTo: "ordinary" }),
+      makeMessage({
+        id: "reaction",
+        text: "reacted line",
+        reactions: [{ emoji: "thumbs up", nicks: ["phrack"] }],
+      }),
+      makeMessage({ id: "topic", kind: "topic", text: "important topic" }),
+      makeMessage({ id: "join", kind: "join", text: "routine join" }),
+    ]);
+    render(<Timeline view={TEST_VIEW} catchUp />);
+
+    expect(document.querySelector('[data-msgid="ordinary"]')).toBeNull();
+    expect(document.querySelector('[data-msgid="mention"]')).toBeTruthy();
+    expect(screen.getByText("reply line")).toBeTruthy();
+    expect(screen.getByText("reacted line")).toBeTruthy();
+    expect(screen.getByText(/important topic/)).toBeTruthy();
+    expect(screen.queryByText(/routine join/)).toBeNull();
+    expect(ipcMock.loadHistory).not.toHaveBeenCalled();
+  });
+
   /** A tint says the client noticed something. It does not say what, and what
    * it noticed — your name is in here — is the part a colour cannot carry. */
   it("says why a run is marked, and names who addressed you", () => {

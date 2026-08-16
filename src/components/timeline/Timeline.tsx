@@ -5,7 +5,7 @@ import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { probe } from "@/lib/probe";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
-import { targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
+import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
 import { assignGroups } from "./groups";
@@ -24,7 +24,7 @@ export const LOAD_OLDER_PX = 400;
 const STUCK_PX = 48;
 const FLASH_MS = 1_200;
 
-export function Timeline({ view }: { view: ViewId | null }) {
+export function Timeline({ view, catchUp = false }: { view: ViewId | null; catchUp?: boolean }) {
   const pane = useView(view);
 
   if (!pane || !pane.network) {
@@ -44,6 +44,7 @@ export function Timeline({ view }: { view: ViewId | null }) {
       view={pane.id}
       network={pane.network}
       target={pane.target}
+      catchUp={catchUp}
     />
   );
 }
@@ -52,9 +53,10 @@ interface TimelineForProps {
   view: ViewId;
   network: string;
   target: string;
+  catchUp: boolean;
 }
 
-function TimelineFor({ view, network, target }: TimelineForProps) {
+function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const timeline = useTimelineForView(view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const highlightWords = useAppStore((s) => s.highlightWords);
@@ -100,9 +102,14 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     [present],
   );
 
+  const visibleMessages = useMemo(
+    () => catchUp ? messages.filter((message) => isCatchUpMessage(message, highlight, roster)) : messages,
+    [messages, highlight, roster, catchUp],
+  );
+
   const rows = useMemo(
-    () => buildRows(messages, unreadFrom, highlight, groups, roster),
-    [messages, unreadFrom, highlight, groups, roster],
+    () => buildRows(visibleMessages, catchUp ? null : unreadFrom, highlight, groups, roster),
+    [visibleMessages, catchUp, unreadFrom, highlight, groups, roster],
   );
   // A `+reply` names its parent the way the server does, and for a message we
   // sent that is the `msgid` tag its echo carried, not the local id the UI drew
@@ -126,7 +133,10 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
 
   const waiting = waitingBehind !== null && messages[0]?.id === waitingBehind;
   const loadingHere = timeline.loadingOlder && askedForPage;
-  const head = rows.length === 0 ? null : historyHead(timeline, loadError, waiting, loadingHere);
+  const head =
+    catchUp || rows.length === 0
+      ? null
+      : historyHead(timeline, loadError, waiting, loadingHere);
   const headRef = useRef<HTMLDivElement>(null);
   // The head is the first thing in the scroller, so the list starts that far
   // down it. The virtualiser needs the offset to place rows and to scroll to
@@ -231,7 +241,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const { record: recordAnchor, release: releaseAnchor } = usePrependAnchor(
     scrollRef,
     headRef,
-    messages,
+    visibleMessages,
     offsets,
     headPx,
     view,
@@ -245,7 +255,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       probe("follow", { view, rows: rows.length });
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
     }
-  }, [messages, rows.length, virtualizer, view]);
+  }, [visibleMessages, rows.length, virtualizer, view]);
 
   // Through the virtualiser rather than by assigning `scrollTop`: an offset is
   // only a place at the width it was measured at, and a rebuilt pane is a
@@ -400,7 +410,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
   const stalled = useRef(false);
   useEffect(() => {
     const el = scrollRef.current;
-    if (stalled.current || !el) return;
+    if (catchUp || stalled.current || !el) return;
     if (el.scrollHeight - el.clientHeight > LOAD_OLDER_PX) return;
     if (!timeline.hasMore || timeline.loadingOlder) return;
     if (messages.length >= TIMELINE_CAP) return;
@@ -415,7 +425,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
       const now = useAppStore.getState().timelines[key]?.messages.length ?? held;
       if (outcome === "failed" || now === held) stalled.current = true;
     });
-  }, [loadOlder, messages, timeline.hasMore, timeline.loadingOlder, network, target]);
+  }, [loadOlder, messages, timeline.hasMore, timeline.loadingOlder, network, target, catchUp]);
 
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
@@ -452,8 +462,8 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
     useAppStore
       .getState()
       .setViewAnchor(view, top === undefined ? null : (rows[top.index]?.id ?? null));
-    if (el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder, view, rows, virtualizer, recordAnchor]);
+    if (!catchUp && el.scrollTop < LOAD_OLDER_PX) void loadOlder();
+  }, [loadOlder, view, rows, virtualizer, recordAnchor, catchUp]);
 
   const jump = useCallback(
     (msgid: string) => {
@@ -552,7 +562,7 @@ function TimelineFor({ view, network, target }: TimelineForProps) {
               className="grid h-full place-items-center text-[12px]"
               style={{ color: "var(--text-muted)" }}
             >
-              Nothing here yet
+              {catchUp ? "Nothing to catch up on" : "Nothing here yet"}
             </div>
           )}
         </div>
@@ -642,6 +652,22 @@ export interface RowContext {
   onReply: (msgid: string) => void;
   flashId: string | null;
   present: ReadonlySet<string>;
+}
+
+const IMPORTANT_CATCH_UP_KINDS = new Set<ChatMessage["kind"]>(["kick", "topic"]);
+
+export function isCatchUpMessage(
+  message: ChatMessage,
+  highlight: HighlightRule,
+  present?: ReadonlySet<string>,
+): boolean {
+  return (
+    isHighlight(message, highlight, present) ||
+    message.replyTo !== null ||
+    (message.reactions?.length ?? 0) > 0 ||
+    (message.raisedBy?.length ?? 0) > 0 ||
+    IMPORTANT_CATCH_UP_KINDS.has(message.kind)
+  );
 }
 
 /** One row of a conversation, whichever of the five kinds it is. Exported so

@@ -1,9 +1,12 @@
 import { useMemo } from "react";
+import type { CSSProperties } from "react";
 import { Icon } from "@/components/common/Icon";
 import { renderRow } from "@/components/timeline/Timeline";
 import { assignGroups } from "@/components/timeline/groups";
 import { buildRows } from "@/components/timeline/rows";
 import { nickColor } from "@/lib/nickColor";
+import { readingMeasure } from "@/lib/theme";
+import { useAppStore } from "@/store";
 import type { HighlightRule } from "@/store/selectors";
 import {
   PREVIEW_MEMBERS,
@@ -33,6 +36,8 @@ import {
 const PREVIEW_HIGHLIGHT: HighlightRule = { nick: PREVIEW_OWN_NICK, words: [] };
 
 export function Preview() {
+  const measure = useAppStore((s) => s.presentation.measure);
+  const nickColors = useAppStore((s) => s.presentation.nickColors);
   // Once per mount. The script is dated relative to today, and a preview whose
   // date rule changed under the reader at midnight would be a strange thing to
   // have built on purpose.
@@ -59,12 +64,17 @@ export function Preview() {
       onReply: () => {},
       flashId: null,
       present: new Set(PREVIEW_MEMBERS.map((nick) => nick.toLowerCase())),
+      focusedGroup: null,
+      onFocusGroup: () => {},
     }),
     [],
   );
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)]">
+    <div
+      className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-base)]"
+      style={{ "--timeline-reading-measure": readingMeasure(measure) } as CSSProperties}
+    >
       <p className="sr-only">
         A sample conversation, drawn with the appearance settings on this page.
       </p>
@@ -114,7 +124,7 @@ export function Preview() {
                 <li
                   key={nick}
                   className="font-[family-name:var(--font-mono)] text-[12px]"
-                  style={{ color: nickColor(nick) }}
+                  style={{ color: nickColors ? nickColor(nick) : "var(--text-primary)" }}
                 >
                   {nick}
                 </li>

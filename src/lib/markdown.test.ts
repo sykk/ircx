@@ -90,6 +90,29 @@ describe("parseMarkdown", () => {
     expect(blocks[0]).toEqual({ type: "paragraph", spans: [{ type: "text", text: "one\ntwo" }] });
   });
 
+  it("separates paragraphs at blank lines", () => {
+    expect(parseMarkdown("one\n\ntwo")).toEqual([
+      { type: "paragraph", spans: [{ type: "text", text: "one" }] },
+      { type: "paragraph", spans: [{ type: "text", text: "two" }] },
+    ]);
+  });
+
+  it("recognises quotes and simple lists", () => {
+    expect(parseMarkdown("> first\n> second\n\n- one\n- two\n\n1. alpha\n2. beta")).toEqual([
+      { type: "quote", spans: [{ type: "text", text: "first\nsecond" }] },
+      {
+        type: "list",
+        ordered: false,
+        items: [[{ type: "text", text: "one" }], [{ type: "text", text: "two" }]],
+      },
+      {
+        type: "list",
+        ordered: true,
+        items: [[{ type: "text", text: "alpha" }], [{ type: "text", text: "beta" }]],
+      },
+    ]);
+  });
+
   it("drops nothing on an empty message", () => {
     expect(parseMarkdown("")).toEqual([]);
   });

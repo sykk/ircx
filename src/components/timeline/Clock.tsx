@@ -11,6 +11,7 @@ import { formatClock } from "./rows";
  * imports. */
 export function Clock({ at, column = false }: { at: string; column?: boolean }) {
   const format = useAppStore((s) => s.presentation.clock);
+  const emphasis = useAppStore((s) => s.presentation.clockEmphasis);
   const clock = formatClock(at, format);
   if (clock === null) return null;
 
@@ -26,7 +27,7 @@ export function Clock({ at, column = false }: { at: string; column?: boolean }) 
       dateTime={at}
       className="shrink-0 font-[family-name:var(--font-mono)] text-[12px] tabular-nums"
       style={{
-        color: "var(--text-muted)",
+        color: emphasis === "quiet" ? "var(--text-faint)" : "var(--text-muted)",
         minWidth: column && columns !== null ? `${columns}ch` : undefined,
       }}
     >

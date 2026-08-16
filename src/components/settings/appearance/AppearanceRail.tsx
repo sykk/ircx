@@ -9,12 +9,14 @@ import {
 import {
   CLOCK_FORMATS,
   CLOCK_SIDES,
+  CLOCK_EMPHASES,
   DENSITIES,
   MESSAGE_SIZES,
   MONO_FACES,
   PRESETS,
   PROSE_FACES,
   TIMELINE_ALIGNS,
+  TIMELINE_MEASURES,
   ZOOM_LEVELS,
   selectDensity,
   selectOverrides,
@@ -24,12 +26,14 @@ import {
   selectTypography,
   type ClockFormat,
   type ClockSide,
+  type ClockEmphasis,
   type DensityId,
   type MessageSize,
   type Overrides,
   type Presentation,
   type Theme,
   type TimelineAlign,
+  type TimelineMeasure,
   type Typography,
 } from "@/lib/theme";
 import { ACCENTS, accentTokens, type Accent } from "./accents";
@@ -111,11 +115,25 @@ export function AppearanceRail({
           onChange={(clockSide) => selectPresentation({ clockSide })}
         />
 
+        <SelectField<ClockEmphasis>
+          label="Timestamp emphasis"
+          value={presentation.clockEmphasis}
+          options={CLOCK_EMPHASES.map(({ id, name }) => ({ value: id, label: name }))}
+          onChange={(clockEmphasis) => selectPresentation({ clockEmphasis })}
+        />
+
         <SelectField<TimelineAlign>
           label="Conversation position"
           value={presentation.align}
           options={TIMELINE_ALIGNS.map(({ id, name }) => ({ value: id, label: name }))}
           onChange={(align) => selectPresentation({ align })}
+        />
+
+        <SelectField<TimelineMeasure>
+          label="Line width"
+          value={presentation.measure}
+          options={TIMELINE_MEASURES.map(({ id, name }) => ({ value: id, label: name }))}
+          onChange={(measure) => selectPresentation({ measure })}
         />
 
         <CheckField
@@ -144,6 +162,13 @@ export function AppearanceRail({
           hint="<alice> rather than alice, wherever the name is written, as clients that named every line wrote it."
           checked={presentation.nickBrackets}
           onChange={(nickBrackets) => selectPresentation({ nickBrackets })}
+        />
+
+        <CheckField
+          label="Nickname colours"
+          hint="Uses colour to make speakers faster to spot. Names still identify them when this is off."
+          checked={presentation.nickColors}
+          onChange={(nickColors) => selectPresentation({ nickColors })}
         />
       </Group>
 

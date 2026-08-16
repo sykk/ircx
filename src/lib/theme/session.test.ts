@@ -104,6 +104,9 @@ describe("what the timeline draws", () => {
         align: "rail",
         compactSingletons: true,
         messageSize: "15px",
+        measure: "wide",
+        nickColors: false,
+        clockEmphasis: "quiet",
       }),
     );
 
@@ -118,6 +121,9 @@ describe("what the timeline draws", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
   });
 
@@ -134,6 +140,9 @@ describe("what the timeline draws", () => {
         align: "rail",
         compactSingletons: true,
         messageSize: "15px",
+        measure: "wide",
+        nickColors: false,
+        clockEmphasis: "quiet",
       },
     });
 
@@ -148,6 +157,9 @@ describe("what the timeline draws", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -158,6 +170,9 @@ describe("what the timeline draws", () => {
       align: "rail",
       compactSingletons: true,
       messageSize: "15px",
+      measure: "wide",
+      nickColors: false,
+      clockEmphasis: "quiet",
     });
   });
 });

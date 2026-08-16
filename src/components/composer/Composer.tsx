@@ -472,6 +472,8 @@ function ReplyBar({
   msgid: string;
   onClear: () => void;
 }) {
+  const nickColors = useAppStore((s) => s.presentation.nickColors);
+
   return (
     <div
       className="mb-1 flex items-baseline gap-2 overflow-hidden pl-2 font-[family-name:var(--font-ui)] text-[12px]"
@@ -485,7 +487,7 @@ function ReplyBar({
         <>
           <span
             className="shrink-0 font-[family-name:var(--font-mono)] font-semibold"
-            style={{ color: nickColor(parent.sender.nick) }}
+            style={{ color: nickColors ? nickColor(parent.sender.nick) : "var(--text-primary)" }}
           >
             {parent.sender.nick}
           </span>

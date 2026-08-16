@@ -3,10 +3,11 @@ import { nickColor } from "@/lib/nickColor";
 
 interface MemberRowProps {
   member: Member;
+  onSelect: (member: Member) => void;
   onMenu: (member: Member, x: number, y: number) => void;
 }
 
-export function MemberRow({ member, onMenu }: MemberRowProps) {
+export function MemberRow({ member, onSelect, onMenu }: MemberRowProps) {
   const away = member.away !== null;
   const awayReason = member.away === null || member.away === "" ? "away" : member.away;
   /** Without `multi-prefix` this is all the server sent; the rest is in the
@@ -20,11 +21,17 @@ export function MemberRow({ member, onMenu }: MemberRowProps) {
       aria-label={member.nick}
       aria-haspopup="menu"
       data-member={member.nick}
+      onClick={() => onSelect(member)}
       onContextMenu={(event) => {
         event.preventDefault();
         onMenu(member, event.clientX, event.clientY);
       }}
       onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(member);
+          return;
+        }
         if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
         event.preventDefault();
         const rect = event.currentTarget.getBoundingClientRect();

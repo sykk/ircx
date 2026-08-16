@@ -8,6 +8,8 @@ import { targetKey, useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { loadSavedSearches, removeSavedSearch, saveSearch } from "@/lib/savedSearches";
+import { Icon } from "@/components/common/Icon";
 
 const HIT_LIMIT = 50;
 const CONTEXT_LIMIT = 200;
@@ -35,6 +37,7 @@ function Search() {
 
   const active = useActiveTarget();
   const [query, setQuery] = useState("");
+  const [saved, setSaved] = useState(loadSavedSearches);
   const [mode, setMode] = useState<"search" | "bookmarks">("search");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -162,18 +165,46 @@ function Search() {
             <button key={choice} type="button" aria-pressed={mode === choice} onClick={() => { setMode(choice); setHits([]); setSelected(0); }} className={clsx("rounded-t-[var(--radius-sm)] px-3 py-1.5 text-[12px] capitalize", mode === choice ? "bg-[var(--surface-active)] text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]")}>{choice}</button>
           ))}
         </div>
-        {mode === "search" && <input
-          autoFocus
-          type="search"
-          aria-label={target ? `Search ${target}` : "Search history"}
-          placeholder={target ? `Search ${target}` : "Search every conversation"}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setSelected(0);
-          }}
-          className="selectable border-b border-[var(--border-subtle)] bg-transparent px-4 py-3 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-        />}
+        {mode === "search" && (
+          <>
+            <div className="flex border-b border-[var(--border-subtle)]">
+              <input
+                autoFocus
+                type="search"
+                aria-label={target ? `Search ${target}` : "Search history"}
+                placeholder={target ? `Search ${target}` : "Search every conversation"}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSelected(0);
+                }}
+                className="selectable min-w-0 flex-1 bg-transparent px-4 py-3 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+              />
+              <button
+                type="button"
+                disabled={text === "" || saved.includes(text)}
+                onClick={() => setSaved(saveSearch(text))}
+                className="px-4 text-[12px] text-[var(--accent)] disabled:text-[var(--text-muted)]"
+              >
+                Save
+              </button>
+            </div>
+            {saved.length > 0 && (
+              <div aria-label="Saved searches" className="flex flex-wrap gap-1.5 border-b border-[var(--border-subtle)] px-3 py-2">
+                {saved.map((held) => (
+                  <span key={held} className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)]">
+                    <button type="button" onClick={() => { setQuery(held); setSelected(0); }} className="max-w-48 truncate px-2 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">
+                      {held}
+                    </button>
+                    <button type="button" aria-label={`Remove saved search ${held}`} onClick={() => setSaved(removeSavedSearch(held))} className="border-l border-[var(--border-subtle)] px-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]">
+                      <Icon name="close" size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
         <ul role="listbox" aria-label="Search results" className="overflow-y-auto py-1">
           {shown.map((hit, i) => (

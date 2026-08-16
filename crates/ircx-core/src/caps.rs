@@ -16,6 +16,7 @@ pub const SUPPORTED: &[&str] = &[
     "multi-prefix",
     "sasl",
     "server-time",
+    "standard-replies",
     "userhost-in-names",
 ];
 
@@ -141,11 +142,13 @@ mod tests {
     #[test]
     fn only_the_intersection_is_requested() {
         let mut caps = Caps::default();
-        caps.record_available("sasl=PLAIN multi-prefix vendor/private away-notify");
+        caps.record_available(
+            "sasl=PLAIN multi-prefix vendor/private away-notify standard-replies",
+        );
 
         assert_eq!(
             caps.request_lines(),
-            vec!["CAP REQ :sasl multi-prefix away-notify"]
+            vec!["CAP REQ :sasl multi-prefix away-notify standard-replies"]
         );
         assert_eq!(caps.value("sasl"), Some("PLAIN"));
         assert!(caps.negotiating());

@@ -9,6 +9,8 @@ import { MessageRow } from "./MessageRow";
 import { failureRuns, writesOwnNick } from "./rows";
 
 const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
+export const TIMELINE_BLOCK_MAX =
+  "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)";
 /** The same ladder with the spine's two columns closed up, for a reader who
  * turned it off: the room a spine would have taken goes back to the prose
  * rather than standing empty at the rail. */
@@ -59,7 +61,7 @@ export function Block({
       className="grid"
       style={{
         width: "100%",
-        maxWidth: "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)",
+        maxWidth: TIMELINE_BLOCK_MAX,
         marginInline: align === "center" ? "auto" : undefined,
         opacity: dimmed ? "var(--disabled-opacity)" : undefined,
         gridTemplateColumns: drawn ? LADDER : FLAT,
@@ -308,12 +310,12 @@ export function MessageBlock({
           style={{ gridTemplateColumns: "max-content minmax(0, 1fr)", columnGap: "8px" }}
         >
           <Clock at={head.timestamp} column />
-          {name}
+          <div data-ui="message-head">{name}</div>
           <div style={{ gridColumn: 2 }}>{rows}</div>
         </div>
       ) : (
         <>
-          <div className="flex items-baseline gap-2">
+          <div data-ui="message-head" className="flex items-baseline gap-2">
             {name}
             <Clock at={head.timestamp} />
           </div>

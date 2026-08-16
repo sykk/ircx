@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { probe } from "@/lib/probe";
+import { nickColor } from "@/lib/nickColor";
 import { displayChord, DEFAULT_BINDINGS, type ActionId } from "@/lib/keybindings";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { readingMeasure } from "@/lib/theme";
@@ -11,8 +12,9 @@ import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store"
 import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
+import { Clock } from "./Clock";
 import { assignGroups } from "./groups";
-import { MessageBlock } from "./MessageBlock";
+import { MessageBlock, TIMELINE_BLOCK_MAX } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { buildRows, rowIndexOfMessage, rowMessages, type TimelineRow } from "./rows";
@@ -75,6 +77,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [stickyAuthor, setStickyAuthor] = useState<ChatMessage | null>(null);
   const [focusedGroup, setFocusedGroup] = useState<string | null>(null);
   const requestedJump = useAppStore((s) => s.messageJump[view] ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -451,6 +454,28 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     });
   }, [loadOlder, messages, timeline.hasMore, timeline.loadingOlder, network, target, catchUp]);
 
+  const updateStickyAuthor = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (scroller === null) return;
+    const top = scroller.getBoundingClientRect().top;
+    const drawn = scroller.querySelectorAll<HTMLElement>("[data-index]");
+    let next: ChatMessage | null = null;
+
+    for (const element of drawn) {
+      const box = element.getBoundingClientRect();
+      if (box.top > top || box.bottom <= top) continue;
+      const index = Number(element.dataset.index);
+      const row = rows[index];
+      const head = element.querySelector<HTMLElement>("[data-ui='message-head']");
+      if (row?.kind === "block" && head !== null && head.getBoundingClientRect().bottom <= top) {
+        next = row.messages[0] ?? null;
+      }
+      break;
+    }
+
+    setStickyAuthor((current) => (current?.id === next?.id ? current : next));
+  }, [rows]);
+
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -489,7 +514,8 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
       .getState()
       .setViewAnchor(view, top === undefined ? null : (rows[top.index]?.id ?? null));
     if (!catchUp && el.scrollTop < LOAD_OLDER_PX) void loadOlder();
-  }, [loadOlder, view, rows, virtualizer, recordAnchor, catchUp, seam]);
+    updateStickyAuthor();
+  }, [loadOlder, view, rows, virtualizer, recordAnchor, catchUp, seam, updateStickyAuthor]);
 
   const jump = useCallback(
     (msgid: string) => {
@@ -649,6 +675,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
             </div>
           )}
         </div>
+        {stickyAuthor !== null && <StickyAuthor message={stickyAuthor} />}
         {focusedGroup !== null && (
           <button
             type="button"
@@ -678,6 +705,46 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
       </div>
 
       <TypingIndicator network={network} target={target} />
+    </div>
+  );
+}
+
+function StickyAuthor({ message }: { message: ChatMessage }) {
+  const { align, clockSide, nickBrackets, nickColors, spine } = useAppStore(
+    (s) => s.presentation,
+  );
+  const name = nickBrackets ? `<${message.sender.nick}>` : message.sender.nick;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute top-0 left-0 z-10 w-full bg-[var(--surface-base)]"
+      data-ui="sticky-author"
+    >
+      <div
+        className="grid"
+        style={{
+          width: "100%",
+          maxWidth: TIMELINE_BLOCK_MAX,
+          marginInline: align === "center" ? "auto" : undefined,
+          gridTemplateColumns: spine
+            ? "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)"
+            : "0 0 minmax(0, 1fr)",
+          paddingLeft: "var(--timeline-rail-pad)",
+          paddingRight: "16px",
+        }}
+      >
+        <div className="flex items-baseline gap-2" style={{ gridColumn: 3 }}>
+          {clockSide === "left" && <Clock at={message.timestamp} />}
+          <span
+            className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
+            style={{ color: nickColors ? nickColor(message.sender.nick) : "var(--text-primary)" }}
+          >
+            {name}
+          </span>
+          {clockSide === "right" && <Clock at={message.timestamp} />}
+        </div>
+      </div>
     </div>
   );
 }

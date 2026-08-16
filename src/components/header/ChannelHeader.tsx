@@ -98,7 +98,11 @@ export function ChannelHeader({
           {onCatchUp && (
             <HeaderButton
               label="Catch up"
-              title="Show mentions, replies, reactions, and important events"
+              title={
+                catchUp
+                  ? "Return to all messages"
+                  : "Show unread mentions, replies, reactions, and important events"
+              }
               pressed={catchUp}
               onClick={onCatchUp}
             >

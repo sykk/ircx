@@ -122,8 +122,8 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   );
 
   const visibleMessages = useMemo(
-    () => catchUp ? messages.filter((message) => isCatchUpMessage(message, highlight, roster)) : messages,
-    [messages, highlight, roster, catchUp],
+    () => catchUp ? catchUpMessages(messages, unreadFrom, highlight, roster) : messages,
+    [messages, unreadFrom, highlight, roster, catchUp],
   );
 
   const rows = useMemo(
@@ -893,6 +893,29 @@ export interface RowContext {
 }
 
 const IMPORTANT_CATCH_UP_KINDS = new Set<ChatMessage["kind"]>(["kick", "topic"]);
+
+export function catchUpMessages(
+  messages: readonly ChatMessage[],
+  unreadFrom: string | null,
+  highlight: HighlightRule,
+  present?: ReadonlySet<string>,
+): ChatMessage[] {
+  if (unreadFrom === null) return [];
+  const unread = messages.findIndex((message) => message.id === unreadFrom);
+  if (unread === -1) return [];
+
+  const included = new Set<number>();
+  for (let index = unread; index < messages.length; index += 1) {
+    if (!isCatchUpMessage(messages[index]!, highlight, present)) continue;
+    if (index > 0) included.add(index - 1);
+    included.add(index);
+    if (index + 1 < messages.length) included.add(index + 1);
+  }
+
+  return [...included]
+    .sort((a, b) => a - b)
+    .map((index) => messages[index]!);
+}
 
 export function isCatchUpMessage(
   message: ChatMessage,

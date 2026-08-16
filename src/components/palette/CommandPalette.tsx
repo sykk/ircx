@@ -189,6 +189,9 @@ function Palette() {
       case "search":
         store.toggleSearch(true);
         break;
+      case "sidebarFilter":
+        store.setSidebarFilter(action.filter);
+        break;
       case "unread": {
         const view = store.activeViewId ? store.views[store.activeViewId] : undefined;
         const current = view?.network ? targetKey(view.network, view.target) : null;

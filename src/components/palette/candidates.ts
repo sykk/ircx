@@ -4,7 +4,7 @@ import { DEFAULT_BINDINGS, displayChord, type ActionId } from "@/lib/keybindings
 import { COMMANDS } from "@/components/composer/commands";
 import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
 import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
-import type { AppState, SplitDirection } from "@/store/types";
+import type { AppState, SidebarFilter, SplitDirection } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 
 export type CandidateKind =
@@ -30,6 +30,7 @@ export type CandidateAction =
   | { type: "split"; direction: SplitDirection }
   | { type: "closePane" }
   | { type: "search" }
+  | { type: "sidebarFilter"; filter: SidebarFilter }
   | { type: "unread"; direction: 1 | -1 }
   | { type: "connect"; network: string }
   | { type: "disconnect"; network: string }
@@ -388,6 +389,26 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Search this conversation",
     detail: "Search the current target's history",
     action: { type: "search" },
+  },
+  {
+    label: "Sidebar: All conversations",
+    detail: "Show every channel and direct message",
+    action: { type: "sidebarFilter", filter: null },
+  },
+  {
+    label: "Sidebar: Unread conversations",
+    detail: "Show channels and direct messages with unread messages",
+    action: { type: "sidebarFilter", filter: "unread" },
+  },
+  {
+    label: "Sidebar: Mentions",
+    detail: "Show highlighted channels and unread direct messages",
+    action: { type: "sidebarFilter", filter: "mentions" },
+  },
+  {
+    label: "Sidebar: Drafts",
+    detail: "Show conversations with unsent text",
+    action: { type: "sidebarFilter", filter: "drafts" },
   },
   {
     label: "Plugins",

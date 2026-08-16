@@ -133,6 +133,50 @@ describe("SidebarNetworks", () => {
     expect(screen.getAllByTitle("Unsent draft")).toHaveLength(2);
   });
 
+  it("filters conversations and keeps each network visible", () => {
+    seedStore(
+      [
+        makeNetwork("libera", { name: "Libera.Chat" }),
+        makeNetwork("oftc", { name: "OFTC" }),
+      ],
+      [
+        makeChannel("libera", "#quiet", { unread: 4 }),
+        makeChannel("libera", "#loud", { unread: 4, highlights: 2 }),
+        makeChannel("oftc", "#read"),
+      ],
+      [makeQuery("libera", "phrack", { unread: 1 })],
+    );
+    useAppStore.getState().setSidebarFilter("mentions");
+    render(<SidebarNetworks />);
+
+    expect(screen.getByText("Mentions")).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "#loud" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+    expect(screen.queryByRole("treeitem", { name: "#quiet" })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: "#read" })).toBeNull();
+    expect(screen.getByRole("treeitem", { name: /^OFTC,/ })).toBeTruthy();
+    expect(screen.getByText("No matching conversations")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear sidebar filter" }));
+    expect(screen.getByRole("treeitem", { name: "#quiet" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "#read" })).toBeTruthy();
+  });
+
+  it("filters to conversations with drafts", () => {
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#draft"), makeChannel("libera", "#read")],
+      [makeQuery("libera", "phrack")],
+    );
+    useAppStore.getState().setDraftPresence("libera", "#draft", true);
+    useAppStore.getState().setSidebarFilter("drafts");
+    render(<SidebarNetworks />);
+
+    expect(screen.getByRole("treeitem", { name: "#draft, draft" })).toBeTruthy();
+    expect(screen.queryByRole("treeitem", { name: "#read" })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: "phrack" })).toBeNull();
+  });
+
   it("keeps the network order the store gives it", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);

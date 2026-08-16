@@ -51,6 +51,7 @@ export interface ConsoleInput {
 
 /** `row` puts the two panes side by side, `column` stacks them. */
 export type SplitDirection = "row" | "column";
+export type SidebarFilter = "unread" | "mentions" | "drafts" | null;
 
 /**
  * How the panes divide the window. A tree rather than a list of panes with one
@@ -248,6 +249,7 @@ export interface AppState {
   sidebarWidth: number;
   /** Fits more network and conversation rows without changing their type. */
   sidebarCompact: boolean;
+  sidebarFilter: SidebarFilter;
   pinnedTargets: TargetKey[];
   /** What somebody dragged the member list to, or null while it is still
    * sizing itself to the longest name in it. One width for every roster: a

@@ -8,6 +8,7 @@ import { OverflowIcon } from "@/components/header/icons";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey, type TargetKey } from "@/store/keys";
 import { useActiveTarget } from "@/store/selectors";
+import type { SidebarFilter } from "@/store/types";
 import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { connectionColor, connectionDetail, connectionLabel } from "./connection";
 
@@ -60,6 +61,7 @@ export function SidebarNetworks() {
   const drafts = useAppStore((s) => s.drafts);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const compact = useAppStore((s) => s.sidebarCompact);
+  const filter = useAppStore((s) => s.sidebarFilter);
   const pinnedTargets = useAppStore((s) => s.pinnedTargets);
   const active = useActiveTarget();
   const showTarget = useAppStore((s) => s.showTarget);
@@ -67,6 +69,7 @@ export function SidebarNetworks() {
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
   const togglePinnedTarget = useAppStore((s) => s.togglePinnedTarget);
+  const setSidebarFilter = useAppStore((s) => s.setSidebarFilter);
 
   // The store's list selectors build a fresh array per call, which React's
   // useSyncExternalStore treats as a changed snapshot; deriving here keeps the
@@ -79,14 +82,22 @@ export function SidebarNetworks() {
       if (!network) continue;
 
       const own = Object.values(channels)
-        .filter((c) => c.network === id)
+        .filter(
+          (c) =>
+            c.network === id &&
+            matchesSidebarFilter(filter, c.unread, c.highlights, drafts[targetKey(id, c.name)]),
+        )
         .sort((a, b) => {
           const aPinned = pinned.has(targetKey(id, a.name));
           const bPinned = pinned.has(targetKey(id, b.name));
           return Number(bPinned) - Number(aPinned) || byName(a.name, b.name);
         });
       const talks = Object.values(queries)
-        .filter((q) => q.network === id)
+        .filter(
+          (q) =>
+            q.network === id &&
+            matchesSidebarFilter(filter, q.unread, q.unread, drafts[targetKey(id, q.nick)]),
+        )
         .sort((a, b) => {
           const aPinned = pinned.has(targetKey(id, a.nick));
           const bPinned = pinned.has(targetKey(id, b.nick));
@@ -127,7 +138,7 @@ export function SidebarNetworks() {
       });
     }
     return out;
-  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks, pinnedTargets]);
+  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks, pinnedTargets, filter]);
 
   /** The panels flattened into what the arrow keys walk. */
   const rows = useMemo<Row[]>(
@@ -357,6 +368,7 @@ export function SidebarNetworks() {
           onClose={() => void closeConversation(conversation)}
         />
       </div>
+
     );
   }
 
@@ -379,6 +391,21 @@ export function SidebarNetworks() {
           <Icon name="plus" size={12} />
         </button>
       </div>
+
+      {filter !== null && (
+        <div className="flex items-center gap-1 px-3 pb-1 text-[11px] text-[var(--text-muted)]">
+          <span>{SIDEBAR_FILTER_LABELS[filter]}</span>
+          <button
+            type="button"
+            aria-label="Clear sidebar filter"
+            title="Show all conversations"
+            onClick={() => setSidebarFilter(null)}
+            className="rounded-[var(--radius-sm)] p-0.5 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          >
+            <Icon name="close" size={10} />
+          </button>
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">
@@ -413,6 +440,11 @@ export function SidebarNetworks() {
                       />
                     )}
                     {panel.queries.map(renderRow)}
+                    {filter !== null && panel.channels.length === 0 && panel.queries.length === 0 && (
+                      <p className="px-3 py-1 text-[11px] text-[var(--text-faint)]">
+                        No matching conversations
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -422,6 +454,24 @@ export function SidebarNetworks() {
       )}
     </nav>
   );
+}
+
+const SIDEBAR_FILTER_LABELS: Record<Exclude<SidebarFilter, null>, string> = {
+  unread: "Unread",
+  mentions: "Mentions",
+  drafts: "Drafts",
+};
+
+function matchesSidebarFilter(
+  filter: SidebarFilter,
+  unread: number,
+  mentions: number,
+  draft: boolean | undefined,
+): boolean {
+  if (filter === "unread") return unread > 0;
+  if (filter === "mentions") return mentions > 0;
+  if (filter === "drafts") return draft === true;
+  return true;
 }
 
 function SectionLabel({ children }: { children: string }) {

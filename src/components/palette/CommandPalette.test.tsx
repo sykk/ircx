@@ -147,6 +147,16 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
+  it("sets a sidebar focus mode", () => {
+    render(<CommandPalette />);
+    type("Sidebar: Mentions");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().sidebarFilter).toBe("mentions");
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("marks the matched characters in the result", () => {
     const { container } = render(<CommandPalette />);
     type("ctfo");

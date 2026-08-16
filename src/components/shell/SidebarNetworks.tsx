@@ -9,7 +9,7 @@ import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useActiveTarget } from "@/store/selectors";
 import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
-import { connectionColor, connectionLabel } from "./connection";
+import { connectionColor, connectionDetail, connectionLabel } from "./connection";
 
 type Row =
   | {
@@ -222,6 +222,16 @@ export function SidebarNetworks() {
     }
   }
 
+  async function reconnect(network: Network) {
+    setMenuFor(null);
+    try {
+      await ipc.disconnectNetwork(network.id);
+      await ipc.connectNetwork(network.id);
+    } catch (reason) {
+      console.warn("ircx could not reconnect", network.name, reason);
+    }
+  }
+
   function isSelected(row: Row): boolean {
     if (!active) return false;
     if (row.kind === "network") {
@@ -265,6 +275,7 @@ export function SidebarNetworks() {
             onOpenChange={(open) => setMenuFor(open ? row.network.id : null)}
             onCollapse={() => toggleNetworkCollapsed(row.network.id)}
             onConnection={() => void toggleConnection(row.network)}
+            onReconnect={() => void reconnect(row.network)}
             onRawLog={() => openConsole(row.network.id, true)}
             onSettings={() => openSetup(row.network.id)}
           />
@@ -406,6 +417,7 @@ function NetworkRow({
   onActivate,
   registerButton,
 }: RowProps & { row: Extract<Row, { kind: "network" }> }) {
+  const detail = connectionDetail(row.network.status);
   return (
     <button
       data-row-id={row.id}
@@ -417,12 +429,24 @@ function NetworkRow({
       aria-expanded={!row.collapsed}
       aria-level={1}
       aria-selected={selected}
-      aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}`}
+      aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}${detail ? `, ${detail}` : ""}`}
       title={`Server messages from ${row.network.name}`}
       className="flex h-8 min-w-0 flex-1 items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)]"
     >
       <StatusDot network={row.network} />
       <span className="truncate">{row.network.name}</span>
+      {detail && (
+        <span
+          className={clsx(
+            "min-w-0 truncate text-[10px] font-normal",
+            row.network.status.state === "failed"
+              ? "text-[var(--danger)]"
+              : "text-[var(--text-muted)]",
+          )}
+        >
+          {detail}
+        </span>
+      )}
       <span className="flex-1" />
       {row.collapsed && row.draft && <DraftMark />}
       {row.collapsed && row.attention > 0 && <Badge count={row.attention} highlight />}
@@ -552,6 +576,7 @@ function NetworkMenu({
   onOpenChange,
   onCollapse,
   onConnection,
+  onReconnect,
   onRawLog,
   onSettings,
 }: {
@@ -564,6 +589,7 @@ function NetworkMenu({
   onOpenChange: (open: boolean) => void;
   onCollapse: () => void;
   onConnection: () => void;
+  onReconnect: () => void;
   onRawLog: () => void;
   onSettings: () => void;
 }) {
@@ -634,6 +660,9 @@ function NetworkMenu({
           <MenuItem onClick={choose(onConnection)}>
             {network.status.state === "disconnected" ? "Connect" : "Disconnect"}
           </MenuItem>
+          {(network.status.state === "failed" || network.status.state === "reconnecting") && (
+            <MenuItem onClick={choose(onReconnect)}>Reconnect now</MenuItem>
+          )}
           <MenuItem onClick={choose(onRawLog)}>Raw protocol log</MenuItem>
           <MenuItem onClick={choose(onSettings)}>{network.name} settings</MenuItem>
         </div>

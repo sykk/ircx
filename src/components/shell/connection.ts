@@ -41,3 +41,14 @@ export function connectionLabel(status: ConnectionStatus): string {
       return "Disconnected";
   }
 }
+
+export function connectionDetail(status: ConnectionStatus): string | null {
+  switch (status.state) {
+    case "reconnecting":
+      return `Retry in ${status.detail.inSeconds}s`;
+    case "failed":
+      return `Retry failed: ${status.detail.message}`;
+    default:
+      return null;
+  }
+}

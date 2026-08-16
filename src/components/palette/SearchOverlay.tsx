@@ -4,12 +4,13 @@ import { formatClock } from "@/components/timeline/rows";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { useAppStore } from "@/store";
-import { useActiveTarget } from "@/store/selectors";
+import { targetKey, useActiveTarget } from "@/store/selectors";
 import type { SearchHit } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 const HIT_LIMIT = 50;
+const CONTEXT_LIMIT = 200;
 const DEBOUNCE_MS = 150;
 /**
  * One character is a query the archive can now answer, in any script. It was
@@ -75,16 +76,29 @@ function Search() {
 
   const close = () => useAppStore.getState().toggleSearch(false);
 
-  // Choosing a hit lands at the bottom of the conversation rather than at the
-  // message: scroll-to-hit needs a timeline that can seek a msgid it may not
-  // have loaded, which does not exist yet.
-  function jump(index: number) {
+  async function jump(index: number) {
     const hit = shown[index];
     if (!hit) return;
-    useAppStore
-      .getState()
-      .showTarget({ network: hit.message.network, target: hit.message.target });
-    close();
+    try {
+      const messages = await ipc.loadHistoryAround(
+        hit.message.network,
+        hit.message.target,
+        hit.message.id,
+        CONTEXT_LIMIT,
+      );
+      if (!messages.some((message) => message.id === hit.message.id)) {
+        setError("That archived message is no longer available.");
+        return;
+      }
+      const store = useAppStore.getState();
+      store.replaceHistory(targetKey(hit.message.network, hit.message.target), messages);
+      store.showTarget({ network: hit.message.network, target: hit.message.target });
+      const view = useAppStore.getState().activeViewId;
+      if (view) useAppStore.getState().setMessageJump(view, hit.message.id);
+      close();
+    } catch (reason) {
+      setError(String(reason));
+    }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -114,7 +128,7 @@ function Search() {
         move(-1);
         break;
       case "Enter":
-        jump(selected);
+        void jump(selected);
         break;
       case "Escape":
         close();
@@ -161,7 +175,7 @@ function Search() {
               ref={(el) => {
                 if (i === selected) el?.scrollIntoView?.({ block: "nearest" });
               }}
-              onClick={() => jump(i)}
+              onClick={() => void jump(i)}
               className={clsx(
                 "mx-1 cursor-pointer rounded-[var(--radius-sm)] px-3 py-1.5",
                 i === selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",

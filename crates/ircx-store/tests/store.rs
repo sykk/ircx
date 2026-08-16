@@ -436,6 +436,40 @@ fn search_marks_the_match_and_filters_by_target() {
 }
 
 #[test]
+fn history_around_centers_the_named_archived_message() {
+    let store = Store::open_in_memory().unwrap();
+    let messages = (0..7)
+        .map(|index| {
+            message(
+                &format!("message-{index}"),
+                "#ircx",
+                &format!("2026-01-01T00:00:0{index}Z"),
+                &format!("line {index}"),
+            )
+        })
+        .collect::<Vec<_>>();
+    store.append_messages(&messages).unwrap();
+
+    let window = store
+        .load_history_around("libera", "#ircx", "message-3", 5)
+        .unwrap();
+
+    assert_eq!(
+        window
+            .iter()
+            .map(|message| message.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "message-1",
+            "message-2",
+            "message-3",
+            "message-4",
+            "message-5"
+        ]
+    );
+}
+
+#[test]
 fn search_does_not_see_deleted_messages() {
     let store = Store::open_in_memory().unwrap();
     store

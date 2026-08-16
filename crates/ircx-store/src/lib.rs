@@ -334,6 +334,64 @@ impl Store {
         Ok(page)
     }
 
+    pub fn load_history_around(
+        &self,
+        network: &str,
+        target: &str,
+        message_id: &str,
+        limit: u32,
+    ) -> Result<Vec<ChatMessage>, StoreError> {
+        let conn = self.reading();
+        let pivot: Option<(String, i64)> = conn
+            .query_row(
+                "SELECT timestamp, id FROM messages
+                 WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3",
+                params![network, target, message_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((timestamp, row_id)) = pivot else {
+            return Ok(Vec::new());
+        };
+
+        let before_limit = limit / 2 + 1;
+        let after_limit = limit.saturating_sub(before_limit);
+        let before_sql = format!(
+            "SELECT {columns} FROM messages m
+             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+               AND (m.timestamp < ?3 OR (m.timestamp = ?3 AND m.id <= ?4))
+             ORDER BY m.timestamp DESC, m.id DESC LIMIT ?5",
+            columns = message::COLUMNS,
+        );
+        let after_sql = format!(
+            "SELECT {columns} FROM messages m
+             WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+               AND (m.timestamp > ?3 OR (m.timestamp = ?3 AND m.id > ?4))
+             ORDER BY m.timestamp, m.id LIMIT ?5",
+            columns = message::COLUMNS,
+        );
+
+        let mut before_stmt = conn.prepare(&before_sql)?;
+        let mut before_rows =
+            before_stmt.query(params![network, target, timestamp, row_id, before_limit])?;
+        let mut messages = Vec::new();
+        while let Some(row) = before_rows.next()? {
+            messages.push(message::from_row(row)?);
+        }
+        messages.reverse();
+
+        let mut after_stmt = conn.prepare(&after_sql)?;
+        let mut after_rows =
+            after_stmt.query(params![network, target, timestamp, row_id, after_limit])?;
+        while let Some(row) = after_rows.next()? {
+            messages.push(message::from_row(row)?);
+        }
+        message::attach_reactions(&conn, &mut messages)?;
+        message::attach_annotations(&conn, &mut messages)?;
+        message::attach_raised(&conn, &mut messages)?;
+        Ok(messages)
+    }
+
     /// Records one reaction, or takes it back. `msgid` need not be a message
     /// the archive holds: the row waits for one, which is what lets a reaction
     /// to something said before this client connected survive.

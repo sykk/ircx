@@ -158,6 +158,8 @@ export interface AppState {
    * written every scroll frame, and a write there re-renders everything
    * subscribed to the view. Read via `getState`. */
   viewAnchor: Record<ViewId, string | null>;
+  /** Message a pane should center once it is present in the rendered window. */
+  messageJump: Record<ViewId, string>;
   /** What is typed into each console pane's command box, and the refusal under
    * it. Here for the same reason as `viewAnchor`: a console saves no draft, so
    * a pane rebuilt by a change to the layout's shape (#308) came back having

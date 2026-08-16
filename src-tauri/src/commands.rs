@@ -155,6 +155,19 @@ pub async fn load_history(
     app.store().load_history(&req).map_err(describe)
 }
 
+#[tauri::command]
+pub async fn load_history_around(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: TargetName,
+    message_id: String,
+    limit: u32,
+) -> Result<Vec<ChatMessage>, String> {
+    app.store()
+        .load_history_around(&network, &target, &message_id, limit)
+        .map_err(describe)
+}
+
 /// The page behind what the archive holds, from the server. Answers whether
 /// another may be behind it, or that the server has not said yet; the messages
 /// arrive as `messagesAppended` on their way through the archive, the same as

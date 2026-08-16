@@ -73,6 +73,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,
   );
   const [flashId, setFlashId] = useState<string | null>(null);
+  const requestedJump = useAppStore((s) => s.messageJump[view] ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // The message the server was asked the page behind, when that ask passed its
   // deadline with no answer. The request is still out and the page may still
@@ -542,6 +543,12 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     placedAtUnread.current = true;
     virtualizer.scrollToIndex(unreadAt, { align: "start" });
   }, [unreadAt, virtualizer]);
+
+  useLayoutEffect(() => {
+    if (requestedJump === null || !byId.has(requestedJump)) return;
+    jump(requestedJump);
+    useAppStore.getState().setMessageJump(view, null);
+  }, [requestedJump, byId, jump, view]);
   useEffect(() => {
     if (!flashId) return;
     const id = setTimeout(() => setFlashId(null), FLASH_MS);

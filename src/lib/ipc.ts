@@ -142,6 +142,8 @@ export const ipc = {
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
 
   loadHistory: (req: HistoryRequest) => invoke<ChatMessage[]>("load_history", { req }),
+  loadHistoryAround: (network: string, target: string, messageId: string, limit: number) =>
+    invoke<ChatMessage[]>("load_history_around", { network, target, messageId, limit }),
   /** What the server holds behind the archive, asked for once the archive has
    * run out. `from` and `msgid` name the oldest message the window holds, and
    * the msgid is the server's own — a locally minted one names nothing it can
@@ -309,4 +311,3 @@ export function onIrcxEvent(handler: (events: IrcxEvent[]) => void) {
 export function onThemesChanged(handler: (themes: ThemeSource[]) => void) {
   return listen<ThemeSource[]>(THEMES_CHANNEL, (e) => handler(e.payload));
 }
-

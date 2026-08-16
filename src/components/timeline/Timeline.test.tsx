@@ -1567,6 +1567,23 @@ describe("Timeline", () => {
     expect(deep).not.toBe(shallow);
   });
 
+  it("offers a direct return to the live edge while reading history", () => {
+    seed(makeConversation({ count: 400, seed: 7 }));
+    render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    scroller.scrollTop = 4_000;
+    fireEvent.scroll(scroller);
+
+    const button = screen.getByRole("button", { name: "Jump to latest" });
+    letItScroll(scroller);
+    fireEvent.click(button);
+
+    expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
+    expect(useAppStore.getState().viewAnchor[TEST_VIEW]).toBe(null);
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+  });
+
   it("comes back to the row it recorded rather than to the top", () => {
     seed(makeConversation({ count: 400, seed: 7 }));
     const { unmount } = render(<Timeline view={TEST_VIEW} />);

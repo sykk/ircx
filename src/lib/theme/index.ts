@@ -40,10 +40,12 @@ export {
   selectOverrides,
   selectPresentation,
   selectPreset,
+  selectSidebarCompact,
   selectTheme,
   selectTypography,
   startThemes,
 } from "./session";
+export { storeSidebarCompact, storedSidebarCompact } from "./sidebar";
 export { TOKEN_CATALOGUE, TOKEN_GROUPS } from "./tokens";
 export type { TokenKind, TokenSpec } from "./tokens";
 export {

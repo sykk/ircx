@@ -175,6 +175,7 @@ describe("the appearance the last run left", () => {
     localStorage.setItem("ircx.density", "compact");
     localStorage.setItem("ircx.typography", JSON.stringify({ prose: "georgia", mono: "courier", zoom: 1.25 }));
     localStorage.setItem("ircx.presentation", JSON.stringify({ ...storedPresentation(), spine: false }));
+    localStorage.setItem("ircx.sidebar.compact", "true");
     localStorage.setItem(
       "ircx.theme.overrides",
       JSON.stringify({ "ircx-light": { "--accent": "#3fb950" } }),
@@ -189,6 +190,7 @@ describe("the appearance the last run left", () => {
     expect(style.getPropertyValue("--font-ui")).toContain("Georgia");
     expect(style.getPropertyValue("--font-mono")).toContain("Courier");
     expect(useAppStore.getState().presentation.spine).toBe(false);
+    expect(useAppStore.getState().sidebarCompact).toBe(true);
     expect(zoomMock).toHaveBeenCalledWith(1.25);
   });
 

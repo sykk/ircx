@@ -18,6 +18,7 @@ import {
   selectOverrides,
   selectPresentation,
   selectPreset,
+  selectSidebarCompact,
   selectTypography,
   type ClockFormat,
   type ClockSide,
@@ -44,6 +45,7 @@ export function AppearanceRail({
   themeId,
   overrides,
   density,
+  sidebarCompact,
   presentation,
   typography,
   onEditTokens,
@@ -53,6 +55,7 @@ export function AppearanceRail({
   themeId: string;
   overrides: Overrides;
   density: DensityId;
+  sidebarCompact: boolean;
   presentation: Presentation;
   typography: Typography;
   onEditTokens: () => void;
@@ -67,6 +70,15 @@ export function AppearanceRail({
           value={density}
           options={DENSITIES.map(({ id, name, detail }) => ({ id, name, detail }))}
           onChange={selectDensity}
+        />
+      </Group>
+
+      <Group title="Sidebar">
+        <CheckField
+          label="Compact sidebar"
+          hint="Fits more networks and conversations without reducing text size."
+          checked={sidebarCompact}
+          onChange={selectSidebarCompact}
         />
       </Group>
 

@@ -132,6 +132,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     typography: DEFAULT_TYPOGRAPHY,
     overrides: {},
     sidebarWidth: 240,
+    sidebarCompact: false,
     rosterWidth: null,
     rawLog: {},
     channelList: {},

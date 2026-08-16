@@ -157,6 +157,7 @@ export interface AppActions {
   dropPlugin: (plugin: string) => void;
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
+  setSidebarCompact: (compact: boolean) => void;
   /** Null gives the column back to the names in it. */
   setRosterWidth: (px: number | null) => void;
 
@@ -207,6 +208,7 @@ const initialState: AppState = {
   pluginsUnavailable: null,
   collapsedNetworks: {},
   sidebarWidth: 240,
+  sidebarCompact: false,
   rosterWidth: null,
   themes: [],
   brokenThemes: [],
@@ -713,6 +715,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     })),
 
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
+
+  setSidebarCompact: (compact) => set({ sidebarCompact: compact }),
 
   // The floor is the 8rem the column already refused to go under: a group
   // heading is drawn whatever the nicks are, and it sits in a row of fixed

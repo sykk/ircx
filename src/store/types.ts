@@ -246,6 +246,8 @@ export interface AppState {
   pluginsUnavailable: string | null;
   collapsedNetworks: Record<string, boolean>;
   sidebarWidth: number;
+  /** Fits more network and conversation rows without changing their type. */
+  sidebarCompact: boolean;
   /** What somebody dragged the member list to, or null while it is still
    * sizing itself to the longest name in it. One width for every roster: a
    * pane's id is minted afresh each run, so a width held per pane would not

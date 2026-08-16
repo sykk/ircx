@@ -231,6 +231,15 @@ describe("AppearancePage", () => {
     });
   });
 
+  it("keeps the compact sidebar choice for the next launch", () => {
+    open();
+
+    fireEvent.click(field("Compact sidebar"));
+
+    expect(useAppStore.getState().sidebarCompact).toBe(true);
+    expect(localStorage.getItem("ircx.sidebar.compact")).toBe("true");
+  });
+
   describe("the accent", () => {
     /* Three tokens rather than one. `--accent` alone would leave the hover
      * state solved against the theme author's blue and every mention tinted in

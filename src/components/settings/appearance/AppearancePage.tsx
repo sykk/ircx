@@ -24,6 +24,7 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
   const broken = useAppStore((s) => s.brokenThemes);
   const themeId = useAppStore((s) => s.themeId);
   const density = useAppStore((s) => s.density);
+  const sidebarCompact = useAppStore((s) => s.sidebarCompact);
   const presentation = useAppStore((s) => s.presentation);
   const typography = useAppStore((s) => s.typography);
   const overrides = useAppStore((s) => s.overrides);
@@ -127,6 +128,7 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
           themeId={themeId}
           overrides={overrides}
           density={density}
+          sidebarCompact={sidebarCompact}
           presentation={presentation}
           typography={typography}
           onEditTokens={() => edit(themeId)}

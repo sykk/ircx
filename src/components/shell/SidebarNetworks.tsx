@@ -53,6 +53,7 @@ export function SidebarNetworks() {
   const queries = useAppStore((s) => s.queries);
   const drafts = useAppStore((s) => s.drafts);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
+  const compact = useAppStore((s) => s.sidebarCompact);
   const active = useActiveTarget();
   const showTarget = useAppStore((s) => s.showTarget);
   const openConsole = useAppStore((s) => s.openConsole);
@@ -265,6 +266,7 @@ export function SidebarNetworks() {
             tabbable={tabbable}
             onActivate={() => activate(row)}
             registerButton={registerButton}
+            compact={compact}
           />
           <NetworkMenu
             network={row.network}
@@ -314,6 +316,7 @@ export function SidebarNetworks() {
           tabbable={tabbable}
           onActivate={() => activate(row)}
           registerButton={registerButton}
+          compact={compact}
         />
         <CloseButton
           label={
@@ -342,7 +345,7 @@ export function SidebarNetworks() {
       data-ui="sidebar"
       className="flex h-full min-w-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)]"
     >
-      <div className="flex items-center pt-3 pr-1.5">
+      <div className={clsx("flex items-center pr-1.5", compact ? "pt-2" : "pt-3")}>
         <SectionLabel>Networks</SectionLabel>
         <span className="flex-1" />
         <button
@@ -374,14 +377,19 @@ export function SidebarNetworks() {
               <div
                 key={panel.header.id}
                 role="none"
-                className="mb-1"
+                className={compact ? "mb-0" : "mb-1"}
               >
                 {renderRow(panel.header)}
                 {!panel.header.collapsed && (
                   <div role="group" aria-label={panel.header.network.name}>
                     {panel.channels.map(renderRow)}
                     {panel.channels.length > 0 && panel.queries.length > 0 && (
-                      <div className="mx-3 my-1 border-t border-[var(--border-subtle)]" />
+                      <div
+                        className={clsx(
+                          "mx-3 border-t border-[var(--border-subtle)]",
+                          compact ? "my-0.5" : "my-1",
+                        )}
+                      />
                     )}
                     {panel.queries.map(renderRow)}
                   </div>
@@ -408,6 +416,7 @@ interface RowProps {
   tabbable: boolean;
   onActivate: () => void;
   registerButton: (el: HTMLButtonElement | null) => void;
+  compact: boolean;
 }
 
 function NetworkRow({
@@ -416,6 +425,7 @@ function NetworkRow({
   tabbable,
   onActivate,
   registerButton,
+  compact,
 }: RowProps & { row: Extract<Row, { kind: "network" }> }) {
   const detail = connectionDetail(row.network.status);
   return (
@@ -431,7 +441,10 @@ function NetworkRow({
       aria-selected={selected}
       aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}${detail ? `, ${detail}` : ""}`}
       title={`Server messages from ${row.network.name}`}
-      className="flex h-8 min-w-0 flex-1 items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)]"
+      className={clsx(
+        "flex min-w-0 flex-1 items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)]",
+        compact ? "h-6" : "h-8",
+      )}
     >
       <StatusDot network={row.network} />
       <span className="truncate">{row.network.name}</span>
@@ -463,6 +476,7 @@ function SidebarRow({
   tabbable,
   onActivate,
   registerButton,
+  compact,
 }: RowProps & { row: Exclude<Row, { kind: "network" }> }) {
   const shared = {
     "data-row-id": row.id,
@@ -480,7 +494,7 @@ function SidebarRow({
         aria-level={2}
         aria-selected={selected}
         aria-label={`${row.query.nick}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}`}
-        className={rowClass(selected)}
+        className={rowClass(selected, compact)}
       >
         {/* Where a channel draws its sigil, a query draws whether the other
             person is there — the network's own dot belonged here only while
@@ -513,7 +527,7 @@ function SidebarRow({
       aria-level={2}
       aria-selected={selected}
       aria-label={`${name}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}`}
-      className={rowClass(selected)}
+      className={rowClass(selected, compact)}
     >
       <span className="flex w-2 shrink-0 justify-center text-[var(--text-faint)]">
         {channelSigil(name)}
@@ -775,9 +789,10 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: ReactN
   );
 }
 
-function rowClass(selected: boolean): string {
+function rowClass(selected: boolean, compact: boolean): string {
   return clsx(
-    "flex h-7 w-full items-center gap-2 rounded-[var(--radius-sm)] pr-3 pl-5 text-[12px]",
+    "flex w-full items-center gap-2 rounded-[var(--radius-sm)] pr-3 pl-5 text-[12px]",
+    compact ? "h-6" : "h-7",
     selected
       ? "bg-[var(--surface-active)] text-[var(--text-primary)]"
       : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]",

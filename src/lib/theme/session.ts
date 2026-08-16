@@ -14,6 +14,7 @@ import { FALLBACK_THEME_ID, catalogue } from "./load";
 import type { Preset } from "./presets";
 import { type Overrides, storeOverrides, storedOverrides } from "./overrides";
 import { type Presentation, storePresentation, storedPresentation } from "./presentation";
+import { storeSidebarCompact, storedSidebarCompact } from "./sidebar";
 import { type Typography, storeTypography, storedTypography } from "./typography";
 import { rememberInstalled, rememberedInstalled } from "./remembered";
 
@@ -53,8 +54,16 @@ export function adoptAppearance(): void {
   const overrides = storedOverrides();
   const presentation = storedPresentation();
   const typography = storedTypography();
+  const sidebarCompact = storedSidebarCompact();
 
-  useAppStore.setState({ themeId: wanted, density, overrides, presentation, typography });
+  useAppStore.setState({
+    themeId: wanted,
+    density,
+    overrides,
+    presentation,
+    typography,
+    sidebarCompact,
+  });
   applyDensity(density);
   applyTypography(typography);
   void setWindowZoom(typography.zoom);
@@ -87,6 +96,11 @@ export function selectDensity(id: DensityId): void {
   useAppStore.getState().setDensity(id);
   applyDensity(id);
   storeDensity(id);
+}
+
+export function selectSidebarCompact(compact: boolean): void {
+  useAppStore.getState().setSidebarCompact(compact);
+  storeSidebarCompact(compact);
 }
 
 /** One field of the presentation, merged over the rest. There is nothing to

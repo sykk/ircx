@@ -72,6 +72,19 @@ describe("SidebarNetworks", () => {
     expect(screen.getByRole("treeitem", { name: "#linux" })).toBeTruthy();
   });
 
+  it("uses shorter rows only when compact mode is on", () => {
+    seedMockupWorkspace();
+    const { rerender } = render(<SidebarNetworks />);
+    const channel = () => screen.getByRole("treeitem", { name: "#ctf-ops" });
+
+    expect(channel().classList.contains("h-7")).toBe(true);
+
+    act(() => useAppStore.getState().setSidebarCompact(true));
+    rerender(<SidebarNetworks />);
+
+    expect(channel().classList.contains("h-6")).toBe(true);
+  });
+
   /* Two networks can both host a NickServ. Gathered into one section those two
    * rows read the same; inside their own network's panel neither is ambiguous. */
   it("puts each network's queries in that network's panel", () => {

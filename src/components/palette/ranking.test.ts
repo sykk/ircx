@@ -78,6 +78,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     typography: DEFAULT_TYPOGRAPHY,
     overrides: {},
     sidebarWidth: 240,
+    sidebarCompact: false,
     rosterWidth: null,
     rawLog: {},
     channelList: {},

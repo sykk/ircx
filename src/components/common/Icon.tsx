@@ -12,6 +12,7 @@ const PATHS = {
   // that makes one and the line it becomes carry the same glyph.
   paperclip: "M11.5 6.5 6.75 11.25a2 2 0 0 1-2.83-2.83l5.4-5.4a3 3 0 0 1 4.24 4.24l-5.4 5.4",
   draft: "M3 13l.7-3.1L10.9 2.7l2.4 2.4-7.2 7.2zM9.8 3.8l2.4 2.4",
+  pin: "M5 2.5h6M6 2.5v4l-2 2h8l-2-2v-4M8 8.5v5",
   // A hub and eight spokes. A gear's teeth do not survive being drawn at 14px
   // in a 1.5px stroke — they close up into a grey ring — so the spokes carry
   // it. The hub is wide and the spokes short: the first draft had it the other

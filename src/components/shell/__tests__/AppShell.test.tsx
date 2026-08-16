@@ -77,8 +77,19 @@ describe("AppShell", () => {
       sidebarWidth: 256,
       rosterWidth: null,
       collapsedNetworks: ["libera"],
+      pinnedTargets: [],
       layout: null,
     });
+  });
+
+  it("persists pinned conversations", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#ctf-ops")]);
+    render(<AppShell />);
+
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "#ctf-ops" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+
+    expect(loadViewState()?.pinnedTargets).toHaveLength(1);
   });
 
   it("writes the panes down as the conversations they hold", () => {

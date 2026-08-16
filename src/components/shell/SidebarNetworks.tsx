@@ -6,7 +6,7 @@ import { Icon } from "@/components/common/Icon";
 import { useHangingMenu } from "@/components/common/hangingMenu";
 import { OverflowIcon } from "@/components/header/icons";
 import { useAppStore } from "@/store";
-import { sameTarget, targetKey } from "@/store/keys";
+import { sameTarget, targetKey, type TargetKey } from "@/store/keys";
 import { useActiveTarget } from "@/store/selectors";
 import { SERVER_TARGET, type Channel, type Network, type Query } from "@/types";
 import { connectionColor, connectionDetail, connectionLabel } from "./connection";
@@ -21,8 +21,14 @@ type Row =
       draft: boolean;
       attention: number;
     }
-  | { id: string; kind: "channel"; channel: Channel; draft: boolean }
-  | { id: string; kind: "query"; query: Query; draft: boolean };
+  | {
+      id: TargetKey;
+      kind: "channel";
+      channel: Channel;
+      draft: boolean;
+      pinned: boolean;
+    }
+  | { id: TargetKey; kind: "query"; query: Query; draft: boolean; pinned: boolean };
 
 /** One network's panel: the server's own row and every conversation on it.
  * Two networks both hosting a NickServ is what the flat list could not draw —
@@ -54,27 +60,38 @@ export function SidebarNetworks() {
   const drafts = useAppStore((s) => s.drafts);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const compact = useAppStore((s) => s.sidebarCompact);
+  const pinnedTargets = useAppStore((s) => s.pinnedTargets);
   const active = useActiveTarget();
   const showTarget = useAppStore((s) => s.showTarget);
   const openConsole = useAppStore((s) => s.openConsole);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
+  const togglePinnedTarget = useAppStore((s) => s.togglePinnedTarget);
 
   // The store's list selectors build a fresh array per call, which React's
   // useSyncExternalStore treats as a changed snapshot; deriving here keeps the
   // subscriptions on the stable record objects.
   const panels = useMemo<Panel[]>(() => {
     const out: Panel[] = [];
+    const pinned = new Set(pinnedTargets);
     for (const id of networkOrder) {
       const network = networks[id];
       if (!network) continue;
 
       const own = Object.values(channels)
         .filter((c) => c.network === id)
-        .sort((a, b) => byName(a.name, b.name));
+        .sort((a, b) => {
+          const aPinned = pinned.has(targetKey(id, a.name));
+          const bPinned = pinned.has(targetKey(id, b.name));
+          return Number(bPinned) - Number(aPinned) || byName(a.name, b.name);
+        });
       const talks = Object.values(queries)
         .filter((q) => q.network === id)
-        .sort((a, b) => byName(a.nick, b.nick));
+        .sort((a, b) => {
+          const aPinned = pinned.has(targetKey(id, a.nick));
+          const bPinned = pinned.has(targetKey(id, b.nick));
+          return Number(bPinned) - Number(aPinned) || byName(a.nick, b.nick);
+        });
 
       out.push({
         header: {
@@ -98,17 +115,19 @@ export function SidebarNetworks() {
           kind: "channel" as const,
           channel,
           draft: Boolean(drafts[targetKey(id, channel.name)]),
+          pinned: pinned.has(targetKey(id, channel.name)),
         })),
         queries: talks.map((query) => ({
           id: targetKey(id, query.nick),
           kind: "query" as const,
           query,
           draft: Boolean(drafts[targetKey(id, query.nick)]),
+          pinned: pinned.has(targetKey(id, query.nick)),
         })),
       });
     }
     return out;
-  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks]);
+  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks, pinnedTargets]);
 
   /** The panels flattened into what the arrow keys walk. */
   const rows = useMemo<Row[]>(
@@ -331,8 +350,10 @@ export function SidebarNetworks() {
         <ConversationMenu
           label={row.kind === "channel" ? row.channel.name : row.query.nick}
           leaves={row.kind === "channel"}
+          pinned={row.pinned}
           open={menuFor === row.id}
           onOpenChange={(open) => setMenuFor(open ? row.id : null)}
+          onTogglePinned={() => togglePinnedTarget(row.id)}
           onClose={() => void closeConversation(conversation)}
         />
       </div>
@@ -493,7 +514,7 @@ function SidebarRow({
         {...shared}
         aria-level={2}
         aria-selected={selected}
-        aria-label={`${row.query.nick}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}`}
+        aria-label={`${row.query.nick}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
         className={rowClass(selected, compact)}
       >
         {/* Where a channel draws its sigil, a query draws whether the other
@@ -512,6 +533,7 @@ function SidebarRow({
         </span>
         <span className="flex-1" />
         {row.draft && <DraftMark />}
+        {row.pinned && <PinnedMark />}
         {row.query.muted && <MutedMark />}
         {row.query.unread > 0 && <Badge count={row.query.unread} />}
       </button>
@@ -526,7 +548,7 @@ function SidebarRow({
       {...shared}
       aria-level={2}
       aria-selected={selected}
-      aria-label={`${name}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}`}
+      aria-label={`${name}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
       className={rowClass(selected, compact)}
     >
       <span className="flex w-2 shrink-0 justify-center text-[var(--text-faint)]">
@@ -535,6 +557,7 @@ function SidebarRow({
       <span className="truncate">{stripSigil(name)}</span>
       <span className="flex-1" />
       {row.draft && <DraftMark />}
+      {row.pinned && <PinnedMark />}
       {restricted && (
         <span className="text-[var(--text-faint)]">
           <Icon name="lock" size={12} />
@@ -553,6 +576,14 @@ function DraftMark() {
   return (
     <span className="text-[var(--text-faint)]" title="Unsent draft" aria-label="Draft" role="img">
       <Icon name="draft" size={12} />
+    </span>
+  );
+}
+
+function PinnedMark() {
+  return (
+    <span className="text-[var(--text-faint)]" title="Pinned" aria-label="Pinned" role="img">
+      <Icon name="pin" size={12} />
     </span>
   );
 }
@@ -731,16 +762,20 @@ const anchorToRow = (menu: HTMLElement) => menu.parentElement;
 function ConversationMenu({
   label,
   leaves,
+  pinned,
   open,
   onOpenChange,
+  onTogglePinned,
   onClose,
 }: {
   label: string;
   /** A channel is parted when it closes, which everyone in it sees. A query is
    * closed privately, so the two do not read the same. */
   leaves: boolean;
+  pinned: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onTogglePinned: () => void;
   onClose: () => void;
 }) {
   /* The row this was right-clicked on, which is the menu's own parent and the
@@ -750,7 +785,7 @@ function ConversationMenu({
 
   if (!open) return null;
 
-  const choose = () => {
+  const close = () => {
     onOpenChange(false);
     onClose();
   };
@@ -771,7 +806,15 @@ function ConversationMenu({
         event.stopPropagation();
       }}
     >
-      <MenuItem onClick={choose}>{leaves ? "Leave and close" : "Close"}</MenuItem>
+      <MenuItem
+        onClick={() => {
+          onOpenChange(false);
+          onTogglePinned();
+        }}
+      >
+        {pinned ? "Unpin" : "Pin"}
+      </MenuItem>
+      <MenuItem onClick={close}>{leaves ? "Leave and close" : "Close"}</MenuItem>
     </div>
   );
 }

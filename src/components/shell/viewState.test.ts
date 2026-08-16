@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { StoredLayout } from "@/store/types";
+import { targetKey } from "@/store/keys";
 import { loadViewState, saveViewState } from "./viewState";
 
 const KEY = "ircx.shell.view";
@@ -27,6 +28,7 @@ describe("saving", () => {
       sidebarWidth: 320,
       rosterWidth: null,
       collapsedNetworks: ["libera"],
+      pinnedTargets: [],
       layout: split,
     });
   });
@@ -40,8 +42,23 @@ describe("loading", () => {
       sidebarWidth: 240,
       rosterWidth: null,
       collapsedNetworks: [],
+      pinnedTargets: [],
       layout: null,
     });
+  });
+
+  it("keeps pinned target keys and drops other values", () => {
+    const pinned = targetKey("libera", "#ctf-ops");
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        sidebarWidth: 240,
+        collapsedNetworks: [],
+        pinnedTargets: [pinned, 7, null],
+      }),
+    );
+
+    expect(loadViewState()?.pinnedTargets).toEqual([pinned]);
   });
 
   it("drops a layout it cannot read without losing the sidebar with it", () => {
@@ -54,6 +71,7 @@ describe("loading", () => {
       sidebarWidth: 240,
       rosterWidth: null,
       collapsedNetworks: [],
+      pinnedTargets: [],
       layout: null,
     });
   });

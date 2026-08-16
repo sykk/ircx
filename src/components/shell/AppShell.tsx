@@ -14,6 +14,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const rosterWidth = useAppStore((s) => s.rosterWidth);
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
+  const pinnedTargets = useAppStore((s) => s.pinnedTargets);
   const layout = useAppStore((s) => s.layout);
   const views = useAppStore((s) => s.views);
 
@@ -37,6 +38,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
       sidebarWidth: stored.sidebarWidth,
       rosterWidth: stored.rosterWidth,
       collapsedNetworks: Object.fromEntries(stored.collapsedNetworks.map((id) => [id, true])),
+      pinnedTargets: stored.pinnedTargets,
     });
   }, []);
 
@@ -50,12 +52,13 @@ export function AppShell({ children }: { children?: ReactNode }) {
       sidebarWidth,
       rosterWidth,
       collapsedNetworks: Object.keys(collapsedNetworks).filter((id) => collapsedNetworks[id]),
+      pinnedTargets,
       // Only once a pane is open. The layout is null until then, and writing
       // that null would throw away the one this run has not restored yet —
       // which is what `saveViewState` merging rather than replacing is for.
       ...(layout ? { layout: toStored(layout, views) } : {}),
     });
-  }, [sidebarWidth, rosterWidth, collapsedNetworks, layout, views]);
+  }, [sidebarWidth, rosterWidth, collapsedNetworks, pinnedTargets, layout, views]);
 
   const columns = narrow ? "1fr" : `${sidebarWidth}px ${HANDLE_PX}px minmax(0, 1fr)`;
 

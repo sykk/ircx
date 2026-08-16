@@ -1,3 +1,4 @@
+import type { TargetKey } from "@/store/keys";
 import type { StoredLayout } from "@/store/types";
 
 const STORAGE_KEY = "ircx.shell.view";
@@ -8,6 +9,7 @@ export interface ViewState {
    * longest name until then. */
   rosterWidth: number | null;
   collapsedNetworks: string[];
+  pinnedTargets: TargetKey[];
   /** How the panes divided the window, or null before anything was opened. */
   layout: StoredLayout | null;
 }
@@ -28,6 +30,9 @@ export function loadViewState(): ViewState | null {
     // reason to throw away the sidebar stored beside it.
     rosterWidth: typeof parsed.rosterWidth === "number" ? parsed.rosterWidth : null,
     collapsedNetworks: collapsedNetworks.filter((id) => typeof id === "string"),
+    pinnedTargets: Array.isArray(parsed.pinnedTargets)
+      ? (parsed.pinnedTargets.filter((key) => typeof key === "string") as TargetKey[])
+      : [],
     // Read on its own so an entry written before there was a layout, or one
     // holding a layout that cannot be trusted, still yields the sidebar.
     layout: storedLayout((parsed as Partial<ViewState>).layout),

@@ -781,6 +781,7 @@ describe("a query whose other end renames", () => {
       },
       replyTo: { [OLD]: "msgid-1" },
       recent: [OLD],
+      pinnedTargets: [OLD],
       drafts: { [OLD]: true },
     });
   }
@@ -827,6 +828,13 @@ describe("a query whose other end renames", () => {
     rename();
 
     expect(useAppStore.getState().drafts).toEqual({ [NEW]: true });
+  });
+
+  it("takes its pin with it", () => {
+    withQuery();
+    rename();
+
+    expect(useAppStore.getState().pinnedTargets).toEqual([NEW]);
   });
 
   /** A pane reading the conversation keeps reading it rather than emptying. */
@@ -1209,6 +1217,8 @@ describe("removing a network", () => {
     store().setReplyTo("oftc", "#tor", "msg-2");
     store().rememberInput("libera", "#ctf-ops", "typed here");
     store().rememberInput("oftc", "#tor", "typed there");
+    store().togglePinnedTarget(gone);
+    store().togglePinnedTarget(kept);
     store().showTarget({ network: "libera", target: "#ctf-ops" });
 
     store().applyEvent({ type: "networkRemoved", network: "libera" });
@@ -1220,6 +1230,7 @@ describe("removing a network", () => {
     expect(store().replyTo[gone]).toBeUndefined();
     expect(store().inputHistory[gone]).toBeUndefined();
     expect(store().recent).not.toContain(gone);
+    expect(store().pinnedTargets).not.toContain(gone);
   });
 
   it("leaves the other networks' entries standing", () => {
@@ -1227,6 +1238,7 @@ describe("removing a network", () => {
     expect(store().channelList["oftc"]).toBeTruthy();
     expect(store().replyTo[kept]).toBe("msg-2");
     expect(store().inputHistory[kept]).toEqual(["typed there"]);
+    expect(store().pinnedTargets).toContain(kept);
   });
 });
 

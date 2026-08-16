@@ -133,6 +133,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     overrides: {},
     sidebarWidth: 240,
     sidebarCompact: false,
+    pinnedTargets: [],
     rosterWidth: null,
     rawLog: {},
     channelList: {},

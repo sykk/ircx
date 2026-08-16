@@ -158,6 +158,7 @@ export interface AppActions {
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
   setSidebarCompact: (compact: boolean) => void;
+  togglePinnedTarget: (target: TargetKey) => void;
   /** Null gives the column back to the names in it. */
   setRosterWidth: (px: number | null) => void;
 
@@ -209,6 +210,7 @@ const initialState: AppState = {
   collapsedNetworks: {},
   sidebarWidth: 240,
   sidebarCompact: false,
+  pinnedTargets: [],
   rosterWidth: null,
   themes: [],
   brokenThemes: [],
@@ -718,6 +720,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setSidebarCompact: (compact) => set({ sidebarCompact: compact }),
 
+  togglePinnedTarget: (target) =>
+    set((s) => ({
+      pinnedTargets: s.pinnedTargets.includes(target)
+        ? s.pinnedTargets.filter((held) => held !== target)
+        : [...s.pinnedTargets, target],
+    })),
+
   // The floor is the 8rem the column already refused to go under: a group
   // heading is drawn whatever the nicks are, and it sits in a row of fixed
   // height, so narrower means a heading wrapping into the member below it.
@@ -1124,6 +1133,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         rawLog,
         channelList,
         recent: s.recent.filter((key) => !key.startsWith(prefix)),
+        pinnedTargets: s.pinnedTargets.filter((key) => !key.startsWith(prefix)),
         views,
         viewAnchor,
         consoleInput,
@@ -1319,6 +1329,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         replyTo: moveKey(s.replyTo, from, to),
         drafts: moveKey(s.drafts, from, to),
         recent: s.recent.map((held) => (held === from ? to : held)),
+        pinnedTargets: s.pinnedTargets.map((held) => (held === from ? to : held)),
         views: Object.fromEntries(
           Object.entries(s.views).map(([id, view]) => [
             id,

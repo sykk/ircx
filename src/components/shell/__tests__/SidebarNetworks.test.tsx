@@ -461,6 +461,29 @@ describe("closing a conversation", () => {
     expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
   });
 
+  it("pins and unpins a conversation from its menu", () => {
+    seedStore(
+      [makeNetwork("libera")],
+      [makeChannel("libera", "#alpha"), makeChannel("libera", "#zulu")],
+    );
+    render(<SidebarNetworks />);
+
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "#zulu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+
+    const rows = () =>
+      within(screen.getByRole("group", { name: "libera" }))
+        .getAllByRole("treeitem")
+        .map((row) => row.getAttribute("aria-label"));
+    expect(rows()).toEqual(["#zulu, pinned", "#alpha"]);
+    expect(screen.getByTitle("Pinned")).toBeTruthy();
+
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "#zulu, pinned" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unpin" }));
+
+    expect(rows()).toEqual(["#alpha", "#zulu"]);
+  });
+
   it("puts the menu away once a conversation is closed", async () => {
     seedOne();
     fireEvent.contextMenu(screen.getByRole("treeitem", { name: "sable" }));

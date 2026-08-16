@@ -35,6 +35,15 @@ export function SearchIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function ClearIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path d="m3 11 7.8-7.8 2 2L5 13H3z" />
+      <path d="M7.8 6.2 9.8 8.2M8.5 13h4M10.5 10.8h2" />
+    </svg>
+  );
+}
+
 export function CatchUpIcon({ size = 14 }: IconProps) {
   return (
     <svg {...svgProps(size)}>

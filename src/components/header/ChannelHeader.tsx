@@ -2,12 +2,20 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import { targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ClosePaneButton } from "./ClosePaneButton";
 import { HeaderButton } from "./HeaderButton";
-import { CatchUpIcon, ChevronIcon, MembersIcon, OverflowIcon, SearchIcon } from "./icons";
+import {
+  CatchUpIcon,
+  ChevronIcon,
+  ClearIcon,
+  MembersIcon,
+  OverflowIcon,
+  SearchIcon,
+} from "./icons";
 
 export function ChannelHeader({
   view,
@@ -26,6 +34,7 @@ export function ChannelHeader({
   const rosterShown = useAppStore((s) => (view ? s.rosterHidden[view] !== true : false));
   const toggleRoster = useAppStore((s) => s.toggleRoster);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
+  const clearBuffer = useAppStore((s) => s.clearBuffer);
   const openSetup = useAppStore((s) => s.openSetup);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -111,6 +120,14 @@ export function ChannelHeader({
             onClick={() => toggleSearch(true)}
           >
             <SearchIcon size={16} />
+          </HeaderButton>
+
+          <HeaderButton
+            label={`Clear ${channel.name} buffer`}
+            title="Clear buffer"
+            onClick={() => clearBuffer(targetKey(channel.network, channel.name))}
+          >
+            <ClearIcon size={16} />
           </HeaderButton>
 
           <div

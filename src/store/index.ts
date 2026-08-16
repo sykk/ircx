@@ -82,6 +82,7 @@ export interface AppActions {
   openConsole: (network: string, raw?: boolean) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
   replaceHistory: (key: TargetKey, messages: ChatMessage[]) => void;
+  clearBuffer: (key: TargetKey) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   /** Records the message the server has been asked for the page behind, so the
    * next scroll can tell its own request from the one already out (#487). */
@@ -595,6 +596,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       timelines: {
         ...s.timelines,
         [key]: { ...EMPTY_TIMELINE, messages },
+      },
+    })),
+
+  clearBuffer: (key) =>
+    set((s) => ({
+      timelines: {
+        ...s.timelines,
+        [key]: { ...EMPTY_TIMELINE, hasMore: false },
       },
     })),
 

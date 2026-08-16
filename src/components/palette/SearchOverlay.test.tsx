@@ -51,6 +51,7 @@ const hits: SearchHit[] = [
 ];
 
 beforeEach(() => {
+  localStorage.clear();
   searchHistory.mockReset();
   searchHistory.mockResolvedValue(hits);
   loadHistoryAround.mockReset();
@@ -110,6 +111,26 @@ describe("SearchOverlay", () => {
         limit: 50,
       }),
     );
+  });
+
+  it("saves, reruns, and removes a query", async () => {
+    render(<SearchOverlay />);
+    type("deployment");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(localStorage.getItem("ircx.search.saved")).toBe('["deployment"]');
+
+    type("");
+    fireEvent.click(screen.getByRole("button", { name: "deployment" }));
+    expect(screen.getByRole("searchbox")).toHaveProperty("value", "deployment");
+    await waitFor(() => expect(searchHistory).toHaveBeenLastCalledWith({
+      query: "deployment",
+      network: "libera",
+      target: "#ctf-ops",
+      limit: 50,
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove saved search deployment" }));
+    expect(screen.queryByRole("button", { name: "deployment" })).toBeNull();
   });
 
   it("lists bookmarks for the active target", async () => {

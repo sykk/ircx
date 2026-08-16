@@ -5,6 +5,7 @@ import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
 import { ChannelHeader, formatTopicTimestamp } from "./ChannelHeader";
+import { makeMessage } from "@/components/timeline/fixtures";
 
 const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
 
@@ -21,6 +22,22 @@ beforeEach(() => {
     ...oneView({ network: "libera", target: CTF_OPS.name }),
     rosterHidden: {},
     searchOpen: false,
+    timelines: {
+      [targetKey("libera", CTF_OPS.name)]: {
+        messages: [makeMessage({ id: "current", target: CTF_OPS.name })],
+        unreadFrom: "current",
+        hasMore: true,
+        loadingOlder: false,
+        askedBehind: "older",
+      },
+      [targetKey("libera", "#rust")]: {
+        messages: [makeMessage({ id: "other", target: "#rust" })],
+        unreadFrom: null,
+        hasMore: true,
+        loadingOlder: false,
+        askedBehind: null,
+      },
+    },
     setup: null,
   });
 });
@@ -139,6 +156,21 @@ describe("ChannelHeader", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     fireEvent.click(screen.getByRole("button", { name: `Search ${CTF_OPS.name}` }));
     expect(useAppStore.getState().searchOpen).toBe(true);
+  });
+
+  it("clears only this conversation's buffer", () => {
+    render(<ChannelHeader view={TEST_VIEW} />);
+    fireEvent.click(screen.getByRole("button", { name: `Clear ${CTF_OPS.name} buffer` }));
+
+    const state = useAppStore.getState();
+    expect(state.timelines[targetKey("libera", CTF_OPS.name)]).toEqual({
+      messages: [],
+      unreadFrom: null,
+      hasMore: false,
+      loadingOlder: false,
+      askedBehind: null,
+    });
+    expect(state.timelines[targetKey("libera", "#rust")]?.messages[0]?.id).toBe("other");
   });
 
   it("keeps invite in the overflow menu, and asks for a nick", () => {

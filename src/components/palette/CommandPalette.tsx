@@ -42,6 +42,7 @@ function Palette() {
 
   const channels = useAppStore((s) => s.channels);
   const queries = useAppStore((s) => s.queries);
+  const drafts = useAppStore((s) => s.drafts);
   const networks = useAppStore((s) => s.networks);
   const networkOrder = useAppStore((s) => s.networkOrder);
   const recent = useAppStore((s) => s.recent);
@@ -58,6 +59,7 @@ function Palette() {
       buildCandidates({
         channels,
         queries,
+        drafts,
         networks,
         networkOrder,
         themes,
@@ -69,6 +71,7 @@ function Palette() {
     [
       channels,
       queries,
+      drafts,
       networks,
       networkOrder,
       themes,

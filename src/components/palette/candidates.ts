@@ -3,7 +3,7 @@ import type { SectionId } from "@/components/settings/sections";
 import { DEFAULT_BINDINGS, displayChord, type ActionId } from "@/lib/keybindings";
 import { COMMANDS } from "@/components/composer/commands";
 import { DENSITIES, type DensityId, type Theme } from "@/lib/theme";
-import { targetKey, type TargetKey } from "@/store/keys";
+import { splitTargetKey, targetKey, type TargetKey } from "@/store/keys";
 import type { AppState, SplitDirection } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 
@@ -11,6 +11,7 @@ export type CandidateKind =
   | "run"
   | "channel"
   | "query"
+  | "draft"
   | "network"
   | "command"
   | "action"
@@ -60,6 +61,7 @@ export const KIND_LABELS: Record<CandidateKind, string> = {
   run: "Run",
   channel: "Channels",
   query: "Queries",
+  draft: "Drafts",
   network: "Networks",
   command: "Commands",
   action: "Actions",
@@ -71,10 +73,11 @@ export const KIND_ORDER: Record<CandidateKind, number> = {
   run: -1,
   channel: 0,
   query: 1,
-  network: 2,
-  command: 3,
-  action: 4,
-  theme: 5,
+  draft: 2,
+  network: 3,
+  command: 4,
+  action: 5,
+  theme: 6,
 };
 
 
@@ -126,6 +129,7 @@ export type CandidateSources = Pick<
   AppState,
   | "channels"
   | "queries"
+  | "drafts"
   | "networks"
   | "networkOrder"
   | "themes"
@@ -165,6 +169,24 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       key: targetKey(query.network, query.nick),
       action: { type: "activate", network: query.network, target: query.nick },
       unread: query.unread,
+    });
+  }
+
+  for (const key of Object.keys(state.drafts) as TargetKey[]) {
+    const { network: networkId } = splitTargetKey(key);
+    const target = state.channels[key]?.name ?? state.queries[key]?.nick;
+    if (!target) continue;
+    const network = state.networks[networkId];
+    const label = `Draft: ${target}`;
+    candidates.push({
+      id: `draft:${networkId}:${target}`,
+      kind: "draft",
+      label,
+      detail: `Unsent message · ${network?.name ?? networkId}`,
+      hay: prepare(label),
+      key,
+      action: { type: "activate", network: networkId, target },
+      unread: 0,
     });
   }
 

@@ -267,15 +267,17 @@ describe("the nickname at the head of a run", () => {
     const { container } = block();
 
     expect(head(container).firstElementChild!.textContent).toBe("phrack");
+    expect(container.querySelector("[data-ui='message-head']")!.textContent).toContain("phrack");
   });
 
   it("stands behind the clock for a reader who put the time first", () => {
     useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, clockSide: "left" } });
     const { container } = block();
 
-    const [first, second] = head(container).children;
-    expect(first!.tagName).toBe("TIME");
-    expect(second!.textContent).toBe("phrack");
+    const [clock, name] = container.querySelector("[data-ui='clock-column']")!.children;
+    expect(clock!.tagName).toBe("TIME");
+    expect(name!.textContent).toBe("phrack");
+    expect(name!.getAttribute("data-ui")).toBe("message-head");
   });
 });
 

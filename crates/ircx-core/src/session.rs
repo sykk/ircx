@@ -1009,7 +1009,7 @@ impl SessionState {
             RPL_TOPIC => self.on_topic_reply(params),
             RPL_NOTOPIC => self.on_no_topic(params),
             RPL_TOPICWHOTIME => self.on_topic_who_time(params),
-            RPL_CREATIONTIME => self.on_creation_time(params, message),
+            RPL_CREATIONTIME => {}
             RPL_LOCALUSERS | RPL_GLOBALUSERS => self.server_sentence(message),
             RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
@@ -1454,17 +1454,11 @@ impl SessionState {
     }
 
     /// The topic a channel already had, which arrives on every join.
-    ///
-    /// Said in the timeline rather than drawn as chrome: the header leaves the
-    /// topic out on purpose, and a change to it already reads as a line in the
-    /// conversation. Without this the topic of a channel you just joined is
-    /// tracked and shown nowhere at all.
     fn on_topic_reply(&mut self, params: &[String]) {
         let (Some(name), Some(topic)) = (params.first(), params.get(1)) else {
             return;
         };
-        let (name, key) = (name.clone(), self.fold(params[0].as_str()));
-        let topic = topic.clone();
+        let key = self.fold(name);
         let Some(channel) = self.channels.get_mut(&key) else {
             return;
         };
@@ -1474,14 +1468,6 @@ impl SessionState {
             set_at: None,
         });
         self.emit_channel(&key);
-
-        if !topic.trim().is_empty() {
-            self.note(
-                &name,
-                MessageKind::Topic,
-                format!("The topic of {name} is: {topic}"),
-            );
-        }
     }
 
     fn on_no_topic(&mut self, params: &[String]) {
@@ -1492,33 +1478,6 @@ impl SessionState {
         };
         channel.topic = None;
         self.emit_channel(&key);
-    }
-
-    /// When a channel was made, in words. `329` is the channel and a unix
-    /// timestamp and nothing else, so the fallback prints `#libera 1619211933`
-    /// — two facts and no sentence between them.
-    ///
-    /// Goes to the channel it is about when we are in it, which is where the
-    /// fallback was already putting it.
-    fn on_creation_time(&mut self, params: &[String], message: &Message) {
-        let Some(channel) = params.first() else {
-            return;
-        };
-        let when = params
-            .get(1)
-            .and_then(|epoch| rfc3339(epoch))
-            .as_deref()
-            .and_then(readable);
-        let Some(when) = when else {
-            return self.server_words(SERVER_TARGET, message);
-        };
-        let target = match self.channels.contains_key(&self.fold(channel)) {
-            true => channel.clone(),
-            false => SERVER_TARGET.to_string(),
-        };
-        let sentence = format!("{channel} was created on {when}");
-        let note = self.chat_message(message, &target, MessageKind::Server, sentence);
-        self.append(note);
     }
 
     /// A numeric whose trailing text is already the whole sentence, and whose
@@ -1620,7 +1579,7 @@ impl SessionState {
     /// the time.
     fn on_topic_who_time(&mut self, params: &[String]) {
         let Some(name) = params.first() else { return };
-        let (name, key) = (name.clone(), self.fold(name));
+        let key = self.fold(name);
         // Ergo sends the whole `nick!user@host` here and Libera sends a bare
         // nick. The specification says "nick"; a mask in a sentence a person
         // reads is noise either way.
@@ -1639,15 +1598,6 @@ impl SessionState {
             topic.set_at.clone_from(&set_at);
         }
         self.emit_channel(&key);
-
-        if let Some(who) = set_by {
-            let when = set_at
-                .as_deref()
-                .and_then(readable)
-                .map(|when| format!(" on {when}"))
-                .unwrap_or_default();
-            self.note(&name, MessageKind::Topic, format!("Set by {who}{when}"));
-        }
     }
 
     fn on_channel_modes(&mut self, params: &[String]) {
@@ -1660,23 +1610,8 @@ impl SessionState {
         let Some(channel) = self.channels.get_mut(&key) else {
             return;
         };
-        channel.modes = modes.clone();
-        let name = channel.name.clone();
+        channel.modes = modes;
         self.emit_channel(&key);
-
-        // Said in the conversation rather than drawn as chrome, which is where
-        // the topic goes and for the same reason: it is a fact about the
-        // channel, and a change to it already reads as a line. Without this the
-        // modes were tracked, used to draw a lock in the sidebar, and shown
-        // nowhere a reader could check the lock against. #243.
-        let rules = channel_rules(modes.split(' ').next().unwrap_or_default());
-        if !rules.is_empty() {
-            self.note(
-                &name,
-                MessageKind::Server,
-                format!("{name} is {}.", and_then(&rules)),
-            );
-        }
     }
 
     fn on_away_reply(&mut self, params: &[String]) {
@@ -3016,35 +2951,6 @@ fn channel_rule(letter: char, adding: bool) -> String {
         ('l', false) => "took the size limit off the channel".into(),
         (other, true) => format!("set +{other} on the channel"),
         (other, false) => format!("took -{other} off the channel"),
-    }
-}
-
-/// The same modes as a description of what a channel is, for the line said on
-/// the way in. Anything unnamed is left out rather than spelled: a reader who
-/// wants the letters has the raw log, and a sentence ending in "and +C" helps
-/// nobody.
-fn channel_rules(flags: &str) -> Vec<&'static str> {
-    flags
-        .chars()
-        .filter_map(|letter| match letter {
-            'm' => Some("moderated"),
-            'i' => Some("invite only"),
-            'k' => Some("behind a key"),
-            't' => Some("topic-locked to ops"),
-            'n' => Some("closed to messages from outside"),
-            's' => Some("secret"),
-            'l' => Some("size-limited"),
-            _ => None,
-        })
-        .collect()
-}
-
-/// `a`, `a and b`, `a, b and c`.
-fn and_then(items: &[&str]) -> String {
-    match items {
-        [] => String::new(),
-        [only] => (*only).to_string(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 

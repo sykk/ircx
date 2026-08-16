@@ -36,6 +36,7 @@ import type {
   ConsoleInput,
   Layout,
   SplitDirection,
+  SidebarFilter,
   StoredLayout,
   TimelineState,
   ViewId,
@@ -159,6 +160,7 @@ export interface AppActions {
   toggleNetworkCollapsed: (network: string) => void;
   setSidebarWidth: (px: number) => void;
   setSidebarCompact: (compact: boolean) => void;
+  setSidebarFilter: (filter: SidebarFilter) => void;
   togglePinnedTarget: (target: TargetKey) => void;
   /** Null gives the column back to the names in it. */
   setRosterWidth: (px: number | null) => void;
@@ -211,6 +213,7 @@ const initialState: AppState = {
   collapsedNetworks: {},
   sidebarWidth: 240,
   sidebarCompact: false,
+  sidebarFilter: null,
   pinnedTargets: [],
   rosterWidth: null,
   themes: [],
@@ -728,6 +731,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setSidebarWidth: (px) => set({ sidebarWidth: Math.min(400, Math.max(180, px)) }),
 
   setSidebarCompact: (compact) => set({ sidebarCompact: compact }),
+
+  setSidebarFilter: (sidebarFilter) => set({ sidebarFilter }),
 
   togglePinnedTarget: (target) =>
     set((s) => ({

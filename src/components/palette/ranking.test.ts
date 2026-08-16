@@ -79,6 +79,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     overrides: {},
     sidebarWidth: 240,
     sidebarCompact: false,
+    sidebarFilter: null,
     pinnedTargets: [],
     rosterWidth: null,
     rawLog: {},

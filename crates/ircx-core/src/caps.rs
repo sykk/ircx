@@ -11,6 +11,7 @@ pub const SUPPORTED: &[&str] = &[
     "draft/multiline",
     "draft/read-marker",
     "echo-message",
+    "extended-monitor",
     "extended-join",
     "invite-notify",
     "labeled-response",
@@ -155,6 +156,17 @@ mod tests {
         );
         assert_eq!(caps.value("sasl"), Some("PLAIN"));
         assert!(caps.negotiating());
+    }
+
+    #[test]
+    fn extended_monitor_is_requested_when_offered() {
+        let mut caps = Caps::default();
+        caps.record_available("account-notify extended-monitor vendor/private");
+
+        assert_eq!(
+            caps.request_lines(),
+            vec!["CAP REQ :account-notify extended-monitor"]
+        );
     }
 
     #[test]

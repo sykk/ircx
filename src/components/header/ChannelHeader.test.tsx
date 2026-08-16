@@ -90,11 +90,16 @@ describe("ChannelHeader", () => {
       expect(screen.getByText("Set by sable on 2026-05-25 at 17:25 UTC")).toBeTruthy();
     });
 
-    it("collapses the metadata while keeping the topic visible", () => {
+    it("expands the full topic and collapses it to one line", () => {
       render(<ChannelHeader view={TEST_VIEW} />);
+      const topic = screen.getByText(TOPIC);
+
+      expect(topic.className).toContain("whitespace-pre-wrap");
+      expect(topic.className).not.toContain("truncate");
       fireEvent.click(screen.getByRole("button", { name: "Collapse topic" }));
 
-      expect(screen.getByText(TOPIC)).toBeTruthy();
+      expect(topic.className).toContain("truncate");
+      expect(topic.className).not.toContain("whitespace-pre-wrap");
       expect(screen.queryByText(/Set by sable/)).toBeNull();
       expect(screen.getByRole("button", { name: "Expand topic" }).getAttribute("aria-expanded"))
         .toBe("false");

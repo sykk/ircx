@@ -207,7 +207,13 @@ export function ChannelHeader({
           className="col-start-1 row-start-2 flex min-w-0 items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-1.5"
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <p title={topic.text} className="selectable min-w-0 truncate text-[var(--text-primary)]">
+            <p
+              title={topic.text}
+              className={clsx(
+                "selectable min-w-0 text-[var(--text-primary)]",
+                topicExpanded ? "whitespace-pre-wrap break-words" : "truncate",
+              )}
+            >
               {topic.text}
             </p>
             {topicExpanded && (topic.setBy !== null || topic.setAt !== null) && (

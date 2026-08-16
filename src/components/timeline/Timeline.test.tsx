@@ -271,10 +271,17 @@ describe("Timeline", () => {
     expect(other?.getAttribute("data-highlight")).toBe(null);
   });
 
-  it("filters catch-up to mentions, replies, reactions, and important events", () => {
-    seed([
+  it("shows unread catch-up events with one message of context on each side", () => {
+    const messages = [
+      makeMessage({
+        id: "old-reaction",
+        text: "old reacted line",
+        reactions: [{ emoji: "eyes", nicks: ["phrack"] }],
+      }),
       makeMessage({ id: "ordinary", text: "ordinary line" }),
       makeMessage({ id: "mention", nick: "phrack", text: "sable: look at this" }),
+      makeMessage({ id: "after-mention", text: "message after mention" }),
+      makeMessage({ id: "unrelated", text: "unrelated line" }),
       makeMessage({ id: "reply", text: "reply line", replyTo: "ordinary" }),
       makeMessage({
         id: "reaction",
@@ -283,16 +290,29 @@ describe("Timeline", () => {
       }),
       makeMessage({ id: "topic", kind: "topic", text: "important topic" }),
       makeMessage({ id: "join", kind: "join", text: "routine join" }),
-    ]);
+    ];
+    seed(messages, "ordinary");
     render(<Timeline view={TEST_VIEW} catchUp />);
 
-    expect(document.querySelector('[data-msgid="ordinary"]')).toBeNull();
+    expect(screen.queryByText("old reacted line")).toBeNull();
+    expect(document.querySelector('[data-msgid="ordinary"]')).toBeTruthy();
     expect(document.querySelector('[data-msgid="mention"]')).toBeTruthy();
+    expect(screen.getByText("message after mention")).toBeTruthy();
+    expect(screen.getByText("unrelated line")).toBeTruthy();
     expect(screen.getByText("reply line")).toBeTruthy();
     expect(screen.getByText("reacted line")).toBeTruthy();
     expect(screen.getByText(/important topic/)).toBeTruthy();
-    expect(screen.queryByText(/routine join/)).toBeNull();
     expect(ipcMock.loadHistory).not.toHaveBeenCalled();
+  });
+
+  it("has nothing to catch up on after the conversation is read", () => {
+    seed([
+      makeMessage({ id: "mention", nick: "phrack", text: "sable: old mention" }),
+    ]);
+    render(<Timeline view={TEST_VIEW} catchUp />);
+
+    expect(screen.getByText("Nothing to catch up on")).toBeTruthy();
+    expect(screen.queryByText("sable: old mention")).toBeNull();
   });
 
   /** A tint says the client noticed something. It does not say what, and what

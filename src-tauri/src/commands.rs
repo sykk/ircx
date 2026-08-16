@@ -209,6 +209,37 @@ pub async fn search_history(
 }
 
 #[tauri::command]
+pub async fn list_bookmarks(
+    app: State<'_, App>,
+    network: Option<NetworkId>,
+    target: Option<TargetName>,
+    limit: u32,
+) -> Result<Vec<SearchHit>, String> {
+    app.store()
+        .bookmarks(network.as_deref(), target.as_deref(), limit)
+        .map_err(describe)
+}
+
+#[tauri::command]
+pub async fn set_bookmark(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: TargetName,
+    message_id: String,
+    active: bool,
+) -> Result<(), String> {
+    if app
+        .store()
+        .set_bookmark(&network, &target, &message_id, active)
+        .map_err(describe)?
+    {
+        Ok(())
+    } else {
+        Err("That message is no longer in local history.".into())
+    }
+}
+
+#[tauri::command]
 pub async fn mark_read(
     app: State<'_, App>,
     network: NetworkId,

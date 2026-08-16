@@ -3,6 +3,7 @@ import clsx from "clsx";
 import type { Reaction } from "@/types";
 import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { Tooltip } from "@/components/common/Tooltip";
+import { Icon } from "@/components/common/Icon";
 
 /** More names than this and the tooltip runs off the window, so the rest of
  * them stay a count. */
@@ -41,7 +42,7 @@ export function Reactions({ reactions, ownNick, onToggle }: Props) {
           onToggle={onToggle}
         />
       ))}
-      {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} />}
+      {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} onBookmark={null} bookmarked={false} />}
     </div>
   );
 }
@@ -104,10 +105,14 @@ export function RowControls({
   alone,
   onReply,
   onPick,
+  onBookmark,
+  bookmarked,
 }: {
   alone: boolean;
   onReply: (() => void) | null;
   onPick: ((emoji: string) => void) | null;
+  onBookmark: (() => void) | null;
+  bookmarked: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -132,6 +137,11 @@ export function RowControls({
       }}
     >
       <span className="relative inline-flex gap-0.5">
+        {onBookmark !== null && (
+          <button type="button" aria-label={bookmarked ? "Remove bookmark" : "Bookmark this message"} aria-pressed={bookmarked} onClick={onBookmark} className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")} style={{ color: bookmarked ? "var(--accent)" : "var(--text-muted)" }}>
+            <Icon name="pin" size={14} />
+          </button>
+        )}
         {onReply !== null && (
           <button
             type="button"

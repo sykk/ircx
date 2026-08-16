@@ -76,7 +76,10 @@ function followFocus(): () => void {
 /** The snapshot is the same state the events describe, so it goes in as
  * events: networks first, then the targets that hang off them. */
 async function loadSnapshot(): Promise<void> {
-  const snapshot = await ipc.getSnapshot();
+  const [snapshot, bookmarks] = await Promise.all([
+    ipc.getSnapshot(),
+    ipc.listBookmarks(null, null, 10_000),
+  ]);
   const { applyEvent } = useAppStore.getState();
 
   for (const network of snapshot.networks) applyEvent({ type: "networkUpdated", network });
@@ -84,6 +87,14 @@ async function loadSnapshot(): Promise<void> {
   for (const query of snapshot.queries) applyEvent({ type: "queryUpdated", query });
   for (const draft of snapshot.drafts) {
     useAppStore.getState().setDraftPresence(draft.network, draft.target, true);
+  }
+  for (const hit of bookmarks) {
+    useAppStore.getState().setBookmarked(
+      hit.message.network,
+      hit.message.target,
+      hit.message.id,
+      true,
+    );
   }
 
   // Member lists are not part of the snapshot. Without this a reload while

@@ -101,6 +101,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     members: {},
     inputHistory: {},
     drafts: {},
+    bookmarks: {},
     timelines: {},
     typing: {},
     replyTo: {},

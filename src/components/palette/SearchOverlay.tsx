@@ -35,6 +35,7 @@ function Search() {
 
   const active = useActiveTarget();
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"search" | "bookmarks">("search");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
@@ -46,14 +47,17 @@ function Search() {
   const text = query.trim();
   // Too short to search: the last answer stays in state but is not shown, so
   // clearing it would only cost a render.
-  const shown = [...text].length < MIN_QUERY ? [] : hits;
+  const shown = mode === "search" && [...text].length < MIN_QUERY ? [] : hits;
 
   useEffect(() => {
-    if ([...text].length < MIN_QUERY) return;
+    if (mode === "search" && [...text].length < MIN_QUERY) return;
 
     let live = true;
     const timer = setTimeout(() => {
-      ipc.searchHistory({ query: text, network, target, limit: HIT_LIMIT }).then(
+      const request = mode === "bookmarks"
+        ? ipc.listBookmarks(network, target, HIT_LIMIT)
+        : ipc.searchHistory({ query: text, network, target, limit: HIT_LIMIT });
+      request.then(
         (found) => {
           if (!live) return;
           setHits(found);
@@ -72,7 +76,7 @@ function Search() {
       live = false;
       clearTimeout(timer);
     };
-  }, [text, network, target]);
+  }, [text, network, target, mode]);
 
   const close = () => useAppStore.getState().toggleSearch(false);
 
@@ -153,7 +157,12 @@ function Search() {
         onMouseDown={(e) => e.stopPropagation()}
         className="relative flex max-h-[74vh] w-[min(720px,92vw)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"
       >
-        <input
+        <div className="flex border-b border-[var(--border-subtle)] px-3 pt-2">
+          {(["search", "bookmarks"] as const).map((choice) => (
+            <button key={choice} type="button" aria-pressed={mode === choice} onClick={() => { setMode(choice); setHits([]); setSelected(0); }} className={clsx("rounded-t-[var(--radius-sm)] px-3 py-1.5 text-[12px] capitalize", mode === choice ? "bg-[var(--surface-active)] text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]")}>{choice}</button>
+          ))}
+        </div>
+        {mode === "search" && <input
           autoFocus
           type="search"
           aria-label={target ? `Search ${target}` : "Search history"}
@@ -164,7 +173,7 @@ function Search() {
             setSelected(0);
           }}
           className="selectable border-b border-[var(--border-subtle)] bg-transparent px-4 py-3 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-        />
+        />}
 
         <ul role="listbox" aria-label="Search results" className="overflow-y-auto py-1">
           {shown.map((hit, i) => (
@@ -202,7 +211,9 @@ function Search() {
         ) : (
           shown.length === 0 && (
             <p className="px-4 py-6 text-center text-[var(--text-muted)]">
-              {[...text].length < MIN_QUERY
+              {mode === "bookmarks"
+                ? "No bookmarks in this conversation"
+                : [...text].length < MIN_QUERY
                 ? "Search this conversation"
                 : `Nothing matches ${text}`}
             </p>

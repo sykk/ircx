@@ -20,6 +20,7 @@ const MIGRATIONS: &[&str] = &[
     HIGHLIGHT_WORDS,
     MUTED,
     STS_POLICY,
+    BOOKMARKS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -367,6 +368,12 @@ CREATE TABLE sts_policy (
     host       TEXT PRIMARY KEY COLLATE NOCASE,
     port       INTEGER,
     expires_at INTEGER NOT NULL
+);
+"#;
+
+const BOOKMARKS: &str = r#"
+CREATE TABLE bookmarks (
+    message INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
 );
 "#;
 

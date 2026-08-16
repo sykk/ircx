@@ -7,10 +7,12 @@ import { SearchOverlay, snippetSegments } from "./SearchOverlay";
 
 const searchHistory = vi.fn();
 const loadHistoryAround = vi.fn();
+const listBookmarks = vi.fn();
 vi.mock("@/lib/ipc", () => ({
   ipc: {
     searchHistory: (req: unknown) => searchHistory(req),
     loadHistoryAround: (...args: unknown[]) => loadHistoryAround(...args),
+    listBookmarks: (...args: unknown[]) => listBookmarks(...args),
   },
 }));
 
@@ -53,6 +55,8 @@ beforeEach(() => {
   searchHistory.mockResolvedValue(hits);
   loadHistoryAround.mockReset();
   loadHistoryAround.mockResolvedValue(hits.map((hit) => hit.message));
+  listBookmarks.mockReset();
+  listBookmarks.mockResolvedValue(hits);
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     searchOpen: true,
@@ -106,6 +110,13 @@ describe("SearchOverlay", () => {
         limit: 50,
       }),
     );
+  });
+
+  it("lists bookmarks for the active target", async () => {
+    render(<SearchOverlay />);
+    fireEvent.click(screen.getByRole("button", { name: "bookmarks" }));
+    await waitFor(() => expect(listBookmarks).toHaveBeenCalledWith("libera", "#ctf-ops", 50));
+    expect(await screen.findAllByRole("option")).toHaveLength(2);
   });
 
   it("renders the backend's mark spans as highlights", async () => {

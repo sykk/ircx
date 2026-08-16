@@ -50,6 +50,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     replyTo: {},
     inputHistory: {},
     drafts: {},
+    bookmarks: {},
     views: {},
     viewAnchor: {},
     messageJump: {},

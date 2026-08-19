@@ -143,6 +143,7 @@ export const SEED = `
     memberCount: (members[name] ?? []).length,
     unread,
     highlights: 0,
+    muted: false,
   });
 
   const snapshot = {
@@ -164,7 +165,8 @@ export const SEED = `
       channel("#long", 0),
       channel("#split", 0),
     ],
-    queries: [{ network: "net1", nick: "sable", account: "sable", unread: 0, online: true }],
+    queries: [{ network: "net1", nick: "sable", account: "sable", unread: 0, online: true, muted: false }],
+    drafts: [],
   };
 
   const drafts = {};
@@ -222,6 +224,19 @@ export const SEED = `
         .slice(0, 20)
         .map((m) => ({ message: m, snippet: m.text }));
     },
+
+    // Bookmarks and mutes joined the startup path after this seed was written:
+    // loadSnapshot awaits them alongside the snapshot, so a missing handler
+    // rejects the pair and the client comes up with no networks at all.
+    // "end" rather than a page: the seed's history is the whole of what it has,
+    // so there is nothing behind the archive for the server to be asked for.
+    page_back: () => "end",
+    list_bookmarks: () => [],
+    set_bookmark: () => null,
+    muted_conversations: () => [],
+    set_muted: () => null,
+    highlight_words: () => [],
+    set_highlight_words: () => null,
 
     list_themes: () => [],
     list_plugins: () => [{

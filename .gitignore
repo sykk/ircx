@@ -8,7 +8,7 @@ dist/
 .DS_Store
 
 # A walk's scripts import each other now, so running one writes a cache beside
-# them. Run 30's is committed; nothing needs the next one to be.
+# them. Nothing needs one committed; run 30's was, and is gone.
 __pycache__/
 
 # Agent worktrees created by Claude Code.

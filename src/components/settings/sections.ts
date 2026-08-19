@@ -40,8 +40,3 @@ export const SECTIONS: readonly Section[] = [
   { id: "networks", name: "Networks", icon: "globe" },
 ];
 
-/** Whether a string names a section. The query a window opens at is a URL the
- * user can edit, and so is untrusted input rather than what was written. */
-export function isSectionId(value: string): value is SectionId {
-  return SECTIONS.some((section) => section.id === value);
-}

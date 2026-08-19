@@ -87,8 +87,3 @@ export function searchEmojis(query: string, limit = 100): EmojiEntry[] {
     .slice(0, limit)
     .map((row) => row.entry);
 }
-
-/** Resolve a native character back to its catalog row, if known. */
-export function emojiEntry(native: string): EmojiEntry | undefined {
-  return allEmojis().find((entry) => entry.native === native);
-}

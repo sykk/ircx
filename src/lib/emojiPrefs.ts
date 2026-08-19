@@ -30,10 +30,6 @@ export function loadFavorites(): string[] {
   return readList(FAVORITES_KEY);
 }
 
-export function isFavorite(native: string): boolean {
-  return loadFavorites().includes(native);
-}
-
 /** Most recent first, without duplicates. */
 export function recordRecent(native: string): string[] {
   const next = [native, ...loadRecents().filter((held) => held !== native)].slice(0, MAX_RECENTS);

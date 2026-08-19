@@ -150,6 +150,10 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         // is the same, and is a delta besides: nothing supersedes it.
         | IrcxEvent::MessageAnnotated { .. }
         | IrcxEvent::MessageRaised { .. }
+        // A whole set each time, so the last one is the answer — but it shares
+        // a lane with nothing that could carry it, and a rename's two arrive
+        // together and cost a list of a handful of names to deliver twice.
+        | IrcxEvent::IgnoredChanged { .. }
         | IrcxEvent::Notice { .. } => None,
     }
 }

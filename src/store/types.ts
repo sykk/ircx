@@ -129,6 +129,11 @@ export interface AppState {
   timelines: Record<TargetKey, TimelineState>;
   /** nick -> epoch ms when the indicator expires. */
   typing: Record<TargetKey, Record<string, number>>;
+  /** Who is ignored, per network, spelled as it was typed. Nothing here filters
+   * anything: the session dropped every line this describes before it reached
+   * the window. It is held so the member list can draw the control that undoes
+   * one. */
+  ignored: Record<string, string[]>;
   /** The server msgid the next message in a conversation answers. Held here
    * rather than in the composer because it is chosen in the timeline, which is
    * a different tree, and shared by every pane on the same conversation. */

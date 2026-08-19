@@ -1763,3 +1763,26 @@ describe("settings", () => {
     expect(store().settings).toBeNull();
   });
 });
+
+describe("who is ignored", () => {
+  it("holds the whole set the backend sends, per network", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({ type: "ignoredChanged", network: "libera", nicks: ["spambot"] });
+    applyEvent({ type: "ignoredChanged", network: "oftc", nicks: ["someone"] });
+
+    expect(useAppStore.getState().ignored).toEqual({
+      libera: ["spambot"],
+      oftc: ["someone"],
+    });
+  });
+
+  /** A set rather than a delta, so the later one is the answer outright — an
+   * unignore arrives as a shorter list, not as a removal. */
+  it("replaces rather than merging", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({ type: "ignoredChanged", network: "libera", nicks: ["spambot", "otherbot"] });
+    applyEvent({ type: "ignoredChanged", network: "libera", nicks: ["otherbot"] });
+
+    expect(useAppStore.getState().ignored.libera).toEqual(["otherbot"]);
+  });
+});

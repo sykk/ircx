@@ -49,6 +49,8 @@ export const COMMANDS: SlashCommand[] = [
   { name: "list", args: "[pattern]", summary: "List the channels on this network" },
   { name: "whois", args: "<nick>", summary: "Look someone up" },
   { name: "away", args: "[reason]", summary: "Set or clear away status" },
+  { name: "ignore", args: "[nick]", summary: "Stop hearing from someone, or list who is ignored" },
+  { name: "unignore", args: "<nick>", summary: "Hear from them again" },
   { name: "quit", args: "[reason]", summary: "Disconnect from the network" },
   { name: "raw", args: "<line>", summary: "Send a protocol line unchanged" },
   { name: "close", args: "[target]", summary: "Close this conversation and forget it" },

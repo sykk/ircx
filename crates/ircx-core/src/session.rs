@@ -75,6 +75,15 @@ pub enum Action {
     StsUpgrade {
         port: u16,
     },
+    /// Write an ignore down, or take it away.
+    ///
+    /// The session has already applied it — this is durability, so the next
+    /// launch starts out not hearing from them either. A rename is two of
+    /// these, the old name and the new one, in one drain.
+    Ignore {
+        nick: String,
+        ignored: bool,
+    },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -277,6 +286,13 @@ pub struct SessionState {
     /// The list is a handful of names, so the walk costs nothing worth keeping
     /// a second copy to avoid.
     pub(crate) muted: Vec<TargetName>,
+    /// People the reader does not want to hear from, as the store holds them.
+    ///
+    /// Held unfolded and compared through `fold` for the reason `muted` above
+    /// gives: it is seeded before the connection has said what its CASEMAPPING
+    /// is, and folding on receipt would settle a nick against the wrong rule
+    /// for the rest of the session.
+    pub(crate) ignored: Vec<String>,
     pub(crate) user: Option<String>,
     pub(crate) host: Option<String>,
     pub(crate) account: Option<String>,
@@ -368,6 +384,7 @@ impl SessionState {
             nick: config.nick.clone(),
             highlight_words: Vec::new(),
             muted: Vec::new(),
+            ignored: Vec::new(),
             config,
             isupport: ISupport::default(),
             caps: Caps::default(),
@@ -628,6 +645,64 @@ impl SessionState {
             self.emit_query(&key);
         }
         self.drain()
+    }
+
+    /// Whether this is somebody the reader asked not to hear from.
+    ///
+    /// The nick is raw, because every caller holds one off the wire rather
+    /// than a folded key.
+    pub(crate) fn is_ignored(&self, nick: &str) -> bool {
+        let folded = self.fold(nick);
+        self.ignored.iter().any(|name| self.fold(name) == folded)
+    }
+
+    /// Replaces who is ignored: the whole set, as the store holds it.
+    ///
+    /// This is the connect-time seed and the answer to a change made from the
+    /// settings window. What `/ignore` does is below, and applies to the next
+    /// line rather than to the next round trip.
+    pub fn set_ignored(&mut self, ignored: Vec<String>) -> Vec<Action> {
+        self.ignored = ignored;
+        self.say_who_is_ignored();
+        self.drain()
+    }
+
+    /// Starts or stops ignoring one person, from the composer or a rename.
+    ///
+    /// The set moves here and the store is told afterwards, so the very next
+    /// line from them is already gone. Nothing is emitted about the messages
+    /// this silences: they were never drawn, and there is no row to take back.
+    pub(crate) fn ignore(&mut self, nick: &str, ignored: bool) {
+        let already = self.is_ignored(nick);
+        if already == ignored {
+            return;
+        }
+        match ignored {
+            true => self.ignored.push(nick.to_string()),
+            false => {
+                let folded = self.fold(nick);
+                self.ignored = self
+                    .ignored
+                    .iter()
+                    .filter(|name| self.fold(name) != folded)
+                    .cloned()
+                    .collect();
+            }
+        }
+        self.say_who_is_ignored();
+        self.actions.push(Action::Ignore {
+            nick: nick.to_string(),
+            ignored,
+        });
+    }
+
+    /// The whole set, every time it moves. It is a handful of names, and a
+    /// delta would have to survive the reload a reconnect brings with it.
+    fn say_who_is_ignored(&mut self) {
+        self.emit(IrcxEvent::IgnoredChanged {
+            network: self.config.network.clone(),
+            nicks: self.ignored.clone(),
+        });
     }
 
     /// Says that a plugin stopped, in the console and once.
@@ -1894,6 +1969,13 @@ impl SessionState {
         let Some(body) = message.param(1) else { return };
         let sender = self.sender_of(message);
 
+        // Before anything this line would make the client do. Dropping it in
+        // `append` would still open a query on the person, mark them online
+        // and answer their CTCP — an ignore that replies is not one.
+        if !sender.is_self && self.is_ignored(&sender.nick) {
+            return;
+        }
+
         // Our own echo of a private message names the other side, not us.
         let mut target = match self.isupport.is_channel(raw_target) || sender.is_self {
             true => raw_target.to_string(),
@@ -2037,6 +2119,9 @@ impl SessionState {
 
     fn handle_tagmsg(&mut self, message: &Message) {
         let sender = self.sender_of(message);
+        if !sender.is_self && self.is_ignored(&sender.nick) {
+            return;
+        }
         let Some(raw_target) = message.param(0) else {
             return;
         };
@@ -2270,6 +2355,9 @@ impl SessionState {
         };
         let sender = self.sender_of(message);
         let old = self.fold(&sender.nick);
+        // Read before the set moves below, so the line announcing the rename is
+        // silenced under the name it was made from.
+        let was_ignored = !sender.is_self && self.is_ignored(&sender.nick);
         let text = format!("{} is now known as {new_nick}", sender.nick);
 
         let shared: Vec<(String, String)> = self
@@ -2325,6 +2413,14 @@ impl SessionState {
             });
             self.emit_query(&folded);
             self.sync_monitor();
+        }
+
+        // An ignore a rename escapes is an ignore that stops working, and it
+        // fails in the direction that puts somebody back in front of the reader
+        // who asked not to hear from them.
+        if was_ignored {
+            self.ignore(&sender.nick, false);
+            self.ignore(&new_nick, true);
         }
 
         if sender.is_self {
@@ -2468,6 +2564,11 @@ impl SessionState {
 
     fn handle_invite(&mut self, message: &Message) {
         let sender = self.sender_of(message);
+        // An invitation is addressed to you by name, which is the thing an
+        // ignore is for.
+        if self.is_ignored(&sender.nick) {
+            return;
+        }
         let Some(channel) = message.params.last() else {
             return;
         };

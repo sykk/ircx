@@ -47,6 +47,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     members: {},
     timelines: {},
     typing: {},
+    ignored: {},
     replyTo: {},
     inputHistory: {},
     drafts: {},

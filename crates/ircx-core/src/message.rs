@@ -150,6 +150,9 @@ impl SessionState {
     /// emit `MessagesAppended`: a batch that leaked its lines one at a time
     /// would render a history backfill as thousands of arrivals.
     pub(crate) fn append(&mut self, message: ChatMessage) {
+        if self.is_silenced(&message) {
+            return;
+        }
         if let Some(batch) = message
             .batch
             .clone()
@@ -180,6 +183,33 @@ impl SessionState {
                 messages: ask,
             });
         }
+    }
+
+    /// Whether an ignored person is behind this row.
+    ///
+    /// Speech and the noise of coming and going, which is the whole of what
+    /// somebody asking not to hear from a person means. Not a kick, a mode or a
+    /// topic: those change the channel rather than say something, and somebody
+    /// kicked by a person they ignore still needs to see why.
+    ///
+    /// Here rather than in each handler because `chat_message` puts the actor
+    /// in `sender` for a join as much as for a sentence, so one test answers
+    /// for both. A line ircx wrote itself is not caught by it: those carry the
+    /// network's own name and a kind this does not name.
+    fn is_silenced(&self, message: &ChatMessage) -> bool {
+        if message.sender.is_self {
+            return false;
+        }
+        matches!(
+            message.kind,
+            MessageKind::Privmsg
+                | MessageKind::Notice
+                | MessageKind::Action
+                | MessageKind::Join
+                | MessageKind::Part
+                | MessageKind::Quit
+                | MessageKind::Nick
+        ) && self.is_ignored(&message.sender.nick)
     }
 
     pub(crate) fn note(&mut self, target: &str, kind: MessageKind, text: String) {

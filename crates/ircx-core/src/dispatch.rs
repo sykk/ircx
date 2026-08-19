@@ -28,6 +28,8 @@ const HELP: &str = "\
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
 /away [reason]            mark yourself away, or back
+/ignore [nick]            stop hearing from somebody, or list who is ignored
+/unignore <nick>          hear from them again
 /quit [reason]            disconnect
 /raw <line>               send a line to the server untouched
 /close [target]           close a conversation and forget it
@@ -229,6 +231,8 @@ impl SessionState {
             "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
             "away" => self.cmd_away(args),
+            "ignore" => self.cmd_ignore(target, args),
+            "unignore" => self.cmd_unignore(target, args),
             "quit" => {
                 self.send_quit((!args.is_empty()).then_some(args));
                 CommandOutcome::Handled
@@ -503,6 +507,61 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// Stops hearing from somebody, or says who is already ignored.
+    ///
+    /// The list is the answer to no argument because that is the question a
+    /// bare `/ignore` asks. It is the one of the two that goes to the server
+    /// tab: who is ignored is a fact about the network, and the same list typed
+    /// in four channels would leave four copies of it in the archive. The
+    /// confirmation goes where it was typed, because the person who typed it is
+    /// reading there and the whole of what they will see otherwise is somebody
+    /// they were talking to going quiet.
+    fn cmd_ignore(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let Some(nick) = args.split_whitespace().next() else {
+            let mut nicks = self.ignored.clone();
+            nicks.sort_by_key(|nick| nick.to_lowercase());
+            let text = match nicks.is_empty() {
+                true => "Nobody is ignored on this network.".to_string(),
+                false => format!("Ignored on this network: {}", nicks.join(", ")),
+            };
+            self.note(SERVER_TARGET, MessageKind::Client, text);
+            return CommandOutcome::Handled;
+        };
+        if self.fold(nick) == self.fold(&self.nick) {
+            return CommandOutcome::Rejected("You cannot ignore yourself.".into());
+        }
+        if self.is_ignored(nick) {
+            return CommandOutcome::Rejected(format!("{nick} is already ignored."));
+        }
+        self.ignore(nick, true);
+        self.note(
+            target,
+            MessageKind::Client,
+            format!("Ignoring {nick}. Nothing they say from now on is kept."),
+        );
+        CommandOutcome::Handled
+    }
+
+    /// Hears from somebody again. What they said while ignored is gone rather
+    /// than hidden, so the note says so: nothing comes back.
+    fn cmd_unignore(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let Some(nick) = args.split_whitespace().next() else {
+            return CommandOutcome::Rejected("`/unignore <nick>` needs a nickname".into());
+        };
+        if !self.is_ignored(nick) {
+            return CommandOutcome::Rejected(format!("{nick} is not ignored."));
+        }
+        self.ignore(nick, false);
+        // In the conversation, unlike the list: this one answers something the
+        // reader just typed there, and there is one of it.
+        self.note(
+            target,
+            MessageKind::Client,
+            format!("No longer ignoring {nick}. What they said meanwhile was not kept."),
+        );
+        CommandOutcome::Handled
+    }
+
     fn cmd_raw(&mut self, args: &str) -> CommandOutcome {
         if args.is_empty() {
             return CommandOutcome::Rejected("`/raw <line>` needs a line".into());
@@ -709,8 +768,8 @@ impl SessionState {
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
-    "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "quit", "raw", "quote",
-    "close", "help",
+    "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "ignore", "unignore",
+    "quit", "raw", "quote", "close", "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

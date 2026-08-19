@@ -19,7 +19,7 @@ import {
 } from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
 import type { SettingsScope } from "@/components/settings/scope";
-import type { MutedConversation } from "@/types";
+import type { IgnoredPerson, MutedConversation } from "@/types";
 
 /**
  * What is allowed to interrupt the reader: the words that raise a conversation,
@@ -44,6 +44,7 @@ export function NotificationsPage({
 }) {
   const [words, setWords] = useState<string[] | null>(null);
   const [muted, setMuted] = useState<MutedConversation[]>([]);
+  const [ignored, setIgnored] = useState<IgnoredPerson[]>([]);
   const [notify, setNotify] = useState<Notifications>(storedNotifications);
   const [refused, setRefused] = useState(false);
   const [typed, setTyped] = useState("");
@@ -68,6 +69,34 @@ export function NotificationsPage({
   }, []);
 
   useEffect(readMuted, [readMuted]);
+
+  const readIgnored = useCallback(() => {
+    void ipc.ignoredPeople().then(
+      (held) => setIgnored(held),
+      (reason: unknown) =>
+        setError(reasonOr(reason, "Who you have ignored could not be read.")),
+    );
+  }, []);
+
+  useEffect(readIgnored, [readIgnored]);
+
+  /* Only ever the undo: an ignore is started where the person is, which is the
+     roster and the composer. This window has no list of who is on a network to
+     start one from. */
+  const hear = useCallback(
+    async (network: string, nick: string) => {
+      report(true);
+      try {
+        await ipc.setIgnored(network, nick, false);
+        setError(null);
+        readIgnored();
+      } catch (reason) {
+        setError(reasonOr(reason, "That could not be changed."));
+      }
+      report(false);
+    },
+    [readIgnored, report],
+  );
 
   /**
    * Turns a notification switch on or off.
@@ -307,6 +336,39 @@ export function NotificationsPage({
         <Note>
           A rule still writes down what it thought was worth reading in a muted conversation, and
           the message still says so. What mute takes away is the interruption.
+        </Note>
+      </Group>
+
+      <Group title="Ignored people">
+        {ignored.length === 0 ? (
+          <Note>
+            Nobody is ignored. Start one from the member list, or with{" "}
+            <code>/ignore nickname</code> in a conversation.
+          </Note>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {ignored.map((row) => (
+              <li
+                key={`${row.network}\u0000${row.nick}`}
+                className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 hover:bg-[var(--surface-hover)]"
+              >
+                <span className="min-w-0 truncate text-[13px] text-[var(--text-primary)]">
+                  <span className="font-[family-name:var(--font-mono)]">{row.nick}</span>
+                  <span className="text-[var(--text-muted)]"> on {row.networkName}</span>
+                </span>
+                <SecondaryButton onClick={() => void hear(row.network, row.nick)}>
+                  Stop ignoring
+                </SecondaryButton>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <Note>
+          Stronger than a mute, and the difference is what is kept: a muted conversation is all
+          still there to scroll back through, while nothing an ignored person says is written down
+          at all. Hearing from them again starts from that moment — what they said meanwhile does
+          not come back.
         </Note>
       </Group>
     </SettingsPage>

@@ -93,6 +93,16 @@ describe("filtering the roster", () => {
     expect(screen.getByRole("menuitem", { name: "Give ops" })).toHaveProperty("disabled", false);
   });
 
+  it("offers to ignore whoever the menu was opened on", () => {
+    fireEvent.contextMenu(screen.getByRole("listitem", { name: /phrack/ }), {
+      clientX: 40,
+      clientY: 60,
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Ignore" })).toBeTruthy();
+  });
+
+
   it("opens member details from the row", () => {
     fireEvent.click(screen.getByRole("listitem", { name: /phrack/ }));
 
@@ -207,5 +217,33 @@ describe("filtering the roster", () => {
     // leave the line below passing for a filter nothing had cleared.
     expect(useAppStore.getState().views[TEST_VIEW]?.target).toBe("#hackint");
     expect(useAppStore.getState().memberFilter[TEST_VIEW]).toBeUndefined();
+  });
+});
+
+/** The one menu item that reads the ignore set, so it offers the undo rather
+ * than offering to do the same thing twice. Its own block because the set has
+ * to be seeded before the panel builds the menu. */
+describe("the menu on somebody already ignored", () => {
+  it("offers to stop rather than to start", () => {
+    resetStore();
+    useAppStore.setState({
+      networks: { libera: LIBERA },
+      networkOrder: ["libera"],
+      channels: { [targetKey("libera", CTF_OPS.name)]: CTF_OPS },
+      members: { [targetKey("libera", CTF_OPS.name)]: CTF_OPS_MEMBERS },
+      // Spelled differently from the roster on purpose: a nick is matched the
+      // way the network folds it.
+      ignored: { libera: ["PHRACK"] },
+      ...oneView({ network: "libera", target: CTF_OPS.name }),
+    });
+    render(<ContextPanel view={TEST_VIEW} />);
+
+    fireEvent.contextMenu(screen.getByRole("listitem", { name: /phrack/ }), {
+      clientX: 40,
+      clientY: 60,
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Stop ignoring" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Ignore" })).toBeNull();
   });
 });

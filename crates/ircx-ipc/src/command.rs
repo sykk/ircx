@@ -34,6 +34,8 @@
 //! set_highlight_words(words: Vec<String>)     -> ()
 //! muted_conversations()                       -> Vec<MutedConversation>
 //! set_muted(network, target, muted)           -> ()
+//! ignored_people()                            -> Vec<IgnoredPerson>
+//! set_ignored(network, nick, ignored)         -> ()
 //! export_archive(scope, path)                 -> u64
 //! delete_archive(scope)                       -> ()
 //! ```

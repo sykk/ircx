@@ -14,6 +14,8 @@ import { actionsFor, rankOf } from "./members";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
 const NO_MEMBERS: Member[] = [];
+/** The same, for a network nobody on it is ignored on. */
+const NOBODY: string[] = [];
 
 /**
  * The roster is as wide as the names in it, not as wide as a column somebody
@@ -63,6 +65,9 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   // One entry, not the whole map: subscribing to `s.members` re-rendered every
   // pane's panel on a join or part in any channel on any network.
   const members = useAppStore((s) => (key === null ? NO_MEMBERS : (s.members[key] ?? NO_MEMBERS)));
+  const ignored = useAppStore((s) =>
+    channel === undefined ? NOBODY : (s.ignored[channel.network] ?? NOBODY),
+  );
   const toggleRoster = useAppStore((s) => s.toggleRoster);
   const dragged = useAppStore((s) => s.rosterWidth);
   const ref = useRef<HTMLElement>(null);
@@ -104,6 +109,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
     (member: Member, x: number, y: number) => {
       if (channel === undefined) return;
       const allowed = actionsFor(self);
+      const isIgnored = ignored.some((nick) => sameTarget(nick, member.nick));
       const isOp = rankOf(member) >= 3;
       const isVoiced = member.prefixes.includes("+");
       const run = async (input: string) => {
@@ -138,6 +144,12 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
           { kind: "separator" },
           { kind: "action", label: "Message", onClick: () => void message() },
           { kind: "action", label: "Whois", onClick: () => void run(`/whois ${member.nick}`) },
+          {
+            kind: "action",
+            label: isIgnored ? "Stop ignoring" : "Ignore",
+            onClick: () =>
+              void run(`${isIgnored ? "/unignore" : "/ignore"} ${member.nick}`),
+          },
           { kind: "separator" },
           {
             kind: "action",
@@ -170,7 +182,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         ],
       });
     },
-    [channel, self, setSelectedNick],
+    [channel, self, ignored, setSelectedNick],
   );
 
   // A query or a console has nobody to list, and an empty column standing in

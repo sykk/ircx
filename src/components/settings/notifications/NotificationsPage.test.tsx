@@ -13,6 +13,8 @@ const { ipcMock, allowedMock } = vi.hoisted(() => ({
     setHighlightWords: vi.fn(),
     mutedConversations: vi.fn(),
     setMuted: vi.fn(),
+    ignoredPeople: vi.fn(),
+    setIgnored: vi.fn(),
   },
   allowedMock: vi.fn(),
 }));
@@ -37,6 +39,8 @@ beforeEach(() => {
   ipcMock.setHighlightWords.mockResolvedValue(undefined);
   ipcMock.mutedConversations.mockResolvedValue([]);
   ipcMock.setMuted.mockResolvedValue(undefined);
+  ipcMock.ignoredPeople.mockResolvedValue([]);
+  ipcMock.setIgnored.mockResolvedValue(undefined);
   allowedMock.mockResolvedValue(true);
   localStorage.clear();
 });
@@ -155,6 +159,34 @@ describe("the notifications page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Unmute" }));
 
     await waitFor(() => expect(ipcMock.setMuted).toHaveBeenCalledWith("hackint", "#other", false));
+  });
+
+  /** The only way back for an ignore made on a network you are no longer
+   * connected to: `/unignore` needs a session to be typed into. */
+  it("lists who is ignored, and stops", async () => {
+    ipcMock.ignoredPeople.mockResolvedValue([
+      { network: "hackint", networkName: "hackint", nick: "spambot" },
+    ]);
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Stop ignoring" }));
+
+    await waitFor(() =>
+      expect(ipcMock.setIgnored).toHaveBeenCalledWith("hackint", "spambot", false),
+    );
+  });
+
+  it("says where an ignore is started when nobody is", async () => {
+    open();
+
+    expect(await screen.findByText(/Nobody is ignored/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop ignoring" })).toBeNull();
+  });
+
+  it("says why the ignore list could not be read", async () => {
+    ipcMock.ignoredPeople.mockRejectedValue("The archive is locked.");
+    open();
+
+    expect(await screen.findByText("The archive is locked.")).toBeTruthy();
   });
 
   it("offers nothing to mute when no conversation was open", async () => {

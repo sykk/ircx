@@ -77,6 +77,9 @@ struct Harness {
     paged_back: Vec<(String, bool)>,
     sts_policies: Vec<(String, Option<u16>, u64)>,
     sts_upgrades: Vec<u16>,
+    /// Stands in for the `ignored` table: who the session asked the host to
+    /// write down, and whether it was an ignore or the end of one.
+    ignore_writes: Vec<(String, bool)>,
     closed: bool,
 }
 
@@ -91,6 +94,7 @@ impl Harness {
             paged_back: Vec::new(),
             sts_policies: Vec::new(),
             sts_upgrades: Vec::new(),
+            ignore_writes: Vec::new(),
             closed: false,
         }
     }
@@ -122,6 +126,7 @@ impl Harness {
                     duration,
                 } => self.sts_policies.push((host, port, duration)),
                 Action::StsUpgrade { port } => self.sts_upgrades.push(port),
+                Action::Ignore { nick, ignored } => self.ignore_writes.push((nick, ignored)),
                 Action::Close => self.closed = true,
             }
         }
@@ -5676,5 +5681,328 @@ mod what_a_sent_message_claims {
                 .delivery,
             Delivery::Sent
         );
+    }
+}
+
+/// Not hearing from somebody: what an ignore takes away, what it leaves, and
+/// what it does about the person changing their name.
+mod ignoring_somebody {
+    use super::*;
+
+    /// In a channel with somebody ignored, having thrown away the setup.
+    fn with_spambot_ignored() -> Harness {
+        let mut session = registered("message-tags echo-message");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":spambot!~bot@example.net JOIN #ircx");
+        assert!(matches!(
+            session.submit("#ircx", "/ignore spambot"),
+            CommandOutcome::Handled
+        ));
+        session.sent();
+        session.events.clear();
+        session.ignore_writes.clear();
+        session
+    }
+
+    /// The whole of what the reader asked for: nothing they say arrives.
+    #[test]
+    fn nothing_an_ignored_person_says_is_drawn() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net PRIVMSG #ircx :buy my coin");
+        session.feed(":spambot!~bot@example.net NOTICE #ircx :seriously, buy it");
+        session.feed(":spambot!~bot@example.net PRIVMSG #ircx :\u{1}ACTION waves\u{1}");
+
+        assert!(
+            session.messages().is_empty(),
+            "nothing they said should have reached the timeline: {:?}",
+            session.messages()
+        );
+    }
+
+    /// A row is never drawn, so there is nothing for the archive to be handed:
+    /// the write follows the emit, and this is where the hole comes from.
+    #[test]
+    fn a_private_message_from_them_opens_no_conversation() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net PRIVMSG sykk :buy my coin");
+
+        assert!(session.messages().is_empty());
+        assert!(
+            !session
+                .events
+                .iter()
+                .any(|event| matches!(event, IrcxEvent::QueryUpdated { .. })),
+            "a query should not open on somebody being ignored: {:?}",
+            session.events
+        );
+        assert!(
+            !session
+                .open
+                .iter()
+                .any(|target| matches!(target, OpenTarget::Query(_))),
+            "and no query should be remembered for the next launch: {:?}",
+            session.open
+        );
+    }
+
+    /// An ignore that answers is not one. A CTCP reply would tell them the
+    /// client is running and who is at it.
+    #[test]
+    fn a_ctcp_from_them_is_not_answered() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net PRIVMSG sykk :\u{1}VERSION\u{1}");
+
+        assert!(
+            session.sent().is_empty(),
+            "nothing should go back to somebody being ignored"
+        );
+    }
+
+    /// The noise of coming and going is what a busy channel's ignores are
+    /// mostly about.
+    #[test]
+    fn their_joins_and_parts_are_not_drawn() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net PART #ircx :bye");
+        session.feed(":spambot!~bot@example.net JOIN #ircx");
+        session.feed(":spambot!~bot@example.net QUIT :Remote host closed the connection");
+
+        assert!(
+            session.messages().is_empty(),
+            "their coming and going should be silent too: {:?}",
+            session.messages()
+        );
+    }
+
+    /// The roster is a fact about the channel rather than about the reader's
+    /// patience. Hiding them from it would be a lie about who is in there —
+    /// and about who can read what the reader types.
+    #[test]
+    fn they_stay_in_the_member_list() {
+        let mut session = with_spambot_ignored();
+        session.feed(":newcomer!~new@example.net JOIN #ircx");
+
+        let members = session.state.members("#ircx");
+        assert!(
+            members.iter().any(|member| member.nick == "spambot"),
+            "an ignored person is still in the channel: {members:?}"
+        );
+    }
+
+    /// A kick changes the channel rather than saying something, and somebody
+    /// kicked by a person they ignore still needs to see why.
+    #[test]
+    fn a_kick_by_them_is_still_drawn() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net KICK #ircx sykk :out");
+
+        let kinds: Vec<MessageKind> = session.messages().iter().map(|m| m.kind).collect();
+        assert_eq!(kinds, vec![MessageKind::Kick]);
+    }
+
+    /// Typing is a courtesy and a reaction is a line about your own message.
+    /// Both are things somebody ignored can do at you.
+    #[test]
+    fn their_typing_and_reactions_are_dropped() {
+        let mut session = with_spambot_ignored();
+        session.feed("@+typing=active :spambot!~bot@example.net TAGMSG #ircx");
+        session.feed("@+draft/react=👍;+reply=abc123 :spambot!~bot@example.net TAGMSG #ircx");
+
+        assert!(
+            !session.events.iter().any(|event| matches!(
+                event,
+                IrcxEvent::TypingChanged { .. } | IrcxEvent::ReactionChanged { .. }
+            )),
+            "neither should have been passed on: {:?}",
+            session.events
+        );
+    }
+
+    /// An invitation is addressed to you by name, which is the thing an ignore
+    /// is for.
+    #[test]
+    fn an_invitation_from_them_is_dropped() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net INVITE sykk :#deals");
+
+        assert!(
+            session.messages().is_empty(),
+            "the invitation should not have been noted: {:?}",
+            session.messages()
+        );
+    }
+
+    /// An ignore a rename escapes is an ignore that stops working, and it fails
+    /// in the direction that puts them back in front of the reader.
+    #[test]
+    fn an_ignore_follows_them_through_a_nick_change() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net NICK spambot2");
+        session.feed(":spambot2!~bot@example.net PRIVMSG #ircx :still here");
+
+        assert!(
+            session.messages().is_empty(),
+            "the rename and what followed it should both be silent: {:?}",
+            session.messages()
+        );
+        assert_eq!(
+            session.ignore_writes,
+            vec![
+                ("spambot".to_string(), false),
+                ("spambot2".to_string(), true)
+            ],
+            "and the store should be told, so a restart starts out ignoring them"
+        );
+    }
+
+    /// Somebody else renaming to the ignored nick is a different person with
+    /// the same eight letters, and there is nothing here that can tell them
+    /// apart — but the reader's answer was about the name.
+    #[test]
+    fn an_unrelated_persons_rename_is_drawn() {
+        let mut session = with_spambot_ignored();
+        session.feed(":newcomer!~new@example.net JOIN #ircx");
+        session.events.clear();
+        session.feed(":newcomer!~new@example.net NICK newcomer_");
+
+        let kinds: Vec<MessageKind> = session.messages().iter().map(|m| m.kind).collect();
+        assert_eq!(kinds, vec![MessageKind::Nick]);
+    }
+
+    /// The set is what the frontend draws the control from, so it says so
+    /// every time it moves.
+    #[test]
+    fn every_change_says_who_is_ignored_now() {
+        let mut session = registered("");
+        session.events.clear();
+        session.submit("#ircx", "/ignore spambot");
+        session.submit("#ircx", "/unignore spambot");
+
+        let said: Vec<Vec<String>> = session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::IgnoredChanged { nicks, .. } => Some(nicks.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(said, vec![vec!["spambot".to_string()], Vec::new()]);
+    }
+
+    /// It takes effect on the next line rather than on the next round trip:
+    /// the session moves its own set and tells the store afterwards.
+    #[test]
+    fn the_command_writes_it_down_and_takes_effect_at_once() {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+
+        assert!(matches!(
+            session.submit("#ircx", "/ignore spambot"),
+            CommandOutcome::Handled
+        ));
+        assert_eq!(session.ignore_writes, vec![("spambot".to_string(), true)]);
+
+        session.feed(":spambot!~bot@example.net PRIVMSG #ircx :buy my coin");
+        assert!(
+            !session
+                .messages()
+                .iter()
+                .any(|message| message.sender.nick == "spambot"),
+            "the very next line should already be gone"
+        );
+    }
+
+    /// The casemapping is the network's, and `Spambot` is `spambot` under the
+    /// one Libera uses.
+    #[test]
+    fn the_match_folds_the_way_the_network_does() {
+        let mut session = with_spambot_ignored();
+        session.feed(":SPAMBOT!~bot@example.net PRIVMSG #ircx :buy my coin");
+
+        assert!(session.messages().is_empty());
+    }
+
+    /// Typed in a channel and confirmed nowhere the reader is looking, the
+    /// whole of what an ignore looks like is somebody going quiet.
+    #[test]
+    fn the_confirmation_lands_where_it_was_typed() {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+        session.submit("#ircx", "/ignore spambot");
+
+        let said: Vec<(&str, &str)> = session
+            .messages()
+            .iter()
+            .map(|message| (message.target.as_str(), message.text.as_str()))
+            .collect();
+        assert_eq!(
+            said,
+            vec![(
+                "#ircx",
+                "Ignoring spambot. Nothing they say from now on is kept."
+            )]
+        );
+    }
+
+    /// A bare `/ignore` asks who is ignored, which is the question it reads as.
+    #[test]
+    fn a_bare_ignore_lists_who_is_ignored() {
+        let mut session = with_spambot_ignored();
+        session.submit("#ircx", "/ignore");
+
+        let said: Vec<(&str, &str)> = session
+            .messages()
+            .iter()
+            .map(|message| (message.target.as_str(), message.text.as_str()))
+            .collect();
+        // The server tab, unlike the confirmation: the same list typed in four
+        // channels would leave four copies of it in the archive.
+        assert_eq!(said, vec![("*", "Ignored on this network: spambot")]);
+    }
+
+    /// A client that let you ignore yourself would silence your own echo, and
+    /// the composer would stop showing what you typed.
+    #[test]
+    fn ignoring_yourself_is_refused() {
+        let mut session = registered("");
+        let outcome = session.submit("#ircx", "/ignore sykk");
+
+        assert!(matches!(outcome, CommandOutcome::Rejected(_)));
+        assert!(session.ignore_writes.is_empty());
+    }
+
+    /// Our own echo of what we said to somebody ignored is ours rather than
+    /// theirs, and a composer that swallowed it would look broken.
+    #[test]
+    fn our_own_line_to_them_is_still_drawn() {
+        let mut session = with_spambot_ignored();
+        session.feed(":sykk!~sykk@user/sykk PRIVMSG spambot :last warning");
+
+        let text: Vec<&str> = session
+            .messages()
+            .iter()
+            .map(|message| message.text.as_str())
+            .collect();
+        assert_eq!(text, vec!["last warning"]);
+    }
+
+    /// What was said while ignored is gone rather than hidden, so unignoring
+    /// brings nothing back and the note says so.
+    #[test]
+    fn unignoring_starts_hearing_them_again() {
+        let mut session = with_spambot_ignored();
+        session.feed(":spambot!~bot@example.net PRIVMSG #ircx :while ignored");
+        session.submit("#ircx", "/unignore spambot");
+        session.events.clear();
+        session.feed(":spambot!~bot@example.net PRIVMSG #ircx :after");
+
+        let text: Vec<&str> = session
+            .messages()
+            .iter()
+            .map(|message| message.text.as_str())
+            .collect();
+        assert_eq!(text, vec!["after"], "only what came after it");
     }
 }

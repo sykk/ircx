@@ -2860,3 +2860,59 @@ fn removing_a_network_takes_its_mutes() {
 
     assert!(store.muted_targets(&id).unwrap().is_empty());
 }
+
+/// The session folds a nick by the network's casemapping before it asks, but
+/// the row was written in whatever case somebody typed, so the delete has to
+/// find it caselessly.
+#[test]
+fn unignoring_finds_the_row_whatever_case_it_was_typed_in() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_ignored("libera", "Spambot", true).unwrap();
+
+    assert_eq!(store.ignored_nicks("libera").unwrap(), ["Spambot"]);
+
+    store.set_ignored("libera", "spambot", false).unwrap();
+    assert!(store.ignored_nicks("libera").unwrap().is_empty());
+}
+
+/// An ignore is per network, because a nick means nothing without the network
+/// it was said on: the same eight letters are two different people.
+#[test]
+fn an_ignore_does_not_cross_networks() {
+    let store = Store::open_in_memory().unwrap();
+    store.set_ignored("libera", "spambot", true).unwrap();
+
+    assert!(store.ignored_nicks("oftc").unwrap().is_empty());
+}
+
+/// The settings window has no network list to look an id up in, so the name
+/// travels with it, the way it does for a mute.
+#[test]
+fn the_ignored_list_names_the_network() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera.Chat")).unwrap();
+    store.set_ignored(&id, "spambot", true).unwrap();
+    store.set_ignored("gone", "someone", true).unwrap();
+
+    let listed = store.ignored_people().unwrap();
+    assert!(
+        listed.contains(&(id.clone(), "Libera.Chat".into(), "spambot".into())),
+        "the configured network is named: {listed:?}"
+    );
+    assert!(
+        listed.contains(&("gone".into(), "gone".into(), "someone".into())),
+        "a network with no config falls back to its id rather than vanishing: {listed:?}"
+    );
+}
+
+/// An ignore is a setting, and one on a network that is gone is one nobody can
+/// find to undo.
+#[test]
+fn removing_a_network_takes_its_ignores() {
+    let store = Store::open_in_memory().unwrap();
+    let id = store.save_network(&network("Libera.Chat")).unwrap();
+    store.set_ignored(&id, "spambot", true).unwrap();
+    store.remove_network(&id).unwrap();
+
+    assert!(store.ignored_nicks(&id).unwrap().is_empty());
+}

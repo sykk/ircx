@@ -12,6 +12,7 @@ import type {
   CommandOutcome,
   FileToUpload,
   HistoryRequest,
+  IgnoredPerson,
   InstalledPlugin,
   IrcxEvent,
   Member,
@@ -137,6 +138,9 @@ export const ipc = {
   mutedConversations: () => invoke<MutedConversation[]>("muted_conversations"),
   setMuted: (network: string, target: string | null, muted: boolean) =>
     invoke<void>("set_muted", { network, target, muted }),
+  ignoredPeople: () => invoke<IgnoredPerson[]>("ignored_people"),
+  setIgnored: (network: string, nick: string, ignored: boolean) =>
+    invoke<void>("set_ignored", { network, nick, ignored }),
   exportArchive: (scope: ArchiveScope, path: string) =>
     invoke<number>("export_archive", { scope, path }),
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),

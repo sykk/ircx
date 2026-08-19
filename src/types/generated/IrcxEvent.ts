@@ -19,7 +19,7 @@ export type IrcxEvent = { "type": "networkUpdated", network: Network, } | { "typ
  * True when the server sent more than ircx would hold, so the list is
  * the beginning of one rather than all of it.
  */
-truncated: boolean, } | { "type": "membersReplaced", network: string, channel: string, members: Array<Member>, } | { "type": "memberUpdated", network: string, channel: string, member: Member, } | { "type": "memberRemoved", network: string, channel: string, nick: string, } | { "type": "typingChanged", network: string, target: string, nick: string, active: boolean, } | { "type": "reactionChanged", network: string, target: string, 
+truncated: boolean, } | { "type": "membersReplaced", network: string, channel: string, members: Array<Member>, } | { "type": "memberUpdated", network: string, channel: string, member: Member, } | { "type": "memberRemoved", network: string, channel: string, nick: string, } | { "type": "ignoredChanged", network: string, nicks: Array<string>, } | { "type": "typingChanged", network: string, target: string, nick: string, active: boolean, } | { "type": "reactionChanged", network: string, target: string, 
 /**
  * The `msgid` the reaction named.
  */

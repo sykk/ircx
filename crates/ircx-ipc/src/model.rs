@@ -300,6 +300,21 @@ pub struct MutedConversation {
     pub target: TargetName,
 }
 
+/// Somebody the reader does not want to hear from, for the settings window's
+/// list of them. The network's name travels with its id for the reason
+/// `MutedConversation` gives.
+///
+/// The nick is spelled as it was typed rather than folded: a list is read by a
+/// person, and `SPAMBOT` is how they will remember writing it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct IgnoredPerson {
+    pub network: NetworkId,
+    pub network_name: String,
+    pub nick: String,
+}
+
 /// One line of a `LIST` reply. Not a `Channel`: the user is not in it, so there
 /// is nothing to say about membership, modes or unread — only what the server
 /// offers to help them choose.

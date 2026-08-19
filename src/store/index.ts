@@ -185,6 +185,7 @@ const initialState: AppState = {
   members: {},
   timelines: {},
   typing: {},
+  ignored: {},
   replyTo: {},
   inputHistory: {},
   drafts: {},
@@ -1428,6 +1429,9 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         typing: { ...s.typing, [key]: { ...current, [event.nick]: Date.now() + 6_000 } },
       };
     }
+
+    case "ignoredChanged":
+      return { ignored: { ...s.ignored, [event.network]: event.nicks } };
 
     case "channelsListed":
       // The list opens itself: a user types `/list` and waits, and a result that

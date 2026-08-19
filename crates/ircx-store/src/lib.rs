@@ -877,6 +877,9 @@ impl Store {
         // Mute is a setting too, and a conversation muted on a network that is
         // gone is one nobody can find to unmute.
         tx.execute("DELETE FROM muted WHERE network = ?1", params![id])?;
+        // And an ignore, for the same reason: a nick means nothing without the
+        // network it was said on.
+        tx.execute("DELETE FROM ignored WHERE network = ?1", params![id])?;
         tx.commit()?;
         Ok(())
     }
@@ -1055,6 +1058,52 @@ impl Store {
             params![network, from, to],
         )?;
         Ok(())
+    }
+
+    /// Starts or stops ignoring somebody on one network.
+    ///
+    /// A row is the whole state, the way a mute is: absence says "not
+    /// ignored" and there is nothing to store beside the key.
+    pub fn set_ignored(&self, network: &str, nick: &str, ignored: bool) -> Result<(), StoreError> {
+        let conn = self.writing();
+        if ignored {
+            conn.execute(
+                "INSERT OR IGNORE INTO ignored (network, nick) VALUES (?1, ?2)",
+                params![network, nick],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM ignored WHERE network = ?1 AND nick = ?2 COLLATE NOCASE",
+                params![network, nick],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Who is ignored on one network. What a session holds, so it can answer
+    /// per message without going to disk.
+    pub fn ignored_nicks(&self, network: &str) -> Result<Vec<String>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare("SELECT nick FROM ignored WHERE network = ?1")?;
+        let nicks = statement
+            .query_map(params![network], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(nicks)
+    }
+
+    /// Everybody ignored, on every network, with the network named. The name
+    /// travels with the id for the reason `muted_conversations` explains.
+    pub fn ignored_people(&self) -> Result<Vec<(String, String, String)>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare(
+            "SELECT i.network, COALESCE(n.name, i.network), i.nick
+             FROM ignored i LEFT JOIN networks n ON n.id = i.network
+             ORDER BY COALESCE(n.name, i.network), i.nick",
+        )?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// The words that raise a conversation beside the reader's nickname, in the

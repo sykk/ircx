@@ -516,6 +516,25 @@ impl App {
         Ok(())
     }
 
+    /// Writes an ignore and hands the network its new set.
+    ///
+    /// One network, for the reason `set_muted` gives: a nick names a person on
+    /// a network, and the same eight letters somewhere else are somebody else.
+    pub async fn set_ignored(
+        &self,
+        network: &NetworkId,
+        nick: &str,
+        ignored: bool,
+    ) -> Result<(), String> {
+        self.store
+            .set_ignored(network, nick, ignored)
+            .map_err(describe)?;
+        let held = self.store.ignored_nicks(network).map_err(describe)?;
+        self.tell_if_connected(network, SessionCommand::IgnoredChanged { ignored: held })
+            .await;
+        Ok(())
+    }
+
     /// Tells every running network that this plugin's library entry changed, so
     /// a hook it dropped is asked again.
     ///

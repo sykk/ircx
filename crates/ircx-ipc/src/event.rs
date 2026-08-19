@@ -120,6 +120,16 @@ pub enum IrcxEvent {
         channel: TargetName,
         nick: String,
     },
+    /// Who is ignored on this network, in full rather than as a delta.
+    ///
+    /// The whole set because it is small and because a delta would have to
+    /// survive the reload that follows a reconnect; the frontend needs it to
+    /// draw the control that undoes an ignore, and nothing else consults it —
+    /// the session already dropped everything this describes.
+    IgnoredChanged {
+        network: NetworkId,
+        nicks: Vec<String>,
+    },
     /// The frontend expires these on its own timer; no stop is sent per start.
     TypingChanged {
         network: NetworkId,

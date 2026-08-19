@@ -24,6 +24,7 @@ export type { Delivery } from "./generated/Delivery";
 export type { DraftTarget } from "./generated/DraftTarget";
 export type { EncryptionState } from "./generated/EncryptionState";
 export type { HistoryRequest } from "./generated/HistoryRequest";
+export type { IgnoredPerson } from "./generated/IgnoredPerson";
 export type { InstalledPlugin } from "./generated/InstalledPlugin";
 export type { IrcxEvent } from "./generated/IrcxEvent";
 export type { Member } from "./generated/Member";

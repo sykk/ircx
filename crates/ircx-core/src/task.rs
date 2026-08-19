@@ -249,6 +249,11 @@ pub enum SessionCommand {
     MutedChanged {
         muted: Vec<TargetName>,
     },
+    /// The reader started or stopped ignoring somebody from the settings
+    /// window. The whole set, for the reason `MutedChanged` gives.
+    IgnoredChanged {
+        ignored: Vec<String>,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -465,6 +470,15 @@ async fn drive(
             session.set_muted(muted);
         }
         Err(error) => warn!(%error, "could not read what is muted on this network"),
+    }
+    // An ignore that cannot be read leaves the person audible, which is the
+    // state they were in before anybody ignored them. Louder than it should be
+    // beats refusing to connect over a settings table.
+    match context.store.ignored_nicks(&context.network) {
+        Ok(ignored) => {
+            session.set_ignored(ignored);
+        }
+        Err(error) => warn!(%error, "could not read who is ignored on this network"),
     }
     let remembered = match context.store.open_targets(&context.network) {
         Ok(targets) => targets,
@@ -722,6 +736,7 @@ async fn apply(
             Vec::new()
         }
         SessionCommand::MutedChanged { muted } => session.set_muted(muted),
+        SessionCommand::IgnoredChanged { ignored } => session.set_ignored(ignored),
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -959,6 +974,16 @@ impl Context {
                     control = Control::Upgrade(port);
                 }
                 Action::StsUpgrade { .. } => {}
+                Action::Ignore { nick, ignored } => {
+                    // The session already stopped listening; this is what makes
+                    // the next launch start out not listening either. A write
+                    // that fails is worth a line in the log and nothing louder:
+                    // the ignore is working, and telling somebody their ignore
+                    // will not survive a restart is a sentence about SQLite.
+                    if let Err(error) = self.store.set_ignored(&self.network, &nick, ignored) {
+                        warn!(%error, %nick, "could not write an ignore down");
+                    }
+                }
                 Action::Close => control = Control::Stop,
             }
         }

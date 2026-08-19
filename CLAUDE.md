@@ -137,6 +137,43 @@ threshold fixes it — a shorter gap only chops one conversation into arbitrary
 pieces. A guess worth drawing fires only where it separates two disjoint sets of
 people in one window, which is clustering rather than a timer.
 
+Muting silences a conversation and ignoring silences a person, and a channel is
+not the person in it who will not stop. An ignore takes effect at the door:
+`append` in `crates/ircx-core/src/message.rs` drops the line before it becomes a
+`ChatMessage` event, so there is no row, no unread, no notification and no
+archive record. **The hole in the archive is not arranged — it falls out.**
+Writing is driven off `MessagesAppended` in the event pump, so a line nothing
+emits is a line nothing writes down, and the bargain that comes with it is the one irssi and weechat
+make: un-ignoring restores nothing, and what was said meanwhile is gone rather
+than hidden. Keeping it would mean persisting without emitting, which splits an
+invariant that currently holds.
+
+One predicate answers for speech and for the noise of coming and going alike,
+because `chat_message` puts the actor in `sender` for a join as much as for a
+sentence. `handle_privmsg` returns before it as well, so an ignored line opens
+no query, marks nobody online and draws no CTCP reply out of us — an ignore that
+replies is not one. What it leaves is as much of the design: kicks, modes and
+topics still draw, because those change the channel rather than say something
+and somebody kicked by a person they ignore still needs to see why; and the
+roster keeps them, because hiding somebody from the member list would be a lie
+about who can read what the reader types. A person is named by nick, folded by
+the network's casemapping, and the set follows them through a rename for the
+reason `move_muted` follows a renamed query — an ignore a rename escapes is an
+ignore that stops working. Not a hostmask pattern: a pattern language is a thing
+to explain and get wrong, and the question being asked is "I do not want to hear
+from this person".
+
+`/ignore` and `/unignore` move the session's own set first and tell the store
+afterwards, so the very next line is already gone; a bare `/ignore` lists who is
+ignored, in the server tab, while the confirmation lands in the conversation it
+was typed in — otherwise the whole of what an ignore looks like is somebody
+going quiet. The member menu and the user inspector offer the same, and the
+inspector says so when there is one, because a reader who is not told is looking
+at somebody whose messages are missing for no reason the window gives. The
+settings window lists them beside the mutes, which is where the difference
+between the two is worth stating and where an ignore made on a network nobody is
+connected to can still be undone.
+
 `docs/multiwindow.md` describes split panes and per-pane context. The layout
 tree is built, and every pane on a channel draws its own member list inside it —
 the three context-panel modes that doc originally specified are gone, and the

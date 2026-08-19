@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
-    FileToUpload, HistoryRequest, InstalledPlugin, Member, MutedConversation, NetworkConfig,
-    NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query, SearchHit,
-    SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
+    FileToUpload, HistoryRequest, IgnoredPerson, InstalledPlugin, Member, MutedConversation,
+    NetworkConfig, NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query,
+    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -489,6 +489,31 @@ pub async fn set_muted(
     muted: bool,
 ) -> Result<(), String> {
     app.set_muted(&network, target.as_ref(), muted).await
+}
+
+/// Everybody the reader has ignored, with the network named.
+#[tauri::command]
+pub async fn ignored_people(app: State<'_, App>) -> Result<Vec<IgnoredPerson>, String> {
+    let rows = app.store().ignored_people().map_err(describe)?;
+    Ok(rows
+        .into_iter()
+        .map(|(network, network_name, nick)| IgnoredPerson {
+            network,
+            network_name,
+            nick,
+        })
+        .collect())
+}
+
+/// Starts or stops ignoring somebody on one network.
+#[tauri::command]
+pub async fn set_ignored(
+    app: State<'_, App>,
+    network: NetworkId,
+    nick: String,
+    ignored: bool,
+) -> Result<(), String> {
+    app.set_ignored(&network, &nick, ignored).await
 }
 
 /// Writes the archive to `path` as JSON Lines and answers with how many bytes

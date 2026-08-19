@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     MUTED,
     STS_POLICY,
     BOOKMARKS,
+    IGNORED,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -360,6 +361,21 @@ CREATE TABLE muted (
     network TEXT NOT NULL,
     target  TEXT NOT NULL,
     PRIMARY KEY (network, target)
+);
+"#;
+
+/// People the reader does not want to hear from, per network.
+///
+/// A nick rather than a hostmask: the question being answered is "I do not
+/// want to hear from this person", and a pattern language is a thing to
+/// explain and get wrong. It is stored as it was typed and matched caselessly,
+/// the way `muted` matches a target — the session folds by the network's own
+/// casemapping, which this file does not know.
+const IGNORED: &str = r#"
+CREATE TABLE ignored (
+    network TEXT NOT NULL,
+    nick    TEXT NOT NULL,
+    PRIMARY KEY (network, nick)
 );
 "#;
 

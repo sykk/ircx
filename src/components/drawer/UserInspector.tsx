@@ -1,9 +1,13 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
 import { sameTarget, splitTargetKey, type TargetKey } from "@/store/keys";
 import type { Member } from "@/types";
 import { BackIcon } from "./icons";
+
+/** Shared so an absent lookup returns one stable reference. */
+const NOBODY: string[] = [];
 
 interface UserInspectorProps {
   network: string;
@@ -17,6 +21,20 @@ export function UserInspector({
   onBack,
 }: UserInspectorProps) {
   const membersByTarget = useAppStore((s) => s.members);
+  const ignored = useAppStore((s) => s.ignored[network] ?? NOBODY);
+  const isIgnored = ignored.some((nick) => sameTarget(nick, member.nick));
+  const [failed, setFailed] = useState<string | null>(null);
+
+  // Through the store rather than through `/ignore`: the inspector is not a
+  // conversation, and a command needs one to be typed in.
+  const toggle = useCallback(async () => {
+    setFailed(null);
+    try {
+      await ipc.setIgnored(network, member.nick, !isIgnored);
+    } catch (reason) {
+      setFailed(typeof reason === "string" ? reason : "That could not be changed.");
+    }
+  }, [network, member.nick, isIgnored]);
 
   const shared = useMemo(() => {
     const channels: string[] = [];
@@ -67,6 +85,29 @@ export function UserInspector({
           {member.away === null ? "here" : `away — ${member.away || "no reason given"}`}
         </dd>
       </dl>
+
+      <div className="px-3 pb-3">
+        {/* Said rather than only offered: an inspector that did not name the
+            ignore would leave the reader looking at a person whose messages
+            are missing for no reason the window gives. */}
+        {isIgnored && (
+          <p className="pb-2 text-[var(--text-secondary)]">
+            You are ignoring {member.nick}. Nothing they say is kept.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => void toggle()}
+          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2 py-1 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+        >
+          {isIgnored ? "Stop ignoring" : "Ignore"}
+        </button>
+        {failed !== null && (
+          <p role="alert" className="pt-1 text-[var(--danger)]">
+            {failed}
+          </p>
+        )}
+      </div>
 
       <div className="px-3 pb-3">
         <h4 className="pb-1 text-[11px] tracking-wide text-[var(--text-muted)] uppercase">

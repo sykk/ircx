@@ -209,6 +209,8 @@ pub fn run() {
             commands::set_highlight_words,
             commands::muted_conversations,
             commands::set_muted,
+            commands::ignored_people,
+            commands::set_ignored,
             commands::export_archive,
             commands::delete_archive,
             commands::announce,

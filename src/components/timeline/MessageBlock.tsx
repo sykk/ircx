@@ -75,12 +75,19 @@ export function Block({
         paddingTop: continues ? undefined : "var(--timeline-block-gap)",
       }}
     >
+      {/* Rounded on the right only. The radius is for the hover fill and the
+          focus ring, but a radius on this box rounds the left border with it,
+          and that border is the rule — a rounded 2px stroke rasterises as an
+          antialiased path instead of a snapped rect, so at 0.8 zoom it lost 5%
+          of its colour along its length and faded over ~3px at both ends of
+          every block. The neutral spine below, which has no radius, stayed
+          exact: the hue that names a conversation was the dimmer of the two. */}
       {spine && drawn && onSpineClick !== undefined ? (
         <button
           type="button"
           data-spine="solid"
           data-ui="group-spine"
-          className="rounded-[var(--radius-sm)] hover:bg-[var(--surface-hover)]"
+          className="rounded-r-[var(--radius-sm)] hover:bg-[var(--surface-hover)]"
           aria-label={spinePressed ? "Show all conversations" : "Focus this conversation"}
           aria-pressed={spinePressed}
           title={spinePressed ? "Show all conversations" : "Focus this conversation"}
@@ -92,12 +99,17 @@ export function Block({
             borderLeftWidth: "var(--timeline-spine-width)",
             borderLeftStyle: "solid",
             borderLeftColor: spineTint,
-            // Overlap the block above by a pixel. Block heights are fractional,
-            // so a boundary rounds either way and leaves a hairline of
-            // background at some of them and not others — measured on a
-            // screenshot, invisible in jsdom, and worse than a clean break
-            // because it reads as an accident rather than as a division.
-            marginTop: continues ? "-1px" : undefined,
+            // Overlap the block above. Block heights are fractional, so a
+            // boundary rounds either way and leaves a hairline of background at
+            // some of them and not others — measured on a screenshot, invisible
+            // in jsdom, and worse than a clean break because it reads as an
+            // accident rather than as a division.
+            //
+            // Two, because one is a CSS pixel and the seam is a device one. The
+            // window scale goes to the webview's own zoom (ZOOM_LEVELS bottoms
+            // out at 0.8), where -1px buys 0.8 device px and stops closing it:
+            // a group's rule came back dashed at one block per author.
+            marginTop: continues ? "-2px" : undefined,
           }}
         />
       ) : spine && drawn ? (
@@ -108,7 +120,7 @@ export function Block({
             borderLeftWidth: "var(--timeline-spine-width)",
             borderLeftStyle: "solid",
             borderLeftColor: spineTint,
-            marginTop: continues ? "-1px" : undefined,
+            marginTop: continues ? "-2px" : undefined,
           }}
           aria-hidden="true"
         />

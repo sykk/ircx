@@ -89,9 +89,11 @@ gone from both ends.
 
 ## What the walk found
 
-**A channel's gap fill counts nothing toward unread.** Six lines naming the
-reader arrived while ircx was shut down. It reconnected, asked
-`CHATHISTORY AFTER #markwalk`, received all six, drew them tinted as mentions —
+**A channel's gap fill counts nothing toward unread** — #565, fixed by #570,
+where the cause turned out to be the watermark taking the rejoin that ended the
+outage. Six lines naming the reader arrived while ircx was shut down. It
+reconnected, asked `CHATHISTORY AFTER #markwalk`, received all six, drew them
+tinted as mentions —
 and the sidebar showed no badge and no dot. `channel-no-unread.png`.
 
 The same shape in a query counts correctly, in the same reconnect, three minutes
@@ -104,9 +106,9 @@ is unread — "What fills a gap is the opposite — it is what they were not her
 for, which is what unread means. #223" — and a channel is where a reader
 notices.
 
-**No seam is ever drawn on a restored boundary.** The query that came back
-saying three unread drew no rule above the first of them, and none appeared on
-leaving and re-entering. `index.ts` declines it deliberately:
+**No seam is ever drawn on a restored boundary** — #566, still open. The query
+that came back saying three unread drew no rule above the first of them, and
+none appeared on leaving and re-entering. `index.ts` declines it deliberately:
 
 ```ts
 // A server backfill is what was said before anybody looked, so it does not
@@ -119,8 +121,9 @@ The second sentence is not true of a gap fill, and the badge of three is the
 counter-example. So the reader is told there are three unread and shown nothing
 that says which three.
 
-**The client draws itself as typing.** `walkacct is typing…` sat above the
-composer while the walk typed into it, on the reader's own nick. `handle_tagmsg`
+**The client draws itself as typing** — #567, fixed by #569. `walkacct is
+typing…` sat above the composer while the walk typed into it, on the reader's
+own nick. `handle_tagmsg`
 computes `sender.is_self` for the ignore check and then emits `TypingChanged`
 without consulting it, so a server that echoes `TAGMSG` under `echo-message`
 tells the reader they are typing. `echotag.py` is a client with no account and

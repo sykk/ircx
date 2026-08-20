@@ -40,10 +40,12 @@ run and the rest. Across a restart, with messages arriving while ircx was shut
 down, the query's badge came back as the three the other session had not
 covered.
 
-Three things that walk found are open: **a channel's gap fill counts nothing
-toward unread** where a query's counts, **no seam is drawn on a boundary
-restored from a marker**, and **the client draws its own nick as typing** when a
-server echoes `TAGMSG`.
+The walk found three defects. Two are fixed: a channel's gap fill counted
+nothing toward unread where a query's counted (#565, the watermark was being
+moved by the rejoin that ended the outage), and the client drew its own nick as
+typing where a server echoes `TAGMSG` (#567). **What is still open is the seam**
+— a boundary restored from a marker is counted and never drawn (#566), so a
+reader is told there are three unread and not which three.
 
 Two caveats worth knowing before repeating it. `ergo` keeps an account's
 markers only while the client is always-on — otherwise the last session leaving

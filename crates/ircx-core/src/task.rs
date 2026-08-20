@@ -594,14 +594,22 @@ async fn drive(
         // Before `on_disconnected` on purpose: a session that has stopped is
         // a session whose last messages have to be down before it says so.
         context.archive.drained().await;
-        if stop {
-            return;
-        }
         if upgraded {
             continue;
         }
-        let actions = session.on_disconnected(&reason);
-        if matches!(context.deliver(actions, None).await, Control::Stop) {
+        // A session that stopped because it was asked to still has to say so.
+        // The status the sidebar and the status bar read is this event, and
+        // #587 was `/quit` returning on the far side of it: the socket was
+        // gone, the composer refused every line, and the window went on saying
+        // Connected. `Control::Stop` is already the answer to whether to come
+        // back, so the only difference the stop makes here is the sentence.
+        let actions = session.on_disconnected(if stop {
+            "you asked to disconnect"
+        } else {
+            &reason
+        });
+        let control = context.deliver(actions, None).await;
+        if stop || matches!(control, Control::Stop) {
             return;
         }
         if !wait_to_retry(&mut backoff, &mut session, context, &mut inbox).await {

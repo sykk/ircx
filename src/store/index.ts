@@ -54,6 +54,7 @@ const INPUT_HISTORY_CAP = 100;
 const EMPTY_TIMELINE: TimelineState = {
   messages: [],
   unreadFrom: null,
+  readMarker: null,
   hasMore: true,
   loadingOlder: false,
   askedBehind: null,
@@ -1043,6 +1044,36 @@ function capped(messages: ChatMessage[]): ChatMessage[] {
 }
 
 /**
+ * Where the unread rule goes when a batch lands, and null for a conversation
+ * the reader is caught up on.
+ *
+ * A live arrival opens one where the reader is not looking. A page of history
+ * cannot open one on its own — it is what was said before anybody looked — but
+ * a read marker says where they stopped, and what a page holds past that is
+ * what they were away for. Without the marker there is nothing to place a rule
+ * against and the page stays unmarked, which is what a server with no
+ * `draft/read-marker` gets. #566.
+ *
+ * The batch rather than the window: a page walks a gap oldest first, so the
+ * first message past the marker is in the page that reaches it, and scanning
+ * the window would sweep ten thousand rows per delivery to learn the same.
+ */
+function seamAt(
+  fresh: ChatMessage[],
+  isActive: boolean,
+  readMarker: string | null,
+): string | null {
+  const live = fresh.find((message) => message.source !== "serverHistory");
+  if (live) return isActive || live.sender.isSelf ? null : live.id;
+  if (readMarker === null) return null;
+  const marker = Date.parse(readMarker);
+  const missed = fresh.find(
+    (message) => !message.sender.isSelf && Date.parse(message.timestamp) > marker,
+  );
+  return missed?.id ?? null;
+}
+
+/**
  * `messagesAppended` against the list this batch is building rather than
  * against the store. Reads the same as `reduce`'s case, which is what
  * `index.test.ts` asserts; the difference is that the list is this batch's own,
@@ -1096,11 +1127,7 @@ function holdMessages(
   const focused = next.activeViewId ? next.views[next.activeViewId] : undefined;
   const isActive =
     focused?.network === event.network && focused.target === event.target;
-  // A server backfill is what was said before anybody looked, so it does not
-  // move the seam that says where looking stopped. Core keeps it out of the
-  // unread counts for the same reason.
-  const seam = fresh.find((m) => m.source !== "serverHistory");
-  opened.unreadFrom ??= isActive || !seam || seam.sender.isSelf ? null : seam.id;
+  opened.unreadFrom ??= seamAt(fresh, isActive, timeline.readMarker);
 }
 
 function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
@@ -1217,10 +1244,6 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
       const isActive =
         focused?.network === event.network && focused.target === event.target;
-      // A server backfill is what was said before anybody looked, so it does
-      // not move the seam that says where looking stopped. Core keeps it out
-      // of the unread counts for the same reason.
-      const seam = fresh.find((m) => m.source !== "serverHistory");
 
       return {
         timelines: {
@@ -1230,8 +1253,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
             ...landed,
             messages: capped(merged),
             unreadFrom:
-              timeline.unreadFrom ??
-              (isActive || !seam || seam.sender.isSelf ? null : seam.id),
+              timeline.unreadFrom ?? seamAt(fresh, isActive, timeline.readMarker),
           },
         },
       };
@@ -1317,12 +1339,16 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
 
     case "readMarkerUpdated": {
       const key = targetKey(event.network, event.target);
-      const timeline = s.timelines[key];
-      if (!timeline || timeline.unreadFrom === null) return {};
+      // Kept even for a conversation with no timeline yet, which is the usual
+      // way round on a reconnect: the marker for a channel arrives with the
+      // join and the page it belongs to is still being asked for.
+      const timeline = { ...(s.timelines[key] ?? EMPTY_TIMELINE), readMarker: event.timestamp };
+      const write = { timelines: { ...s.timelines, [key]: timeline } };
+      if (timeline.unreadFrom === null) return write;
       const unread = timeline.messages.findIndex((message) => message.id === timeline.unreadFrom);
-      if (unread === -1) return {};
+      if (unread === -1) return write;
       const marker = Date.parse(event.timestamp);
-      if (Date.parse(timeline.messages[unread]!.timestamp) > marker) return {};
+      if (Date.parse(timeline.messages[unread]!.timestamp) > marker) return write;
       const next = timeline.messages
         .slice(unread + 1)
         .find((message) => !message.sender.isSelf && Date.parse(message.timestamp) > marker);

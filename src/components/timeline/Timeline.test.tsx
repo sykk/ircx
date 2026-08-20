@@ -132,7 +132,16 @@ function seedTimelines(timelines: AppState["timelines"]) {
 }
 
 function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
-  seedTimelines({ [KEY]: { messages, unreadFrom, hasMore: true, loadingOlder: false, askedBehind: null } });
+  seedTimelines({
+    [KEY]: {
+      messages,
+      unreadFrom,
+      readMarker: null,
+      hasMore: true,
+      loadingOlder: false,
+      askedBehind: null,
+    },
+  });
 }
 
 /** A second pane on the same channel, as a split would open. `anchor` is the
@@ -554,7 +563,7 @@ describe("Timeline", () => {
     seedTimelines({
       [KEY]: {
         messages: makeConversation({ count: 20, seed: 6 }),
-        unreadFrom: null,
+        unreadFrom: null, readMarker: null,
         hasMore: false,
         loadingOlder: false, askedBehind: null
       },

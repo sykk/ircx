@@ -391,7 +391,7 @@ describe("Composer replying", () => {
               messages: [
                 makeMessage({ id: "123", nick: "phrack", text: "the flag is in the env" }),
               ],
-              unreadFrom: null,
+              unreadFrom: null, readMarker: null,
               hasMore: false,
               loadingOlder: false, askedBehind: null
             },
@@ -686,7 +686,7 @@ function queue(pending: number) {
     return message;
   });
   useAppStore.setState({
-    timelines: { [KEY]: { messages, unreadFrom: null, hasMore: false, loadingOlder: false, askedBehind: null } },
+    timelines: { [KEY]: { messages, unreadFrom: null, readMarker: null, hasMore: false, loadingOlder: false, askedBehind: null } },
   });
 }
 

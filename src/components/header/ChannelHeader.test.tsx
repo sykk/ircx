@@ -26,13 +26,14 @@ beforeEach(() => {
       [targetKey("libera", CTF_OPS.name)]: {
         messages: [makeMessage({ id: "current", target: CTF_OPS.name })],
         unreadFrom: "current",
+        readMarker: null,
         hasMore: true,
         loadingOlder: false,
         askedBehind: "older",
       },
       [targetKey("libera", "#rust")]: {
         messages: [makeMessage({ id: "other", target: "#rust" })],
-        unreadFrom: null,
+        unreadFrom: null, readMarker: null,
         hasMore: true,
         loadingOlder: false,
         askedBehind: null,
@@ -170,7 +171,7 @@ describe("ChannelHeader", () => {
     const state = useAppStore.getState();
     expect(state.timelines[targetKey("libera", CTF_OPS.name)]).toEqual({
       messages: [],
-      unreadFrom: null,
+      unreadFrom: null, readMarker: null,
       hasMore: false,
       loadingOlder: false,
       askedBehind: null,

@@ -151,6 +151,106 @@ describe("a read marker from another client", () => {
   });
 });
 
+/**
+ * #566. The count came back on a reconnect and the rule did not: core counts a
+ * page that fills a gap as unread, and the store refused to place a seam on
+ * anything the server replayed. A reader was told there were three unread and
+ * not which three. The marker is what says where they stopped, and it arrives
+ * before the page it belongs to.
+ */
+describe("a page landing against a marker", () => {
+  const KEY = targetKey("libera", "#ctf-ops");
+  const timeline = () => useAppStore.getState().timelines[KEY];
+
+  const missed = (id: string, timestamp: string): ChatMessage =>
+    makeMessage({ id, timestamp, source: "serverHistory" });
+
+  const page = (messages: ChatMessage[]): IrcxEvent => ({
+    type: "messagesAppended",
+    answers: null,
+    network: "libera",
+    target: "#ctf-ops",
+    messages,
+  });
+
+  const marker = (timestamp: string): IrcxEvent => ({
+    type: "readMarkerUpdated",
+    network: "libera",
+    target: "#ctf-ops",
+    timestamp,
+  });
+
+  it("draws the rule at the first message the marker does not cover", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent(marker("2026-08-15T12:01:00.000Z"));
+    applyEvent(
+      page([
+        missed("covered", "2026-08-15T12:00:30.000Z"),
+        missed("first-unread", "2026-08-15T12:01:30.000Z"),
+        missed("after", "2026-08-15T12:02:00.000Z"),
+      ]),
+    );
+
+    expect(timeline()?.unreadFrom).toBe("first-unread");
+  });
+
+  /** And the same through the batching path `applyEvents` reads by, where the
+   * marker and the page can arrive in one delivery. */
+  it("draws it the same way inside a batch", () => {
+    useAppStore
+      .getState()
+      .applyEvents([
+        marker("2026-08-15T12:01:00.000Z"),
+        page([
+          missed("covered", "2026-08-15T12:00:30.000Z"),
+          missed("first-unread", "2026-08-15T12:01:30.000Z"),
+        ]),
+      ]);
+
+    expect(timeline()?.unreadFrom).toBe("first-unread");
+  });
+
+  /** A page every row of which the marker covers is a reconnect into a
+   * conversation somebody else has already read. */
+  it("leaves a page the marker covers unmarked", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent(marker("2026-08-15T12:05:00.000Z"));
+    applyEvent(page([missed("covered", "2026-08-15T12:00:30.000Z")]));
+
+    expect(timeline()?.unreadFrom).toBeNull();
+  });
+
+  /** The reader's own line is not something they were away for, wherever the
+   * marker sits. */
+  it("passes over the reader's own messages", () => {
+    const { applyEvent } = useAppStore.getState();
+    const own = missed("own", "2026-08-15T12:01:30.000Z");
+    own.sender.isSelf = true;
+    applyEvent(marker("2026-08-15T12:01:00.000Z"));
+    applyEvent(page([own, missed("theirs", "2026-08-15T12:02:00.000Z")]));
+
+    expect(timeline()?.unreadFrom).toBe("theirs");
+  });
+
+  /** Without a marker there is nothing to place a rule against, which is what
+   * a server with no `draft/read-marker` gives and what #223 means by a first
+   * page: it stays what was said before anybody looked. */
+  it("marks nothing where the server has said nothing", () => {
+    useAppStore.getState().applyEvent(page([missed("older", "2026-08-15T12:00:30.000Z")]));
+
+    expect(timeline()?.unreadFrom).toBeNull();
+  });
+
+  /** The marker is kept for a conversation that has no timeline yet, which is
+   * the usual way round: a channel's marker arrives with the join and its page
+   * is still being asked for. */
+  it("keeps a marker that arrives before any page", () => {
+    useAppStore.getState().applyEvent(marker("2026-08-15T12:01:00.000Z"));
+
+    expect(timeline()?.readMarker).toBe("2026-08-15T12:01:00.000Z");
+  });
+});
+
 /** The raw log had the shape #321 fixed for rosters: a `/list` delivers tens
  * of thousands of `rawLine` events in one batch, and each copied the whole
  * capped log on its way in. Coalesced now, and `reduce` stays the one to
@@ -193,7 +293,7 @@ describe("paging backwards", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: seed, unreadFrom: null, hasMore: true, loadingOlder: true, askedBehind: null },
+        [KEY]: { messages: seed, unreadFrom: null, readMarker: null, hasMore: true, loadingOlder: true, askedBehind: null },
       },
     }));
 
@@ -545,7 +645,7 @@ describe("showing a target", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { messages: [], unreadFrom: from, hasMore: true, loadingOlder: false, askedBehind: null },
+        [key]: { messages: [], unreadFrom: from, readMarker: null, hasMore: true, loadingOlder: false, askedBehind: null },
       },
     }));
   }
@@ -671,7 +771,7 @@ describe("a message a notification rule raised", () => {
         ...s.timelines,
         [KEY]: {
           messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
-          unreadFrom: null,
+          unreadFrom: null, readMarker: null,
           hasMore: true,
           loadingOlder: false, askedBehind: null
         },
@@ -829,7 +929,7 @@ describe("a query whose other end renames", () => {
       timelines: {
         [OLD]: {
           messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
-          unreadFrom: null,
+          unreadFrom: null, readMarker: null,
           hasMore: false,
           loadingOlder: false, askedBehind: null
         },
@@ -1414,7 +1514,7 @@ describe("deleting a network", () => {
       timelines: {
         [targetKey("oftc", "#linux")]: {
           messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
-          unreadFrom: null,
+          unreadFrom: null, readMarker: null,
           hasMore: false,
           loadingOlder: false, askedBehind: null
         },

@@ -90,6 +90,14 @@ export interface TimelineState {
   messages: ChatMessage[];
   /** msgid of the first message below the unread rule; null when caught up. */
   unreadFrom: string | null;
+  /**
+   * Where the server says this reader stopped, as a server timestamp, or null
+   * where nothing has said. Kept rather than only acted on: the marker for a
+   * conversation arrives before the page it belongs to — at a join, or as the
+   * answer to the ask a query opens with — and it is what places the rule in a
+   * page nobody was here for. #566.
+   */
+  readMarker: string | null;
   /** False once the backend reports no older messages remain. */
   hasMore: boolean;
   loadingOlder: boolean;

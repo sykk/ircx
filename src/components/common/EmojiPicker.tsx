@@ -77,9 +77,15 @@ function EmojiGrid({
               onClick={() => onToggleFavorite(entry.native)}
               className={clsx(
                 "absolute top-0 right-0 rounded-bl-[var(--radius-sm)] px-0.5 text-[9px] leading-none",
+                // A star already on is always drawn; one that is not appears
+                // with the pointer, and with the keyboard for the same reason.
+                // `opacity-0` takes the focus ring with it, so without the
+                // second rule tabbing lands on a control nothing shows — and
+                // Tailwind wraps the first in `@media (hover: hover)`, which a
+                // machine without a pointer never matches.
                 favorite
                   ? "text-[var(--accent)] opacity-100"
-                  : "text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-[var(--accent)]",
+                  : "text-[var(--text-faint)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-[var(--accent)]",
               )}
             >
               {favorite ? "★" : "☆"}

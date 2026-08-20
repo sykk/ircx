@@ -25,6 +25,19 @@ describe("EmojiPicker", () => {
     expect(screen.getByRole("button", { name: "Eggplant" })).toBeTruthy();
   });
 
+  // Tailwind wraps `group-hover:` in `@media (hover: hover)`, so a machine
+  // without a pointer never matches it, and `opacity-0` hides the focus ring
+  // along with the glyph. A star revealed only that way is a control somebody
+  // tabbing onto cannot see.
+  it("reveals an unset star to the keyboard wherever it reveals it to the pointer", () => {
+    render(<EmojiPicker onPick={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "eggplant" } });
+    const star = screen.getByRole("button", { name: "Add Eggplant to favorites" });
+
+    expect(star.className).toContain("group-hover:opacity-100");
+    expect(star.className).toContain("group-focus-within:opacity-100");
+  });
+
   it("saves favorites from the star control", () => {
     render(<EmojiPicker onPick={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "eggplant" } });

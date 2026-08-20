@@ -1,0 +1,7 @@
+<html><body style="background:#fff;font:28px monospace;padding:20px">
+<div id="out">…</div>
+<script>
+const q = ["(hover: hover)","(hover: none)","(any-hover: hover)","(pointer: fine)","(pointer: coarse)","(any-pointer: fine)"];
+document.getElementById("out").innerHTML =
+  q.map(s => s + " → " + matchMedia(s).matches).join("<br>");
+</script></body></html>

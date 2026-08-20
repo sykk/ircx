@@ -1289,7 +1289,7 @@ fn ctcp_version_is_answered_with_the_client_string() {
     session.feed(":sable!~s@user/sable PRIVMSG sykk :\u{1}VERSION\u{1}");
 
     let reply = session
-        .sent_starting("PRIVMSG sable :")
+        .sent_starting("NOTICE sable :")
         .into_iter()
         .next()
         .expect("a CTCP VERSION reply");
@@ -1314,14 +1314,39 @@ fn a_ctcp_version_reply_is_shown_and_not_answered_again() {
 }
 
 #[test]
-fn ctcp_ping_is_answered_on_the_same_command() {
+fn ctcp_ping_is_answered_on_a_notice() {
     let mut session = registered("");
     session.feed(":sable!~s@user/sable PRIVMSG sykk :\u{1}PING token\u{1}");
 
     assert_eq!(
         session.sent(),
-        vec![format!("PRIVMSG sable :\u{1}PING token\u{1}")]
+        vec![format!("NOTICE sable :\u{1}PING token\u{1}")]
     );
+}
+
+/// The line above is the line below: an answer sent on the command it arrived
+/// on is one the other client reads as a question, and two of those never stop.
+/// #572 watched it run to forty exchanges between one client and a script.
+#[test]
+fn a_ctcp_ping_on_a_notice_is_an_answer_and_draws_none() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable NOTICE sykk :\u{1}PING token\u{1}");
+
+    assert!(session.sent().is_empty(), "an answer is not a question");
+    let messages = session.messages();
+    assert_eq!(messages.len(), 1);
+    assert!(messages[0].text.contains("CTCP PING: token"));
+}
+
+/// A bare `\u{1}VERSION\u{1}` is the shape a question takes, and it is still not
+/// one when it arrives on a `NOTICE`: the only client that sends that is one
+/// answering a question of its own with nothing to say.
+#[test]
+fn a_bare_ctcp_version_on_a_notice_draws_no_answer() {
+    let mut session = registered("");
+    session.feed(":sable!~s@user/sable NOTICE sykk :\u{1}VERSION\u{1}");
+
+    assert!(session.sent().is_empty(), "an answer is not a question");
 }
 
 /// No `:` before the body, because it holds no space. The serialiser marks a

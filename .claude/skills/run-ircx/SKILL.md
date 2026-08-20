@@ -177,9 +177,18 @@ quit
 | `--nick <nick>` | default `walker` |
 | `--join <#channel>` | seeded as a connect command, repeatable |
 | `--tls` | the seeded network uses TLS, off by default |
+| `--sasl <account:password>` | the seeded network logs in with SASL PLAIN |
 | `--release` | drive the release app instead of a debug build against Vite |
 | `--keep` | leave the profile behind and print where it is |
 | `--profile <dir>` | launch on a profile a `--keep` run left, as it stands |
+
+**`--sasl` is how a walk becomes two sessions of one account**, which is what
+`MARKREAD` is relayed between and what a bouncer-shaped question needs. The
+password does not go in the seed: the app reads it from the OS keyring, so the
+flag writes it there — the `ircx` service, keyed by the network's id — and
+clears it again on the way out unless `--keep` was asked for. `ergo` merges a
+second connection into an existing client when it authenticates, so a socket
+script with the same credentials is the second session.
 
 **`--profile` is how "does it survive a restart" is asked.** A run seeds a fresh
 profile, so a draft, a pane layout, a theme and its edits are all gone by the
@@ -257,6 +266,11 @@ towards the file size, then fail to deserialise: the archive looks populated,
 the timeline comes up empty, and nothing says so. The first version of this
 harness measured exactly that. **Check a seeded profile with a screenshot before
 believing a number taken on it.**
+
+`networks.sasl_mechanism` is a fourth, and it fails wider: the bare word `PLAIN`
+where the column wants `"PLAIN"` fails one row's deserialisation and takes the
+whole network list with it, so the app comes up saying it has no networks
+configured while the row sits in the table.
 
 ## Run (human path)
 

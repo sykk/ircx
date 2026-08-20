@@ -6,21 +6,53 @@ the assembled app. Nothing here is covered by `cargo test` or `npm test`.
 ## IRCv3 multiline
 
 The negotiated limits, outbound batch framing, fallback, inbound assembly and
-echo matching are scripted. A live server that advertises `draft/multiline`
-still needs an end-to-end walk with two clients: paste paragraphs containing a
-blank line and a line longer than 512 bytes, then confirm both clients draw one
-message with the same text and that a reply remains attached to the whole
-message. Repeat with `draft/multiline` disabled and confirm each nonblank line
-arrives as a separate message.
+echo matching are scripted.
+
+**The end-to-end walk is done** (2026-08-19, `docs/end-to-end-run-33.md`),
+against `ergo` 2.19 with a second client on the socket. A paragraph, a blank
+line and a 600-byte line pasted into the composer went out as one
+`draft/multiline` batch with the blank line as its own component and the long
+line split on `draft/multiline-concat`; the second client reassembled the 641
+characters that were typed, compared byte for byte rather than by eye. A client
+without the capability received three messages and no blank line, which is the
+server splitting the batch. ircx drew one message in both directions — its own
+send, and a batch the other client framed — and a reply naming the batch's
+`msgid` quoted the assembled message rather than the component that carried the
+id. With `multiline: max-bytes: 0` on the server ircx renegotiated without the
+capability and sent three labelled `PRIVMSG`s, dropping the blank line rather
+than sending an empty one.
+
+What that leaves: **a bouncer, and a second client that draws rather than
+parses.** Everything above is one implementation talking to test sockets.
 
 ## IRCv3 read markers
 
 Capability negotiation, query marker requests, local updates, remote partial
-updates and unread-seam movement are scripted. A live server or bouncer with
-two sessions for one account still needs to verify the whole exchange: read a
-channel and a query in one client, confirm the other client loses only the
-covered unread messages, then reconnect both clients and confirm the initial
-channel and query markers restore the same boundary.
+updates and unread-seam movement are scripted.
+
+**The two-session exchange is walked** (2026-08-19,
+`docs/end-to-end-run-33.md`), against `ergo` 2.19 with a second session of one
+account. Opening a conversation sends `MARKREAD` with the newest server-time
+ircx holds and the other session receives it; a marker the other session sets
+takes exactly the messages it covers out of the badge — six mentions to three,
+three private messages to one — and the unread seam lands between the covered
+run and the rest. Across a restart, with messages arriving while ircx was shut
+down, the query's badge came back as the three the other session had not
+covered.
+
+Three things that walk found are open: **a channel's gap fill counts nothing
+toward unread** where a query's counts, **no seam is drawn on a boundary
+restored from a marker**, and **the client draws its own nick as typing** when a
+server echoes `TAGMSG`.
+
+Two caveats worth knowing before repeating it. `ergo` keeps an account's
+markers only while the client is always-on — otherwise the last session leaving
+takes them, and the client's own ask comes back `*`. And ircx keeps no marker
+across a launch: `read_markers` is in memory and nothing writes it down, so on a
+server that forgets, so does the client.
+
+What that leaves: **a real bouncer**, which is the other half of what this entry
+asked for.
 
 ## Strict Transport Security
 

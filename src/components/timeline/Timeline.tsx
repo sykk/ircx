@@ -627,6 +627,16 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
           className="h-full overflow-x-hidden overflow-y-auto"
           style={{ overflowAnchor: "none" }}
         >
+          {/* Sticky inside the scroller rather than absolute over it, and of no
+              height so it takes no room in the flow. The band stops passing
+              clicks through to the row it paints over (#584), and a wheel finds
+              the scroller in its own ancestors — over a sibling it found
+              nothing, and the strip the band covers stopped scrolling. */}
+          {stickyAuthor !== null && (
+            <div className="sticky top-0 z-10 h-0">
+              <StickyAuthor message={stickyAuthor} />
+            </div>
+          )}
           {head !== null && (
             <div
               ref={headRef}
@@ -675,7 +685,6 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
             </div>
           )}
         </div>
-        {stickyAuthor !== null && <StickyAuthor message={stickyAuthor} />}
         {focusedGroup !== null && (
           <button
             type="button"
@@ -718,7 +727,7 @@ function StickyAuthor({ message }: { message: ChatMessage }) {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute top-0 left-0 z-10 w-full bg-[var(--surface-base)]"
+      className="absolute top-0 left-0 z-10 w-full bg-[var(--surface-base)]"
       data-ui="sticky-author"
     >
       <div

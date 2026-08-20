@@ -95,7 +95,9 @@ quit
 ```
 
 The seed holds one network, `#ircx`, `#rust`, a 300-message `#long` to park in
-the middle of, and a query. `#ircx`'s members are picked for the roster's width
+the middle of, a `#band` whose sixty lines are one block tall enough to scroll
+its own author off the top — which is what draws the sticky author band, and
+what run 37 measured under it — and a query. `#ircx`'s members are picked for the roster's width
 arithmetic: a voiced one, an away one, and `wallabywombat` to reach the ceiling.
 A line typed into the composer is kept, so `ArrowUp` brings it back.
 
@@ -221,8 +223,11 @@ Tailwind variant, which is the only kind this harness can see.
 
 **A timeline can only be scrolled with `wheel`.** The scroller is a `div`
 nothing focuses, so no key sent to the window moves it, and `click` lands on a
-message rather than dragging a bar. A notch is about a third of a message in
-WebKitGTK, which is worth knowing before asking for 900 of them.
+message rather than dragging a bar. **How far a notch goes is not a constant.**
+It has been about a third of a message, and it was three whole messages — 75px
+at 1200x800 — in run 37's channel, so a coordinate read off one screenshot is
+stale after a single notch. Measure it in the pane being walked before counting
+them, and take the screenshot the coordinate comes from after the last one.
 
 **Two frames with nothing between them is how the app is caught moving on its
 own.** Send an input, photograph, wait, photograph again — any difference is the

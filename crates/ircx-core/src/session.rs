@@ -3211,8 +3211,10 @@ impl SessionState {
         }
     }
 
-    /// Handles CTCP other than ACTION. Replies on the same command the query
-    /// arrived on — PRIVMSG queries expect PRIVMSG answers on many clients.
+    /// Handles CTCP other than ACTION. A question is a `PRIVMSG` and an answer
+    /// is a `NOTICE`, which is the rule that keeps two clients from trading one
+    /// line forever: what this sends can never be read back as a question, and
+    /// what arrives on a `NOTICE` is somebody's answer and is only drawn. #572
     fn handle_incoming_ctcp(
         &mut self,
         sender: &Sender,
@@ -3221,11 +3223,12 @@ impl SessionState {
         args: &str,
     ) -> (MessageKind, String) {
         let args = args.trim();
+        let asked = !sender.is_self && !command.eq_ignore_ascii_case("NOTICE");
 
         if request.eq_ignore_ascii_case("VERSION") {
             if args.is_empty() {
-                if !sender.is_self {
-                    self.reply_ctcp(&sender.nick, command, &client::ctcp_version_body());
+                if asked {
+                    self.reply_ctcp(&sender.nick, &client::ctcp_version_body());
                 }
                 return (
                     MessageKind::Server,
@@ -3239,8 +3242,8 @@ impl SessionState {
         }
 
         if request.eq_ignore_ascii_case("PING") {
-            if !sender.is_self {
-                self.reply_ctcp(&sender.nick, command, &text::ctcp_wrap("PING", args));
+            if asked {
+                self.reply_ctcp(&sender.nick, &text::ctcp_wrap("PING", args));
             }
             let text = if args.is_empty() {
                 format!("{} CTCP PING", sender.nick)
@@ -3256,14 +3259,19 @@ impl SessionState {
         )
     }
 
-    /// CTCP replies travel on the same command the query arrived on.
-    fn reply_ctcp(&mut self, nick: &str, command: &str, body: &str) {
-        match MessageBuilder::new(command).param(nick).param(body).build() {
+    /// CTCP replies travel on a `NOTICE`, always, so that nothing this client
+    /// sends can draw an answer out of the client it is sent to.
+    fn reply_ctcp(&mut self, nick: &str, body: &str) {
+        match MessageBuilder::new("NOTICE")
+            .param(nick)
+            .param(body)
+            .build()
+        {
             Ok(message) => {
                 self.send_line(message.to_line());
             }
             Err(error) => {
-                debug!(%nick, %command, %body, %error, "refused to send a CTCP reply");
+                debug!(%nick, %body, %error, "refused to send a CTCP reply");
             }
         }
     }

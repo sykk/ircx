@@ -1742,6 +1742,47 @@ fn a_typing_tag_becomes_a_typing_event() {
     assert_eq!(typing, vec![true, false]);
 }
 
+/// A server that negotiated `echo-message` sends your own `TAGMSG` back to you,
+/// so the client was told the reader was typing while they typed. #567.
+#[test]
+fn your_own_typing_tag_comes_back_and_says_nothing() {
+    let mut session = registered("message-tags echo-message");
+    session.feed("@+typing=active :sykk!~s@user/sykk TAGMSG #ircx");
+    session.feed("@+typing=active :sable!~s@user/sable TAGMSG #ircx");
+
+    let typing: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::TypingChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(typing, vec!["sable"]);
+}
+
+/// The reaction on the same line keeps its echo: a chip belongs under the
+/// message whoever added it, and `react` already draws one locally.
+#[test]
+fn your_own_reaction_still_arrives() {
+    let mut session = registered("message-tags echo-message");
+    session.feed("@+typing=active;+draft/react=👍;+reply=abc123 :sykk!~s@user/sykk TAGMSG #ircx");
+
+    let reactions: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::ReactionChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reactions, vec!["sykk"]);
+    assert!(!session
+        .events
+        .iter()
+        .any(|event| matches!(event, IrcxEvent::TypingChanged { .. })));
+}
+
 #[test]
 fn a_line_the_parser_cannot_read_is_ignored() {
     let mut session = registered("");
@@ -4104,6 +4145,41 @@ mod what_a_backfill_counts {
         );
 
         assert_eq!(unread(&session, "#ircx"), 2);
+    }
+
+    /// #565. The rejoin that ends an outage is stamped after everything said
+    /// during it, so a watermark that took the join read the whole backlog as
+    /// something already held: six mentions arrived, were drawn, and the
+    /// sidebar said nothing had happened. A query has no join and counted
+    /// correctly, which is what the walk in `docs/end-to-end-run-33.md` found.
+    #[test]
+    fn a_stamped_rejoin_is_not_the_backlog_being_read() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed("@time=2026-07-31T09:05:00.000Z :sykk!~sykk@user/sykk JOIN #ircx");
+        replay(
+            &mut session,
+            &[
+                "@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :while you were out",
+                "@batch=1;time=2026-07-31T09:01:00.000Z :phrack!p@h PRIVMSG #ircx :and again",
+            ],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 2);
+    }
+
+    /// Somebody else arriving mid-outage stamps a line in the conversation too,
+    /// and it is the same trap: the reader was not there for either.
+    #[test]
+    fn somebody_else_arriving_is_not_either() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed("@time=2026-07-31T09:05:00.000Z :phrack!p@h JOIN #ircx");
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning"],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 1);
     }
 
     /// Ergo narrates the reader's own comings and goings as messages from a

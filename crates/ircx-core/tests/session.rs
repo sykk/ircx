@@ -4147,6 +4147,41 @@ mod what_a_backfill_counts {
         assert_eq!(unread(&session, "#ircx"), 2);
     }
 
+    /// #565. The rejoin that ends an outage is stamped after everything said
+    /// during it, so a watermark that took the join read the whole backlog as
+    /// something already held: six mentions arrived, were drawn, and the
+    /// sidebar said nothing had happened. A query has no join and counted
+    /// correctly, which is what the walk in `docs/end-to-end-run-33.md` found.
+    #[test]
+    fn a_stamped_rejoin_is_not_the_backlog_being_read() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed("@time=2026-07-31T09:05:00.000Z :sykk!~sykk@user/sykk JOIN #ircx");
+        replay(
+            &mut session,
+            &[
+                "@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :while you were out",
+                "@batch=1;time=2026-07-31T09:01:00.000Z :phrack!p@h PRIVMSG #ircx :and again",
+            ],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 2);
+    }
+
+    /// Somebody else arriving mid-outage stamps a line in the conversation too,
+    /// and it is the same trap: the reader was not there for either.
+    #[test]
+    fn somebody_else_arriving_is_not_either() {
+        let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed("@time=2026-07-31T09:05:00.000Z :phrack!p@h JOIN #ircx");
+        replay(
+            &mut session,
+            &["@batch=1;time=2026-07-31T09:00:00.000Z :phrack!p@h PRIVMSG #ircx :morning"],
+        );
+
+        assert_eq!(unread(&session, "#ircx"), 1);
+    }
+
     /// Ergo narrates the reader's own comings and goings as messages from a
     /// service, and a badge counting those says more than was said. #221.
     #[test]

@@ -2040,6 +2040,30 @@ mod newest_timestamp {
         );
     }
 
+    /// The join that ends an outage is stamped after everything said during it,
+    /// so a conversation resumed from one asks for a gap starting after its own
+    /// contents — and counts none of what comes back as unread. #565.
+    #[test]
+    fn a_join_is_not_where_the_record_left_off() {
+        let store = Store::open_in_memory().unwrap();
+        let mut rejoined = message("b", "#ircx", "2026-07-31T10:00:00Z", "sykk joined #ircx");
+        rejoined.kind = MessageKind::Join;
+        store
+            .append_messages(&[
+                message("a", "#ircx", "2026-07-31T09:00:00Z", "said there"),
+                rejoined,
+            ])
+            .unwrap();
+
+        assert_eq!(
+            store
+                .newest_timestamp("libera", "#ircx")
+                .unwrap()
+                .as_deref(),
+            Some("2026-07-31T09:00:00Z")
+        );
+    }
+
     /// The same folding `load_history` does, and for the reason #190 gives:
     /// rows written before it hold whichever casing arrived.
     #[test]

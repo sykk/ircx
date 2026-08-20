@@ -2168,7 +2168,7 @@ impl SessionState {
                     network: self.config.network.clone(),
                     target,
                     message: id,
-                    nick: sender.nick,
+                    nick: self.canonical_nick(&sender.nick),
                     emoji,
                     active,
                 });
@@ -3173,6 +3173,31 @@ impl SessionState {
             return query.nick.clone();
         }
         target.to_string()
+    }
+
+    /// The casing a person is already known by, for a reaction that may have
+    /// arrived under a different one.
+    ///
+    /// `canonical` above does this for a conversation and this does it for
+    /// somebody in one, for the same reason: the chip's nick list, the unique
+    /// index the archive keeps and the `you` the label is written with all key
+    /// on the string, so a reaction filed under the casing it arrived with
+    /// becomes a second chip nobody can clear. Your own is the case that shows
+    /// it first — `send_react` emits under `self.nick` and the echo that
+    /// follows arrives however the server spells it, which is one person on a
+    /// chip counted twice.
+    ///
+    /// A nick nothing here knows keeps the casing it came with, exactly as a
+    /// target nothing is open for does.
+    pub(crate) fn canonical_nick(&self, nick: &str) -> String {
+        if self.is_me(nick) {
+            return self.nick.clone();
+        }
+        let folded = self.fold(nick);
+        self.channels
+            .values()
+            .find_map(|channel| channel.members.get(&folded))
+            .map_or_else(|| nick.to_string(), |member| member.nick.clone())
     }
 
     pub(crate) fn fold(&self, name: &str) -> String {

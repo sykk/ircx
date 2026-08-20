@@ -450,14 +450,19 @@ of a row for an id nobody will ever hold.
 **A reaction moves no counter.** Sent into an unfocused query it left the window
 byte-identical: no badge, no unread, no seam.
 
-**A chip under the sticky author band is hidden and still live** (2026-08-20,
+**A chip under the sticky author band was hidden and still live** (2026-08-20,
 `docs/end-to-end-run-37.md`). The band is opaque, the width of the timeline and
 19.5px tall against a chip's 22, so a chip passing under it is drawn over down
-to a two-pixel sliver — and it is `pointer-events-none`, so a click on the part
-that is not drawn reaches it. In the window that click put `+draft/react` on the
-wire, counted the reader into a chip whose top was behind the band, and took it
-back again on a second click. What to do about a control that is invisible and
-live is a design question and nothing has been decided.
+to a two-pixel sliver — and it was `pointer-events-none`, so a click on the part
+that was not drawn reached it. In the window that click put `+draft/react` on
+the wire, counted the reader into a chip whose top was behind the band, and took
+it back again on a second click.
+
+**Fixed — #585.** The band is a sticky box inside the scroller now rather than
+an absolute one over it, so it takes the clicks that land on what it hides and a
+wheel over it still finds a scroller to scroll. Both halves needed walking:
+dropping `pointer-events-none` on its own stopped that strip scrolling at all,
+which two byte-identical frames caught and no test could have.
 
 **Not walked:**
 - **Another client drawing what ircx sends.** The peers parse; none of them

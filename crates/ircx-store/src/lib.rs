@@ -265,6 +265,10 @@ impl Store {
     /// it. The session applies the same rule to what arrives live, so a rejoin
     /// and a relaunch ask from the same place.
     ///
+    /// So are joins and quits, for the reason #565 gives: the join that ends an
+    /// outage is stamped after everything said during it, and a conversation
+    /// resumed from it asks for a gap that starts after its own contents.
+    ///
     /// Matched without case for the reason `load_history` gives below.
     pub fn newest_timestamp(
         &self,
@@ -273,11 +277,12 @@ impl Store {
     ) -> Result<Option<String>, StoreError> {
         let conn = self.reading();
         let mut stmt = conn.prepare(
-            "SELECT timestamp FROM messages
+            r#"SELECT timestamp FROM messages
              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
                AND timestamp_is_local = 0
+               AND kind IN ('"privmsg"', '"notice"', '"action"')
              ORDER BY timestamp DESC, id DESC
-             LIMIT 1",
+             LIMIT 1"#,
         )?;
         let mut rows = stmt.query(params![network, target])?;
         match rows.next()? {

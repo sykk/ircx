@@ -563,6 +563,19 @@ impl SessionState {
         if message.timestamp_is_local {
             return;
         }
+        // Only what somebody said. A join or a quit is stamped like anything
+        // else, and the join that ends an outage is stamped after everything
+        // said during it — so a watermark that took it read the whole backlog
+        // as already held, and `was_missed` counted none of it. #565.
+        //
+        // It is what the watermark's readers mean as well: the gap is asked for
+        // from the last message, and a read marker names one.
+        if !matches!(
+            message.kind,
+            MessageKind::Privmsg | MessageKind::Notice | MessageKind::Action
+        ) {
+            return;
+        }
         let key = self.fold(&message.target);
         let newer = self
             .archived

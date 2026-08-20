@@ -161,11 +161,18 @@ line is in the log and somebody reading it later deserves to know why.
   them renders. Same gap as every run since 33.
 - **Anything about rows under the sticky author.** A click on a chip at y≈105,
   inside the band the sticky author occupies, sent nothing at all — no `TAGMSG`
-  reached the proxy. The likely reason is that the band is over the row and took
-  the click, and if so a control on the topmost row cannot be reached by
-  pointer. **This run did not isolate it** — the click may simply have fallen
-  between two chips — and it is written down here as the next thing to walk
-  rather than as a finding.
+  reached the proxy. The band was written down as the reason, and **that is not
+  what happened**: `StickyAuthor` has carried `pointer-events-none` since
+  `b8bae22` first drew it, and that commit is an ancestor of both builds walked
+  here, so the click went through the band and landed on whatever the row had at
+  that point. Most likely between two chips. **This run did not isolate it**,
+  and the reading it wrote down was wrong.
+
+  What the band does is paint. It is opaque, full width, and over the rows that
+  scroll beneath it, so a chip on the topmost row is covered rather than
+  unreachable — a reader has nothing to aim at, though a pointer put there would
+  still land. That is the question worth walking, and it is not the one this run
+  asked: not whether the control can be clicked, but whether it can be seen.
 - **The archive.** No restart was done; every result above is the live path.
   Run 35 walked the restart and the rows it leaves.
 - **Anything about timing.** Every step was driven and waited for.

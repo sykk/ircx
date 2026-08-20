@@ -1,0 +1,6 @@
+   39.595 >> @+typing=active TAGMSG #refuse39
+   39.595 << @time=2026-08-20T23:42:32.597Z :ergo.test 404 walker #refuse39 :Cannot send to channel (+m)
+   40.870 >> @+typing=done TAGMSG #refuse39
+   40.870 << @time=2026-08-20T23:42:33.872Z :ergo.test 404 walker #refuse39 :Cannot send to channel (+m)
+   40.872 >> @label=ircx-1 PRIVMSG #refuse39 :a line typed into the pane that is in the archive
+   40.873 << @label=ircx-1;time=2026-08-20T23:42:33.875Z :ergo.test 404 walker #refuse39 :Cannot send to channel (+m)

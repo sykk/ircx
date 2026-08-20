@@ -462,7 +462,7 @@ describe("what is still waiting to send", () => {
       timelines: {
         [targetKey("libera", "#ctf-ops")]: {
           messages,
-          unreadFrom: null,
+          unreadFrom: null, readMarker: null,
           hasMore: false,
           loadingOlder: false, askedBehind: null
         },

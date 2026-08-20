@@ -70,7 +70,7 @@ describe("buildContextMenuItems", () => {
           messages: [message],
           hasMore: false,
           loadingOlder: false,
-          unreadFrom: null,
+          unreadFrom: null, readMarker: null,
           askedBehind: null,
         },
       },

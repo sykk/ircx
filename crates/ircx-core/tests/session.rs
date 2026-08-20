@@ -1320,7 +1320,7 @@ fn ctcp_ping_is_answered_on_a_notice() {
 
     assert_eq!(
         session.sent(),
-        vec![format!("NOTICE sable :\u{1}PING token\u{1}")]
+        vec!["NOTICE sable :\u{1}PING token\u{1}".to_string()]
     );
 }
 
@@ -1361,7 +1361,7 @@ fn ctcp_command_sends_a_wrapped_query() {
     assert!(matches!(outcome, CommandOutcome::Handled));
     assert_eq!(
         session.sent(),
-        vec![format!("PRIVMSG sable \u{1}VERSION\u{1}")]
+        vec!["PRIVMSG sable \u{1}VERSION\u{1}".to_string()]
     );
 }
 
@@ -1375,7 +1375,7 @@ fn ctcp_in_a_query_tab_uses_the_person_being_spoken_with() {
     assert!(matches!(outcome, CommandOutcome::Handled));
     assert_eq!(
         session.sent(),
-        vec![format!("PRIVMSG sable \u{1}VERSION\u{1}")]
+        vec!["PRIVMSG sable \u{1}VERSION\u{1}".to_string()]
     );
 }
 

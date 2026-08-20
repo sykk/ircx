@@ -464,6 +464,28 @@ describe("Composer replying", () => {
     expect(staged()).toBe("123");
   });
 
+  /** The control that arms a reply is a button in the timeline, so the caret is
+   * not in the box when one is armed by pointer. #575. */
+  it("takes the caret when a reply is armed", async () => {
+    const box = await mount();
+    expect(document.activeElement).not.toBe(box);
+
+    act(() => {
+      useAppStore.getState().setReplyTo("libera", "#ctf-ops", "123");
+    });
+
+    expect(document.activeElement).toBe(box);
+  });
+
+  /** A reply armed before this composer existed is one the reader left behind,
+   * and taking the focus for it would move the caret on the way back in. */
+  it("leaves the caret alone for a reply armed before it mounted", async () => {
+    stage("123");
+    const box = await mount();
+
+    expect(document.activeElement).not.toBe(box);
+  });
+
   it("drops the parent on Escape", async () => {
     stage("123");
     const box = await mount();

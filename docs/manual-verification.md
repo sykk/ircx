@@ -463,9 +463,14 @@ byte-identical: no badge, no unread, no seam.
   runs off the same event, so the row and the chip cannot disagree either.
   Scripted against `rfc1459` folding — where `[` and `{` are one nick, which
   lowercasing would not catch — and against the `echo-message` copy of your own
-  reaction. Still unwalked against a server that actually re-cases: `ergo`
-  advertises `CASEMAPPING=ascii` and nothing has provoked one. Rows written
-  before the fix keep whatever casing they were written under.
+  reaction. **Walked 2026-08-20** (`docs/end-to-end-run-36.md`): the server
+  behaviour nothing could provoke is a proxy's now, re-casing a `TAGMSG` sender
+  and claiming `rfc1459` in `005`, and the walk was run against the pre-fix
+  release build as a control. A reaction taken back as `SABLE{M}` clears a chip
+  the roster knows as `sable[m]`, where the control keeps it; the
+  `echo-message` copy of your own reaction reads `1` where the control reads
+  `2`. Rows written before the fix keep whatever casing they were written
+  under.
 - **The pointer route to reacting to a message with no chips yet.** That control
   is hover-only, and the harness cannot see it — see below.
 

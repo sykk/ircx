@@ -1918,6 +1918,18 @@ describe("reaction chips", () => {
     expect(document.activeElement).toBe(add);
   });
 
+  // Which way the picker opens is decided against the timeline's top edge, and
+  // `RowControls` finds it by walking up from the button. The stub in
+  // `Reactions.test.tsx` states the arithmetic; this states that the element it
+  // measures is really above the control in the tree the app renders. #580.
+  it("puts the reaction control inside the element the picker measures against", () => {
+    seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const add = screen.getByRole("button", { name: "Add a reaction" });
+    expect(add.closest("[data-ui='timeline']")).not.toBe(null);
+  });
+
   it("closes the picker on Escape and gives the focus back", () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);

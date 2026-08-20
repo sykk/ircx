@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import type { Reaction } from "@/types";
 import { EmojiPicker } from "@/components/common/EmojiPicker";
@@ -10,6 +10,10 @@ import { Icon } from "@/components/common/Icon";
 const NAMES_SHOWN = 12;
 
 const CHIP = "flex items-center rounded-[var(--radius-sm)] border px-2 py-[3px]";
+
+/** `mb-1`/`mt-1`, as a number, because the room above has to be measured
+ * against the same gap the picker is drawn with. */
+const PICKER_GAP = 4;
 const QUIET = "border-[var(--border-default)] bg-[var(--surface-raised)]";
 
 interface Props {
@@ -115,7 +119,24 @@ export function RowControls({
   bookmarked: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(true);
   const anchor = useRef<HTMLButtonElement>(null);
+  const picker = useRef<HTMLSpanElement>(null);
+
+  // The picker opens upward, over rows that painted before it. On a row near
+  // the top of the scroller there is nothing above to open into and it went out
+  // over the channel header instead — the one place in this app anything is
+  // drawn over it. The timeline's own top is the ceiling: a pane's, so a split
+  // measures its own. Read in a layout effect, which runs after it is laid out
+  // and before it is painted, so the flip is not a flicker somebody sees.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const button = anchor.current;
+    const panel = picker.current;
+    if (!button || !panel) return;
+    const ceiling = button.closest("[data-ui='timeline']")?.getBoundingClientRect().top ?? 0;
+    setAbove(button.getBoundingClientRect().top - ceiling >= panel.offsetHeight + PICKER_GAP);
+  }, [open]);
 
   return (
     <span
@@ -178,7 +199,13 @@ export function RowControls({
             </button>
 
             {open && (
-              <span className="absolute bottom-full left-0 z-10 mb-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]">
+              <span
+                ref={picker}
+                className={clsx(
+                  "absolute left-0 z-10 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]",
+                  above ? "bottom-full mb-1" : "top-full mt-1",
+                )}
+              >
                 <EmojiPicker
                   compact
                   onPick={(emoji) => {

@@ -1742,6 +1742,47 @@ fn a_typing_tag_becomes_a_typing_event() {
     assert_eq!(typing, vec![true, false]);
 }
 
+/// A server that negotiated `echo-message` sends your own `TAGMSG` back to you,
+/// so the client was told the reader was typing while they typed. #567.
+#[test]
+fn your_own_typing_tag_comes_back_and_says_nothing() {
+    let mut session = registered("message-tags echo-message");
+    session.feed("@+typing=active :sykk!~s@user/sykk TAGMSG #ircx");
+    session.feed("@+typing=active :sable!~s@user/sable TAGMSG #ircx");
+
+    let typing: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::TypingChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(typing, vec!["sable"]);
+}
+
+/// The reaction on the same line keeps its echo: a chip belongs under the
+/// message whoever added it, and `react` already draws one locally.
+#[test]
+fn your_own_reaction_still_arrives() {
+    let mut session = registered("message-tags echo-message");
+    session.feed("@+typing=active;+draft/react=👍;+reply=abc123 :sykk!~s@user/sykk TAGMSG #ircx");
+
+    let reactions: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::ReactionChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reactions, vec!["sykk"]);
+    assert!(!session
+        .events
+        .iter()
+        .any(|event| matches!(event, IrcxEvent::TypingChanged { .. })));
+}
+
 #[test]
 fn a_line_the_parser_cannot_read_is_ignored() {
     let mut session = registered("");

@@ -205,11 +205,19 @@ is the tauri CLI rather than the cargo profile, and both land on
 of an error page. Nothing can tell them apart from outside — the embedded assets
 are compressed — so the first screenshot is the check.
 
-**A CSS `:hover` rule can only be walked here.** It answers to where the pointer
-is rather than to any event a script can dispatch, and `driver.mjs` has no way
-to place a pointer without also clicking — `dragxy` presses and releases. So
-anything drawn on hover is photographed with `move`, in the window, however much
-easier the rest of the question would be in Chrome.
+**A Tailwind `hover:` rule cannot be walked at all, and says nothing about it.**
+Tailwind v4 wraps every `hover:` and `group-hover:` utility in
+`@media (hover: hover)`, and WebKitGTK on `Xvfb` answers that query `hover:
+none` — there is no pointer device on that display, whatever `move` does with
+XTEST. So a control drawn `hidden group-hover:block` is invisible for the whole
+of a walk, and reads as a control the app does not have. Run 35 lost an hour to
+exactly that; `docs/end-to-end-35/hover-probe.html` is the four-line page that
+settles it, and the same engine on a real session answers `hover: hover`.
+
+Reach such a control by its focus twin instead — `group-focus-within:` is not
+inside the media query, so clicking anything focusable in the same group draws
+it. `move` still photographs a bare `:hover` rule, one written without the
+Tailwind variant, which is the only kind this harness can see.
 
 **A timeline can only be scrolled with `wheel`.** The scroller is a `div`
 nothing focuses, so no key sent to the window moves it, and `click` lands on a

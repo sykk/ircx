@@ -1,0 +1,8 @@
+network|msgid|nick|emoji
+walk|b35cb6ghs8eas8685czae94bwe|talker35|🎉
+walk|nosuchmsgidatall|witness35|🤔
+walk|b35cb6ghs8eas8685czae94bwe|witness35|✅
+walk|b35cb6ghs8eas8685czae94bwe|walker35|🎉
+walk|b35cb6ghs8eas8685czae94bwe|walker35|hear hear
+walk|notarealmsgid|walker35|yes
+walk|b35cb6ghs8eas8685czae94bwe|witness35|👎

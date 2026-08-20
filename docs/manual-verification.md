@@ -400,11 +400,65 @@ On ergo as `syk!~u@4dy55fkndsc9u.irc` in `#replytest` it came to 464 bytes, and
 a 400-character attempt went as one message. Read the figure off the mask in the
 raw log rather than guessing at it.
 
+**The whole path is walked in the window** (2026-08-20,
+`docs/end-to-end-run-35.md`), against `ergo` 2.19 with two clients on the
+socket. A reply armed from the timeline's own control went out as
+`@label=ircx-9;+reply=<msgid> PRIVMSG` and drew its quote; a reply coming the
+other way drew the parent it named; and one naming a message this client has
+never held drew *in reply to an earlier message* rather than an empty quote.
+Both spellings arrive — `+reply` and `+draft/reply` — because `reply_to` reads
+either.
+
+The walk found one defect, and it is in the composer rather than the wire:
+arming a reply left the caret on the button that armed it, so a sentence typed
+straight afterwards went to a button and was lost. #575. Nothing in
+`Composer.tsx` called `focus()` at all.
+
 **On Libera it will not work**, and the client cannot tell in advance. Client
 tags there are an allowlist holding only `+typing`, and `message-tags` is
 negotiated all the same — so ircx attaches `+reply`, draws the quote on the
 sender's own copy, and Libera strips the tag before anyone else sees it. That is
 exactly the position reactions are in, and for the same reason.
+
+## Reactions, in the application
+
+The wire is verified above and on Libera; what had never been watched is the
+chip. **Walked 2026-08-20** (`docs/end-to-end-run-35.md`) against `ergo` 2.19,
+release build, with a second and third client on the socket.
+
+Reactions arriving from two people make one chip carrying the count and both
+names, your own is outlined and written as `you`, and taking the last one back
+removes the chip. A reaction inside a query lands in the query, because
+`handle_tagmsg` takes the target from the sender when the parameter is not a
+channel. `/react` and `/unreact` do the same by hand, a value with a space in it
+is escaped as `hear\shear` and arrives whole, and `/react` in the server tab is
+refused with a sentence rather than sent.
+
+Four lines that should draw nothing drew nothing, each measured as two
+byte-identical frames: a reaction with no `+reply`, one carrying `+draft/react`
+and `+draft/unreact` together, one naming a `msgid` this client has never held,
+and one from somebody `/ignore`d — that last against a control who sent the same
+emoji a second later and appeared.
+
+**The chips survive a restart out of the archive rather than off the server.**
+Every chip and every reply quote came back on a kept profile, and no `TAGMSG`
+arrived on the wire after the reconnect. `reactions` holds one row per person
+per emoji, including rows for `msgid`s this client never had: that is the stated
+design — a page of history fetched later brings its chips with it — at the cost
+of a row for an id nobody will ever hold.
+
+**A reaction moves no counter.** Sent into an unfocused query it left the window
+byte-identical: no badge, no unread, no seam.
+
+**Not walked:**
+- **Another client drawing what ircx sends.** The peers parse; none of them
+  renders.
+- **A network that folds `rfc1459`.** `applyReaction` matches a nick by string
+  equality rather than by the network's folding, so a server handing back a
+  differently-cased nick would leave a chip nobody can clear. `ergo` advertises
+  `CASEMAPPING=ascii` and nothing here provoked one.
+- **The pointer route to reacting to a message with no chips yet.** That control
+  is hover-only, and the harness cannot see it — see below.
 
 ## The preview fetch over TLS
 
@@ -500,7 +554,20 @@ WebKitGTK, not only in Chrome.
 `seed.mjs` carries an attachment and a `load_preview` handler now, without which
 none of this was walkable, and `xsend` grew a `move` verb — a motion event and
 no button. `move` was built for the peek's hover and is the only way this
-harness can photograph a CSS `:hover` rule at all, so it stays.
+harness can photograph a bare CSS `:hover` rule, so it stays.
+
+**A Tailwind `hover:` rule is a different matter, and no walk can see one.**
+Tailwind v4 wraps every `hover:` and `group-hover:` utility in
+`@media (hover: hover)`, and WebKitGTK on `Xvfb` answers that query `hover:
+none` — there is no pointer device on that display, whatever `move` does with
+XTEST. Run 35 measured it both ways with a four-line probe
+(`docs/end-to-end-35/hover-probe.html`): `hover: none`, `any-hover: none`,
+`pointer: none` under `Xvfb`, and `hover=true anyhover=true fine=true` from the
+same engine on a real session. So the timeline's row controls — pin, reply, add
+a reaction — are invisible for the whole of a walk and read as controls the app
+does not have, and anything else drawn only on hover is unwalkable here. The way
+in is `group-focus-within:`, which is not inside the media query: click anything
+focusable in the row and the pair appears beside it.
 
 **Not walked:** whether a very tall image under the line pushes the rest of the
 conversation about as it decodes. The cap is a `max-h`, so the row's height is

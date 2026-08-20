@@ -1,0 +1,6 @@
+Line 27's chip, on marrow's socket -- a third party to both the peer that
+made the chip and the client that clicked it where the band covers it.
+
+[126] @msgid=dbzmkszbhht92wtv7vuuadxtei;time=2026-08-20T20:15:47.993Z;+reply=49pqnwj3rny6ugpz2dr7vydscn;+draft/react=👍 :marrow!~u@f6u3beryjfghu.irc TAGMSG #run37
+[133] @time=2026-08-20T20:18:00.382Z;msgid=6eigsryw8wqpk6ribafbfspm8a;+draft/react=👍;+reply=49pqnwj3rny6ugpz2dr7vydscn :walker!~u@f6u3beryjfghu.irc TAGMSG #run37
+[136] @time=2026-08-20T20:19:29.485Z;msgid=sw3rxdz2vr3ztuetcz9vapesr2;+draft/unreact=👍;+reply=49pqnwj3rny6ugpz2dr7vydscn :walker!~u@f6u3beryjfghu.irc TAGMSG #run37

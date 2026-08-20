@@ -107,6 +107,22 @@ export const SEED = `
       ...message("#split", "crowd" + i, "*.net *.split", i * 0.05),
       kind: "quit",
     })),
+    // One person talking for long enough that the block is taller than the
+    // pane, which is the only shape that draws the sticky author band: the
+    // band appears when a block's head has gone past the top and the rest of
+    // it has not. Two chips in the middle of it, adjacent, because what the
+    // band does to a control underneath is the question and "the pointer fell
+    // between two chips" is the other answer it has to be told apart from.
+    "#band": Array.from({ length: 60 }, (_, i) => ({
+      ...message("#band", "sable", "line " + i + " of one person talking", i * 3),
+      reactions:
+        i === 30
+          ? [
+              { emoji: "\u{1F44D}", nicks: ["marrow"] },
+              { emoji: "\u{1F389}", nicks: ["nyx", "kade"] },
+            ]
+          : [],
+    })),
     sable: [
       message("sable", "sable", "got a minute?", 0),
       message("sable", "walker", "sure", 20),
@@ -132,6 +148,7 @@ export const SEED = `
     ],
     "#rust": [member("cinder", ["@"]), member("vex"), member("walker")],
     "#long": NICKS.map((nick) => member(nick)),
+    "#band": [member("sable"), member("marrow"), member("nyx"), member("kade"), member("walker")],
   };
 
   const channel = (name, unread, topic) => ({
@@ -164,6 +181,7 @@ export const SEED = `
       channel("#rust", 2),
       channel("#long", 0),
       channel("#split", 0),
+      channel("#band", 0),
     ],
     queries: [{ network: "net1", nick: "sable", account: "sable", unread: 0, online: true, muted: false }],
     drafts: [],

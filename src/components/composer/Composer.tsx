@@ -148,6 +148,18 @@ function ComposerFor({
     };
   }, [network, target]);
 
+  // A reply is armed from the timeline, where the control is a button: a
+  // pointer leaves the focus on it, and what the reader types next goes to a
+  // button and is lost. The caret follows the reply that was just armed, and
+  // only that one — a reply still armed from before this composer mounted would
+  // take the focus off whatever the reader has come back to.
+  const armed = replying?.msgid ?? null;
+  const armedBefore = useRef(armed);
+  useEffect(() => {
+    if (armed !== null && armed !== armedBefore.current) textareaRef.current?.focus();
+    armedBefore.current = armed;
+  }, [armed]);
+
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;

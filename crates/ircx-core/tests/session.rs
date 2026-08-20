@@ -1808,6 +1808,81 @@ fn your_own_reaction_still_arrives() {
         .any(|event| matches!(event, IrcxEvent::TypingChanged { .. })));
 }
 
+/// A chip's nick list, the archive's unique index and the `you` in the label
+/// all key on the string, so a reaction has to arrive under the casing the
+/// channel already knows the reactor by. `[` folds to `{` under rfc1459, which
+/// no amount of lowercasing would have caught. #578.
+#[test]
+fn a_reaction_takes_the_casing_the_channel_knows() {
+    let mut session = registered("message-tags");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sable[m]");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    session.events.clear();
+
+    session.feed("@+draft/react=👍;+reply=abc123 :SABLE{M}!~s@user/sable TAGMSG #ircx");
+    session.feed("@+draft/unreact=👍;+reply=abc123 :Sable[M]!~s@user/sable TAGMSG #ircx");
+
+    let reactions: Vec<(&str, bool)> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::ReactionChanged { nick, active, .. } => Some((nick.as_str(), *active)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        reactions,
+        vec![("sable[m]", true), ("sable[m]", false)],
+        "one person spelled three ways is one person, so the chip clears"
+    );
+}
+
+/// `send_react` draws the chip locally under `self.nick` and the server's
+/// `echo-message` copy follows it. A server that hands the nick back spelled
+/// differently would put the reader on their own chip twice.
+#[test]
+fn your_own_reaction_and_its_echo_are_one_person() {
+    let mut session = registered("message-tags echo-message");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.events.clear();
+
+    session.feed("@+draft/react=👍;+reply=abc123 :SYKK!~sykk@user/sykk TAGMSG #ircx");
+
+    let reactions: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::ReactionChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        reactions,
+        vec!["sykk"],
+        "the echo is the nick we reacted under"
+    );
+}
+
+/// The rule `canonical` states for a target, one level down: a name nothing
+/// here knows keeps the casing it came with, because that is the first
+/// sighting and there is nothing to disagree with it.
+#[test]
+fn a_reaction_from_a_stranger_keeps_the_casing_it_came_with() {
+    let mut session = registered("message-tags");
+    session.feed("@+draft/react=👍;+reply=abc123 :StRaNgEr!~s@example TAGMSG sykk");
+
+    let reactions: Vec<&str> = session
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            IrcxEvent::ReactionChanged { nick, .. } => Some(nick.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reactions, vec!["StRaNgEr"]);
+}
+
 #[test]
 fn a_line_the_parser_cannot_read_is_ignored() {
     let mut session = registered("");

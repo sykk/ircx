@@ -453,10 +453,19 @@ byte-identical: no badge, no unread, no seam.
 **Not walked:**
 - **Another client drawing what ircx sends.** The peers parse; none of them
   renders.
-- **A network that folds `rfc1459`.** `applyReaction` matches a nick by string
-  equality rather than by the network's folding, so a server handing back a
-  differently-cased nick would leave a chip nobody can clear. `ergo` advertises
-  `CASEMAPPING=ascii` and nothing here provoked one.
+- **A network that folds `rfc1459`, against a real server.** The defect this
+  run named is fixed — #578. `applyReaction` still matches by string equality,
+  because casemapping does not cross the IPC boundary and the frontend has no
+  way to fold; what changed is that it is now fed one casing per person.
+  `session.rs` resolves a reactor through the channel it happened in before the
+  event leaves, the way `canonical` resolves a target, so the chip's nick list,
+  the archive's unique index and the `you` in the label all agree. Persistence
+  runs off the same event, so the row and the chip cannot disagree either.
+  Scripted against `rfc1459` folding — where `[` and `{` are one nick, which
+  lowercasing would not catch — and against the `echo-message` copy of your own
+  reaction. Still unwalked against a server that actually re-cases: `ergo`
+  advertises `CASEMAPPING=ascii` and nothing has provoked one. Rows written
+  before the fix keep whatever casing they were written under.
 - **The pointer route to reacting to a message with no chips yet.** That control
   is hover-only, and the harness cannot see it — see below.
 

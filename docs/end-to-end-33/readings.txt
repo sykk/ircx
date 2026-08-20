@@ -1,0 +1,181 @@
+Every line ircx wrote or read on the socket that carries a claim in
+docs/end-to-end-run-33.md.  `>>` is ircx to the server.  Taken through
+proxy.py, because the app's own raw log records what it queued.
+
+1787180383.208 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787180383.208 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787180383.208 << @time=2026-08-19T22:59:43.208Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787180384.701 << @time=2026-08-19T22:59:44.701Z :ergo.test MARKREAD #markwalk *
+1787180385.201 << @time=2026-08-19T22:59:45.201Z :ergo.test MARKREAD #quiet *
+1787180386.700 << @draft/chathistory-end;time=2026-08-19T22:59:46.700Z :ergo.test BATCH +1 draft/chathistory-targets
+1787180386.700 << @time=2026-08-19T22:59:46.700Z :ergo.test BATCH -1
+1787180387.702 << @draft/chathistory-end;time=2026-08-19T22:59:47.701Z :ergo.test BATCH +2 chathistory #markwalk
+1787180387.702 << @time=2026-08-19T22:59:47.701Z :ergo.test BATCH -2
+1787180388.701 << @draft/chathistory-end;time=2026-08-19T22:59:48.701Z :ergo.test BATCH +3 chathistory #quiet
+1787180388.701 << @time=2026-08-19T22:59:48.701Z :ergo.test BATCH -3
+1787180426.992 >> MARKREAD #quiet timestamp=2026-08-19T22:59:45.201Z
+1787180426.993 << @time=2026-08-19T23:00:26.992Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T22:59:45.201Z
+1787180427.012 << @label=ircx-1;draft/chathistory-end;time=2026-08-19T23:00:27.011Z :ergo.test BATCH +4 chathistory #quiet
+1787180427.012 << @time=2026-08-19T23:00:27.011Z :ergo.test BATCH -4
+1787180501.622 >> MARKREAD #markwalk timestamp=2026-08-19T23:00:52.461Z
+1787180501.622 << @time=2026-08-19T23:01:41.621Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:00:52.461Z
+1787180501.651 << @draft/chathistory-end;time=2026-08-19T23:01:41.651Z;label=ircx-2 :ergo.test BATCH +5 chathistory #markwalk
+1787180501.651 << @time=2026-08-19T23:01:41.651Z :ergo.test BATCH -5
+1787180542.354 << @time=2026-08-19T23:02:22.354Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:01:56.515Z
+1787180561.200 >> MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787180561.200 << @time=2026-08-19T23:02:41.200Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787180585.257 >> MARKREAD talker33
+1787180585.257 << @time=2026-08-19T23:03:05.257Z :ergo.test MARKREAD talker33 *
+1787180606.804 << @time=2026-08-19T23:03:26.803Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:03:05.959Z
+1787180648.536 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787180648.536 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787180648.536 << @time=2026-08-19T23:04:08.536Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787180650.037 >> MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787180650.037 << @time=2026-08-19T23:04:10.037Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787180651.039 << @time=2026-08-19T23:04:11.038Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787180651.538 << @time=2026-08-19T23:04:11.537Z :ergo.test MARKREAD #quiet *
+1787180653.038 >> MARKREAD talker33
+1787180653.038 << @time=2026-08-19T23:04:13.038Z :ergo.test MARKREAD talker33 *
+1787180653.538 << @draft/chathistory-end;time=2026-08-19T23:04:13.536Z :ergo.test BATCH +1 draft/chathistory-targets
+1787180653.538 << @time=2026-08-19T23:04:13.536Z :ergo.test BATCH -1
+1787180655.037 << @draft/chathistory-end;time=2026-08-19T23:04:15.037Z :ergo.test BATCH +2 chathistory #markwalk
+1787180655.038 << @time=2026-08-19T23:04:15.037Z :ergo.test BATCH -2
+1787180656.037 << @draft/chathistory-end;time=2026-08-19T23:04:16.037Z :ergo.test BATCH +3 chathistory #quiet
+1787180656.038 << @time=2026-08-19T23:04:16.037Z :ergo.test BATCH -3
+1787181794.523 >> MARKREAD talker33 timestamp=2026-08-19T23:03:06.661Z
+1787181794.523 << @time=2026-08-19T23:23:14.522Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:03:06.661Z
+1787181794.537 << @draft/chathistory-end;time=2026-08-19T23:23:14.536Z;label=ircx-11 :ergo.test BATCH +4 chathistory talker33
+1787181794.537 << @time=2026-08-19T23:23:14.536Z :ergo.test BATCH -4
+1787182010.401 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787182010.401 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182010.402 << @time=2026-08-19T23:26:50.401Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182011.404 << @time=2026-08-19T23:26:51.403Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:01:58.322Z
+1787182011.404 << @time=2026-08-19T23:26:51.403Z :ergo.test MARKREAD #quiet *
+1787182011.903 >> MARKREAD talker33 timestamp=2026-08-19T23:03:06.661Z
+1787182011.903 << @time=2026-08-19T23:26:51.903Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:22.859Z
+1787182012.404 << @draft/chathistory-end;time=2026-08-19T23:26:52.403Z;label=ircx-1 :ergo.test BATCH +1 chathistory talker33
+1787182012.404 << @time=2026-08-19T23:26:52.403Z :ergo.test BATCH -1
+1787182014.902 >> MARKREAD talker33
+1787182014.903 << @time=2026-08-19T23:26:54.902Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:22.859Z
+1787182015.404 << @draft/chathistory-end;time=2026-08-19T23:26:55.403Z :ergo.test BATCH +2 draft/chathistory-targets
+1787182015.404 << @time=2026-08-19T23:26:55.403Z :ergo.test BATCH -2
+1787182016.903 << @draft/chathistory-end;time=2026-08-19T23:26:56.903Z :ergo.test BATCH +3 chathistory #markwalk
+1787182016.903 << @time=2026-08-19T23:26:56.903Z :ergo.test BATCH -3
+1787182017.903 << @draft/chathistory-end;time=2026-08-19T23:26:57.902Z :ergo.test BATCH +4 chathistory #quiet
+1787182017.903 << @time=2026-08-19T23:26:57.902Z :ergo.test BATCH -4
+1787182018.404 << @draft/chathistory-end;time=2026-08-19T23:26:58.403Z :ergo.test BATCH +5 chathistory talker33
+1787182018.404 << @time=2026-08-19T23:26:58.403Z :ergo.test BATCH -5
+1787182076.586 >> MARKREAD #markwalk timestamp=2026-08-19T23:26:51.403Z
+1787182076.587 << @time=2026-08-19T23:27:56.586Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:26:51.403Z
+1787182076.637 << @label=ircx-2;draft/chathistory-end;time=2026-08-19T23:27:56.636Z :ergo.test BATCH +6 chathistory #markwalk
+1787182076.637 << @time=2026-08-19T23:27:56.636Z :ergo.test BATCH -6
+1787182078.589 >> MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787182078.589 << @time=2026-08-19T23:27:58.588Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787182190.335 >> MARKREAD #quiet timestamp=2026-08-19T23:26:51.403Z
+1787182190.336 << @time=2026-08-19T23:29:50.335Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:26:51.403Z
+1787182190.352 << @draft/chathistory-end;time=2026-08-19T23:29:50.352Z;label=ircx-4 :ergo.test BATCH +7 chathistory #quiet
+1787182190.352 << @time=2026-08-19T23:29:50.352Z :ergo.test BATCH -7
+1787182396.020 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787182396.020 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182396.021 << @time=2026-08-19T23:33:16.020Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182397.023 << @time=2026-08-19T23:33:17.023Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:32:57.738Z
+1787182397.024 << @time=2026-08-19T23:33:17.023Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:26:51.403Z
+1787182397.522 >> MARKREAD #quiet timestamp=2026-08-19T23:26:51.403Z
+1787182397.522 << @time=2026-08-19T23:33:17.522Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:26:51.403Z
+1787182398.022 << @draft/chathistory-end;time=2026-08-19T23:33:18.021Z;label=ircx-1 :ergo.test BATCH +1 chathistory #quiet
+1787182398.022 << @time=2026-08-19T23:33:18.021Z :ergo.test BATCH -1
+1787182400.521 >> MARKREAD talker33
+1787182400.522 << @time=2026-08-19T23:33:20.521Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787182401.023 << @draft/chathistory-end;time=2026-08-19T23:33:21.022Z :ergo.test BATCH +2 draft/chathistory-targets
+1787182401.023 << @time=2026-08-19T23:33:21.022Z :ergo.test BATCH -2
+1787182402.522 << @draft/chathistory-end;time=2026-08-19T23:33:22.521Z :ergo.test BATCH +3 chathistory #markwalk
+1787182402.522 << @time=2026-08-19T23:33:22.521Z :ergo.test BATCH -3
+1787182403.522 << @draft/chathistory-end;time=2026-08-19T23:33:23.521Z :ergo.test BATCH +4 chathistory #quiet
+1787182403.522 << @time=2026-08-19T23:33:23.521Z :ergo.test BATCH -4
+1787182517.357 >> MARKREAD #markwalk timestamp=2026-08-19T23:33:17.023Z
+1787182517.358 << @time=2026-08-19T23:35:17.357Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:33:17.023Z
+1787182517.389 << @draft/chathistory-end;time=2026-08-19T23:35:17.389Z;label=ircx-3 :ergo.test BATCH +5 chathistory #markwalk
+1787182517.389 << @time=2026-08-19T23:35:17.389Z :ergo.test BATCH -5
+1787182567.136 >> MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182567.136 << @time=2026-08-19T23:36:07.136Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182583.564 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787182583.564 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182583.564 << @time=2026-08-19T23:36:23.564Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182584.567 << @time=2026-08-19T23:36:24.566Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:33:17.023Z
+1787182584.567 << @time=2026-08-19T23:36:24.566Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182585.066 >> MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182585.066 << @time=2026-08-19T23:36:25.065Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182585.567 << @time=2026-08-19T23:36:25.566Z;label=ircx-1;draft/chathistory-end :ergo.test BATCH +1 chathistory #quiet
+1787182585.567 << @time=2026-08-19T23:36:25.566Z :ergo.test BATCH -1
+1787182588.066 >> MARKREAD talker33
+1787182588.066 << @time=2026-08-19T23:36:28.065Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787182588.566 << @draft/chathistory-end;time=2026-08-19T23:36:28.566Z :ergo.test BATCH +2 draft/chathistory-targets
+1787182588.566 << @time=2026-08-19T23:36:28.566Z :ergo.test BATCH -2
+1787182590.066 << @draft/chathistory-end;time=2026-08-19T23:36:30.065Z :ergo.test BATCH +3 chathistory #markwalk
+1787182590.066 << @time=2026-08-19T23:36:30.065Z :ergo.test BATCH -3
+1787182591.066 << @draft/chathistory-end;time=2026-08-19T23:36:31.065Z :ergo.test BATCH +4 chathistory #quiet
+1787182591.066 << @time=2026-08-19T23:36:31.065Z :ergo.test BATCH -4
+1787182701.372 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787182701.372 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182701.372 << @time=2026-08-19T23:38:21.371Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787182702.375 << @time=2026-08-19T23:38:22.375Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:33:17.023Z
+1787182702.376 << @time=2026-08-19T23:38:22.375Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:33:17.023Z
+1787182702.873 >> MARKREAD #quiet timestamp=2026-08-19T23:36:24.566Z
+1787182702.874 << @time=2026-08-19T23:38:22.873Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:36:24.566Z
+1787182703.373 << @draft/chathistory-end;time=2026-08-19T23:38:23.373Z;label=ircx-1 :ergo.test BATCH +1 chathistory #quiet
+1787182703.373 << @time=2026-08-19T23:38:23.373Z :ergo.test BATCH -1
+1787182705.873 >> MARKREAD talker33
+1787182705.874 << @time=2026-08-19T23:38:25.873Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787182706.373 << @draft/chathistory-end;time=2026-08-19T23:38:26.373Z :ergo.test BATCH +2 draft/chathistory-targets
+1787182706.373 << @time=2026-08-19T23:38:26.373Z :ergo.test BATCH -2
+1787182707.874 << @draft/chathistory-end;time=2026-08-19T23:38:27.873Z :ergo.test BATCH +3 chathistory #markwalk
+1787182707.874 << @time=2026-08-19T23:38:27.873Z :ergo.test BATCH -3
+1787182708.874 << @draft/chathistory-end;time=2026-08-19T23:38:28.873Z :ergo.test BATCH +4 chathistory #quiet
+1787182708.874 << @time=2026-08-19T23:38:28.873Z :ergo.test BATCH -4
+1787182709.373 << @time=2026-08-19T23:38:29.373Z;draft/chathistory-end :ergo.test BATCH +5 chathistory talker33
+1787182709.374 << @time=2026-08-19T23:38:29.373Z :ergo.test BATCH -5
+1787182774.584 >> MARKREAD #markwalk timestamp=2026-08-19T23:38:22.375Z
+1787182774.584 << @time=2026-08-19T23:39:34.583Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:38:22.375Z
+1787182774.599 << @draft/chathistory-end;time=2026-08-19T23:39:34.598Z;label=ircx-2 :ergo.test BATCH +6 chathistory #markwalk
+1787182774.599 << @time=2026-08-19T23:39:34.598Z :ergo.test BATCH -6
+1787182834.519 >> @label=ircx-4 BATCH +99f27b3f10114056bdeab08f08022838 draft/multiline #markwalk
+1787182834.519 >> @batch=99f27b3f10114056bdeab08f08022838 PRIVMSG #markwalk :paragraph one, before the blank line
+1787182834.519 >> @batch=99f27b3f10114056bdeab08f08022838 PRIVMSG #markwalk L001-L002-L003-L004-L005-L006-L007-L008-L009-L010-L011-L012-L013-L014-L015-L016-L017-L018-L019-L020-L021-L022-L023-L024-L025-L026-L027-L028-L029-L030-L031-L032-L033-L034-L035-L036-L037-L038-L039-L040-L041-L042-L043-L044-L045-L046-L047-L048-L049-L050-L051-L052-L053-L054-L055-L056-L057-L058-L059-L060-L061-L062-L063-L064-L065-L066-L067-L068-L069-L070-L071-L072-L073-L074-L075-L076-L077-L078-L079-L080-L081-L082-L083-L084-L085-L086-L087-L088-L089-L090-L091-L092-
+1787182835.018 >> @batch=99f27b3f10114056bdeab08f08022838;draft/multiline-concat PRIVMSG #markwalk L093-L094-L095-L096-L097-L098-L099-L100-L101-L102-L103-L104-L105-L106-L107-L108-L109-L110-L111-L112-L113-L114-L115-L116-L117-L118-L119-L120-
+1787182835.519 >> BATCH -99f27b3f10114056bdeab08f08022838
+1787182835.519 << @time=2026-08-19T23:40:35.518Z;msgid=bgj6hdhp73xuwqhvn3axu8wc4n;account=walkacct;label=ircx-4 :walkacct!~u@f6u3beryjfghu.irc BATCH +7 draft/multiline #markwalk
+1787182835.519 << @batch=7;draft/multiline-concat :walkacct!~u@f6u3beryjfghu.irc PRIVMSG #markwalk :L093-L094-L095-L096-L097-L098-L099-L100-L101-L102-L103-L104-L105-L106-L107-L108-L109-L110-L111-L112-L113-L114-L115-L116-L117-L118-L119-L120-
+1787182835.519 << :walkacct!~u@f6u3beryjfghu.irc BATCH -7
+1787182918.497 >> @label=ircx-5 BATCH +b0206daeab3d4f4bb4a1f9dec3048c78 draft/multiline #markwalk
+1787182918.497 >> @batch=b0206daeab3d4f4bb4a1f9dec3048c78 PRIVMSG #markwalk :second paragraph, before its blank line
+1787182918.497 >> @batch=b0206daeab3d4f4bb4a1f9dec3048c78 PRIVMSG #markwalk L001-L002-L003-L004-L005-L006-L007-L008-L009-L010-L011-L012-L013-L014-L015-L016-L017-L018-L019-L020-L021-L022-L023-L024-L025-L026-L027-L028-L029-L030-L031-L032-L033-L034-L035-L036-L037-L038-L039-L040-L041-L042-L043-L044-L045-L046-L047-L048-L049-L050-L051-L052-L053-L054-L055-L056-L057-L058-L059-L060-L061-L062-L063-L064-L065-L066-L067-L068-L069-L070-L071-L072-L073-L074-L075-L076-L077-L078-L079-L080-L081-L082-L083-L084-L085-L086-L087-L088-L089-L090-L091-L092-
+1787182918.995 >> @batch=b0206daeab3d4f4bb4a1f9dec3048c78;draft/multiline-concat PRIVMSG #markwalk L093-L094-L095-L096-L097-L098-L099-L100-L101-L102-L103-L104-L105-L106-L107-L108-L109-L110-L111-L112-L113-L114-L115-L116-L117-L118-L119-L120-
+1787182919.495 >> BATCH -b0206daeab3d4f4bb4a1f9dec3048c78
+1787182919.496 << @account=walkacct;label=ircx-5;time=2026-08-19T23:41:59.495Z;msgid=iyhz7uw3wzvk8v6fnmratq4hj2 :walkacct!~u@f6u3beryjfghu.irc BATCH +8 draft/multiline #markwalk
+1787182919.496 << @batch=8;draft/multiline-concat :walkacct!~u@f6u3beryjfghu.irc PRIVMSG #markwalk :L093-L094-L095-L096-L097-L098-L099-L100-L101-L102-L103-L104-L105-L106-L107-L108-L109-L110-L111-L112-L113-L114-L115-L116-L117-L118-L119-L120-
+1787182919.496 << :walkacct!~u@f6u3beryjfghu.irc BATCH -8
+1787183756.622 << @time=2026-08-19T23:55:56.621Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:38:22.375Z
+1787183756.622 << @time=2026-08-19T23:55:56.621Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:36:24.566Z
+1787183759.119 >> MARKREAD talker33
+1787183759.119 << @time=2026-08-19T23:55:59.119Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787183759.619 << @draft/chathistory-end;time=2026-08-19T23:55:59.619Z :ergo.test BATCH +1 draft/chathistory-targets
+1787183759.619 << @time=2026-08-19T23:55:59.619Z :ergo.test BATCH -1
+1787183761.120 << @draft/chathistory-end;time=2026-08-19T23:56:01.120Z :ergo.test BATCH +2 chathistory #markwalk
+1787183761.120 << @time=2026-08-19T23:56:01.120Z :ergo.test BATCH -2
+1787183762.120 << @draft/chathistory-end;time=2026-08-19T23:56:02.119Z :ergo.test BATCH +3 chathistory #quiet
+1787183762.120 << @time=2026-08-19T23:56:02.119Z :ergo.test BATCH -3
+1787183801.132 >> @label=ircx-7 PRIVMSG #markwalk :fallback paragraph, before the blank line
+1787183801.132 >> @label=ircx-8 PRIVMSG #markwalk L001-L002-L003-L004-L005-L006-L007-L008-L009-L010-L011-L012-L013-L014-L015-L016-L017-L018-L019-L020-L021-L022-L023-L024-L025-L026-L027-L028-L029-L030-L031-L032-L033-L034-L035-L036-L037-L038-L039-L040-L041-L042-L043-L044-L045-L046-L047-L048-L049-L050-L051-L052-L053-L054-L055-L056-L057-L058-L059-L060-L061-L062-L063-L064-L065-L066-L067-L068-L069-L070-L071-L072-L073-L074-L075-L076-L077-L078-L079-L080-L081-L082-L083-L084-L085-L086-L087-L088-L089-L090-L091-L092-
+1787183864.493 << :ergo.test CAP * LS * :account-notify account-tag away-notify batch cap-notify chghost draft/account-registration=before-connect draft/channel-rename draft/chathistory draft/event-playback draft/extended-isupport draft/languages=17,en,~bs,~de,~el,~en-AU,~es,~fi,~fr-FR,~it,~nl,~no,~pl,~pt-BR,~ro,~sq-AL,~tr-TR,~zh-CN draft/metadata-2=before-connect,max-subs=100,max-keys=100 draft/metadata-3=before-connect,max-subs=100,max-keys=100 draft/multiline=max-bytes=4096,max-lines=100 draft/persistence draft/pre-away
+1787183864.493 >> CAP REQ :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787183864.493 << @time=2026-08-19T23:57:44.493Z :ergo.test CAP * ACK :account-notify account-tag away-notify batch chghost draft/chathistory draft/multiline draft/read-marker echo-message extended-join extended-monitor invite-notify labeled-response message-tags multi-prefix sasl server-time standard-replies userhost-in-names
+1787183865.496 << @time=2026-08-19T23:57:45.495Z :ergo.test MARKREAD #markwalk timestamp=2026-08-19T23:38:22.375Z
+1787183865.496 << @time=2026-08-19T23:57:45.495Z :ergo.test MARKREAD #quiet timestamp=2026-08-19T23:36:24.566Z
+1787183867.994 >> MARKREAD talker33
+1787183867.994 << @time=2026-08-19T23:57:47.994Z :ergo.test MARKREAD talker33 timestamp=2026-08-19T23:26:24.967Z
+1787183868.494 << @draft/chathistory-end;time=2026-08-19T23:57:48.493Z :ergo.test BATCH +1 draft/chathistory-targets
+1787183868.494 << @time=2026-08-19T23:57:48.493Z :ergo.test BATCH -1
+1787183869.994 << @draft/chathistory-end;time=2026-08-19T23:57:49.994Z :ergo.test BATCH +2 chathistory #markwalk
+1787183869.994 << @time=2026-08-19T23:57:49.994Z :ergo.test BATCH -2
+1787183870.993 << @time=2026-08-19T23:57:50.993Z;draft/chathistory-end :ergo.test BATCH +3 chathistory #quiet
+1787183870.993 << @time=2026-08-19T23:57:50.993Z :ergo.test BATCH -3

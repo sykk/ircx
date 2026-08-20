@@ -29,6 +29,8 @@
 //   --nick <nick>          default walker
 //   --join <#channel>      seeded as a connect command, repeatable
 //   --tls                  the seeded network uses TLS, off by default
+//   --sasl <account:pass>  the seeded network logs in with SASL PLAIN, which is
+//                          what a walk needs to be two sessions of one account
 //   --release              drive the release app, built by `npm run tauri build`,
 //                          which is what a figure has to be measured on
 //   --keep                 leave the profile behind and print where it is
@@ -68,6 +70,10 @@ const [HOST, PORT] = (flag("server", "127.0.0.1:6667") ?? "").split(":");
 const NICK = flag("nick", "walker");
 const CHANNELS = flags("join");
 const TLS = process.argv.includes("--tls");
+/* The password does not go in the seed: the app keeps it in the OS keyring and
+ * reads it from there, so a walk has to put it where the app will look — the
+ * `ircx` service, under the network's id. */
+const [SASL_ACCOUNT, SASL_PASSWORD] = (flag("sasl", "") ?? "").split(":");
 const KEEP = process.argv.includes("--keep");
 /* A release app carries the frontend inside it and needs no dev server, so this
  * drives what people actually run rather than a debug binary against Vite. Any
@@ -88,6 +94,7 @@ function need(binary) {
   }
 }
 ["gcc", "Xvfb", "xprop", "import"].forEach(need);
+if (SASL_ACCOUNT) need("secret-tool");
 
 /* `npm run tauri build`, and not `cargo build --release`: what decides whether
  * the frontend is inside the binary or fetched from the dev server is the tauri
@@ -269,7 +276,7 @@ function seedNetwork() {
     `INSERT INTO networks (id, name, host, port, tls, tls_verify, nick, alt_nicks, username,
                            realname, sasl_mechanism, sasl_account, connect_commands, autojoin,
                            auto_connect)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, NULL, NULL, ?, '[]', 1)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, '[]', 1)`,
   ).run(
     "walk",
     "walk",
@@ -280,9 +287,32 @@ function seedNetwork() {
     NICK,
     NICK,
     NICK,
+    /* JSON, and not the bare word: the column holds a serialised
+     * `SaslMechanism`, so `PLAIN` deserialises into nothing and takes the whole
+     * network list down with it — the app comes up saying it has no networks
+     * configured, with the row sitting in the table. */
+    SASL_ACCOUNT ? JSON.stringify("PLAIN") : null,
+    SASL_ACCOUNT || null,
     JSON.stringify(CHANNELS.map((channel) => `/join ${channel}`)),
   );
   db.close();
+  if (SASL_ACCOUNT) seedPassword();
+}
+
+/* `keyring` 3.x names an entry by four attributes and finds it by three of
+ * them, so a password written under anything else is a password the app cannot
+ * see — and SASL then fails in a way that reads as the server refusing it.
+ * `crates/ircx-store/src/credentials.rs` is where `ircx` and the id come from. */
+function seedPassword() {
+  const stored = spawnSync(
+    "secret-tool",
+    ["store", "--label=ircx walk", "service", "ircx", "username", "walk",
+     "target", "default", "application", "rust-keyring"],
+    { input: SASL_PASSWORD },
+  );
+  if (stored.status !== 0) {
+    throw new Error(String(stored.stderr).trim() || "secret-tool store failed");
+  }
 }
 
 startApp();
@@ -347,6 +377,9 @@ for await (const line of lines) {
 
 for (const child of children) child.kill();
 xvfb.kill();
+if (SASL_ACCOUNT && !KEEP) {
+  spawnSync("secret-tool", ["clear", "service", "ircx", "username", "walk"]);
+}
 if (KEEP) say(`ok profile kept at ${HOME_DIR}`);
 else rmSync(run, { recursive: true, force: true });
 process.exit(0);

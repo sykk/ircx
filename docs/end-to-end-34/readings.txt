@@ -1,0 +1,367 @@
+1787225182.699 window: ok ready :90 profile /tmp/ircx-window-3FXmLV/data
+1787225192.187 -- spawn witness34 #ignore34
+1787225192.241 witness34 registered: :ergo.test 001 witness34 :Welcome to the ErgoTest IRC Network witness34
+1787225192.291 witness34 joined #ignore34
+1787225192.492 -- spawn talker34 #ignore34
+1787225192.543 talker34 registered: :ergo.test 001 talker34 :Welcome to the ErgoTest IRC Network talker34
+1787225192.594 talker34 joined #ignore34
+1787225192.794 -- win wait 1500
+1787225194.297    window: ok waited
+1787225194.497 -- win ss /tmp/shots34/00-joined.png
+1787225194.573    window: ok screenshot /tmp/shots34/00-joined.png
+1787225211.053 -- say talker34 #ignore34 control line one, before any ignore
+1787225211.253 -- say witness34 #ignore34 witness speaking, and it will keep speaking
+1787225211.454 -- win wait 1200
+1787225212.657    window: ok waited
+1787225212.857 -- win ss /tmp/shots34/01-control.png
+1787225212.934    window: ok screenshot /tmp/shots34/01-control.png
+1787225213.134 -- count talker34
+1787225213.134    talker34 holds 59 lines
+1787225213.335 -- ctcp talker34 walker34 VERSION
+1787225213.535 -- win wait 1200
+1787225214.738    window: ok waited
+1787225214.938 -- since talker34 8
+1787225214.939    [8] :ergo.test 005 talker34 TOPICLEN=390 UTF8ONLY WHOX draft/CHATHISTORY=1000 :are supported by this server
+1787225214.939    [9] :ergo.test 251 talker34 :There are 0 users and 3 invisible on 1 server(s)
+1787225214.939    [10] :ergo.test 252 talker34 0 :IRC Operators online
+1787225214.939    [11] :ergo.test 253 talker34 0 :unregistered connections
+1787225214.939    [12] :ergo.test 254 talker34 6 :channels formed
+1787225214.939    [13] :ergo.test 255 talker34 :I have 3 clients and 0 servers
+1787225214.939    [14] :ergo.test 265 talker34 3 3 :Current local users 3, max 3
+1787225214.939    [15] :ergo.test 266 talker34 3 3 :Current global users 3, max 3
+1787225214.939    [16] :ergo.test 375 talker34 :- ergo.test Message of the day - 
+1787225214.939    [17] :ergo.test 372 talker34 :-      __ __  ______ ___  ______ ___ 
+1787225214.939    [18] :ergo.test 372 talker34 :-   __/ // /_/ ____/ __ \/ ____/ __ \
+1787225214.939    [19] :ergo.test 372 talker34 :-  /_  // __/ __/ / /_/ / / __/ / / /
+1787225214.939    [20] :ergo.test 372 talker34 :- /_  // __/ /___/ _, _/ /_/ / /_/ / 
+1787225214.939    [21] :ergo.test 372 talker34 :-  /_//_/ /_____/_/ |_|\____/\____/  
+1787225214.939    [22] :ergo.test 372 talker34 :- 
+1787225214.939    [23] :ergo.test 372 talker34 :- 
+1787225214.939    [24] :ergo.test 372 talker34 :- This is the default Ergo MOTD.
+1787225214.939    [25] :ergo.test 372 talker34 :- 
+1787225214.939    [26] :ergo.test 372 talker34 :- 
+1787225214.939    [27] :ergo.test 372 talker34 :- If motd-formatting is enabled in the config file, you can use the dollarsign character to
+1787225214.939    [28] :ergo.test 372 talker34 :- create special formatting such as bold, italics and color codes.
+1787225214.939    [29] :ergo.test 372 talker34 :- 
+1787225214.939    [30] :ergo.test 372 talker34 :- For example, here are a few formatted lines (enable motd-formatting to see these in action):
+1787225214.939    [31] :ergo.test 372 talker34 :- 
+1787225214.939    [32] :ergo.test 372 talker34 :- - this is bold text.
+1787225214.939    [33] :ergo.test 372 talker34 :- - this is italics text.
+1787225214.939    [34] :ergo.test 372 talker34 :- - this is 4red and 2blue text.
+1787225214.939    [35] :ergo.test 372 talker34 :- - this is 4,12red text with a light blue background.
+1787225214.939    [36] :ergo.test 372 talker34 :- - this is a normal escaped dollarsign: $
+1787225214.939    [37] :ergo.test 372 talker34 :- 
+1787225214.939    [38] :ergo.test 372 talker34 :- And now a few fun colour charts!
+1787225214.939    [39] :ergo.test 372 talker34 :- 
+1787225214.939    [40] :ergo.test 372 talker34 :- 1,0 00 0,1 01 0,2 02 0,3 03 1,4 04 0,5 05 0,6 06 1,7 07 
+1787225214.939    [41] :ergo.test 372 talker34 :- 1,8 08 1,9 09 0,10 10 1,11 11 0,12 12 1,13 13 1,14 14 1,15 15 
+1787225214.939    [42] :ergo.test 372 talker34 :- 
+1787225214.939    [43] :ergo.test 372 talker34 :- 0,16 16 0,17 17 0,18 18 0,19 19 0,20 20 0,21 21 0,22 22 0,23 23 0,24 24 0,25 25 0,26 26 0,27 27 
+1787225214.939    [44] :ergo.test 372 talker34 :- 0,28 28 0,29 29 0,30 30 0,31 31 0,32 32 0,33 33 0,34 34 0,35 35 0,36 36 0,37 37 0,38 38 0,39 39 
+1787225214.939    [45] :ergo.test 372 talker34 :- 0,40 40 0,41 41 0,42 42 0,43 43 0,44 44 0,45 45 0,46 46 0,47 47 0,48 48 0,49 49 0,50 50 0,51 51 
+1787225214.939    [46] :ergo.test 372 talker34 :- 0,52 52 0,53 53 1,54 54 1,55 55 1,56 56 1,57 57 1,58 58 0,59 59 0,60 60 0,61 61 0,62 62 0,63 63 
+1787225214.939    [47] :ergo.test 372 talker34 :- 0,64 64 1,65 65 1,66 66 1,67 67 1,68 68 1,69 69 1,70 70 1,71 71 0,72 72 0,73 73 0,74 74 0,75 75 
+1787225214.939    [48] :ergo.test 372 talker34 :- 1,76 76 1,77 77 1,78 78 1,79 79 1,80 80 1,81 81 1,82 82 1,83 83 1,84 84 1,85 85 1,86 86 1,87 87 
+1787225214.939    [49] :ergo.test 372 talker34 :- 0,88 88 0,89 89 0,90 90 0,91 91 0,92 92 0,93 93 0,94 94 0,95 95 1,96 96 1,97 97 1,98 98 99,99 99 
+1787225214.939    [50] :ergo.test 372 talker34 :- 
+1787225214.939    [51] :ergo.test 372 talker34 :- For more information on using these, see MOTDFORMATTING.md
+1787225214.939    [52] :ergo.test 376 talker34 :End of MOTD command
+1787225214.940    [53] :ergo.test 221 talker34 +Zi
+1787225214.940    [54] :ergo.test NOTICE talker34 :This server is in debug mode and is logging all user I/O. If you do not wish for everything you send to be readable by the server owner(s), please disconnect.
+1787225214.940    [55] :talker34!~u@f6u3beryjfghu.irc JOIN #ignore34
+1787225214.940    [56] :ergo.test 353 talker34 = #ignore34 :@walker34 witness34 talker34
+1787225214.940    [57] :ergo.test 366 talker34 #ignore34 :End of NAMES list
+1787225214.940    [58] :witness34!~u@f6u3beryjfghu.irc PRIVMSG #ignore34 :witness speaking, and it will keep speaking
+1787225214.940    [59] :walker34!~u@f6u3beryjfghu.irc PRIVMSG talker34 :VERSION ircx 0.1.0+910339c - https://github.com/sykk/ircx
+1787225258.780 -- win click 680 748
+1787225259.095    window: ok clicked
+1787225259.295 -- win type /ignore talker34
+1787225259.853    window: ok typed
+1787225260.053 -- win key Return
+1787225260.308    window: ok pressed
+1787225260.509 -- win wait 1000
+1787225261.511    window: ok waited
+1787225261.712 -- win ss /tmp/shots34/02-ignored.png
+1787225261.790    window: ok screenshot /tmp/shots34/02-ignored.png
+1787225261.990 -- say talker34 #ignore34 first line after the ignore, nobody should see this
+1787225262.191 -- say witness34 #ignore34 witness after the ignore
+1787225262.391 -- win wait 1500
+1787225263.893    window: ok waited
+1787225264.094 -- win ss /tmp/shots34/03-after.png
+1787225264.175    window: ok screenshot /tmp/shots34/03-after.png
+1787225286.649 -- count talker34
+1787225286.649    talker34 holds 63 lines
+1787225286.849 -- say talker34 walker34 a private line while ignored
+1787225287.050 -- ctcp talker34 walker34 VERSION
+1787225287.250 -- ctcp talker34 walker34 PING 12345
+1787225287.450 -- win wait 2000
+1787225289.454    window: ok waited
+1787225289.654 -- win ss /tmp/shots34/04-query-while-ignored.png
+1787225289.728    window: ok screenshot /tmp/shots34/04-query-while-ignored.png
+1787225289.928 -- since talker34 60
+1787225289.929    [60] :ergo.test PONG ergo.test keepalive1787225237
+1787225289.929    [61] :witness34!~u@f6u3beryjfghu.irc PRIVMSG #ignore34 :witness after the ignore
+1787225289.929    [62] :ergo.test PONG ergo.test keepalive1787225282
+1787225313.974 -- win click 57 154
+1787225314.289    window: ok clicked
+1787225314.489 -- win wait 1200
+1787225315.691    window: ok waited
+1787225315.891 -- win ss /tmp/shots34/05-query-open.png
+1787225315.964    window: ok screenshot /tmp/shots34/05-query-open.png
+1787225316.164 -- say talker34 #ignore34 walker34: this mentions you and must not raise anything
+1787225316.365 -- win wait 800
+1787225317.167    window: ok waited
+1787225317.368 -- win ss /tmp/shots34/06-mention-ignored.png
+1787225317.443    window: ok screenshot /tmp/shots34/06-mention-ignored.png
+1787225317.644 -- say witness34 #ignore34 walker34: this one should raise the channel
+1787225317.844 -- win wait 1500
+1787225319.346    window: ok waited
+1787225319.546 -- win ss /tmp/shots34/07-mention-witness.png
+1787225319.620    window: ok screenshot /tmp/shots34/07-mention-witness.png
+1787225355.320 -- win click 60 117
+1787225355.634    window: ok clicked
+1787225355.834 -- win wait 1200
+1787225357.036    window: ok waited
+1787225357.236 -- win ss /tmp/shots34/08-back-in-channel.png
+1787225357.315    window: ok screenshot /tmp/shots34/08-back-in-channel.png
+1787225357.516 -- raw talker34 PART #ignore34 :ignored people leaving
+1787225357.716 -- win wait 1200
+1787225358.919    window: ok waited
+1787225359.119 -- win ss /tmp/shots34/09-ignored-parted.png
+1787225359.199    window: ok screenshot /tmp/shots34/09-ignored-parted.png
+1787225359.399 -- raw talker34 JOIN #ignore34
+1787225359.599 -- win wait 1200
+1787225360.802    window: ok waited
+1787225361.002 -- win ss /tmp/shots34/10-ignored-rejoined.png
+1787225361.081    window: ok screenshot /tmp/shots34/10-ignored-rejoined.png
+1787225361.281 -- raw witness34 PART #ignore34 :the witness leaving
+1787225361.482 -- win wait 1200
+1787225362.683    window: ok waited
+1787225362.884 -- raw witness34 JOIN #ignore34
+1787225363.084 -- win wait 1500
+1787225364.586    window: ok waited
+1787225364.787 -- win ss /tmp/shots34/11-witness-cycled.png
+1787225364.866    window: ok screenshot /tmp/shots34/11-witness-cycled.png
+1787225395.113 -- win click 680 748
+1787225395.426    window: ok clicked
+1787225395.627 -- win type /mode #ignore34 +o talker34
+1787225396.418    window: ok typed
+1787225396.618 -- win key Return
+1787225396.874    window: ok pressed
+1787225397.074 -- win wait 1200
+1787225398.276    window: ok waited
+1787225398.476 -- raw talker34 TOPIC #ignore34 :a topic set by somebody the reader ignores
+1787225398.677 -- win wait 1500
+1787225400.180    window: ok waited
+1787225400.380 -- win ss /tmp/shots34/12-topic-by-ignored.png
+1787225400.463    window: ok screenshot /tmp/shots34/12-topic-by-ignored.png
+1787225400.663 -- raw talker34 KICK #ignore34 witness34 :kicked by somebody the reader ignores
+1787225400.864 -- win wait 1500
+1787225402.366    window: ok waited
+1787225402.566 -- win ss /tmp/shots34/13-kick-by-ignored.png
+1787225402.646    window: ok screenshot /tmp/shots34/13-kick-by-ignored.png
+1787225426.179 -- raw witness34 JOIN #ignore34
+1787225426.379 -- win wait 1000
+1787225427.382    window: ok waited
+1787225427.582 -- raw talker34 NICK talker34b
+1787225427.783 -- win wait 1500
+1787225429.285    window: ok waited
+1787225429.486 -- win ss /tmp/shots34/14-renamed.png
+1787225429.567    window: ok screenshot /tmp/shots34/14-renamed.png
+1787225429.767 -- say talker34 #ignore34 renamed and still ignored, nobody should see this
+1787225429.968 -- say witness34 #ignore34 the witness after the rename
+1787225430.168 -- win wait 1500
+1787225431.670    window: ok waited
+1787225431.871 -- win ss /tmp/shots34/15-after-rename.png
+1787225431.953    window: ok screenshot /tmp/shots34/15-after-rename.png
+1787225450.981 -- win click 680 748
+1787225451.294    window: ok clicked
+1787225451.494 -- win type /ignore
+1787225451.848    window: ok typed
+1787225452.049 -- win key Return
+1787225452.305    window: ok pressed
+1787225452.505 -- win wait 1200
+1787225453.708    window: ok waited
+1787225453.908 -- win ss /tmp/shots34/16-bare-ignore-channel.png
+1787225453.989    window: ok screenshot /tmp/shots34/16-bare-ignore-channel.png
+1787225454.190 -- win click 40 88
+1787225454.506    window: ok clicked
+1787225454.707 -- win wait 1200
+1787225455.909    window: ok waited
+1787225456.110 -- win ss /tmp/shots34/17-bare-ignore-server.png
+1787225456.193    window: ok screenshot /tmp/shots34/17-bare-ignore-server.png
+1787225485.151 -- win click 60 117
+1787225485.466    window: ok clicked
+1787225485.666 -- win wait 800
+1787225486.468    window: ok waited
+1787225486.669 -- win click 1131 135
+1787225486.984    window: ok clicked
+1787225487.184 -- win wait 1200
+1787225488.387    window: ok waited
+1787225488.587 -- win ss /tmp/shots34/18-inspector.png
+1787225488.670    window: ok screenshot /tmp/shots34/18-inspector.png
+1787225522.186 -- win quit
+1787225522.186    window: ok profile kept at /tmp/ircx-window-3FXmLV/data
+1787225534.810 -- say talker34 #ignore34 offline line one from the ignored person
+1787225535.011 -- say talker34 #ignore34 offline line two from the ignored person
+1787225535.211 -- say talker34 walker34 an offline private line from the ignored person
+1787225535.412 -- say witness34 #ignore34 offline line from the witness, which must come back
+1787225535.613 -- say witness34 #ignore34 walker34: and this one mentions the reader
+1787225573.133 -- quit
+1787225583.427 window: ok ready :90 profile /tmp/ircx-window-3FXmLV/data
+1787225587.311 -- win wait 3000
+1787225590.315    window: ok waited
+1787225590.515 -- win ss /tmp/shots34/19-restarted.png
+1787225590.596    window: ok screenshot /tmp/shots34/19-restarted.png
+1787225617.977 -- win wait 4000
+1787225621.982    window: ok waited
+1787225622.182 -- win ss /tmp/shots34/20-gapfill.png
+1787225622.262    window: ok screenshot /tmp/shots34/20-gapfill.png
+1787225622.463 -- win wheel 650 400 5
+1787225622.863    window: ok scrolled
+1787225623.063 -- win wait 1000
+1787225624.065    window: ok waited
+1787225624.266 -- win ss /tmp/shots34/21-gapfill-bottom.png
+1787225624.346    window: ok screenshot /tmp/shots34/21-gapfill-bottom.png
+1787225702.113 -- win wait 1500
+1787225703.615    window: ok waited
+1787225703.815 -- win ss /tmp/shots34/22-both-back.png
+1787225703.897    window: ok screenshot /tmp/shots34/22-both-back.png
+1787225704.098 -- win quit
+1787225704.099    window: ok profile kept at /tmp/ircx-window-3FXmLV/data
+1787225759.821 -- quit
+1787225764.170 window: ok ready :90 profile /tmp/ircx-window-3FXmLV/data
+1787225765.690 -- win wait 6000
+1787225771.697    window: ok waited
+1787225771.898 -- win ss /tmp/shots34/23-gapfill-with-ignored.png
+1787225771.977    window: ok screenshot /tmp/shots34/23-gapfill-with-ignored.png
+1787225806.836 -- win key ctrl+k
+1787225807.090    window: ok pressed
+1787225807.290 -- win wait 800
+1787225808.093    window: ok waited
+1787225808.293 -- win type Privacy
+1787225808.645    window: ok typed
+1787225808.845 -- win wait 800
+1787225809.648    window: ok waited
+1787225809.848 -- win ss /tmp/shots34/24-palette.png
+1787225809.926    window: ok screenshot /tmp/shots34/24-palette.png
+1787225810.126 -- win key Return
+1787225810.382    window: ok pressed
+1787225810.583 -- win wait 1500
+1787225812.085    window: ok waited
+1787225812.285 -- win ss /tmp/shots34/25-privacy.png
+1787225812.367    window: ok screenshot /tmp/shots34/25-privacy.png
+1787225841.116 -- win click 170 177
+1787225841.430    window: ok clicked
+1787225841.630 -- win wait 1500
+1787225843.133    window: ok waited
+1787225843.334 -- win ss /tmp/shots34/26-notifications.png
+1787225843.419    window: ok screenshot /tmp/shots34/26-notifications.png
+1787225858.731 -- win wheel 700 500 6
+1787225859.142    window: ok scrolled
+1787225859.342 -- win wait 800
+1787225860.143    window: ok waited
+1787225860.344 -- win ss /tmp/shots34/27-ignored-list.png
+1787225860.429    window: ok screenshot /tmp/shots34/27-ignored-list.png
+1787225892.416 -- win key Escape
+1787225892.668    window: ok pressed
+1787225892.869 -- win wait 800
+1787225893.670    window: ok waited
+1787225893.871 -- win click 680 748
+1787225894.188    window: ok clicked
+1787225894.388 -- win type /unignore talker34
+1787225894.992    window: ok typed
+1787225895.193 -- win key Return
+1787225895.449    window: ok pressed
+1787225895.649 -- win wait 1000
+1787225896.652    window: ok waited
+1787225896.852 -- win ss /tmp/shots34/28-unignore-old-name.png
+1787225896.933    window: ok screenshot /tmp/shots34/28-unignore-old-name.png
+1787225897.134 -- win type /unignore talker34b
+1787225897.747    window: ok typed
+1787225897.948 -- win key Return
+1787225898.203    window: ok pressed
+1787225898.403 -- win wait 1200
+1787225899.604    window: ok waited
+1787225899.805 -- win ss /tmp/shots34/29-unignored.png
+1787225899.887    window: ok screenshot /tmp/shots34/29-unignored.png
+1787225936.679 -- win click 680 748
+1787225936.992    window: ok clicked
+1787225937.192 -- win key ctrl+a
+1787225937.448    window: ok pressed
+1787225937.649 -- win type /unignore talker34b
+1787225938.259    window: ok typed
+1787225938.459 -- win key Return
+1787225938.714    window: ok pressed
+1787225938.914 -- win wait 1200
+1787225940.116    window: ok waited
+1787225940.317 -- win ss /tmp/shots34/30-unignored.png
+1787225940.398    window: ok screenshot /tmp/shots34/30-unignored.png
+1787225961.734 -- win wait 1500
+1787225963.236    window: ok waited
+1787225963.437 -- win ss /tmp/shots34/31-heard-again.png
+1787225963.516    window: ok screenshot /tmp/shots34/31-heard-again.png
+1787226123.268 -- win ss /tmp/shots34/32-ctcp-loop-sidebar.png
+1787226123.343    window: ok screenshot /tmp/shots34/32-ctcp-loop-sidebar.png
+1787226123.543 -- win click 57 190
+1787226123.859    window: ok clicked
+1787226124.059 -- win wait 1200
+1787226125.261    window: ok waited
+1787226125.462 -- win ss /tmp/shots34/33-ctcp-loop-query.png
+1787226125.537    window: ok screenshot /tmp/shots34/33-ctcp-loop-query.png
+1787226149.297 -- win click 63 154
+1787226149.610    window: ok clicked
+1787226149.811 -- win wait 1200
+1787226151.013    window: ok waited
+1787226151.214 -- win ss /tmp/shots34/34-loop-query.png
+1787226151.291    window: ok screenshot /tmp/shots34/34-loop-query.png
+1787226186.152 -- win click 680 748
+1787226186.467    window: ok clicked
+1787226186.667 -- win key ctrl+a
+1787226186.922    window: ok pressed
+1787226187.122 -- win type /ignore loopbot34
+1787226187.696    window: ok typed
+1787226187.897 -- win key Return
+1787226188.153    window: ok pressed
+1787226293.449 -- win ss /tmp/shots34/35-loop-stopped-by-ignore.png
+1787226293.523    window: ok screenshot /tmp/shots34/35-loop-stopped-by-ignore.png
+1787226334.427 -- win click 60 117
+1787226334.741    window: ok clicked
+1787226334.942 -- win wait 800
+1787226335.743    window: ok waited
+1787226335.944 -- win click 680 748
+1787226336.260    window: ok clicked
+1787226336.461 -- win key ctrl+a
+1787226336.717    window: ok pressed
+1787226336.917 -- win type /ignore walker34
+1787226337.472    window: ok typed
+1787226337.672 -- win key Return
+1787226337.928    window: ok pressed
+1787226338.128 -- win wait 1000
+1787226339.131    window: ok waited
+1787226339.331 -- win ss /tmp/shots34/36-ignore-self.png
+1787226339.411    window: ok screenshot /tmp/shots34/36-ignore-self.png
+1787226339.612 -- win key ctrl+a
+1787226339.867    window: ok pressed
+1787226340.068 -- win type /ignore TALKER34B
+1787226340.642    window: ok typed
+1787226340.843 -- win key Return
+1787226341.099    window: ok pressed
+1787226341.300 -- win wait 1200
+1787226342.502    window: ok waited
+1787226351.435 -- win ss /tmp/shots34/37-action-and-notice.png
+1787226351.511    window: ok screenshot /tmp/shots34/37-action-and-notice.png
+1787226407.820 -- win ss /tmp/shots34/38-typing-control.png
+1787226407.901    window: ok screenshot /tmp/shots34/38-typing-control.png
+1787226411.821 -- win click 680 748
+1787226412.137    window: ok clicked
+1787226412.337 -- win key ctrl+a
+1787226412.594    window: ok pressed
+1787226412.794 -- win type /ignore tagger34
+1787226413.337    window: ok typed
+1787226413.537 -- win key Return
+1787226413.793    window: ok pressed
+1787226413.994 -- win wait 1500
+1787226415.497    window: ok waited
+1787226419.825 -- win ss /tmp/shots34/39-typing-ignored.png
+1787226419.902    window: ok screenshot /tmp/shots34/39-typing-ignored.png

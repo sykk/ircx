@@ -368,6 +368,15 @@ already one directory per worktree — see Gotchas for what sharing one costs.
   so `(` and `)` are unreachable through it. Use `type`, which goes through
   `Input.insertText` and is layout-independent. This matters for anything
   pasting a CSS value like `rgb(...)` or `url(...)`.
+- **`window.mjs`'s `type` cannot type an emoji, and the failure is sticky.**
+  That `type` is not `driver.mjs`'s: it goes through XTEST a keystroke at a
+  time, so a character with no keysym stops it dead — `err no keycode for
+  keysym 0xf0` is what a 👍 gets. Run 36 lost two attempts to it. Worse, the
+  characters typed *before* the failure are already in the field, so the next
+  attempt appends to them and sends something nobody wrote: a `/react` that
+  died on its emoji left ircx sending a reaction whose value was a msgid.
+  Clear the field (`ctrl+a`, `BackSpace`) after any `type` that errors. A
+  reaction's value has no restriction on it, so a word tests the same path.
 - **Do not type a path into GTK's *folder* chooser.** Its location bar (`ctrl+l`)
   duplicates injected characters: `/tmp/notaplugin` arrived as
   `/tmp/nootaplugin`, and a longer one as `claude-aude-1000` for `claude-1000`.

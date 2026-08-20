@@ -2137,7 +2137,20 @@ impl SessionState {
             sender.nick.clone()
         };
 
-        if let Some(state) = message.tag("+typing").or_else(|| message.tag("typing")) {
+        // Not your own, which `echo-message` sends straight back: the indicator
+        // exists to say somebody else is about to speak, and a reader told they
+        // are typing learns nothing. A second session of the same account types
+        // under this nick too, and is the same answer for the same reason.
+        //
+        // The reaction below keeps its echo. That one is a fact about a message
+        // — the chip belongs under it whoever added it — and the local copy
+        // `react` emits is the same event arriving twice rather than a claim
+        // about somebody's hands.
+        if let Some(state) = message
+            .tag("+typing")
+            .or_else(|| message.tag("typing"))
+            .filter(|_| !sender.is_self)
+        {
             self.emit(IrcxEvent::TypingChanged {
                 network: self.config.network.clone(),
                 target: target.clone(),

@@ -62,6 +62,38 @@ server that forgets, so does the client.
 What that leaves: **a real bouncer**, which is the other half of what this entry
 asked for.
 
+## Ignoring somebody
+
+What an ignore does to the session, the archive and the roster is scripted.
+
+**The end-to-end walk is done** (2026-08-20, `docs/end-to-end-run-34.md`),
+against `ergo` 2.19 with a witness client saying the same kind of thing at every
+step. `/ignore` takes effect on the next line; a mention from an ignored person
+left the window byte-identical where the witness's moved it and raised a badge;
+a private line opened no query and two CTCP requests drew no answer, thirteen
+minutes after the same request had been answered; a part and a rejoin drew no
+row while the roster lost them and got them back; a `/me`, a `NOTICE` and a
+`@+typing=active TAGMSG` were all silenced; and the kick, the mode and the topic
+an ignored person set were all drawn, which is the design. A rename was
+followed into the session, the sidebar, the bare `/ignore` list and the
+`ignored` table. Across a restart the ignore held and the channel's gap fill
+brought back the witness's two messages and neither of the other's.
+
+The archive was read out of SQLite rather than off the screen: five lines of
+speech, a part, a rejoin, a rename, a private message and two CTCP requests
+happened while the ignore was on, and none of them is in `messages`.
+
+The walk found #572, which is not about ignoring: ircx answers a CTCP that
+arrived on a `NOTICE`, and replies on whatever command the request arrived on,
+so two ircx clients trade the same `PING` until something outside stops them.
+An ignore was the only thing that stopped it.
+
+What that leaves: **a network that folds `rfc1459`** — ergo advertises
+`CASEMAPPING=ascii`, so `talker[34]` against `talker{34}` is untested;
+**an ignore made while a network is disconnected**, undone from the settings
+dialog, which is argued for and not watched; and **the desktop notification**,
+which nothing on the walk was listening for.
+
 ## Strict Transport Security
 
 The parser, policy expiry, plaintext upgrade decision and cached-policy

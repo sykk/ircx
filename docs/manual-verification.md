@@ -91,8 +91,12 @@ An ignore was the only thing that stopped it.
 What that leaves: **a network that folds `rfc1459`** — ergo advertises
 `CASEMAPPING=ascii`, so `talker[34]` against `talker{34}` is untested;
 **an ignore made while a network is disconnected**, undone from the settings
-dialog, which is argued for and not watched; and **the desktop notification**,
-which nothing on the walk was listening for.
+dialog, which is argued for and not watched. **The desktop notification is
+walked** (2026-08-20, `docs/end-to-end-run-38.md`): the same mention from the
+same person in the same channel raised one before `/ignore sable` and nothing
+after it, with no row and no badge to go with the silence — which is what
+dropping the line at the door leaves, there being no event for a notification to
+be raised from.
 
 ## Strict Transport Security
 
@@ -4582,6 +4586,17 @@ What that run settled:
 the ordering. Twenty sent in sequence reached the bus as `2, 1, 3, 4, 6, 7, 5,
 …` while the timeline held them in order. Ordering them means notifying outside
 the plugin, per platform — the same larger thing the click target needs, below.
+
+**The rest of the decision is walked too** (2026-08-20,
+`docs/end-to-end-run-38.md`), on run 21's daemon under a bus of its own:
+thirteen provocations against a live `ergo`, five notifications. A muted channel
+raises nothing while its badge still counts; a query the reader is looking at
+raises nothing where the one they are not raises `nyx`; a word added in the
+settings dialog takes effect on the next line with no restart, and `redeployed`
+does not match `deploy`; a mention that arrives as history after a reconnect
+draws, counts and interrupts nobody; and an ignored person raises nothing at
+all. Both switches are off until somebody turns them on, and turning one back
+off is silent again.
 
 **What still needs a person:**
 

@@ -67,7 +67,18 @@ function offsetsFor(layout: Row[]): Offsets {
   const holding = (id: string) => layout.find((row) => linesOf(row).some((l) => l.id === id));
   return {
     offsetOfMessage: (id) => holding(id)?.start,
-    messageAtOffset: (offset) => layout.find((row) => offset < row.start + row.size)?.id,
+    messageAtOffset: (offset) => {
+      const row = layout.find((r) => offset < r.start + r.size);
+      if (row === undefined) return undefined;
+      // The last line the offset has reached, which is the message drawn at it
+      // rather than the one the row is named for (#608).
+      let found = row.id;
+      for (const line of linesOf(row)) {
+        if (row.start + line.within > offset) break;
+        found = line.id;
+      }
+      return found;
+    },
     lineWithinRow: (id) => {
       const row = holding(id);
       return row === undefined ? undefined : linesOf(row).find((l) => l.id === id)?.within;
@@ -220,6 +231,37 @@ describe("usePrependAnchor", () => {
     // "c" was drawn at the top of the scroller and is put back there: its row
     // starts at 1_000 and its own line is 200 into it.
     expect(el.scrollTop).toBe(1_200);
+  });
+
+  /**
+   * #608, and the one of its three ways in that nothing else in the app is
+   * watching: no page, no fill, no message changing place. A line already drawn
+   * above the reader gets taller — a delivery failure gaining its reason, a
+   * preview, an edit — and the row's own top does not move, so the reader is
+   * carried down by exactly what it gained.
+   */
+  it("puts the reader back when a line above theirs grows inside their row", () => {
+    const before: Row[] = [
+      { id: "a", start: 0, size: 1_000 },
+      { id: "b", start: 1_000, size: 1_200, lines: [{ id: "b", within: 0 }, { id: "c", within: 200 }] },
+    ];
+    // "b" is a hundred pixels longer than it was, and "c" is that much further
+    // into the row it shares with it. Nothing arrived and nothing moved.
+    const grown: Row[] = [
+      { id: "a", start: 0, size: 1_000 },
+      { id: "b", start: 1_000, size: 1_300, lines: [{ id: "b", within: 0 }, { id: "c", within: 300 }] },
+    ];
+    const { getByTestId, rerender } = render(<Scroller messages={ids("a", "b", "c")} layout={before} />);
+    const el = getByTestId("scroller");
+
+    rerender(<Scroller messages={ids("a", "b", "c")} layout={before} />);
+    // The reader is inside that row, on "c" rather than on the "b" its row is
+    // named for, which is the arrangement the whole issue is about.
+    scrollTo(el, 1_200);
+
+    rerender(<Scroller messages={ids("a", "b", "c")} layout={grown} />);
+
+    expect(el.scrollTop).toBe(1_300);
   });
 
   it("asserts the place again when the next commit measures the page differently", () => {

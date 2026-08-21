@@ -17,7 +17,19 @@ export interface Head {
 export interface Offsets {
   /** Where the row holding a message starts, or undefined if it is not there. */
   offsetOfMessage: (id: string) => number | undefined;
-  /** A message in the row under an offset, or undefined above the first row. */
+  /**
+   * The message whose own line is drawn at an offset, or undefined above the
+   * first row.
+   *
+   * The line and not the row that holds it, which is #608: a row is a run, and
+   * in a channel that speaks in runs the first message of the row under the
+   * reader can be a screen or more above the line they are reading. Everything
+   * that arrives between the two is then in no term the correction computes.
+   *
+   * The row's first message where the offset has not reached a line of it — a
+   * pane at the top of its content, where the two answers are the same message
+   * anyway — and where the row is not drawn to be asked.
+   */
   messageAtOffset: (offset: number) => string | undefined;
   /**
    * How far into its row a message's own line is drawn, and undefined where the
@@ -61,8 +73,9 @@ export function raisedByAnchor(event: Event): boolean {
   return raised.has(event);
 }
 
-/** Where the reader is: a message, where its row sat under their eyes, and the
- * place it held in the list when that was read. */
+/** Where the reader is: the message whose line was drawn at the fold, where its
+ * row sat under their eyes, and the place it held in the list when that was
+ * read. */
 interface Anchor {
   id: string;
   delta: number;
@@ -115,6 +128,12 @@ export function movedInList(
  * put a different amount of list above the reader than they were reading
  * against, which is why the trigger is the reader's own message moving rather
  * than the first one changing.
+ *
+ * And a fourth that moves nothing in the list at all: a line already above the
+ * reader getting taller — a delivery failure gaining its reason, a preview, an
+ * edit. That one is #608, it is answered by the `grown` branch below, and what
+ * made all four one defect is who the reader is. The message at the fold is the
+ * reader; the first message of the row that holds them is not.
  *
  * The move is answered by putting that message back where the reader had it,
  * rather than by adding the container's growth to `scrollTop`. The growth is
@@ -350,6 +369,27 @@ export function usePrependAnchor(
     } else if (previous && previous.firstId === first && headPx !== previous.headPx) {
       branch = "head";
       place(el.scrollTop + (headPx - previous.headPx));
+    } else if (previous && reader !== null && tookIn(reader) !== 0) {
+      // The reader's row took something in above their line while the list
+      // stayed as it was, which is the third of #608's ways in and the one no
+      // other term is watching: a line already drawn getting taller. Nothing
+      // changes place, so `movedInList` is false, and the correction is not
+      // wrong here — it is never asked for.
+      //
+      // **Nothing else in the app covers this and nothing else will fight over
+      // it.** The virtualiser corrects the pane for a row it measures taller
+      // only where that row is *entirely* above the fold, and declines for one
+      // that spans it on the grounds that the growth is below the reader's
+      // anchor point — which is right for a row nobody is inside and wrong for
+      // the row the reader is parked in. That row is the only one whose
+      // `tookIn` a parked reader can watch change.
+      //
+      // Last of the branches so that a head arriving on the same commit keeps
+      // the answer it has always had.
+      branch = "grown";
+      const start = drawnAt(reader.id);
+      if (start !== undefined) place(start + tookIn(reader) - reader.delta);
+      settling.current = { ...reader, count: messages.length };
     }
     committed.current = { firstId: first, headPx, sh: el.scrollHeight };
     record();

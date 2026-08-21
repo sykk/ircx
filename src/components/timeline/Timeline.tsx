@@ -255,7 +255,26 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
         if (from === undefined) return undefined;
         for (let index = from; index < rows.length; index++) {
           const first = rowMessages(rows[index]!)[0];
-          if (first) return first.id;
+          if (!first) continue;
+          const drawn = drawnRow(index);
+          // `getTotalSize` for `offsetOfMessage`'s reason.
+          virtualizer.getTotalSize();
+          const start = virtualizer.getOffsetForIndex(index, "start")?.[0];
+          // The rows rendered on the commit a page lands in are the ones the
+          // old scroll offset asked for, so the row under the new offset is
+          // often not among them. The row's own name is what this answered
+          // before #608, and the anchor's later commits ask again.
+          if (drawn === null || start === undefined) return first.id;
+          const top = drawn.getBoundingClientRect().top;
+          let found = first.id;
+          // The last line the offset has reached, which is the one it is drawn
+          // inside. Rects for the lines of one row rather than of the pane:
+          // the reader is inside this row and no other can hold their eyes.
+          for (const line of drawn.querySelectorAll<HTMLElement>("[data-msgid]")) {
+            if (start + (line.getBoundingClientRect().top - top) > offset) break;
+            found = line.dataset.msgid ?? found;
+          }
+          return found;
         }
         return undefined;
       },

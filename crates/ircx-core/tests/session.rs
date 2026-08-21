@@ -178,6 +178,11 @@ impl Harness {
         self.apply(actions);
     }
 
+    fn typing(&mut self, target: &str, active: bool) {
+        let actions = self.state.set_typing(target, active);
+        self.apply(actions);
+    }
+
     fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) {
         let actions = self.state.react(target, message, emoji, active);
         self.apply(actions);
@@ -1784,6 +1789,80 @@ fn your_own_typing_tag_comes_back_and_says_nothing() {
         })
         .collect();
     assert_eq!(typing, vec!["sable"]);
+}
+
+/// #591. A channel that will not take a typing notification answers it with a
+/// `404`, and the sentence for a `404` is about the reader's message — so a
+/// moderated channel told them a message they had not sent had been refused,
+/// twice for every line they typed. The label is what tells the two apart.
+#[test]
+fn the_answer_to_a_typing_notification_is_not_the_readers_message() {
+    let mut session = registered("message-tags labeled-response");
+    session.typing("#ircx", true);
+
+    let sent = session.sent_starting("@+typing=active;label=");
+    assert_eq!(sent.len(), 1, "the notification went out unlabelled: {sent:?}");
+    let label = sent[0]
+        .split("label=")
+        .nth(1)
+        .and_then(|rest| rest.split([' ', ';']).next())
+        .expect("a label")
+        .to_string();
+
+    session.feed(&format!(
+        "@label={label} :irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)"
+    ));
+
+    assert!(
+        session.messages().is_empty(),
+        "a typing notification was described to the reader: {:?}",
+        session.messages()
+    );
+}
+
+/// The other side of it: what the reader said is labelled too, and its refusal
+/// is exactly the thing that has to keep being drawn.
+#[test]
+fn a_channel_that_refuses_a_message_still_says_so() {
+    let mut session = registered("message-tags labeled-response echo-message");
+    session.submit("#ircx", "the flag is in the env");
+    let label = session
+        .sent_starting("@label=")
+        .first()
+        .and_then(|line| line.split("label=").nth(1))
+        .and_then(|rest| rest.split([' ', ';']).next())
+        .expect("a labelled message")
+        .to_string();
+
+    session.feed(&format!(
+        "@label={label} :irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)"
+    ));
+
+    assert!(
+        session
+            .messages()
+            .iter()
+            .any(|message| message.text.contains("would not take your message")),
+        "the refusal was swallowed: {:?}",
+        session.messages()
+    );
+}
+
+/// Without `labeled-response` there is nothing to tell them apart with, and the
+/// sentence stays what it was rather than becoming a guess.
+#[test]
+fn an_unlabelled_refusal_is_still_described() {
+    let mut session = registered("message-tags");
+    session.typing("#ircx", true);
+    session.feed(":irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)");
+
+    assert!(
+        session
+            .messages()
+            .iter()
+            .any(|message| message.text.contains("would not take your message")),
+        "nothing was drawn for a refusal nobody can attribute"
+    );
 }
 
 /// The reaction on the same line keeps its echo: a chip belongs under the

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -40,6 +40,22 @@ const KEY = targetKey("libera", "#ctf-ops");
 vi.setConfig({ testTimeout: 20_000 });
 
 beforeAll(installLayout);
+
+/**
+ * The virtualiser sets a timer on every scroll — `isScrollingResetDelay`, 150ms
+ * — and nothing cancels it when the pane unmounts. So a file whose last test
+ * scrolls and then returns hands vitest a timer with nothing to fire into: it
+ * lands after the environment is torn down, `notify` reaches React and React
+ * reaches `window`, and a run in which every test passed fails on an unhandled
+ * `ReferenceError`. It is a race and this machine wins it; CI does not.
+ *
+ * Waited out here rather than cancelled, because the timer belongs to a
+ * virtualiser this file has no handle on. By now testing-library's own cleanup
+ * has unmounted the panes, so what it notifies reaches nobody.
+ */
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+});
 
 function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({

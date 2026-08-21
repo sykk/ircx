@@ -278,12 +278,25 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole
   // content is the kind of row that merges.
+  //
+  // And on the measured height as well, which is the case neither of those
+  // covers: a row that grows *where it stands* moves the tail without the
+  // messages changing at all. A row is measured as it mounts, so a row that
+  // arrives taller than the estimate is already the right height when this
+  // scrolls to it — but one that gains a line afterwards is not. The
+  // virtualiser will not correct that itself, and says why: a row growing at
+  // its bottom while it spans the fold is the streaming-message case, where
+  // shifting the scroller by the delta would drag a reader downward. Here it is
+  // the last row and the reader is following it, which is the one arrangement
+  // where the drag is what they want. #594, where a refused message gained its
+  // reason and a retry and left the sentence below the fold for good.
+  const measuredPx = virtualizer.getTotalSize();
   useLayoutEffect(() => {
     if (followingRef.current && rows.length > 0) {
       probe("follow", { view, rows: rows.length });
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
     }
-  }, [visibleMessages, rows.length, virtualizer, view]);
+  }, [visibleMessages, rows.length, measuredPx, virtualizer, view]);
 
   // Through the virtualiser rather than by assigning `scrollTop`: an offset is
   // only a place at the width it was measured at, and a rebuilt pane is a

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
@@ -9,7 +9,7 @@ import { ESTIMATED_ROW_PX, LOAD_OLDER_PX, Timeline } from "./Timeline";
 import { makeConversation, makeMessage } from "./fixtures";
 import { assignGroups } from "./groups";
 import { buildRows } from "./rows";
-import { flushLayout, installLayout } from "./layoutHarness";
+import { flushLayout, installLayout, VIEWPORT_PX } from "./layoutHarness";
 
 /**
  * The timeline where the rows are uneven, which is every timeline the app draws
@@ -310,6 +310,101 @@ describe("a timeline whose rows are the heights it draws", () => {
  * head saying so, that being the pane's own report and not the conversation's
  * (#516).
  */
+/**
+ * #594. A pane following the conversation is scrolled to the last row, and the
+ * row is measured as its element mounts — so a row that *arrives* taller than
+ * the estimate is already the height it will be by the time the follow scrolls
+ * to it. What is not is a row that grows where it stands, which moves the tail
+ * without the messages changing: the virtualiser declines to correct that on
+ * purpose, a row growing at its bottom while it spans the fold being the case
+ * where shifting the scroller drags a reader downward.
+ *
+ * At the tail, under a reader who is following, the drag is the thing they
+ * want. The walk found it as a refused message whose sentence stayed below the
+ * fold for good — nothing moved it until the next line arrived.
+ */
+describe("a pane at the live edge when the row at the tail grows", () => {
+  /** How far the last row's bottom falls past the bottom of the viewport. */
+  function belowTheFold(scroller: HTMLElement): number {
+    const last = [...scroller.querySelectorAll<HTMLElement>("[data-index]")].at(-1);
+    if (!last) throw new Error("nothing is drawn in this pane");
+    const head = scroller.querySelector<HTMLElement>('[data-testid="timeline-head"]');
+    const bottom = topOf(last) + last.offsetHeight + (head?.offsetHeight ?? 0);
+    return bottom - (scroller.scrollTop + VIEWPORT_PX);
+  }
+
+  /** The reader's own line, sent and then refused: the row it is drawn in gains
+   * the reason and the retry `MessageRow` draws a failed run with. */
+  function refuse(scroller: HTMLElement): number {
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messageUpdated",
+        message: {
+          ...useAppStore.getState().timelines[KEY]!.messages.at(-1)!,
+          delivery: { state: "failed", detail: "Cannot send to channel (+m)" },
+        },
+      });
+    });
+    flushLayout();
+    return belowTheFold(scroller);
+  }
+
+  function send() {
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        answers: null,
+        network: "libera",
+        target: "#ctf-ops",
+        messages: [
+          makeMessage({
+            id: "mine",
+            nick: "sable",
+            text: "a line typed with the reader already at the tail",
+            delivery: { state: "sent" },
+          }),
+        ],
+      });
+    });
+    flushLayout();
+  }
+
+  it("draws the whole of a row that gains a line where it stands", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    expect(belowTheFold(scroller)).toBeLessThanOrEqual(0);
+
+    // The row arrives at the height it will be, which the follow scroll has
+    // already measured: this is the half that was never broken.
+    send();
+    expect(belowTheFold(scroller)).toBeLessThanOrEqual(0);
+
+    expect(refuse(scroller)).toBeLessThanOrEqual(0);
+  });
+
+  it("leaves a reader who is not following where they are", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    // Clear of `LOAD_OLDER_PX`, so nothing is asked for and no head arrives to
+    // move them instead.
+    scroller.scrollTop = 1000;
+    fireEvent.scroll(scroller);
+    send();
+    const reading = atTheFold(scroller);
+    const before = eyeLine(scroller, reading);
+
+    refuse(scroller);
+
+    expect(eyeLine(scroller, reading)).toBe(before);
+  });
+});
+
 describe("two panes on one channel, one of them parked", () => {
   /** The read the reader's scroll asks for, held open the way a round trip
    * holds it: the head goes up in both panes and stays up until this is

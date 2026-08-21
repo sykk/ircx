@@ -379,7 +379,10 @@ export function usePrependAnchor(
       tookIn: reader === null ? null : tookIn(reader),
       now: anchor.current,
     });
-    probeStack(view, el, first !== (previous?.firstId ?? null));
+    // Who the reader is, which only the landing commit is asked for: the
+    // message the hold was just taken on, or the one under them where the
+    // landing armed no hold.
+    probeStack(view, el, first !== (previous?.firstId ?? null), settling.current?.id ?? anchor.current?.id);
   });
 
   /** The reader has taken the pane over, so stop putting it back. The same
@@ -402,6 +405,17 @@ export function usePrependAnchor(
 const STACK_COMMITS = 8;
 /** Commits of the stack still owed, per scroller. */
 const owed = new WeakMap<HTMLElement, number>();
+/**
+ * The message a pane's records are read against, taken on the landing commit
+ * and kept for the commits owed after it.
+ *
+ * Latched rather than asked for each time, because what the anchor names stops
+ * being the reader the moment they are displaced: the hold ends, the next
+ * `record` names whatever the pane is now sitting on, and a before-and-after
+ * loses the message it was about halfway through (#601). The reader the page
+ * arrived under is the subject of the whole window.
+ */
+const reading = new WeakMap<HTMLElement, string>();
 
 /**
  * Every row the pane draws, as the virtualiser placed it and as the browser
@@ -457,10 +471,57 @@ function numbering(row: HTMLElement): { from: number; to: number; jumps: number;
   return { from: nums[0] ?? 0, to: nums.at(-1) ?? 0, jumps, run: stretches.join(" ") };
 }
 
-function probeStack(view: string, el: HTMLElement, landed: boolean): void {
+/**
+ * Where the virtualiser put a row. The transform rather than a rect: it is the
+ * number the virtualiser wrote, and a rect would fold the scroll offset back
+ * into it.
+ */
+function rowTop(row: HTMLElement): number {
+  return Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0);
+}
+
+/**
+ * Where the reader's own line is drawn, named by the message rather than by the
+ * row that holds it (#601).
+ *
+ * A page merging into the reader's block gives that row a new key and re-orders
+ * what is inside it, so two records of the stack cannot be compared row by row
+ * across a landing: the same `i` is not the same row and the same row is not the
+ * same messages. An id survives both. `within` and `top` are the two halves of
+ * where the list puts the line, which is what tells a reader who moved from a
+ * row re-ordered under one who did not; `y` is where it is against the top of
+ * the pane, which is the number the walk was reading off a screenshot.
+ */
+function lineOf(
+  el: HTMLElement,
+  id: string | undefined,
+): { id: string; i: number; within: number; top: number; y: number } | null {
+  if (id === undefined) return null;
+  // Compared rather than selected on, for `lineWithinRow`'s reason: an id is
+  // the server's or this client's and neither is written to be a selector.
+  const line = [...el.querySelectorAll<HTMLElement>("[data-msgid]")].find(
+    (candidate) => candidate.dataset.msgid === id,
+  );
+  const row = line?.closest<HTMLElement>("[data-index]");
+  if (!line || !row) return null;
+  const at = line.getBoundingClientRect().top;
+  return {
+    id,
+    i: Number(row.dataset.index),
+    within: Math.round(at - row.getBoundingClientRect().top),
+    top: rowTop(row),
+    y: Math.round(at - el.getBoundingClientRect().top),
+  };
+}
+
+function probeStack(view: string, el: HTMLElement, landed: boolean, reader: string | undefined): void {
   const left = landed ? STACK_COMMITS : (owed.get(el) ?? 0);
   if (left <= 0) return;
   owed.set(el, left - 1);
+  if (landed) {
+    if (reader === undefined) reading.delete(el);
+    else reading.set(el, reader);
+  }
   const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")].map((row) => ({
     i: Number(row.dataset.index),
     // What the messages inside the row take up, against the height the row
@@ -472,9 +533,7 @@ function probeStack(view: string, el: HTMLElement, landed: boolean): void {
     zero: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].filter(
       (line) => line.offsetHeight === 0,
     ).length,
-    // The transform rather than a rect: it is the number the virtualiser wrote,
-    // and a rect would fold the scroll offset back into it.
-    top: Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0),
+    top: rowTop(row),
     h: row.offsetHeight,
     first: row.querySelector<HTMLElement>("[data-msgid]")?.dataset.msgid ?? null,
     last: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].at(-1)?.dataset.msgid ?? null,
@@ -485,6 +544,9 @@ function probeStack(view: string, el: HTMLElement, landed: boolean): void {
     x: Math.round(el.getBoundingClientRect().left),
     landed,
     top: el.scrollTop,
+    // Where the reader is, by message. The rows below are the pane's own
+    // arithmetic; this is the place in it the walk is asking about (#601).
+    line: lineOf(el, reading.get(el)),
     rows,
   });
 }

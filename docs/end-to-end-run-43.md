@@ -112,6 +112,37 @@ Two things it does not claim:
 `docs/measurements.md` has no figure at stake. The 250–580px in #601 was a real
 distance, measured on a real defect, and it is the same defect as #602's.
 
+## The line that gets taller, which needs none of this
+
+Written after the run, out of #608. The anchor's blind spot does not need a page
+at all: a line already inside the reader's row getting taller does it, with
+nothing arriving, nothing merging and nothing changing place in the list.
+
+`Timeline.layout.test.tsx` says so — the reader moves by exactly what the line
+above them gained, while the message the anchor holds stays to the pixel — and
+#599 is what a model saying so alone is worth. So it was asked of the engine.
+
+`docs/end-to-end-43/grow-lab.sh` is `docs/end-to-end-42/lab` doing it: the real
+frontend in `webkit2gtk-4.1`, one pane parked inside a run of thirty, and
+`line 0823` given two more wrapped lines through the store the event pump
+writes to. Twice of twice:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 96** | y 96 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 884 | 884 | 884 |
+
+`grown-before.png` opens on `line 0837` and `grown-after.png` on `line 0835`: the
+viewport did not move and the conversation slid down two lines inside it. The
+reader is looking at text they had already read past.
+
+This is the frontend on its own — the lab has no Rust behind it — so it is #608
+confirmed rather than a conjecture, and it is a wider hole than the landing
+case: **any** height change inside the reader's row above their eyes does it. A
+delivery failure gaining its reason and its retry, a preview drawn under a line,
+an edit.
+
 ## What the harness learned
 
 - **A record that names one message is a record of one message.** The reader is
@@ -127,6 +158,11 @@ distance, measured on a real defect, and it is the same defect as #602's.
   branch the minifier drops; the object handed to it is not. A record that reads
   the DOM has to be skipped at the call site or the app anybody runs pays for it,
   which is what `probing` is for.
+- **The lab answers a layout question in forty seconds.** It did not reproduce
+  #602, which is what it is remembered for; #608 it reproduces on the first run,
+  because that one is the frontend's own arithmetic rather than something the
+  app hands the engine. A question about where a pane sits is worth asking there
+  before it is worth a walk.
 - **305 notches is still the parking**, on this binary as on run 40's release
   one, and `park.sh` says so in a fifth of a walk. `band.py` is the check that
   the pane landed in the band rather than the assumption that it did.

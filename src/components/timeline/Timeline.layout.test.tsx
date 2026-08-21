@@ -765,9 +765,12 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
    *
    * The line to flip when #608 is answered is the last one: the reader's own
    * line should end where it started, as the anchor's message already does.
-   * `docs/end-to-end-run-43.md` is the walk behind it, and the window has not
-   * been asked this particular question — #599 is what a model saying so alone
-   * is worth.
+   *
+   * **The window agrees.** `docs/end-to-end-43/grow-lab.sh` puts the same
+   * arrangement in `webkit2gtk-4.1` and grows the same kind of line: the fold
+   * moves 46px and the anchor's message does not move at all, twice of twice.
+   * The model is not manufacturing this one, which is the question #599 left
+   * behind it.
    */
   it("moves the parked reader by whatever a line above them gains, which is #608", () => {
     seed(longRunAcrossTheBoundary(201, 400));

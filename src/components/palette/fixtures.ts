@@ -109,6 +109,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     views: {},
     viewAnchor: {},
     messageJump: {},
+    latestJump: {},
     consoleInput: {},
     rawAnchor: {},
     composerError: {},

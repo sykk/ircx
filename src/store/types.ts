@@ -175,6 +175,12 @@ export interface AppState {
   viewAnchor: Record<ViewId, string | null>;
   /** Message a pane should center once it is present in the rendered window. */
   messageJump: Record<ViewId, string>;
+  /** Panes to put back at the live edge, set by the composer that sent a line.
+   * The reader saying something is the reader saying where they want to be, and
+   * a pane reading history otherwise stays there while everything the client has
+   * to say about that message — the row itself, a failure drawn on it, a refusal
+   * drawn under it — is at a tail they are not looking at (#590). */
+  latestJump: Record<ViewId, true>;
   /** What is typed into each console pane's command box, and the refusal under
    * it. Here for the same reason as `viewAnchor`: a console saves no draft, so
    * a pane rebuilt by a change to the layout's shape (#308) came back having

@@ -93,6 +93,10 @@ export interface AppActions {
 
   setViewAnchor: (view: ViewId, row: string | null) => void;
   setMessageJump: (view: ViewId, message: string | null) => void;
+  /** Asks a pane to return to the live edge, or takes the request back once it
+   * has. Not `setViewAnchor(view, null)`: the anchor is what a pane writes as it
+   * scrolls, and asking through it would be answering its own reports. */
+  setLatestJump: (view: ViewId, wanted: boolean) => void;
   setViewSelectedUser: (view: ViewId, nick: string | null) => void;
   setViewRaw: (view: ViewId, raw: boolean) => void;
   /** Holds one console pane's command box. Both fields together: sending clears
@@ -196,6 +200,7 @@ const initialState: AppState = {
   views: {},
   viewAnchor: {},
   messageJump: {},
+  latestJump: {},
   consoleInput: {},
   rawAnchor: {},
   composerError: {},
@@ -405,6 +410,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { messageJump };
     }),
 
+  setLatestJump: (view, wanted) =>
+    set((s) => {
+      if (!s.views[view]) return {};
+      if (wanted === (s.latestJump[view] ?? false)) return {};
+      const latestJump = { ...s.latestJump };
+      if (wanted) latestJump[view] = true;
+      else delete latestJump[view];
+      return { latestJump };
+    }),
+
   setViewSelectedUser: (view, nick) =>
     set((s) => {
       const current = s.views[view];
@@ -470,6 +485,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const { [view]: _typed, ...consoleInput } = s.consoleInput;
       const { [view]: _line, ...rawAnchor } = s.rawAnchor;
       const { [view]: _refusal, ...composerError } = s.composerError;
+      const { [view]: _latest, ...latestJump } = s.latestJump;
       const at = s.viewOrder.indexOf(view);
       // Closing the focused pane is leaving its conversation: the seam it was
       // read under would otherwise wait, stale, for the next visit.
@@ -490,6 +506,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         consoleInput,
         rawAnchor,
         composerError,
+        latestJump,
         viewOrder: paneOrder(layout),
         activeViewId:
           s.activeViewId === view

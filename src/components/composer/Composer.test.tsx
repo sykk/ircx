@@ -46,6 +46,7 @@ beforeEach(() => {
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     timelines: {},
     replyTo: {},
+    latestJump: {},
     inputHistory: {},
     uploadRequest: null,
     members: {
@@ -156,6 +157,37 @@ describe("Composer sending", () => {
     await waitFor(() =>
       expect(useAppStore.getState().timelines[KEY]?.messages).toEqual([local]),
     );
+  });
+
+  /** #590. The pane the line was typed into is where everything the client has
+   * to say about it is drawn, and a reader who was reading history is not
+   * looking at it. The request is the pane's own — a split can hold one channel
+   * twice. */
+  it("asks its own pane back to the live edge for a line that was said", async () => {
+    const local = makeMessage({ id: "local-1", nick: "sable", text: "mine" });
+    local.sender.isSelf = true;
+    ipcMock.submitInput.mockResolvedValue({ kind: "sent", value: local });
+    const view = useAppStore.getState().activeViewId!;
+
+    const box = await mount();
+    type(box, "mine");
+    press(box, "Enter");
+
+    await waitFor(() => expect(useAppStore.getState().latestJump[view]).toBe(true));
+  });
+
+  /** A command that said nothing has nothing to be at the bottom of, and a
+   * reader who typed `/whois` while reading back is still reading back. */
+  it("does not ask for the live edge when the line was a command", async () => {
+    ipcMock.submitInput.mockResolvedValue({ kind: "handled" });
+    const view = useAppStore.getState().activeViewId!;
+
+    const box = await mount();
+    type(box, "/whois sable");
+    press(box, "Enter");
+
+    await waitFor(() => expect(box.value).toBe(""));
+    expect(useAppStore.getState().latestJump[view]).toBe(undefined);
   });
 
   it("does not raise its own unread rule over a line the user just typed", async () => {

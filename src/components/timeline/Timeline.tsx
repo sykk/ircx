@@ -80,6 +80,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const [stickyAuthor, setStickyAuthor] = useState<ChatMessage | null>(null);
   const [focusedGroup, setFocusedGroup] = useState<string | null>(null);
   const requestedJump = useAppStore((s) => s.messageJump[view] ?? null);
+  const requestedLatest = useAppStore((s) => s.latestJump[view] ?? false);
   const [loadError, setLoadError] = useState<string | null>(null);
   // The message the server was asked the page behind, when that ask passed its
   // deadline with no answer. The request is still out and the page may still
@@ -583,6 +584,16 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     jump(requestedJump);
     useAppStore.getState().setMessageJump(view, null);
   }, [requestedJump, byId, jump, view]);
+  // The line the reader just sent is the last row, so this is the pill they did
+  // not have to find. Held rather than cleared while the pane has nothing to
+  // scroll to, the way the jump above waits for its message to be present: a
+  // conversation being read back from the archive can be asked before it has a
+  // row.
+  useEffect(() => {
+    if (!requestedLatest || rows.length === 0) return;
+    jumpLatest();
+    useAppStore.getState().setLatestJump(view, false);
+  }, [requestedLatest, rows.length, jumpLatest, view]);
   useEffect(() => {
     if (!flashId) return;
     const id = setTimeout(() => setFlashId(null), FLASH_MS);

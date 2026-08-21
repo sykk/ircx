@@ -295,6 +295,10 @@ function ComposerFor({
         messages: [message],
         answers: null,
       });
+      // This pane and not the conversation: a split can hold one channel twice,
+      // and the reader typed into one of them. Everything the client has to say
+      // about this line is drawn where the line is (#590).
+      useAppStore.getState().setLatestJump(view, true);
       return;
     }
     if (outcome.kind !== "rejected") return;

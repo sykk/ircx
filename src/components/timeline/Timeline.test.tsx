@@ -580,6 +580,38 @@ describe("Timeline", () => {
     expect(first.style.transform).toBe("translateY(0px)");
   });
 
+  /** #590. The pane the reader typed into is the one their own line is drawn in,
+   * and a pane reading history stays there on its own: the append below is the
+   * reader's own and nothing follows it until the request arrives. */
+  it("goes back to the live edge when its own composer asks", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+
+    const scroller = screen.getByTestId("timeline-scroller");
+    letItScroll(scroller);
+    // Clear of `LOAD_OLDER_PX`, so nothing is asked for and the head that would
+    // arrive with it is not part of what is being measured.
+    scroller.scrollTop = 1000;
+    fireEvent.scroll(scroller);
+    expect(scroller.scrollTop).toBe(1000);
+
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        answers: null,
+        network: "libera",
+        target: "#ctf-ops",
+        messages: [makeMessage({ id: "mine", nick: "sable", text: "typed from the archive" })],
+      });
+    });
+    expect(scroller.scrollTop).toBe(1000);
+
+    act(() => useAppStore.getState().setLatestJump(TEST_VIEW, true));
+
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+    expect(useAppStore.getState().latestJump[TEST_VIEW]).toBe(undefined);
+  });
+
   it("keeps the viewport still when a page of history is prepended", async () => {
     const older = makeConversation({
       count: 200,

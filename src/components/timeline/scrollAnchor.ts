@@ -379,6 +379,7 @@ export function usePrependAnchor(
       tookIn: reader === null ? null : tookIn(reader),
       now: anchor.current,
     });
+    probeStack(view, el, first !== (previous?.firstId ?? null));
   });
 
   /** The reader has taken the pane over, so stop putting it back. The same
@@ -389,4 +390,53 @@ export function usePrependAnchor(
   }, []);
 
   return { record, release };
+}
+
+/**
+ * How many commits of the stack a landing is worth recording. A landing is not
+ * one commit: the page arrives, the rows above the reader are measured over the
+ * commits after it, and the offsets the virtualiser computes from those
+ * measurements are what #601 and #602 are about. Four is what the anchor's own
+ * records already show a landing settling in.
+ */
+const STACK_COMMITS = 8;
+/** Commits of the stack still owed, per scroller. */
+const owed = new WeakMap<HTMLElement, number>();
+
+/**
+ * Every row the pane draws, as the virtualiser placed it and as the browser
+ * measures it.
+ *
+ * #602 is a block drawing a run of its messages nowhere on the screen, and what
+ * a walk cannot answer is whether the row's own height is wrong or the transform
+ * it was placed at is — a release build has no DOM anybody can ask. Both are
+ * here on the same line, so they are told apart by subtraction: a stack whose
+ * every row starts where the one above it ends is a pane whose arithmetic is
+ * right, and a defect still on the screen after that is paint.
+ *
+ * Only around a landing. On every commit this is twenty rows a commit for the
+ * length of a walk, which is a record nobody reads and a cost on the commits
+ * being measured.
+ */
+function probeStack(view: string, el: HTMLElement, landed: boolean): void {
+  const left = landed ? STACK_COMMITS : (owed.get(el) ?? 0);
+  if (left <= 0) return;
+  owed.set(el, left - 1);
+  const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")].map((row) => ({
+    i: Number(row.dataset.index),
+    // The transform rather than a rect: it is the number the virtualiser wrote,
+    // and a rect would fold the scroll offset back into it.
+    top: Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0),
+    h: row.offsetHeight,
+    first: row.querySelector<HTMLElement>("[data-msgid]")?.dataset.msgid ?? null,
+    last: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].at(-1)?.dataset.msgid ?? null,
+    says: row.querySelectorAll("[data-msgid]").length,
+  }));
+  probe("stack", {
+    view,
+    x: Math.round(el.getBoundingClientRect().left),
+    landed,
+    top: el.scrollTop,
+    rows,
+  });
 }

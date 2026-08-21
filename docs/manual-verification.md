@@ -2782,6 +2782,15 @@ right one:
   arrival at it. Whether a badge should reappear underneath a pane the user is
   looking at but not reading is not settled.
 
+  **It is not hypothetical**, walked on 2026-08-20 in
+  `docs/end-to-end-run-39.md`: every line said while the reader watches puts the
+  mark back on the row for the conversation they are looking at, and only leaving
+  and coming back takes it off. `followFocus` is read once per target key —
+  `if (at === last) return` — and `count_towards_unread` on the other side has no
+  notion of focus at all. It is not the split: the same reading comes back with
+  neither pane parked, and again with no split at all, which is what those two
+  arms of that run are for.
+
 **A reconnect used to hand back the last message you had read, with a 1 on it**
 (#380), found by probing this on 2026-08-03 rather than from an entry — there
 was none. A gap is asked for from the newest thing a conversation holds, and
@@ -3282,8 +3291,38 @@ What that leaves:
   their own; whether they cancel is not. #475 says what to measure.
 - **A release build.** Both walks are debug against Vite, so `StrictMode`. The
   shipped path is the unwalked one.
-- **Two panes on one conversation**, one at the live edge and one scrolled back.
-  The anchor shares a component with #307's restore and no walk has opened both.
+
+**Two panes on one conversation, one at the live edge and one scrolled back, is
+walked** (2026-08-20, `docs/end-to-end-run-39.md`), which is what this list had
+carried as unwalked since run 12. Runs 22, 23 and 31 all park the right pane and
+page the left, so every split measured until now was two panes both reading
+history; this one leaves the pane at the tail alone, which a restored pane opens
+at.
+
+The arrangement holds, four walks an arm. A page-back landing in the pane reading
+history moves neither pane — `+0px` on both, the asking pane's rows changing
+under it where the page abuts what is drawn, the pane at the tail showing only a
+shortened scrollbar thumb. A line arriving live moves the parked pane by nothing
+and takes the pane at the tail down by the row it drew. The two interleaved —
+lines arriving while a page is held forty seconds — are no different. A split
+made *from* the archive keeps the reader's place and opens the new pane at the
+live edge, which is #307's half of the question in the order nobody had walked;
+and the *Jump to latest* pill lands on the tail as it is, not as it was when the
+pill appeared.
+
+What the run found instead is what the reader can do from there: **a line sent
+from a pane scrolled back leaves the pane where it is** (#590), so the message,
+any failure drawn on its row, and any refusal drawn as a system row are all at a
+tail the reader is not looking at. Walked against a `+m` channel, where the whole
+of what the window says about a refused message is nothing. Two more came off the
+same wire and are not about panes: a refused typing notification is reported as
+the reader's message being refused (#591), and a message refused on its own label
+stays drawn as one that was sent (#592).
+
+What that run leaves is **two conversations in a split**, which is the other half
+of what this file records as unsettled about unread counts: both of run 39's
+panes are on one channel. The head's whole cycle is still the first bullet above,
+which neither of its landing frames measures either.
 
 ### A message arriving while the reader is scrolled back
 

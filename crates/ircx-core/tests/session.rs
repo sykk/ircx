@@ -1824,11 +1824,55 @@ fn the_answer_to_a_typing_notification_is_not_the_readers_message() {
     );
 }
 
-/// The other side of it: what the reader said is labelled too, and its refusal
-/// is exactly the thing that has to keep being drawn.
+/// The other side of it: what the reader said is labelled too, and #592 is
+/// where that refusal goes. The label names the message the server refused, so
+/// the sentence lands on that message's own row — which is drawn dimmed, with
+/// the reason and the retry — rather than beside it as a system row saying the
+/// same thing about nothing in particular.
 #[test]
-fn a_channel_that_refuses_a_message_still_says_so() {
+fn a_channel_that_refuses_a_message_says_so_on_the_message() {
     let mut session = registered("message-tags labeled-response echo-message");
+    let CommandOutcome::Sent(optimistic) = session.submit("#ircx", "the flag is in the env") else {
+        panic!("expected a sent message");
+    };
+    let label = session
+        .sent_starting("@label=")
+        .first()
+        .and_then(|line| line.split("label=").nth(1))
+        .and_then(|rest| rest.split([' ', ';']).next())
+        .expect("a labelled message")
+        .to_string();
+    session.wrote_everything();
+
+    session.feed(&format!(
+        "@label={label} :irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)"
+    ));
+
+    let refused = session
+        .updated(&optimistic.id)
+        .expect("the refusal settles the message it answers");
+    assert_eq!(
+        refused.delivery,
+        Delivery::Failed("Cannot send to channel (+m)".into()),
+        "a message the server refused is still drawn as one that was sent"
+    );
+    assert!(
+        !session
+            .messages()
+            .iter()
+            .any(|message| message.text.contains("would not take your message")),
+        "the same refusal was drawn twice: {:?}",
+        session.messages()
+    );
+}
+
+/// The write is the last thing a server without `echo-message` says about a
+/// send, so the optimistic copy is let go at the socket and a refusal arriving
+/// afterwards has nothing to attribute itself to. What it must not do is go
+/// quiet: the sentence stays the system row it was.
+#[test]
+fn a_refusal_with_nothing_left_to_fail_is_still_described() {
+    let mut session = registered("message-tags labeled-response");
     session.submit("#ircx", "the flag is in the env");
     let label = session
         .sent_starting("@label=")
@@ -1837,11 +1881,78 @@ fn a_channel_that_refuses_a_message_still_says_so() {
         .and_then(|rest| rest.split([' ', ';']).next())
         .expect("a labelled message")
         .to_string();
+    session.wrote_everything();
 
     session.feed(&format!(
         "@label={label} :irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)"
     ));
 
+    assert!(
+        session
+            .messages()
+            .iter()
+            .any(|message| message.text.contains("would not take your message")),
+        "the refusal was swallowed: {:?}",
+        session.messages()
+    );
+}
+
+/// A private message is refused by the same rule, and this is the case the
+/// system row could not cover: `on_other_numeric` files a numeric under a
+/// channel or under the server tab, so the query the reader typed into was the
+/// one place the refusal was never drawn.
+#[test]
+fn a_refused_private_message_fails_in_the_query_it_was_typed_in() {
+    let mut session = registered("message-tags labeled-response echo-message");
+    let CommandOutcome::Sent(optimistic) = session.submit("sable", "are you there") else {
+        panic!("expected a sent message");
+    };
+    let label = session
+        .sent_starting("@label=")
+        .first()
+        .and_then(|line| line.split("label=").nth(1))
+        .and_then(|rest| rest.split([' ', ';']).next())
+        .expect("a labelled message")
+        .to_string();
+    session.wrote_everything();
+
+    session.feed(&format!(
+        "@label={label} :irc.libera.chat 531 sykk sable :You are not permitted to message this user"
+    ));
+
+    let refused = session
+        .updated(&optimistic.id)
+        .expect("the refusal settles the message it answers");
+    assert_eq!(
+        refused.delivery,
+        Delivery::Failed("You are not permitted to message this user".into())
+    );
+    assert_eq!(
+        refused.target, "sable",
+        "it failed in the conversation it was sent to"
+    );
+}
+
+/// Only what this client labelled, and only the label that message went out
+/// under: an answer to somebody else's line, or to a request of ours that is
+/// not a message, leaves the reader's messages where they were.
+#[test]
+fn a_numeric_under_another_label_fails_nothing() {
+    let mut session = registered("message-tags labeled-response echo-message");
+    let CommandOutcome::Sent(optimistic) = session.submit("#ircx", "the flag is in the env") else {
+        panic!("expected a sent message");
+    };
+    session.wrote_everything();
+
+    session
+        .feed("@label=ircx-not-ours :irc.libera.chat 404 sykk #ircx :Cannot send to channel (+m)");
+
+    assert!(
+        session
+            .updated(&optimistic.id)
+            .is_none_or(|message| !matches!(message.delivery, Delivery::Failed(_))),
+        "a message nobody refused was failed"
+    );
     assert!(
         session
             .messages()

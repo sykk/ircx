@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -40,6 +40,22 @@ const KEY = targetKey("libera", "#ctf-ops");
 vi.setConfig({ testTimeout: 20_000 });
 
 beforeAll(installLayout);
+
+/**
+ * The virtualiser sets a timer on every scroll — `isScrollingResetDelay`, 150ms
+ * — and nothing cancels it when the pane unmounts. So a file whose last test
+ * scrolls and then returns hands vitest a timer with nothing to fire into: it
+ * lands after the environment is torn down, `notify` reaches React and React
+ * reaches `window`, and a run in which every test passed fails on an unhandled
+ * `ReferenceError`. It is a race and this machine wins it; CI does not.
+ *
+ * Waited out here rather than cancelled, because the timer belongs to a
+ * virtualiser this file has no handle on. By now testing-library's own cleanup
+ * has unmounted the panes, so what it notifies reaches nobody.
+ */
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+});
 
 function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({
@@ -720,5 +736,89 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
 
     expect(eyeLine(parked!, "line201")).toBe(inside);
     expect(eyeLine(parked!, watching)).toBe(before);
+  });
+});
+
+describe("a row that grows under the reader following it", () => {
+  /** How much of the last row is drawn below the bottom of the pane. What #594
+   * photographed is a sentence that is: the clock over the line on the screen
+   * and the line itself off the bottom. */
+  function belowTheFold(scroller: HTMLElement): number {
+    const last = [...scroller.querySelectorAll<HTMLElement>("[data-index]")].at(-1)!;
+    const head = scroller.querySelector<HTMLElement>('[data-testid="timeline-head"]');
+    const bottom = topOf(last) + last.offsetHeight + (head?.offsetHeight ?? 0);
+    return Math.max(0, bottom - (scroller.scrollTop + scroller.clientHeight));
+  }
+
+  /** The reader's own line, stamped after everything the channel already holds:
+   * a message older than the tail is sorted in where it belongs, and a line that
+   * lands in the middle of the window is a different case with a different
+   * answer. */
+  function said(): ChatMessage {
+    const held = useAppStore.getState().timelines[KEY]!.messages;
+    return makeMessage({
+      id: "mine",
+      nick: "sable",
+      text: "a line typed with the reader already at the tail",
+      timestamp: new Date(Date.parse(held.at(-1)!.timestamp) + 1000).toISOString(),
+      delivery: { state: "sent" },
+    });
+  }
+
+  function append(message: ChatMessage) {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      answers: null,
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [message],
+    });
+  }
+
+  function refuse(message: ChatMessage) {
+    useAppStore.getState().applyEvent({
+      type: "messageUpdated",
+      message: {
+        ...message,
+        delivery: { state: "failed", detail: "Cannot send to channel (+m)" },
+      },
+    });
+  }
+
+  /**
+   * #599, where the model is the thing under test. A `+m` channel refuses a line
+   * a moment after it was sent, and the row the reader is already following
+   * gains the reason and the retry under it — in a later commit than the one it
+   * mounted in, which is the arrangement a loopback server cannot produce and a
+   * proxy holding the refusal back can.
+   *
+   * The release app draws the whole of it, walked under `Xvfb` at 3ms, 301ms and
+   * 2001ms. What the model did was leave the pane a line short of the row's
+   * bottom for good, because the only thing it counted as scrollable was the
+   * sizer and the sizer is a commit behind the row that grew.
+   */
+  it("follows a row that gains a line after it was measured", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    expect(belowTheFold(scroller)).toBe(0);
+
+    const mine = said();
+    act(() => append(mine));
+    flushLayout();
+    const row = scroller
+      .querySelector('[data-msgid="mine"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    const sent = row.offsetHeight;
+    expect(belowTheFold(scroller)).toBe(0);
+
+    act(() => refuse(mine));
+    flushLayout();
+
+    // That the row grew is asserted rather than assumed: a refusal drawn in the
+    // same space would leave the reading below true of nothing.
+    expect(row.offsetHeight).toBeGreaterThan(sent);
+    expect(belowTheFold(scroller)).toBe(0);
   });
 });

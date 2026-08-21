@@ -57,6 +57,16 @@ control, both readings
   41 or 112 on the control, and the difference is the displacement: 659 - 41 =
   618, 659 - 112 = 547.
 
+#608, asked in the engine afterwards — `grow-lab.sh` and `fill-lab.sh`, one pane
+parked inside a run of thirty, twice each. The line the reader is reading, and
+the message the anchor holds, against the top of the pane:
+
+  a line above them gets taller   fold  50 ->  96 (+46px)   anchor -742 (+0px)
+  a gap fill lands in their row   fold  50 -> 150 (+100px)  anchor -742 (+0px)
+
+  `scrollTop` is 884 before and after in all four runs, and the readings two
+  seconds later are the same numbers again.
+
 The probe logs themselves are not kept: `*.log` is ignored, as run 40's and run
 41's were. This file and the two frames beside it are what the walks left.
 `walk.sh` writes a fresh log every run and `held.py` prints the lines above.

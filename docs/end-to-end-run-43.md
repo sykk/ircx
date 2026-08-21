@@ -143,6 +143,47 @@ case: **any** height change inside the reader's row above their eyes does it. A
 delivery failure gaining its reason and its retry, a preview drawn under a line,
 an edit.
 
+## The gap fill, which is the same floor by another door
+
+#608's second conjecture, and it lands where the first one did. A gap fill is
+history sorting into the *middle* of what is held rather than in front of it — a
+page-back answers before the window, a fill answers inside it — so it goes into
+the reader's row between the message the anchor holds and the line they are
+reading.
+
+`Timeline.layout.test.tsx` puts four lines the reader never saw between two they
+have read past: the reader moves 96px, four lines of them, and the anchor's
+message does not move at all. `docs/end-to-end-43/fill-lab.sh` asks the engine
+the same thing, twice of twice:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 150** | y 150 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 884 | 884 | 884 |
+
+`merged: true` in the same record is the arrangement asserted rather than
+assumed — the fill is in the reader's own row and not in one of its own.
+
+**Both sides have to be history for this to exist at all.** `rows.ts` closes the
+open run where `source` changes, so a fill landing in a window of live messages
+opens a row of its own instead of joining theirs, and the first model run of this
+measured exactly that and nothing else. It is run 40's finding about a restored
+window from the other side, and it narrows who this reaches: a reader paged back
+into history, which is the reader who is parked in the first place.
+
+## The shape both of them share
+
+The landing case this run opened with (#601, fixed by #606) is the anchor
+correcting and coming up short. **These two are the anchor never running.** A
+message growing changes nobody's place in the list, and a fill lands *behind* the
+anchor's own message, so `movedInList` is false in both and the branch that would
+put anybody back is never taken. What arrives above the reader arrives below the
+message that speaks for them.
+
+That is why the fold record matters beyond this run: the reader is two messages,
+and every instrument here until now has been watching the one that does not move.
+
 ## What the harness learned
 
 - **A record that names one message is a record of one message.** The reader is
@@ -158,6 +199,9 @@ an edit.
   branch the minifier drops; the object handed to it is not. A record that reads
   the DOM has to be skipped at the call site or the app anybody runs pays for it,
   which is what `probing` is for.
+- **A fill and a page are not the same event.** One arrives in front of the
+  window and one inside it, and only the first moves the reader's own message in
+  the list. A walk that tests paging has not tested filling.
 - **The lab answers a layout question in forty seconds.** It did not reproduce
   #602, which is what it is remembered for; #608 it reproduces on the first run,
   because that one is the frontend's own arithmetic rather than something the

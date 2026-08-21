@@ -1,0 +1,62 @@
+held.py over the ten walks, in the order they were run. The right pane is the
+parked one; the left is the pane that asked for the page.
+
+The first six walks were read before `fold` was added, so they carry the
+anchor's reading alone — the line held.py now labels `anchor`.
+
+ship, the anchor only
+  a  left   ji36dem4  y   142 ->   142 (+0px)  within 30 -> 689 (+659px)
+     right  ji36dem4  y -1295 -> -1295 (+0px)  within 30 -> 689 (+659px)
+  b  left   z638fj65  y   142 ->   142 (+0px)  within 30 -> 689 (+659px)
+     right  z638fj65  y -1295 -> -1295 (+0px)  within 30 -> 689 (+659px)
+  c  left   te9i3w3p  y   142 ->   142 (+0px)  within 30 -> 689 (+659px)
+     right  te9i3w3p  y -1295 -> -1295 (+0px)  within 30 -> 689 (+659px)
+  d  left   gfat8iqw  y   142 ->   142 (+0px)  within 30 -> 689 (+659px)
+     right  gfat8iqw  y -1295 -> -1295 (+0px)  within 30 -> 689 (+659px)
+  frames, the parked pane: 629..638 before the page, 629..638 thirty seconds on
+
+control, the anchor only — #606 reverted, `git checkout e963c62^ -- src/store/index.ts`
+  e  left   fzrbmjvm  y   142 ->   142 (+0px)  within 30 ->  71 (+41px)
+     right  fzrbmjvm  y -1367 -> -1367 (+0px)  within 30 ->  71 (+41px)
+  f  left   nzbpuury  y   142 ->   142 (+0px)  within 30 ->  71 (+41px)
+     right  nzbpuury  y -1367 -> -1367 (+0px)  within 30 ->  71 (+41px)
+  frames, the parked pane: 629..639 before the page, 621..629 thirty seconds on
+
+  The anchor reads +0px in both walks and the frames say the reader moved eight
+  messages. That is the whole of what the fold record was added for.
+
+ship, both readings
+  g  left   anchor  yfp87sdr  y   142 ->   142 (+0px)  within   30 ->  689 (+659px)
+     left   fold    — nothing named before the landing
+     right  anchor  yfp87sdr  y -1295 -> -1295 (+0px)  within   30 ->  689 (+659px)
+     right  fold    x3migad7  y   -40 ->   -40 (+0px)  within 1285 -> 1944 (+659px)
+  h  left   anchor  vxbbzwtr  y   142 ->   142 (+0px)  within   30 ->  689 (+659px)
+     left   fold    vxbbzwtr  y   142 ->   142 (+0px)  within   30 ->  689 (+659px)
+     right  anchor  vxbbzwtr  y -1295 -> -1295 (+0px)  within   30 ->  689 (+659px)
+     right  fold    n4pqr68r  y   -40 ->   -40 (+0px)  within 1285 -> 1944 (+659px)
+  frames, the parked pane: 629..638 before the page, 629..638 thirty seconds on
+
+  Walk g named no fold in the left pane, which is the pane scrolled to the very
+  top: `atFold` took the highest row and asked only that one for a message, and
+  the highest row there holds none. It now falls through to the next.
+
+control, both readings
+  i  left   anchor  3misagn8  y   142 ->   142 (+0px)    within   30 ->  142 (+112px)
+     left   fold    3misagn8  y   142 ->   142 (+0px)    within   30 ->  142 (+112px)
+     right  anchor  3misagn8  y -1367 -> -1367 (+0px)    within   30 ->  142 (+112px)
+     right  fold    8tczc8mi  y  -112 ->   435 (+547px)  within 1285 -> 1944 (+659px)
+     frames, the parked pane: 629..639 -> 622..630
+  j  left   anchor  i5d6gdwp  y   142 ->   142 (+0px)    within   30 ->   71 (+41px)
+     left   fold    i5d6gdwp  y   142 ->   142 (+0px)    within   30 ->   71 (+41px)
+     right  anchor  i5d6gdwp  y -1367 -> -1367 (+0px)    within   30 ->   71 (+41px)
+     right  fold    ibjuxyw8  y  -112 ->   506 (+618px)  within 1285 -> 1944 (+659px)
+     frames, the parked pane: 629..639 -> 621..629
+
+  The fold's own message gains 659px above it inside the row in both arms, so
+  the page is the same page. What the anchor's message gains is 659 on ship and
+  41 or 112 on the control, and the difference is the displacement: 659 - 41 =
+  618, 659 - 112 = 547.
+
+The probe logs themselves are not kept: `*.log` is ignored, as run 40's and run
+41's were. This file and the two frames beside it are what the walks left.
+`walk.sh` writes a fresh log every run and `held.py` prints the lines above.

@@ -82,7 +82,7 @@ wait "$HOLD_PID" 2>/dev/null || true
 
 echo "$(grep -c ' >> .*CHATHISTORY BEFORE' "$DIR/wire.log" || true) page-backs asked (2 is the arrangement)"
 echo "-- where the panes were parked --"
-python3 "$HERE/band.py" "$DIR/probe.log"
+python3 "$HERE/band.py" --parked "$DIR/probe.log"
 echo "-- the parked pane, before the page --"
 python3 "$TREE/docs/end-to-end-42/sequence.py" "$DIR/parked.png" right
 echo "-- the parked pane, thirty seconds after it --"

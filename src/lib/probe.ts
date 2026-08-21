@@ -22,6 +22,16 @@ import { ipc } from "@/lib/ipc";
  * weight; a flush every 100ms costs the measured commit a `push`.
  */
 const ON = import.meta.env.VITE_PROBE === "1";
+/**
+ * Whether this build carries the probe, for the call sites whose records cost
+ * something to build.
+ *
+ * `probe` below is a branch the minifier drops; the object handed to it is an
+ * argument, and an argument is evaluated whether or not the call does anything.
+ * A record that reads the DOM therefore has to be skipped where it is written
+ * rather than where it is taken, or the app anybody runs pays for it.
+ */
+export const probing = ON;
 /** How long a record waits for company. */
 const FLUSH_MS = 100;
 

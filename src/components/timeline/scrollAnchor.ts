@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { RefObject } from "react";
-import { probe } from "@/lib/probe";
+import { probe, probing } from "@/lib/probe";
 
 /** The part of the head element this module reads. */
 export interface Head {
@@ -358,6 +358,12 @@ export function usePrependAnchor(
     // are the same message and its `delta` has changed, the pane moved without
     // anything here writing to it — which is the half of #508 a screenshot
     // cannot tell from the other.
+    //
+    // The rest of this effect is records. `probe` is a branch a build without
+    // the probe drops, but the record handed to it is an argument and an
+    // argument is evaluated either way, so a reading of the DOM has to be
+    // skipped here rather than there.
+    if (!probing) return;
     probe("commit", {
       view,
       // Which pane this is, in the only terms a screenshot shares: a view id is
@@ -385,11 +391,17 @@ export function usePrependAnchor(
       // reading from *before* the page arrived is what says whether anybody
       // moved, and only a record on every commit has one (#601).
       line: lineOf(el, settling.current?.id ?? anchor.current?.id),
+      // And where the message the reader is *looking at* is drawn, which in
+      // this arrangement is a different message a screen or more below.
+      fold: lineOf(el, atFold(el)),
     });
     // Who the reader is, which only the landing commit is asked for: the
     // message the hold was just taken on, or the one under them where the
     // landing armed no hold.
     probeStack(view, el, first !== (previous?.firstId ?? null), settling.current?.id ?? anchor.current?.id);
+    // After the records, so a landing latches the fold this pane had on the
+    // commit before it.
+    latch(wasAtFold, el, atFold(el));
   });
 
   /** The reader has taken the pane over, so stop putting it back. The same
@@ -423,6 +435,24 @@ const owed = new WeakMap<HTMLElement, number>();
  * arrived under is the subject of the whole window.
  */
 const reading = new WeakMap<HTMLElement, string>();
+/**
+ * The message the reader was looking at when the page arrived, and the one each
+ * pane had at its fold on the commit before.
+ *
+ * Two maps because the landing commit cannot be asked: the rendered window
+ * there is the one the old scroll offset asked for, so what is drawn at the top
+ * of the pane on that commit is not what anybody was reading. The commit before
+ * it is.
+ */
+const wasAtFold = new WeakMap<HTMLElement, string>();
+const watching = new WeakMap<HTMLElement, string>();
+
+/** Latches a message for the length of a landing's window, or forgets the one
+ * before where this landing has nobody to name. */
+function latch(map: WeakMap<HTMLElement, string>, el: HTMLElement, id: string | undefined): void {
+  if (id === undefined) map.delete(el);
+  else map.set(el, id);
+}
 
 /**
  * Every row the pane draws, as the virtualiser placed it and as the browser
@@ -488,6 +518,55 @@ function rowTop(row: HTMLElement): number {
 }
 
 /**
+ * The highest of these drawn at or across an edge. The virtualiser's rows are
+ * in the DOM in the order it rendered them rather than the order it placed
+ * them, and this does not depend on either.
+ */
+function topmostAt(elements: HTMLElement[], edge: number): HTMLElement | undefined {
+  let found: HTMLElement | undefined;
+  let best = Infinity;
+  for (const candidate of elements) {
+    const box = candidate.getBoundingClientRect();
+    if (box.bottom > edge && box.top < best) {
+      best = box.top;
+      found = candidate;
+    }
+  }
+  return found;
+}
+
+/**
+ * The message at the top of the pane, which is the one the reader is looking
+ * at.
+ *
+ * `lineOf` below is asked where the *anchor's* message is drawn, and the two
+ * are not the same message: the anchor names the first message of the row under
+ * the scroll offset, and where that row is a run of sixty it can start a screen
+ * or more above the fold. A page merging into that row below the anchor's
+ * message and above this one moves everything the reader can see while every
+ * term the anchor computes reads held — which is #601, and is why a record
+ * carrying only the anchor's line cannot tell a reader who held from one who
+ * was displaced.
+ *
+ * The rows are asked first and the messages only of the rows that answer: a
+ * window of twenty rows of sixty is twelve hundred lines, and this runs on
+ * every commit. Rows rather than row, because the one at the top of the pane
+ * need not hold a message at all — a date or an unread seam is a row, and the
+ * reader is looking at whatever is under it.
+ */
+function atFold(el: HTMLElement): string | undefined {
+  const edge = el.getBoundingClientRect().top;
+  const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")]
+    .filter((row) => row.getBoundingClientRect().bottom > edge)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  for (const row of rows) {
+    const line = topmostAt([...row.querySelectorAll<HTMLElement>("[data-msgid]")], edge);
+    if (line) return line.dataset.msgid;
+  }
+  return undefined;
+}
+
+/**
  * Where the reader's own line is drawn, named by the message rather than by the
  * row that holds it (#601).
  *
@@ -526,8 +605,8 @@ function probeStack(view: string, el: HTMLElement, landed: boolean, reader: stri
   if (left <= 0) return;
   owed.set(el, left - 1);
   if (landed) {
-    if (reader === undefined) reading.delete(el);
-    else reading.set(el, reader);
+    latch(reading, el, reader);
+    latch(watching, el, wasAtFold.get(el));
   }
   const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")].map((row) => ({
     i: Number(row.dataset.index),
@@ -552,8 +631,11 @@ function probeStack(view: string, el: HTMLElement, landed: boolean, reader: stri
     landed,
     top: el.scrollTop,
     // Where the reader is, by message. The rows below are the pane's own
-    // arithmetic; this is the place in it the walk is asking about (#601).
+    // arithmetic; these are the place in it the walk is asking about (#601) —
+    // the message the anchor is holding, and the message the reader had at the
+    // top of the pane when the page arrived.
     line: lineOf(el, reading.get(el)),
+    fold: lineOf(el, watching.get(el)),
     rows,
   });
 }

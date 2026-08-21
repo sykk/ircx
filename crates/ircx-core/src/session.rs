@@ -1210,6 +1210,16 @@ impl SessionState {
             return;
         }
 
+        // A refusal wearing a send's label belongs on the message it refuses,
+        // where the row draws the reason and offers the retry. It is not also a
+        // system row: that is the same sentence twice in one conversation, the
+        // second time detached from the line it is about — and where the
+        // message is a query's, the system row went to the server tab instead,
+        // so the conversation it failed in said nothing at all.
+        if self.fail_labelled_send(code, message) {
+            return;
+        }
+
         // The first parameter of a numeric is our own nick; nothing below
         // wants it. Borrowed, not cloned: a /list is tens of thousands of
         // numerics through here.
@@ -2104,6 +2114,57 @@ impl SessionState {
                 message: Box::new(pending.message),
             });
         }
+    }
+
+    /// A numeric answering a line this client labelled, where that line is
+    /// something the reader said.
+    ///
+    /// `labeled-response` exists so that a server's answer names the message it
+    /// belongs to, and an error wearing a send's label is that send being
+    /// refused. What never arrives in that case is the echo — the terminal
+    /// state — so without this the optimistic copy sits at `Sent` for the rest
+    /// of the session, drawn exactly like a message that was delivered (#592).
+    ///
+    /// Only where the echo is what settles a send: without `echo-message`,
+    /// `on_written` drops the pending copy at the socket, so by the time a
+    /// refusal arrives there is nothing left to fail and the row keeps the
+    /// state the write gave it.
+    fn fail_labelled_send(&mut self, code: u16, message: &Message) -> bool {
+        // A send that succeeds is answered by its echo, so a numeric under its
+        // label is a refusal. Errors only all the same: the client is claiming
+        // a message was not delivered, and it says that on the evidence of a
+        // server saying something went wrong rather than on a label alone.
+        if !(400..600).contains(&code) {
+            return false;
+        }
+        let Some(label) = message.tag("label") else {
+            return false;
+        };
+        let Some(index) = self
+            .pending
+            .iter()
+            .position(|pending| pending.label.as_deref() == Some(label))
+        else {
+            return false;
+        };
+
+        // The server's own sentence, past the first parameter, which is our
+        // nick. `MessageRow` draws it as `Not sent — {reason}` beside the retry
+        // it already offers a failed run.
+        let reason = message
+            .params
+            .get(1..)
+            .and_then(<[String]>::last)
+            .filter(|reason| !reason.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("{} would not take it", self.network_name()));
+
+        let mut refused = self.pending.remove(index).message;
+        refused.delivery = Delivery::Failed(reason);
+        self.emit(IrcxEvent::MessageUpdated {
+            message: Box::new(refused),
+        });
+        true
     }
 
     /// Matches a server echo to the optimistic copy already on screen. The id

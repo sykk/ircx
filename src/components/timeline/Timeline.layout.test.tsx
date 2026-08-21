@@ -821,4 +821,49 @@ describe("a row that grows under the reader following it", () => {
     expect(row.offsetHeight).toBeGreaterThan(sent);
     expect(belowTheFold(scroller)).toBe(0);
   });
+
+  /**
+   * #594, which is not the case above and is the same shortfall. The refusal
+   * lands within a millisecond of the line that provoked it, so both rows are
+   * added in one commit and the follow effect runs once for the pair — against
+   * the estimate the new rows are still drawn at.
+   *
+   * What the walk photographed is the refusal's clock on screen with its
+   * sentence below the fold, in a pane that stays there: two frames two seconds
+   * apart are the same picture, and a later line from another client scrolls in
+   * normally, so the pane is still following.
+   */
+  it("follows two rows that arrive in one commit", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    expect(belowTheFold(scroller)).toBe(0);
+
+    const mine = said();
+    // The channel's own account of why the line did not go: `on_other_numeric`
+    // files the numeric under the channel as a `server` row, which joins no run
+    // and so opens a block of its own — a clock on one line and the sentence on
+    // the next, where the estimate is one line and no clock.
+    const refusal = makeMessage({
+      id: "refused",
+      kind: "server",
+      nick: "irc.libera.chat",
+      text: "Cannot send to channel (+m)",
+      timestamp: new Date(Date.parse(mine.timestamp) + 1).toISOString(),
+    });
+    act(() => {
+      append(mine);
+      append(refusal);
+    });
+    flushLayout();
+
+    // The refusal has to be taller than the estimate for the reading below to be
+    // about anything: the pane is only left short by the difference.
+    const row = scroller
+      .querySelector('[data-msgid="refused"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    expect(row.offsetHeight).toBeGreaterThan(ESTIMATED_ROW_PX);
+    expect(belowTheFold(scroller)).toBe(0);
+  });
 });

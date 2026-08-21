@@ -275,15 +275,29 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     view,
   );
 
+  // What the rows are known to measure — the number the sizer below is drawn
+  // at. It changes on the commit a measurement lands in, which is the commit
+  // the tail moves in with no message arriving.
+  const measuredPx = virtualizer.getTotalSize();
+
   // On the messages rather than the row count: a message that merges into the
   // row already open moves the tail without adding a row, and a console's whole
   // content is the kind of row that merges.
+  //
+  // And on the measurements, because a row is measured as its element mounts —
+  // after this has already scrolled to the end against the estimate the row was
+  // drawn at. One taller than the estimate leaves the pane short by the
+  // difference, which an ordinary conversation hides: the next line along
+  // scrolls the pane again and takes the shortfall with it. #594 is the
+  // arrangement where no next line comes — a refusal lands in the same commit as
+  // the line it refuses, so the pair moves the tail once, and the `+m` channel
+  // that refused says nothing after.
   useLayoutEffect(() => {
     if (followingRef.current && rows.length > 0) {
       probe("follow", { view, rows: rows.length });
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
     }
-  }, [visibleMessages, rows.length, virtualizer, view]);
+  }, [visibleMessages, rows.length, measuredPx, virtualizer, view]);
 
   // Through the virtualiser rather than by assigning `scrollTop`: an offset is
   // only a place at the width it was measured at, and a rebuilt pane is a

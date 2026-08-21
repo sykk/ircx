@@ -1103,6 +1103,21 @@ Two things that run leaves open, and both are narrower than what it closed:
   with every one of those lines on the wire exactly once and the pane's own
   record saying it holds them. #602.
 
+  **That one is answered, and the answer is that it is not the app's arithmetic**
+  (2026-08-21, `docs/end-to-end-run-41.md`). The stack probe writes every drawn
+  row's transform and measured height beside the number of messages it drew, and
+  in three walks of three the settled pane reads exactly right: every row starts
+  where the one above it ends, every row is 69 to 71px a message, and the block
+  the page merged into holds all sixty. The pane beside it draws the identical
+  geometry — same tops, same heights, same first and last msgid — and draws the
+  lines. So the DOM is whole and WebKitGTK paints part of it with content
+  belonging to a scroll offset the pane no longer has. **Nothing to fix in the
+  offsets; what is unnamed is the invalidation that does not happen.**
+
+  It leaves #601 needing a second look rather than a second walk: that table was
+  read off frames, and run 41 has this pane's frames misreporting its own content
+  by ten messages.
+
   Three things a walk of this needs, all learned the hard way and all in
   `docs/end-to-end-40/`: a seed whose runs are long enough to park inside, one
   launch rather than two — `rows.ts` closes the open run where `source` changes,

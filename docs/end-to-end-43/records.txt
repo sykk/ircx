@@ -63,8 +63,10 @@ the message the anchor holds, against the top of the pane:
 
   a line above them gets taller   fold  50 ->  96 (+46px)   anchor -742 (+0px)
   a gap fill lands in their row   fold  50 -> 150 (+100px)  anchor -742 (+0px)
+  a live line stamped behind      fold  50 ->  75 (+25px)   anchor -742 (+0px)
 
-  `scrollTop` is 884 before and after in all four runs, and the readings two
+  `scrollTop` does not move in any of the six runs — 884 in the first four, 828
+  in the two whose window was made live before the parking — and the readings two
   seconds later are the same numbers again.
 
 The probe logs themselves are not kept: `*.log` is ignored, as run 40's and run

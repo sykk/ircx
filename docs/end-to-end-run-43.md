@@ -172,14 +172,48 @@ measured exactly that and nothing else. It is run 40's finding about a restored
 window from the other side, and it narrows who this reaches: a reader paged back
 into history, which is the reader who is parked in the first place.
 
+## The line stamped behind, which needs no paging at all
+
+#608's third conjecture, and the one that asks least of the world. The reader has
+paged nothing back: they have scrolled up in a channel that is still talking, and
+a line arrives stamped behind what is already held — a relay, a bridge, or a
+server whose clock moved. `insertionPoint` puts it at its own time, which is
+inside the run they are sitting in.
+
+Live on both sides, so the `source` rule that keeps a gap fill out of a live
+window does not apply: the line joins the run rather than opening one.
+`docs/end-to-end-43/late-lab.sh`, twice of twice, with `merged: true` again:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 75** | y 75 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 828 | 828 | 828 |
+
+One line of displacement for one line of arrival. The model says the same at
+24px.
+
+## Where it stops, which is the useful half
+
+The same line stamped a moment *earlier* — in front of the message the anchor
+holds rather than behind it — and **the reader holds**. That is asserted in
+`Timeline.layout.test.tsx` as what should happen rather than what does, and it
+passes.
+
+The anchor's own message moves in the list there, so `movedInList` is true, the
+branch that puts the reader back runs, and `tookIn` reads the height because the
+reader's line really did move inside its row. The correction is not broken. It is
+asked for only when something lands in front of the one message the anchor is
+watching, and every displacement in this run landed behind it.
+
 ## The shape both of them share
 
 The landing case this run opened with (#601, fixed by #606) is the anchor
-correcting and coming up short. **These two are the anchor never running.** A
-message growing changes nobody's place in the list, and a fill lands *behind* the
-anchor's own message, so `movedInList` is false in both and the branch that would
-put anybody back is never taken. What arrives above the reader arrives below the
-message that speaks for them.
+correcting and coming up short. **The three above are the anchor never running.**
+A message growing changes nobody's place in the list, and a fill or a late line
+lands *behind* the anchor's own message, so `movedInList` is false in all three
+and the branch that would put anybody back is never taken. What arrives above the
+reader arrives below the message that speaks for them.
 
 That is why the fold record matters beyond this run: the reader is two messages,
 and every instrument here until now has been watching the one that does not move.
@@ -199,6 +233,10 @@ and every instrument here until now has been watching the one that does not move
   branch the minifier drops; the object handed to it is not. A record that reads
   the DOM has to be skipped at the call site or the app anybody runs pays for it,
   which is what `probing` is for.
+- **One defect, three doors, and a fourth that is shut.** A page in front of the
+  reader's message is corrected; a growth, a fill and a late line behind it are
+  not. Which side of that message an event lands on is what decides whether the
+  app does anything at all, and nothing in the app is written in those terms.
 - **A fill and a page are not the same event.** One arrives in front of the
   window and one inside it, and only the first moves the reader's own message in
   the list. A walk that tests paging has not tested filling.

@@ -1088,12 +1088,26 @@ Two things that run leaves open, and both are narrower than what it closed:
   Fixed by holding the anchor until the reader's own row is a height the
   virtualiser knows, rather than until the container's height stands still.
 
-  **What no walk has watched is still the release app.** The model is where the
-  744px was read, and the model had to be corrected to read it — its
-  `ResizeObserver` never delivered the entry a browser delivers on observing, so
-  every row remounted under a new key kept its estimate. A walk of this wants a
-  seed that speaks in runs of twenty or more, so that a pane can be parked inside
-  one block and be a neighbour without being the asker.
+  **Walked, and the release app does not hold** (2026-08-21,
+  `docs/end-to-end-run-40.md`). A channel speaking in runs of sixty, the reader
+  parked 1300px into the row the page merges into, the page held forty seconds
+  by run 30's proxy: twelve walks of twelve moved the reader, and every one of
+  them stuck — the frame thirty seconds on is the frame a second after the
+  landing, to the pixel. Four to eight messages on the binary that ships, which
+  is 250 to 580px at this width, and ten to nineteen on the same binary with
+  #539's term taken out. **So the term halves the distance and does not close
+  it, and the model asserts a hold the window does not give.** #601.
+
+  **The same walk found the asking pane drawing a block with ten of its messages
+  missing** — `line 0600` and then `line 0611`, on four `ship` walks out of four,
+  with every one of those lines on the wire exactly once and the pane's own
+  record saying it holds them. #602.
+
+  Three things a walk of this needs, all learned the hard way and all in
+  `docs/end-to-end-40/`: a seed whose runs are long enough to park inside, one
+  launch rather than two — `rows.ts` closes the open run where `source` changes,
+  so a page can never merge into a *restored* window — and the split's own
+  unasked-for page-back waited out before anything is parked.
 
 ## Resizing a split
 

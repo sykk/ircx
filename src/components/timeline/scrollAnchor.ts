@@ -378,6 +378,13 @@ export function usePrependAnchor(
       // and is otherwise invisible in these records.
       tookIn: reader === null ? null : tookIn(reader),
       now: anchor.current,
+      // Where the reader's line is drawn, which the terms above give only as
+      // the virtualiser's own arithmetic. The stack records carry this around a
+      // landing and a landing is where it is least worth having: the rendered
+      // window on that commit is the one the old scroll offset asked for. A
+      // reading from *before* the page arrived is what says whether anybody
+      // moved, and only a record on every commit has one (#601).
+      line: lineOf(el, settling.current?.id ?? anchor.current?.id),
     });
     // Who the reader is, which only the landing commit is asked for: the
     // message the hold was just taken on, or the one under them where the

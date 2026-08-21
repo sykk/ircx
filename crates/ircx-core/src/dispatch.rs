@@ -132,15 +132,35 @@ impl SessionState {
     }
 
     /// Silent without `message-tags`: typing is a courtesy, not an error.
+    ///
+    /// Labelled where the server will carry one, and the label is the whole of
+    /// #591: a channel that refuses the notification answers with a `404`, and
+    /// an answer that cannot be told from the answer to a message was described
+    /// to the reader as their message having been refused — twice a line,
+    /// before they had sent one. What this client labels, it can recognise.
+    ///
+    /// The cost is an `ACK` where the server has `labeled-response` and not
+    /// `echo-message`, which is the only answer a notification draws when it is
+    /// taken. Nothing is drawn for one, and it is the price of not lying about
+    /// the refusal.
     pub fn set_typing(&mut self, target: &str, active: bool) -> Vec<Action> {
         if self.caps.is_enabled("message-tags") {
             let state = if active { "active" } else { "done" };
-            if let Ok(message) = MessageBuilder::new("TAGMSG")
+            let label = self
+                .caps
+                .is_enabled("labeled-response")
+                .then(|| self.next_label());
+            let mut builder = MessageBuilder::new("TAGMSG")
                 .tag("+typing", Some(state.into()))
-                .param(target)
-                .build()
-            {
+                .param(target);
+            if let Some(label) = label.clone() {
+                builder = builder.tag("label", Some(label));
+            }
+            if let Ok(message) = builder.build() {
                 self.send_line(message.to_line());
+                if let Some(label) = label {
+                    self.sent_typing_as(label);
+                }
             }
         }
         self.drain()

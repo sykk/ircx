@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use ircx_ipc::{
@@ -362,6 +362,15 @@ pub struct SessionState {
     /// goes back out on the batch that answers, which is the only place the two
     /// can be told apart.
     pub(crate) page_backs: HashMap<String, String>,
+    /// Labels the typing notifications this client sent on its own went out
+    /// under, so an answer to one can be told from an answer to something the
+    /// reader said (#591).
+    ///
+    /// A few, and the oldest goes when a newer one arrives: one notification is
+    /// outstanding per conversation at a time and its answer comes within a
+    /// round trip, so this holds enough for several conversations at once and
+    /// nothing for a server that never answers.
+    typing_labels: VecDeque<String>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
     ///
@@ -418,6 +427,7 @@ impl SessionState {
             away_since: None,
             gap_fills: HashMap::new(),
             page_backs: HashMap::new(),
+            typing_labels: VecDeque::new(),
             first_pages: HashSet::new(),
         }
     }
@@ -1184,6 +1194,22 @@ impl SessionState {
     }
 
     fn handle_numeric(&mut self, code: u16, message: &Message) {
+        // An answer to a typing notification is not an answer to the reader,
+        // and the label is what says which it is: a moderated channel refuses
+        // the notification the composer sends as they type, and `404` was being
+        // described as their message having been refused — twice a line, before
+        // they had sent one (#591).
+        //
+        // Only what this client labelled is claimed here. Without
+        // `labeled-response` a typing notification carries no label, nothing
+        // can be matched to it, and the sentence stays as it was.
+        if message
+            .tag("label")
+            .is_some_and(|label| self.was_typing_notification(label))
+        {
+            return;
+        }
+
         // The first parameter of a numeric is our own nick; nothing below
         // wants it. Borrowed, not cloned: a /list is tens of thousands of
         // numerics through here.
@@ -3327,6 +3353,25 @@ impl SessionState {
                 self.pending.remove(index);
             }
         }
+    }
+
+    /// Remembers that a typing notification went out under this label. Keeps a
+    /// few: see the field.
+    pub(crate) fn sent_typing_as(&mut self, label: String) {
+        self.typing_labels.push_back(label);
+        while self.typing_labels.len() > 8 {
+            self.typing_labels.pop_front();
+        }
+    }
+
+    /// Whether this label named a typing notification, forgetting it if it did:
+    /// one answer is all there is to match.
+    fn was_typing_notification(&mut self, label: &str) -> bool {
+        let Some(at) = self.typing_labels.iter().position(|sent| sent == label) else {
+            return false;
+        };
+        self.typing_labels.remove(at);
+        true
     }
 
     pub(crate) fn next_label(&mut self) -> String {

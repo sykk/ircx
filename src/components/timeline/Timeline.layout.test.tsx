@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/types";
 import { useAppStore } from "@/store";
@@ -720,5 +720,89 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
 
     expect(eyeLine(parked!, "line201")).toBe(inside);
     expect(eyeLine(parked!, watching)).toBe(before);
+  });
+});
+
+describe("a row that grows under the reader following it", () => {
+  /** How much of the last row is drawn below the bottom of the pane. What #594
+   * photographed is a sentence that is: the clock over the line on the screen
+   * and the line itself off the bottom. */
+  function belowTheFold(scroller: HTMLElement): number {
+    const last = [...scroller.querySelectorAll<HTMLElement>("[data-index]")].at(-1)!;
+    const head = scroller.querySelector<HTMLElement>('[data-testid="timeline-head"]');
+    const bottom = topOf(last) + last.offsetHeight + (head?.offsetHeight ?? 0);
+    return Math.max(0, bottom - (scroller.scrollTop + scroller.clientHeight));
+  }
+
+  /** The reader's own line, stamped after everything the channel already holds:
+   * a message older than the tail is sorted in where it belongs, and a line that
+   * lands in the middle of the window is a different case with a different
+   * answer. */
+  function said(): ChatMessage {
+    const held = useAppStore.getState().timelines[KEY]!.messages;
+    return makeMessage({
+      id: "mine",
+      nick: "sable",
+      text: "a line typed with the reader already at the tail",
+      timestamp: new Date(Date.parse(held.at(-1)!.timestamp) + 1000).toISOString(),
+      delivery: { state: "sent" },
+    });
+  }
+
+  function append(message: ChatMessage) {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      answers: null,
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [message],
+    });
+  }
+
+  function refuse(message: ChatMessage) {
+    useAppStore.getState().applyEvent({
+      type: "messageUpdated",
+      message: {
+        ...message,
+        delivery: { state: "failed", detail: "Cannot send to channel (+m)" },
+      },
+    });
+  }
+
+  /**
+   * #599, where the model is the thing under test. A `+m` channel refuses a line
+   * a moment after it was sent, and the row the reader is already following
+   * gains the reason and the retry under it — in a later commit than the one it
+   * mounted in, which is the arrangement a loopback server cannot produce and a
+   * proxy holding the refusal back can.
+   *
+   * The release app draws the whole of it, walked under `Xvfb` at 3ms, 301ms and
+   * 2001ms. What the model did was leave the pane a line short of the row's
+   * bottom for good, because the only thing it counted as scrollable was the
+   * sizer and the sizer is a commit behind the row that grew.
+   */
+  it("follows a row that gains a line after it was measured", () => {
+    seed(makeConversation({ count: 400, seed: 3 }));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    expect(belowTheFold(scroller)).toBe(0);
+
+    const mine = said();
+    act(() => append(mine));
+    flushLayout();
+    const row = scroller
+      .querySelector('[data-msgid="mine"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    const sent = row.offsetHeight;
+    expect(belowTheFold(scroller)).toBe(0);
+
+    act(() => refuse(mine));
+    flushLayout();
+
+    // That the row grew is asserted rather than assumed: a refusal drawn in the
+    // same space would leave the reading below true of nothing.
+    expect(row.offsetHeight).toBeGreaterThan(sent);
+    expect(belowTheFold(scroller)).toBe(0);
   });
 });

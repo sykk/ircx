@@ -111,6 +111,20 @@ function above(piece: HTMLElement): number {
   return px;
 }
 
+/**
+ * How far down the sizer the lowest row reaches. A row is absolutely positioned
+ * and put in its place by a transform, so this is its own top plus what it
+ * draws.
+ */
+function drawnBottom(sizer: HTMLElement): number {
+  let px = 0;
+  for (const row of sizer.querySelectorAll<HTMLElement>("[data-index]")) {
+    const top = Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, ""));
+    px = Math.max(px, (Number.isNaN(top) ? 0 : top) + heightOf(row));
+  }
+  return px;
+}
+
 function heightOf(el: HTMLElement): number {
   if (el.hasAttribute("data-index")) return rowPx(el);
   if (el.dataset.testid === "timeline-head") return HISTORY_HEAD_PX;
@@ -279,6 +293,17 @@ export function installLayout(): void {
   // the virtualiser's sizer, which does carry a real inline height, plus the
   // head above it: both are inside the scroller, so both are part of what there
   // is to scroll.
+  //
+  // **And the rows, where one of them hangs below the sizer.** The sizer's
+  // height is React state, so it is a commit behind a row that grew under it,
+  // and a row is an absolutely positioned box a browser counts towards the
+  // scrollable overflow whether or not its parent has been told to make room.
+  // Taking the sizer alone put a floor under the pane one line above the row it
+  // was already drawing: `getMaxScrollOffset` is this, `scrollToIndex(last,
+  // "end")` is that, and the virtualiser's own reconcile — which re-reads the
+  // target on the next frame and is what the release app is saved by — was
+  // being handed the short answer and settling on it. #599 is the case that
+  // found it, a row that grows in a later commit than the one it mounted in.
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
     get(this: HTMLElement) {
@@ -286,7 +311,10 @@ export function installLayout(): void {
       const declared = sizer?.style.height;
       if (!declared) return this.offsetHeight;
       const head = this.querySelector<HTMLElement>('[data-testid="timeline-head"]');
-      return Number.parseFloat(declared) + (head === null ? 0 : HISTORY_HEAD_PX);
+      return (
+        Math.max(Number.parseFloat(declared), drawnBottom(sizer)) +
+        (head === null ? 0 : HISTORY_HEAD_PX)
+      );
     },
   });
   // jsdom keeps scrollTop as a plain number and lets anything be written to it.

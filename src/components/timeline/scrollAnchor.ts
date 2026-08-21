@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { RefObject } from "react";
-import { probe } from "@/lib/probe";
+import { probe, probing } from "@/lib/probe";
 
 /** The part of the head element this module reads. */
 export interface Head {
@@ -358,6 +358,12 @@ export function usePrependAnchor(
     // are the same message and its `delta` has changed, the pane moved without
     // anything here writing to it — which is the half of #508 a screenshot
     // cannot tell from the other.
+    //
+    // The rest of this effect is records. `probe` is a branch a build without
+    // the probe drops, but the record handed to it is an argument and an
+    // argument is evaluated either way, so a reading of the DOM has to be
+    // skipped here rather than there.
+    if (!probing) return;
     probe("commit", {
       view,
       // Which pane this is, in the only terms a screenshot shares: a view id is
@@ -378,8 +384,24 @@ export function usePrependAnchor(
       // and is otherwise invisible in these records.
       tookIn: reader === null ? null : tookIn(reader),
       now: anchor.current,
+      // Where the reader's line is drawn, which the terms above give only as
+      // the virtualiser's own arithmetic. The stack records carry this around a
+      // landing and a landing is where it is least worth having: the rendered
+      // window on that commit is the one the old scroll offset asked for. A
+      // reading from *before* the page arrived is what says whether anybody
+      // moved, and only a record on every commit has one (#601).
+      line: lineOf(el, settling.current?.id ?? anchor.current?.id),
+      // And where the message the reader is *looking at* is drawn, which in
+      // this arrangement is a different message a screen or more below.
+      fold: lineOf(el, atFold(el)),
     });
-    probeStack(view, el, first !== (previous?.firstId ?? null));
+    // Who the reader is, which only the landing commit is asked for: the
+    // message the hold was just taken on, or the one under them where the
+    // landing armed no hold.
+    probeStack(view, el, first !== (previous?.firstId ?? null), settling.current?.id ?? anchor.current?.id);
+    // After the records, so a landing latches the fold this pane had on the
+    // commit before it.
+    latch(wasAtFold, el, atFold(el));
   });
 
   /** The reader has taken the pane over, so stop putting it back. The same
@@ -402,6 +424,35 @@ export function usePrependAnchor(
 const STACK_COMMITS = 8;
 /** Commits of the stack still owed, per scroller. */
 const owed = new WeakMap<HTMLElement, number>();
+/**
+ * The message a pane's records are read against, taken on the landing commit
+ * and kept for the commits owed after it.
+ *
+ * Latched rather than asked for each time, because what the anchor names stops
+ * being the reader the moment they are displaced: the hold ends, the next
+ * `record` names whatever the pane is now sitting on, and a before-and-after
+ * loses the message it was about halfway through (#601). The reader the page
+ * arrived under is the subject of the whole window.
+ */
+const reading = new WeakMap<HTMLElement, string>();
+/**
+ * The message the reader was looking at when the page arrived, and the one each
+ * pane had at its fold on the commit before.
+ *
+ * Two maps because the landing commit cannot be asked: the rendered window
+ * there is the one the old scroll offset asked for, so what is drawn at the top
+ * of the pane on that commit is not what anybody was reading. The commit before
+ * it is.
+ */
+const wasAtFold = new WeakMap<HTMLElement, string>();
+const watching = new WeakMap<HTMLElement, string>();
+
+/** Latches a message for the length of a landing's window, or forgets the one
+ * before where this landing has nobody to name. */
+function latch(map: WeakMap<HTMLElement, string>, el: HTMLElement, id: string | undefined): void {
+  if (id === undefined) map.delete(el);
+  else map.set(el, id);
+}
 
 /**
  * Every row the pane draws, as the virtualiser placed it and as the browser
@@ -457,10 +508,106 @@ function numbering(row: HTMLElement): { from: number; to: number; jumps: number;
   return { from: nums[0] ?? 0, to: nums.at(-1) ?? 0, jumps, run: stretches.join(" ") };
 }
 
-function probeStack(view: string, el: HTMLElement, landed: boolean): void {
+/**
+ * Where the virtualiser put a row. The transform rather than a rect: it is the
+ * number the virtualiser wrote, and a rect would fold the scroll offset back
+ * into it.
+ */
+function rowTop(row: HTMLElement): number {
+  return Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0);
+}
+
+/**
+ * The highest of these drawn at or across an edge. The virtualiser's rows are
+ * in the DOM in the order it rendered them rather than the order it placed
+ * them, and this does not depend on either.
+ */
+function topmostAt(elements: HTMLElement[], edge: number): HTMLElement | undefined {
+  let found: HTMLElement | undefined;
+  let best = Infinity;
+  for (const candidate of elements) {
+    const box = candidate.getBoundingClientRect();
+    if (box.bottom > edge && box.top < best) {
+      best = box.top;
+      found = candidate;
+    }
+  }
+  return found;
+}
+
+/**
+ * The message at the top of the pane, which is the one the reader is looking
+ * at.
+ *
+ * `lineOf` below is asked where the *anchor's* message is drawn, and the two
+ * are not the same message: the anchor names the first message of the row under
+ * the scroll offset, and where that row is a run of sixty it can start a screen
+ * or more above the fold. A page merging into that row below the anchor's
+ * message and above this one moves everything the reader can see while every
+ * term the anchor computes reads held — which is #601, and is why a record
+ * carrying only the anchor's line cannot tell a reader who held from one who
+ * was displaced.
+ *
+ * The rows are asked first and the messages only of the rows that answer: a
+ * window of twenty rows of sixty is twelve hundred lines, and this runs on
+ * every commit. Rows rather than row, because the one at the top of the pane
+ * need not hold a message at all — a date or an unread seam is a row, and the
+ * reader is looking at whatever is under it.
+ */
+function atFold(el: HTMLElement): string | undefined {
+  const edge = el.getBoundingClientRect().top;
+  const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")]
+    .filter((row) => row.getBoundingClientRect().bottom > edge)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  for (const row of rows) {
+    const line = topmostAt([...row.querySelectorAll<HTMLElement>("[data-msgid]")], edge);
+    if (line) return line.dataset.msgid;
+  }
+  return undefined;
+}
+
+/**
+ * Where the reader's own line is drawn, named by the message rather than by the
+ * row that holds it (#601).
+ *
+ * A page merging into the reader's block gives that row a new key and re-orders
+ * what is inside it, so two records of the stack cannot be compared row by row
+ * across a landing: the same `i` is not the same row and the same row is not the
+ * same messages. An id survives both. `within` and `top` are the two halves of
+ * where the list puts the line, which is what tells a reader who moved from a
+ * row re-ordered under one who did not; `y` is where it is against the top of
+ * the pane, which is the number the walk was reading off a screenshot.
+ */
+function lineOf(
+  el: HTMLElement,
+  id: string | undefined,
+): { id: string; i: number; within: number; top: number; y: number } | null {
+  if (id === undefined) return null;
+  // Compared rather than selected on, for `lineWithinRow`'s reason: an id is
+  // the server's or this client's and neither is written to be a selector.
+  const line = [...el.querySelectorAll<HTMLElement>("[data-msgid]")].find(
+    (candidate) => candidate.dataset.msgid === id,
+  );
+  const row = line?.closest<HTMLElement>("[data-index]");
+  if (!line || !row) return null;
+  const at = line.getBoundingClientRect().top;
+  return {
+    id,
+    i: Number(row.dataset.index),
+    within: Math.round(at - row.getBoundingClientRect().top),
+    top: rowTop(row),
+    y: Math.round(at - el.getBoundingClientRect().top),
+  };
+}
+
+function probeStack(view: string, el: HTMLElement, landed: boolean, reader: string | undefined): void {
   const left = landed ? STACK_COMMITS : (owed.get(el) ?? 0);
   if (left <= 0) return;
   owed.set(el, left - 1);
+  if (landed) {
+    latch(reading, el, reader);
+    latch(watching, el, wasAtFold.get(el));
+  }
   const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")].map((row) => ({
     i: Number(row.dataset.index),
     // What the messages inside the row take up, against the height the row
@@ -472,9 +619,7 @@ function probeStack(view: string, el: HTMLElement, landed: boolean): void {
     zero: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].filter(
       (line) => line.offsetHeight === 0,
     ).length,
-    // The transform rather than a rect: it is the number the virtualiser wrote,
-    // and a rect would fold the scroll offset back into it.
-    top: Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0),
+    top: rowTop(row),
     h: row.offsetHeight,
     first: row.querySelector<HTMLElement>("[data-msgid]")?.dataset.msgid ?? null,
     last: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].at(-1)?.dataset.msgid ?? null,
@@ -485,6 +630,12 @@ function probeStack(view: string, el: HTMLElement, landed: boolean): void {
     x: Math.round(el.getBoundingClientRect().left),
     landed,
     top: el.scrollTop,
+    // Where the reader is, by message. The rows below are the pane's own
+    // arithmetic; these are the place in it the walk is asking about (#601) —
+    // the message the anchor is holding, and the message the reader had at the
+    // top of the pane when the page arrived.
+    line: lineOf(el, reading.get(el)),
+    fold: lineOf(el, watching.get(el)),
     rows,
   });
 }

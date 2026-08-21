@@ -9,7 +9,7 @@ import { ESTIMATED_ROW_PX, LOAD_OLDER_PX, Timeline } from "./Timeline";
 import { makeConversation, makeMessage } from "./fixtures";
 import { assignGroups } from "./groups";
 import { buildRows } from "./rows";
-import { flushLayout, installLayout } from "./layoutHarness";
+import { LINE_PX, flushLayout, installLayout } from "./layoutHarness";
 
 /**
  * The timeline where the rows are uneven, which is every timeline the app draws
@@ -127,6 +127,18 @@ function atTheFold(scroller: HTMLElement): string {
     if (row && topOf(row) + headPx >= scroller.scrollTop) return line.dataset.msgid!;
   }
   throw new Error("no message is drawn below the fold");
+}
+
+/** The message the reader is actually looking at: the first whose own *line* is
+ * drawn at or below the top of the viewport. `atTheFold` above answers in rows,
+ * which names a different message wherever the reader is parked inside one
+ * (#608) — the row below theirs, whose top is the first at or under the fold. */
+function lineAtTheFold(scroller: HTMLElement): string {
+  for (const line of scroller.querySelectorAll<HTMLElement>("[data-msgid]")) {
+    const msgid = line.dataset.msgid!;
+    if (eyeLine(scroller, msgid) >= 0) return msgid;
+  }
+  throw new Error("no message's line is drawn below the fold");
 }
 
 /** The page a scroll to the top is answered with, 200 messages behind the
@@ -735,6 +747,302 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     ).toBe("line190");
 
     expect(eyeLine(parked!, "line201")).toBe(inside);
+    expect(eyeLine(parked!, watching)).toBe(before);
+  });
+
+  /**
+   * **This asserts what the app does, and what it does is #608.** The anchor
+   * holds the first message of the reader's row, and where that row is a run of
+   * twenty it is nowhere near the line they are reading: a page merging in
+   * between the two moved a live reader 618px in run 43 while every term the
+   * anchor computes read held.
+   *
+   * Nothing has to arrive for that gap to open. A line already in the row
+   * getting taller does it too, and needs no landing, no merge and no
+   * re-ordering: the row's top does not move and `lineWithinRow` of the message
+   * the anchor holds does not change, so `tookIn` reads zero and nothing is
+   * corrected. The reader is moved by exactly what the line above them gained.
+   *
+   * The line to flip when #608 is answered is the last one: the reader's own
+   * line should end where it started, as the anchor's message already does.
+   *
+   * **The window agrees.** `docs/end-to-end-43/grow-lab.sh` puts the same
+   * arrangement in `webkit2gtk-4.1` and grows the same kind of line: the fold
+   * moves 46px and the anchor's message does not move at all, twice of twice.
+   * The model is not manufacturing this one, which is the question #599 left
+   * behind it.
+   */
+  it("moves the parked reader by whatever a line above them gains, which is #608", () => {
+    seed(longRunAcrossTheBoundary(201, 400));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [, parked] = screen.getAllByTestId("timeline-scroller");
+    parked!.scrollTop = LOAD_OLDER_PX + 200;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    const opening = parked!
+      .querySelector('[data-msgid="line201"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    parked!.scrollTop = topOf(opening) + opening.offsetHeight - 100;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    expect(parked!.scrollTop).toBeGreaterThan(LOAD_OLDER_PX);
+    expect(topOf(opening)).toBeLessThan(parked!.scrollTop);
+    expect(topOf(opening) + opening.offsetHeight).toBeGreaterThan(parked!.scrollTop);
+
+    // The line under the reader's eyes, and the line the anchor is holding,
+    // which are the two readings run 43 disagreed on.
+    const watching = lineAtTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+    const anchored = eyeLine(parked!, "line201");
+
+    // A message the reader has already scrolled past gains two wrapped lines:
+    // inside their row, above their eyes, and below the message the anchor
+    // holds. `line205` is drawn above the fold, which is asserted rather than
+    // assumed — where the reader sits inside the run is the model's to decide.
+    const grown = useAppStore.getState().timelines[KEY]!.messages.find((m) => m.id === "line205")!;
+    expect(eyeLine(parked!, "line205")).toBeLessThan(0);
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messageUpdated",
+        message: { ...grown, text: `${grown.text} ${"and then it was said again ".repeat(4)}` },
+      });
+    });
+    flushLayout();
+
+    // The message the anchor holds is exactly where it was, and the message the
+    // reader is looking at is two lines further down the pane.
+    expect(eyeLine(parked!, "line201")).toBe(anchored);
+    expect(eyeLine(parked!, watching)).toBe(before + 2 * LINE_PX);
+  });
+
+  /**
+   * #608's second way in, and it lands on the same floor. A gap fill is history
+   * sorting into the *middle* of what is held rather than in front of it — a
+   * page-back answers before the window, a fill answers inside it — so it goes
+   * into the reader's row between the message the anchor holds and the line
+   * they are reading.
+   *
+   * The anchor does not run for this either, and for a different reason than
+   * the growth above: the fill lands *behind* the anchor's own message in the
+   * list, so its index does not change, `movedInList` is false, and the branch
+   * that would correct anybody is never taken. What arrives above the reader is
+   * arriving below the message that speaks for them.
+   */
+  it("moves the parked reader by a gap fill landing inside their row, which is #608", () => {
+    // Read back rather than lived through, because `rows.ts` closes the open
+    // run where `source` changes: a fill is history, and history landing in a
+    // window of live messages opens a row of its own rather than joining
+    // theirs. Which is run 40's finding about a restored window from the other
+    // side — the arrangement exists only where the two are the same kind.
+    seed(longRunAcrossTheBoundary(201, 400).map((m) => ({ ...m, source: "serverHistory" as const })));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [, parked] = screen.getAllByTestId("timeline-scroller");
+    parked!.scrollTop = LOAD_OLDER_PX + 200;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    const opening = parked!
+      .querySelector('[data-msgid="line201"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    parked!.scrollTop = topOf(opening) + opening.offsetHeight - 100;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    const watching = lineAtTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+    const anchored = eyeLine(parked!, "line201");
+    expect(eyeLine(parked!, "line205")).toBeLessThan(0);
+
+    // Four lines the reader never saw, stamped between two they have already
+    // read past. The same speaker, so `groups.ts` keeps the run one row and
+    // this is a fill inside the reader's own block rather than a new one.
+    const held = useAppStore.getState().timelines[KEY]!.messages;
+    const at = Date.parse(held.find((m) => m.id === "line205")!.timestamp);
+    const fill = Array.from({ length: 4 }, (_, i) =>
+      makeMessage({
+        id: `fill${i}`,
+        nick: "historian",
+        // One wrapped line each, so the displacement below is four of them and
+        // not eight.
+        text: `the fill ${i}, behind what the reader has read`,
+        timestamp: new Date(at + i + 1).toISOString(),
+        source: "serverHistory",
+      }),
+    );
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        answers: null,
+        network: "libera",
+        target: "#ctf-ops",
+        messages: fill,
+      });
+    });
+    flushLayout();
+
+    // The fill is where it was aimed: inside the reader's own row, above their
+    // eyes and below the message the anchor holds.
+    expect(
+      parked!.querySelector('[data-msgid="fill0"]')!.closest<HTMLElement>("[data-index]"),
+    ).toBe(parked!.querySelector('[data-msgid="line201"]')!.closest<HTMLElement>("[data-index]"));
+    expect(eyeLine(parked!, "fill0")).toBeLessThan(0);
+
+    expect(eyeLine(parked!, "line201")).toBe(anchored);
+    expect(eyeLine(parked!, watching)).toBe(before + 4 * LINE_PX);
+  });
+
+  /**
+   * #608's third way in, and the one that needs nothing unusual to have
+   * happened. The reader has not paged anything back: they have scrolled up in
+   * a channel that is still talking, and a line arrives stamped behind what is
+   * already held — a relay, a bridge, or a server whose clock moved.
+   * `insertionPoint` puts it at its own time, which is inside the run the
+   * reader is sitting in.
+   *
+   * Live on both sides, so the `source` rule that keeps a gap fill out of a
+   * live window does not apply here: the line joins the run rather than opening
+   * one, and there is nothing about the arrangement a reader could avoid.
+   */
+  it("moves the parked reader by a live line stamped into their row, which is #608", () => {
+    seed(longRunAcrossTheBoundary(201, 400));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [, parked] = screen.getAllByTestId("timeline-scroller");
+    parked!.scrollTop = LOAD_OLDER_PX + 200;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    const opening = parked!
+      .querySelector('[data-msgid="line201"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    parked!.scrollTop = topOf(opening) + opening.offsetHeight - 100;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    const watching = lineAtTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+    const anchored = eyeLine(parked!, "line201");
+    expect(eyeLine(parked!, "line205")).toBeLessThan(0);
+
+    const held = useAppStore.getState().timelines[KEY]!.messages;
+    const at = Date.parse(held.find((m) => m.id === "line205")!.timestamp);
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        answers: null,
+        network: "libera",
+        target: "#ctf-ops",
+        messages: [
+          makeMessage({
+            id: "late",
+            nick: "historian",
+            text: "a line said a moment ago and stamped a while back",
+            timestamp: new Date(at + 1).toISOString(),
+          }),
+        ],
+      });
+    });
+    flushLayout();
+
+    // In the reader's own row, above their eyes, and behind the message the
+    // anchor holds — which is the whole arrangement.
+    expect(parked!.querySelector('[data-msgid="late"]')!.closest<HTMLElement>("[data-index]")).toBe(
+      parked!.querySelector('[data-msgid="line201"]')!.closest<HTMLElement>("[data-index]"),
+    );
+    expect(eyeLine(parked!, "late")).toBeLessThan(0);
+
+    expect(eyeLine(parked!, "line201")).toBe(anchored);
+    expect(eyeLine(parked!, watching)).toBe(before + LINE_PX);
+  });
+
+  /**
+   * And the other side of it, which is where #608 stops. The same line, stamped
+   * a moment *earlier* — in front of the message the anchor holds rather than
+   * behind it.
+   *
+   * Now the anchor's own message moves in the list, `movedInList` is true, and
+   * the branch that puts the reader back runs: `tookIn` reads the line's height
+   * because the reader's line really did move down inside its row, and the
+   * write cancels it. **The reader holds, and this test asserts what should
+   * happen rather than what does.**
+   *
+   * Which is what makes the three tests above one defect and not a broken
+   * anchor: the correction works, and it is asked for only when something lands
+   * in front of the one message the anchor is watching.
+   */
+  it("holds the parked reader when the same line is stamped in front of the anchor's own", () => {
+    seed(longRunAcrossTheBoundary(201, 400));
+    const second = openSecondView();
+    render(
+      <>
+        <Timeline view={TEST_VIEW} />
+        <Timeline view={second} />
+      </>,
+    );
+    flushLayout();
+
+    const [, parked] = screen.getAllByTestId("timeline-scroller");
+    parked!.scrollTop = LOAD_OLDER_PX + 200;
+    fireEvent.scroll(parked!);
+    flushLayout();
+    const opening = parked!
+      .querySelector('[data-msgid="line201"]')!
+      .closest<HTMLElement>("[data-index]")!;
+    parked!.scrollTop = topOf(opening) + opening.offsetHeight - 100;
+    fireEvent.scroll(parked!);
+    flushLayout();
+
+    const watching = lineAtTheFold(parked!);
+    const before = eyeLine(parked!, watching);
+
+    const held = useAppStore.getState().timelines[KEY]!.messages;
+    const at = Date.parse(held.find((m) => m.id === "line201")!.timestamp);
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messagesAppended",
+        answers: null,
+        network: "libera",
+        target: "#ctf-ops",
+        messages: [
+          makeMessage({
+            id: "earlier",
+            nick: "historian",
+            text: "a line said a moment ago and stamped a while further back",
+            timestamp: new Date(at - 1).toISOString(),
+          }),
+        ],
+      });
+    });
+    flushLayout();
+
+    // In front of the anchor's message, in the same row, which is what makes
+    // this the same event as the test above and not another one.
+    expect(
+      parked!.querySelector('[data-msgid="earlier"]')!.closest<HTMLElement>("[data-index]"),
+    ).toBe(parked!.querySelector('[data-msgid="line201"]')!.closest<HTMLElement>("[data-index]"));
+
     expect(eyeLine(parked!, watching)).toBe(before);
   });
 });

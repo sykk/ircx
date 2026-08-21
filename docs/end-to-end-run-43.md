@@ -1,0 +1,250 @@
+# End-to-end run 43: the anchor held, and the reader moved
+
+Debug build, `ergo` 2.19 on 127.0.0.1, Linux/WebKitGTK under `Xvfb`. Run 40's
+arrangement, unchanged: two panes on one channel, one parked inside the block an
+arriving page merges into and the other taken to the top so it asks, with
+`docs/end-to-end-30/latepage.py` holding the answer twenty seconds so it lands on
+a pane at rest.
+
+Ten walks. Six on the binary anybody builds, four with #606 taken back out. The
+`fold` record described below arrived in the middle of the set, so two walks of
+each arm carry it and the other six carry the anchor's reading alone.
+
+## What #601 asked for
+
+> Something that names the reader's line rather than their row. […] I would
+> rather add that and re-walk than read another frame table.
+
+The addition is on the anchor's own records: the reader's message by id, how far
+into its row its line is drawn, the transform of that row, and where the line
+lands against the top of the pane. `docs/end-to-end-42/line.py` reads it back and
+`docs/end-to-end-43/held.py` is the subtraction.
+
+The first four walks of `main` used it, and it said the reader held to the
+pixel — four of four:
+
+```
+right pane: anchor y -1295 -> -1295 (+0px), within 30 -> 689 (+659px)
+```
+
+`within` is what says the walk was in the arrangement rather than measuring a
+reader nothing reached: the page merged into the reader's own row and put 659px
+of itself above their line.
+
+## The control, which is where the run turned
+
+`ship` is `main`. `control` is `main` with #606's tie-break reverted —
+`git checkout e963c62^ -- src/store/index.ts`, one file, the merge deciding a
+shared millisecond towards the window again.
+
+The control moved the parked reader, in the frames, exactly as run 40 measured
+it: `629..639` before the page and `621..629` thirty seconds after it in three
+walks of four, `622..630` in the fourth. Run 40's own table reads `0630 → 0622`.
+
+**And the records said the reader held.** `anchor y -1367 -> -1367 (+0px)`, in
+the same walk, on the same pane, in the same second.
+
+That is not the instrument failing. It is the instrument answering a question
+one word away from the one being asked, and the two words are what #601 is:
+
+- the **anchor** names the first message of the row under the scroll offset. In
+  this arrangement that row is a run of sixty, and it starts a screen or more
+  above the top of the pane — 1295px above it, in these walks;
+- the **fold** is the message at the top of the pane, which is what the reader is
+  reading.
+
+A page merging into that row *below the anchor's message and above the fold*
+moves everything the reader can see, and every term the anchor computes reads
+held — because the message it holds did not move. The hold is not wrong. It is
+holding the wrong thing.
+
+## Both messages, and the arithmetic closes
+
+`fold` now rides the records beside `line`, latched at the landing from the
+commit before it. Two walks each way:
+
+| arm | anchor | fold | frames |
+|---|---|---|---|
+| ship | +0px | +0px | `629..638` → `629..638` |
+| ship | +0px | +0px | `629..638` → `629..638` |
+| control | +0px | **+547px** | `629..639` → `622..630` |
+| control | +0px | **+618px** | `629..639` → `621..629` |
+
+The `within` terms say why, and they are the whole mechanism on one line. In both
+arms the fold's own message gains the same 659px above it inside the row — the
+page is the same page. What differs is how much of that the anchor's message
+gained:
+
+| arm | anchor `within` | fold `within` | the difference |
+|---|---|---|---|
+| ship | 30 → 689 (+659) | 1285 → 1944 (+659) | 0 |
+| control | 30 → 71 (+41) | 1285 → 1944 (+659) | 618 |
+| control | 30 → 142 (+112) | 1285 → 1944 (+659) | 547 |
+
+With the tie-break, the arriving page goes in front of the messages it ties with,
+which is above the anchor: the anchor sees the whole 659px and corrects for the
+whole of it. Without it, the page waits behind every tied message and goes in
+*below* the anchor's own line — 41px of it above, 618px of it between the anchor
+and the reader's eyes — and the correction is short by exactly what the frames
+show.
+
+## What this run claims
+
+**#601 is #602.** The displacement it reports is the mis-ordered merge putting an
+arriving page between the reader's anchor and the reader, and #606 fixes it. Six
+walks on `main`: the anchor `+0px` in all six, the fold `+0px` in the two that
+carry it, and the parked pane painting `629..638` in the frame before the page
+and in the frame thirty seconds after it, every time. Four with the tie-break
+out: the same `+0px` on the anchor, the reader moved in all four.
+
+Two things it does not claim:
+
+- **that the anchor is right in general.** It holds the first message of the
+  reader's row, and this run is a demonstration that where the row is a run of
+  sixty, holding that message is not holding the reader. Nothing in this walk
+  moves the fold with the order fixed — but nothing here rules out another
+  arrangement that does, and the fold record is now the way to ask;
+- **anything about the release build.** Every walk here is the debug binary
+  fetching the frontend from Vite. Run 42 established that #602 reproduces
+  identically on both, which is why this run could afford ten walks at two
+  minutes rather than six.
+
+`docs/measurements.md` has no figure at stake. The 250–580px in #601 was a real
+distance, measured on a real defect, and it is the same defect as #602's.
+
+## The line that gets taller, which needs none of this
+
+Written after the run, out of #608. The anchor's blind spot does not need a page
+at all: a line already inside the reader's row getting taller does it, with
+nothing arriving, nothing merging and nothing changing place in the list.
+
+`Timeline.layout.test.tsx` says so — the reader moves by exactly what the line
+above them gained, while the message the anchor holds stays to the pixel — and
+#599 is what a model saying so alone is worth. So it was asked of the engine.
+
+`docs/end-to-end-43/grow-lab.sh` is `docs/end-to-end-42/lab` doing it: the real
+frontend in `webkit2gtk-4.1`, one pane parked inside a run of thirty, and
+`line 0823` given two more wrapped lines through the store the event pump
+writes to. Twice of twice:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 96** | y 96 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 884 | 884 | 884 |
+
+`grown-before.png` opens on `line 0837` and `grown-after.png` on `line 0835`: the
+viewport did not move and the conversation slid down two lines inside it. The
+reader is looking at text they had already read past.
+
+This is the frontend on its own — the lab has no Rust behind it — so it is #608
+confirmed rather than a conjecture, and it is a wider hole than the landing
+case: **any** height change inside the reader's row above their eyes does it. A
+delivery failure gaining its reason and its retry, a preview drawn under a line,
+an edit.
+
+## The gap fill, which is the same floor by another door
+
+#608's second conjecture, and it lands where the first one did. A gap fill is
+history sorting into the *middle* of what is held rather than in front of it — a
+page-back answers before the window, a fill answers inside it — so it goes into
+the reader's row between the message the anchor holds and the line they are
+reading.
+
+`Timeline.layout.test.tsx` puts four lines the reader never saw between two they
+have read past: the reader moves 96px, four lines of them, and the anchor's
+message does not move at all. `docs/end-to-end-43/fill-lab.sh` asks the engine
+the same thing, twice of twice:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 150** | y 150 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 884 | 884 | 884 |
+
+`merged: true` in the same record is the arrangement asserted rather than
+assumed — the fill is in the reader's own row and not in one of its own.
+
+**Both sides have to be history for this to exist at all.** `rows.ts` closes the
+open run where `source` changes, so a fill landing in a window of live messages
+opens a row of its own instead of joining theirs, and the first model run of this
+measured exactly that and nothing else. It is run 40's finding about a restored
+window from the other side, and it narrows who this reaches: a reader paged back
+into history, which is the reader who is parked in the first place.
+
+## The line stamped behind, which needs no paging at all
+
+#608's third conjecture, and the one that asks least of the world. The reader has
+paged nothing back: they have scrolled up in a channel that is still talking, and
+a line arrives stamped behind what is already held — a relay, a bridge, or a
+server whose clock moved. `insertionPoint` puts it at its own time, which is
+inside the run they are sitting in.
+
+Live on both sides, so the `source` rule that keeps a gap fill out of a live
+window does not apply: the line joins the run rather than opening one.
+`docs/end-to-end-43/late-lab.sh`, twice of twice, with `merged: true` again:
+
+| | before | after | settled, two seconds on |
+|---|---|---|---|
+| the line the reader is reading | y 50 | **y 75** | y 75 |
+| the message the anchor holds | y −742 | y −742 | y −742 |
+| `scrollTop` | 828 | 828 | 828 |
+
+One line of displacement for one line of arrival. The model says the same at
+24px.
+
+## Where it stops, which is the useful half
+
+The same line stamped a moment *earlier* — in front of the message the anchor
+holds rather than behind it — and **the reader holds**. That is asserted in
+`Timeline.layout.test.tsx` as what should happen rather than what does, and it
+passes.
+
+The anchor's own message moves in the list there, so `movedInList` is true, the
+branch that puts the reader back runs, and `tookIn` reads the height because the
+reader's line really did move inside its row. The correction is not broken. It is
+asked for only when something lands in front of the one message the anchor is
+watching, and every displacement in this run landed behind it.
+
+## The shape both of them share
+
+The landing case this run opened with (#601, fixed by #606) is the anchor
+correcting and coming up short. **The three above are the anchor never running.**
+A message growing changes nobody's place in the list, and a fill or a late line
+lands *behind* the anchor's own message, so `movedInList` is false in all three
+and the branch that would put anybody back is never taken. What arrives above the
+reader arrives below the message that speaks for them.
+
+That is why the fold record matters beyond this run: the reader is two messages,
+and every instrument here until now has been watching the one that does not move.
+
+## What the harness learned
+
+- **A record that names one message is a record of one message.** The reader is
+  two things — what the anchor holds and what the fold shows — and in a channel
+  that speaks in runs they are a screen apart. A walk that reads only the first
+  passes on a build that displaces the reader by 618px.
+- **The landing commit cannot be asked anything.** Its rendered window is the one
+  the *old* scroll offset asked for, and `scrollTop` has already been written to
+  the new one: the same row reads `rowtop=332` there and `rowtop=13398` on the
+  commit after. Both readings here start two records back — the commit record and
+  the stack record are written by one effect.
+- **A probe's record is an argument, and an argument is evaluated.** `probe` is a
+  branch the minifier drops; the object handed to it is not. A record that reads
+  the DOM has to be skipped at the call site or the app anybody runs pays for it,
+  which is what `probing` is for.
+- **One defect, three doors, and a fourth that is shut.** A page in front of the
+  reader's message is corrected; a growth, a fill and a late line behind it are
+  not. Which side of that message an event lands on is what decides whether the
+  app does anything at all, and nothing in the app is written in those terms.
+- **A fill and a page are not the same event.** One arrives in front of the
+  window and one inside it, and only the first moves the reader's own message in
+  the list. A walk that tests paging has not tested filling.
+- **The lab answers a layout question in forty seconds.** It did not reproduce
+  #602, which is what it is remembered for; #608 it reproduces on the first run,
+  because that one is the frontend's own arithmetic rather than something the
+  app hands the engine. A question about where a pane sits is worth asking there
+  before it is worth a walk.
+- **305 notches is still the parking**, on this binary as on run 40's release
+  one, and `park.sh` says so in a fifth of a walk. `band.py` is the check that
+  the pane landed in the band rather than the assumption that it did.

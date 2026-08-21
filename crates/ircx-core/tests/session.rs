@@ -1801,7 +1801,11 @@ fn the_answer_to_a_typing_notification_is_not_the_readers_message() {
     session.typing("#ircx", true);
 
     let sent = session.sent_starting("@+typing=active;label=");
-    assert_eq!(sent.len(), 1, "the notification went out unlabelled: {sent:?}");
+    assert_eq!(
+        sent.len(),
+        1,
+        "the notification went out unlabelled: {sent:?}"
+    );
     let label = sent[0]
         .split("label=")
         .nth(1)

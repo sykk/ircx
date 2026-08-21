@@ -418,12 +418,60 @@ const owed = new WeakMap<HTMLElement, number>();
  * length of a walk, which is a record nobody reads and a cost on the commits
  * being measured.
  */
+/** From the top of a row's first message to the bottom of its last, which is
+ * what the row would be the height of if every message in it took its own
+ * space. */
+function spannedBy(row: HTMLElement): number {
+  const lines = [...row.querySelectorAll<HTMLElement>("[data-msgid]")];
+  const first = lines[0];
+  const last = lines.at(-1);
+  if (!first || !last) return 0;
+  return Math.round(last.getBoundingClientRect().bottom - first.getBoundingClientRect().top);
+}
+
+/**
+ * The row's messages by the number the seed wrote into them, and how many
+ * places that run is not consecutive at.
+ *
+ * The frames of #602 show a block drawing `line 0600` and then `line 0611`, and
+ * every measurement so far — the row's height, what its messages span, how many
+ * it holds — says the row is whole. What none of them reads is the *order* the
+ * messages are in inside it, which is the difference between an engine drawing
+ * the wrong thing and this app handing it one.
+ */
+function numbering(row: HTMLElement): { from: number; to: number; jumps: number; run: string } {
+  const nums = [...row.querySelectorAll<HTMLElement>("[data-msgid]")]
+    .map((line) => Number(/line (\d{4})/.exec(line.textContent ?? "")?.[1] ?? Number.NaN))
+    .filter((n) => !Number.isNaN(n));
+  let jumps = 0;
+  for (let i = 1; i < nums.length; i++) if (nums[i] !== nums[i - 1]! + 1) jumps++;
+  // The run itself where it is not consecutive, as the ends of its stretches:
+  // "600-601 611-619 602-610" is a different bug from "600-659 with one line
+  // repeated", and a count cannot tell them apart.
+  const stretches: string[] = [];
+  for (let i = 0; i < nums.length; i++) {
+    const start = nums[i]!;
+    while (i + 1 < nums.length && nums[i + 1] === nums[i]! + 1) i++;
+    stretches.push(start === nums[i] ? `${start}` : `${start}-${nums[i]}`);
+  }
+  return { from: nums[0] ?? 0, to: nums.at(-1) ?? 0, jumps, run: stretches.join(" ") };
+}
+
 function probeStack(view: string, el: HTMLElement, landed: boolean): void {
   const left = landed ? STACK_COMMITS : (owed.get(el) ?? 0);
   if (left <= 0) return;
   owed.set(el, left - 1);
   const rows = [...el.querySelectorAll<HTMLElement>("[data-index]")].map((row) => ({
     i: Number(row.dataset.index),
+    // What the messages inside the row take up, against the height the row
+    // measured. #602's frames show ten messages absent from a row whose height
+    // counts them, and a count of `[data-msgid]` elements cannot tell a message
+    // the engine failed to paint from one laid out with no height at all.
+    spanned: spannedBy(row),
+    ...numbering(row),
+    zero: [...row.querySelectorAll<HTMLElement>("[data-msgid]")].filter(
+      (line) => line.offsetHeight === 0,
+    ).length,
     // The transform rather than a rect: it is the number the virtualiser wrote,
     // and a rect would fold the scroll offset back into it.
     top: Math.round(Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, "")) || 0),

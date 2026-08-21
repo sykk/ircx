@@ -594,7 +594,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const ordered =
         !head || !newest || Date.parse(newest.timestamp) <= Date.parse(head.timestamp)
           ? [...kept, ...timeline.messages]
-          : mergeByTime(timeline.messages, kept);
+          : mergeByTime(timeline.messages, kept, readBack(kept));
       return {
         timelines: {
           ...s.timelines,
@@ -1135,8 +1135,9 @@ function holdMessages(
   if (fresh.length === 0) return;
 
   const last = opened.messages[opened.messages.length - 1];
-  if (last && Date.parse(fresh[0]!.timestamp) < Date.parse(last.timestamp)) {
-    opened.messages = mergeByTime(opened.messages, fresh);
+  const history = readBack(fresh);
+  if (last && sortsBefore(fresh[0]!, last, history)) {
+    opened.messages = mergeByTime(opened.messages, fresh, history);
   } else {
     for (const message of fresh) opened.messages.push(message);
   }
@@ -1257,7 +1258,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         return { timelines: { ...s.timelines, [key]: { ...timeline, ...landed } } };
       }
 
-      const merged = mergeByTime(timeline.messages, fresh);
+      const merged = mergeByTime(timeline.messages, fresh, readBack(fresh));
       const focused = s.activeViewId ? s.views[s.activeViewId] : undefined;
       const isActive =
         focused?.network === event.network && focused.target === event.target;
@@ -1560,19 +1561,58 @@ function applyReaction(
 function mergeByTime(
   held: readonly ChatMessage[],
   fresh: readonly ChatMessage[],
+  freshIsBehind = false,
 ): ChatMessage[] {
   const last = held[held.length - 1];
-  if (!last || Date.parse(fresh[0]!.timestamp) >= Date.parse(last.timestamp)) {
+  if (!last || !sortsBefore(fresh[0]!, last, freshIsBehind)) {
     return [...held, ...fresh];
   }
   const merged: ChatMessage[] = [];
   let i = 0;
   let j = 0;
   while (i < held.length && j < fresh.length) {
-    const takeFresh = Date.parse(fresh[j]!.timestamp) < Date.parse(held[i]!.timestamp);
+    const takeFresh = sortsBefore(fresh[j]!, held[i]!, freshIsBehind);
     merged.push(takeFresh ? fresh[j++]! : held[i++]!);
   }
   return merged.concat(held.slice(i), fresh.slice(j));
+}
+
+/** Whether `a` belongs in front of `b`, with `orTie` deciding a stamp they
+ * share — see `readBack` for what decides that. */
+function sortsBefore(a: ChatMessage, b: ChatMessage, orTie: boolean): boolean {
+  const at = Date.parse(a.timestamp);
+  const bt = Date.parse(b.timestamp);
+  return orTie ? at <= bt : at < bt;
+}
+
+/**
+ * Whether a batch is history being read back rather than the conversation
+ * happening, which is what tells the merge above which side a tied stamp goes
+ * to.
+ *
+ * **A stamp is a millisecond and a burst is not.** `ergo` gave nine of run 42's
+ * messages the same `18:04:42.886Z`, and the page that landed in front of them
+ * shared it — so the clock cannot order the two runs, and something else has to.
+ * A merge that breaks the tie towards the window puts the page after messages it
+ * precedes, and then the rest of the page after the first stamp that differs:
+ * the pane drew `line 0600` and then `line 0611`, with ten of its messages
+ * hundreds of pixels further down the block (#602).
+ *
+ * What the batch *is* rather than where its first message lands: an archive
+ * read, a page-back's answer and a gap fill are all history and all belong in
+ * front of a message the reader has already been shown at the same millisecond,
+ * while a line somebody just said belongs after it. A window whose every
+ * message shares one stamp — a fixture, or a channel that took a paste — makes
+ * the positional test say history of every live message that arrives.
+ *
+ * All of them rather than the first: the pump folds two batches together where
+ * they answer the same page-back, and a gap fill can be folded with the live
+ * line that followed it. A batch that is not wholly history is left ordered the
+ * way it was, which is what it was before this and is no worse for the half of
+ * it that is live.
+ */
+function readBack(fresh: readonly ChatMessage[]): boolean {
+  return fresh.length > 0 && fresh.every((message) => message.source !== "live");
 }
 
 /** A timeline is held in the order the conversation happened, so a message that

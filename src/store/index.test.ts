@@ -349,6 +349,61 @@ describe("paging backwards", () => {
     ]);
   });
 
+  /**
+   * #602. A server stamps at millisecond resolution and a burst arrives inside
+   * one of them: `ergo` gave `line 0611` to `line 0619` the same
+   * `18:04:42.886Z` in end-to-end run 42. So the window holds a run of messages
+   * the timestamp cannot order, and the page that lands in front of them shares
+   * it — and a merge that reads the clock alone has nothing to go on.
+   *
+   * What it did was break the tie towards the window, which puts the arriving
+   * page *after* messages it precedes, and then the rest of the page after the
+   * first message whose stamp is different. The pane drew `line 0600` followed
+   * by `line 0611`, with ten of its messages further down the block.
+   */
+  it("keeps a page in front of the tied stamps it is older than", () => {
+    const burst = "2026-08-21T18:04:42.886Z";
+    const after = "2026-08-21T18:04:42.887Z";
+    const held = [
+      ...Array.from({ length: 9 }, (_, i) => makeMessage({ id: `held-${611 + i}`, timestamp: burst })),
+      ...Array.from({ length: 3 }, (_, i) => makeMessage({ id: `held-${620 + i}`, timestamp: after })),
+    ];
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      answers: null,
+      network: "libera",
+      target: "#ctf-ops",
+      messages: held,
+    });
+
+    // The page the pane asked for, which is every message before `held-611`.
+    // `serverHistory` is what a `CHATHISTORY` answer carries, and it is what
+    // tells the merge these are older than a live line sharing their
+    // millisecond rather than newer.
+    const page = [
+      makeMessage({
+        id: "page-600",
+        timestamp: "2026-08-21T18:04:42.885Z",
+        source: "serverHistory",
+      }),
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeMessage({ id: `page-${601 + i}`, timestamp: burst, source: "serverHistory" }),
+      ),
+    ];
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      answers: "ask-1",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: page,
+    });
+
+    expect(timeline()!.messages.map((m) => m.id)).toEqual([
+      ...page.map((m) => m.id),
+      ...held.map((m) => m.id),
+    ]);
+  });
+
   /** #487. What the server was asked for the page behind is what tells the next
    * scroll's request from the one already out, and the session abandons its
    * page-backs when the connection goes: a conversation still naming one would

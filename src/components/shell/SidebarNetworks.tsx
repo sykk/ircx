@@ -1,4 +1,12 @@
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
 import { ipc } from "@/lib/ipc";
@@ -688,10 +696,20 @@ function NetworkMenu({
   onRawLog: () => void;
   onSettings: () => void;
 }) {
+  const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   /** Stable, because the placing effect takes it as a dependency. */
   const anchorToButton = useCallback(() => button.current, []);
   const menu = useHangingMenu(open, anchorToButton);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) onOpenChange(false);
+    };
+    window.addEventListener("pointerdown", closeOutside, true);
+    return () => window.removeEventListener("pointerdown", closeOutside, true);
+  }, [open, onOpenChange]);
 
   const choose = (run: () => void) => () => {
     onOpenChange(false);
@@ -700,6 +718,7 @@ function NetworkMenu({
 
   return (
     <div
+      ref={root}
       className="relative"
       onKeyDown={(event) => {
         if (!open) return;

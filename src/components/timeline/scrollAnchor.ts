@@ -32,15 +32,16 @@ export interface Offsets {
    */
   messageAtOffset: (offset: number) => string | undefined;
   /**
-   * How far into its row a message's own line is drawn, and undefined where the
-   * row is not on the screen to be measured.
+   * Where a message's own line starts and ends inside its row, and undefined
+   * where the row is not on the screen to be measured.
    *
-   * A row is a run of messages, so this is not always zero and does not always
-   * stay what it was: a landing page can merge into the block at the top of the
-   * window, putting the messages it brought above the reader's own line inside
-   * the row that holds it (#535).
+   * A row is a run of messages, so neither edge is always zero and neither
+   * always stays what it was: a landing page can merge into the block at the top
+   * of the window, putting the messages it brought above the reader's own line
+   * inside the row that holds it (#535), and a rewrap makes the line itself
+   * taller (#613).
    */
-  lineWithinRow: (id: string) => number | undefined;
+  lineBoxInRow: (id: string) => { top: number; bottom: number } | undefined;
   /**
    * Whether the row holding a message is a height the virtualiser has not been
    * told about, and false where the row is not on the screen to compare.
@@ -80,10 +81,27 @@ interface Anchor {
   id: string;
   delta: number;
   index: number;
-  /** How far into that row the message's own line was drawn, or null where the
-   * row was not on the screen to measure. Held so that a row which takes in
-   * messages above the reader can be told from one that did not (#535). */
+  /** How far into that row the edge below was drawn, or null where the row was
+   * not on the screen to measure. Held so that a row which takes in messages
+   * above the reader can be told from one that did not (#535). */
   within: number | null;
+  /**
+   * Which edge of their own message the reader is held by, and it is the one
+   * they can see (#613).
+   *
+   * The window cuts through the message it names — that is what being at the
+   * fold is — so where its top is above the fold, what the reader can read of it
+   * begins at the fold and ends at its bottom. A rewrap gives such a message
+   * lines, and it gives them to the part below the fold: holding its top would
+   * draw them between the reader and everything they were reading, which is what
+   * #613 measured as 46px in the engine and this file's own tests asserted.
+   *
+   * Its top where they can see its top, which is a message drawn at the fold
+   * rather than cut by it — the arrangement a restore leaves, where the reader
+   * asked for that message and losing its first lines is the same defect the
+   * other way round.
+   */
+  edge: "top" | "bottom";
 }
 
 interface Committed {
@@ -246,15 +264,24 @@ export function usePrependAnchor(
     if (!el) return;
     const id = latest.current.messageAtOffset(el.scrollTop - lag.current);
     const start = id === undefined ? undefined : latest.current.offsetOfMessage(id);
-    anchor.current =
-      id === undefined || start === undefined
-        ? null
-        : {
-            id,
-            delta: start + lag.current - el.scrollTop,
-            index: rendered.current.findIndex((message) => message.id === id),
-            within: latest.current.lineWithinRow(id) ?? null,
-          };
+    if (id === undefined || start === undefined) {
+      anchor.current = null;
+      return;
+    }
+    const delta = start + lag.current - el.scrollTop;
+    const box = latest.current.lineBoxInRow(id);
+    // Where the top of their own message is drawn, which is what says whether
+    // they can see it: `messageAtOffset` answers with the message the offset has
+    // reached, so this is at or above the fold in every case but the two it
+    // falls back to the row's first message in.
+    const edge = box !== undefined && delta + box.top < 0 ? "bottom" : "top";
+    anchor.current = {
+      id,
+      delta,
+      index: rendered.current.findIndex((message) => message.id === id),
+      within: box?.[edge] ?? null,
+      edge,
+    };
   }, [ref]);
 
   useLayoutEffect(() => {
@@ -272,10 +299,16 @@ export function usePrependAnchor(
       return start === undefined ? undefined : start + lag.current;
     };
     /**
-     * What the row under the reader has taken in above their own line since the
-     * anchor was taken, which the row's own top cannot say (#535): a page that
-     * merges into the block at the top of the window leaves the reader's
-     * message second in a run it opened, that far below where the row starts.
+     * What the row under the reader has taken in above the edge holding them
+     * since the anchor was taken, which the row's own top cannot say (#535): a
+     * page that merges into the block at the top of the window leaves the
+     * reader's message second in a run it opened, that far below where the row
+     * starts.
+     *
+     * Above the edge and not above the message, which are the same number until
+     * the message itself rewraps: a reader the window cuts through is held by
+     * its bottom, so the lines it gains are lines the row took in above them
+     * (#613).
      *
      * Zero where either side is unmeasured, which is the row not being on the
      * screen — and on the commit a page lands in it usually is not, the rendered
@@ -284,8 +317,8 @@ export function usePrependAnchor(
      * the row is drawn and this answers.
      */
     const tookIn = (held: Anchor) => {
-      const now = offsets.lineWithinRow(held.id);
-      return held.within === null || now === undefined ? 0 : now - held.within;
+      const now = offsets.lineBoxInRow(held.id);
+      return held.within === null || now === undefined ? 0 : now[held.edge] - held.within;
     };
     /**
      * Puts the pane there, and sends the scroll event a browser would send a

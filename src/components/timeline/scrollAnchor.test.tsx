@@ -42,7 +42,7 @@ interface Row {
    * block at the top of the window, and the reader's own message is then drawn
    * that far below where their row starts (#535).
    */
-  lines?: { id: string; within: number }[];
+  lines?: { id: string; within: number; px?: number }[];
   /**
    * Whether the virtualiser is still carrying an estimate for this row, so the
    * `scrollTop` it owes for the difference has not been written yet. A row
@@ -52,8 +52,14 @@ interface Row {
   unmeasured?: boolean;
 }
 
-function linesOf(row: Row): { id: string; within: number }[] {
-  return row.lines ?? [{ id: row.id, within: 0 }];
+/** A line of text, which is what a message is until a test says otherwise. Its
+ * own height matters only where the message itself grows: everything else here
+ * reads the distance between two of them. */
+const LINE_PX = 24;
+
+function linesOf(row: Row): { id: string; within: number; px: number }[] {
+  const lines = row.lines ?? [{ id: row.id, within: 0 }];
+  return lines.map((line) => ({ ...line, px: line.px ?? LINE_PX }));
 }
 
 /**
@@ -79,9 +85,10 @@ function offsetsFor(layout: Row[]): Offsets {
       }
       return found;
     },
-    lineWithinRow: (id) => {
+    lineBoxInRow: (id) => {
       const row = holding(id);
-      return row === undefined ? undefined : linesOf(row).find((l) => l.id === id)?.within;
+      const line = row === undefined ? undefined : linesOf(row).find((l) => l.id === id);
+      return line === undefined ? undefined : { top: line.within, bottom: line.within + line.px };
     },
     rowUnmeasured: (id) => holding(id)?.unmeasured ?? false,
   };

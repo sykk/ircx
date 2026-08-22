@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   Group,
@@ -39,14 +40,8 @@ import {
 import { ACCENTS, accentTokens, type Accent } from "./accents";
 
 /**
- * Everything on this page that is not a theme, in the column beside the
- * preview.
- *
- * The order is what each control costs to try. The accent and the density
- * change one thing about the sample; the timeline settings change how a
- * conversation is laid out; a preset overwrites most of the column at once,
- * so it is last, where it cannot be reached for before the settings it
- * replaces have been seen.
+ * The controls beside the preview, split by what they change. A preset remains
+ * an action rather than a selected mode after it moves into the Style tab.
  */
 export function AppearanceRail({
   theme,
@@ -57,6 +52,7 @@ export function AppearanceRail({
   presentation,
   typography,
   onEditTokens,
+  themesPanel,
 }: {
   /** The theme in force, or null when the one named is not installed. */
   theme: Theme | null;
@@ -67,163 +63,219 @@ export function AppearanceRail({
   presentation: Presentation;
   typography: Typography;
   onEditTokens: () => void;
+  themesPanel: ReactNode;
+}) {
+  const [tab, setTab] = useState<"style" | "messages" | "text">("style");
+
+  return (
+    <div className="relative min-w-0 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-raised)]">
+      <span className="absolute top-7 right-full hidden h-px w-5 bg-[var(--accent)] @4xl:block" />
+      <div role="tablist" aria-label="Appearance controls" className="grid grid-cols-3 border-b border-[var(--border-subtle)] px-2">
+        <RailTab name="Style" selected={tab === "style"} onClick={() => setTab("style")} />
+        <RailTab name="Messages" selected={tab === "messages"} onClick={() => setTab("messages")} />
+        <RailTab name="Text & scale" selected={tab === "text"} onClick={() => setTab("text")} />
+      </div>
+
+      <div role="tabpanel" aria-label={tab === "style" ? "Style" : tab === "messages" ? "Messages" : "Text & scale"} className="flex flex-col gap-4 p-4">
+        {tab === "style" && (
+          <>
+            {themesPanel}
+            <PresetList />
+            <AccentRow
+              theme={theme}
+              themeId={themeId}
+              overrides={overrides}
+              onCustom={onEditTokens}
+            />
+          </>
+        )}
+
+        {tab === "messages" && (
+          <>
+            <Group title="Density">
+              <ChoiceList
+                label="Density"
+                value={density}
+                options={DENSITIES.map(({ id, name }) => ({ id, name }))}
+                onChange={selectDensity}
+              />
+              <Note>Controls how much room the conversation takes.</Note>
+            </Group>
+
+            <Group title="Timeline">
+              <SelectField<ClockFormat>
+                label="Timestamp"
+                value={presentation.clock}
+                options={CLOCK_FORMATS.map(({ id, name, example }) => ({
+                  value: id,
+                  label: example === null ? name : `${name} · ${example}`,
+                }))}
+                onChange={(clock) => selectPresentation({ clock })}
+              />
+
+              {/* Offered even with the clock off, where it changes nothing: hiding it
+                  would move the controls under it every time somebody tried Off. */}
+              <SelectField<ClockSide>
+                label="Timestamp place"
+                value={presentation.clockSide}
+                options={CLOCK_SIDES.map(({ id, name }) => ({ value: id, label: name }))}
+                onChange={(clockSide) => selectPresentation({ clockSide })}
+              />
+
+              <SelectField<ClockEmphasis>
+                label="Timestamp emphasis"
+                value={presentation.clockEmphasis}
+                options={CLOCK_EMPHASES.map(({ id, name }) => ({ value: id, label: name }))}
+                onChange={(clockEmphasis) => selectPresentation({ clockEmphasis })}
+              />
+
+              <SelectField<TimelineAlign>
+                label="Conversation position"
+                value={presentation.align}
+                options={TIMELINE_ALIGNS.map(({ id, name }) => ({ value: id, label: name }))}
+                onChange={(align) => selectPresentation({ align })}
+              />
+
+              <SelectField<TimelineMeasure>
+                label="Line width"
+                value={presentation.measure}
+                options={TIMELINE_MEASURES.map(({ id, name }) => ({ value: id, label: name }))}
+                onChange={(measure) => selectPresentation({ measure })}
+              />
+
+              <CheckField
+                label="Spine"
+                hint="The rule at the rail. Its colour names the conversation a run belongs to, which nothing else on the row says."
+                checked={presentation.spine}
+                onChange={(spine) => selectPresentation({ spine })}
+              />
+
+              <CheckField
+                label="Nickname on every line"
+                hint="Each line states who said it and when, instead of the run stating it once above them."
+                checked={presentation.nickEveryLine}
+                onChange={(nickEveryLine) => selectPresentation({ nickEveryLine })}
+              />
+
+              <CheckField
+                label="Compact single-message runs"
+                hint="Puts the nickname and time in front of the message when a run has only one line."
+                checked={presentation.compactSingletons}
+                onChange={(compactSingletons) => selectPresentation({ compactSingletons })}
+              />
+
+              <CheckField
+                label="Angle brackets around nicknames"
+                hint="<alice> rather than alice, wherever the name is written, as clients that named every line wrote it."
+                checked={presentation.nickBrackets}
+                onChange={(nickBrackets) => selectPresentation({ nickBrackets })}
+              />
+
+              <CheckField
+                label="Nickname colours"
+                hint="Uses colour to make speakers faster to spot. Names still identify them when this is off."
+                checked={presentation.nickColors}
+                onChange={(nickColors) => selectPresentation({ nickColors })}
+              />
+            </Group>
+          </>
+        )}
+
+        {tab === "text" && (
+          <>
+            <Group title="Type">
+              <SelectField<MessageSize>
+                label="Message text"
+                value={presentation.messageSize}
+                options={MESSAGE_SIZES.map(({ id, name }) => ({ value: id, label: name }))}
+                onChange={(messageSize) => selectPresentation({ messageSize })}
+              />
+
+              <SelectField
+                label="Prose"
+                value={typography.prose}
+                options={PROSE_FACES.map((face) => ({ value: face.id, label: face.name }))}
+                onChange={(prose) => selectTypography({ prose })}
+              />
+
+              <SelectField
+                label="Identifiers and code"
+                value={typography.mono}
+                options={MONO_FACES.map((face) => ({ value: face.id, label: face.name }))}
+                onChange={(mono) => selectTypography({ mono })}
+              />
+            </Group>
+
+            <Group title="Window scale">
+              <ScaleStepper zoom={typography.zoom} />
+              <Note>Scales the whole window, the way a browser&rsquo;s zoom does.</Note>
+            </Group>
+
+            <Group title="Sidebar">
+              <CheckField
+                label="Compact sidebar"
+                hint="Fits more networks and conversations without reducing text size."
+                checked={sidebarCompact}
+                onChange={selectSidebarCompact}
+              />
+            </Group>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RailTab({
+  name,
+  selected,
+  onClick,
+}: {
+  name: string;
+  selected: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <AccentRow theme={theme} themeId={themeId} overrides={overrides} onCustom={onEditTokens} />
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      className={clsx(
+        "border-b-2 px-1 py-3 text-[12px]",
+        selected
+          ? "border-[var(--accent)] text-[var(--accent)]"
+          : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+      )}
+    >
+      {name}
+    </button>
+  );
+}
 
-      <Group title="Density">
-        <ChoiceList
-          label="Density"
-          value={density}
-          options={DENSITIES.map(({ id, name, detail }) => ({ id, name, detail }))}
-          onChange={selectDensity}
-        />
-      </Group>
-
-      <Group title="Sidebar">
-        <CheckField
-          label="Compact sidebar"
-          hint="Fits more networks and conversations without reducing text size."
-          checked={sidebarCompact}
-          onChange={selectSidebarCompact}
-        />
-      </Group>
-
-      <Group title="Window scale">
-        <ScaleStepper zoom={typography.zoom} />
-        <Note>Scales the whole window, the way a browser&rsquo;s zoom does.</Note>
-      </Group>
-
-      <Group title="Timeline">
-        <SelectField<ClockFormat>
-          label="Timestamp"
-          value={presentation.clock}
-          options={CLOCK_FORMATS.map(({ id, name, example }) => ({
-            value: id,
-            label: example === null ? name : `${name} · ${example}`,
-          }))}
-          onChange={(clock) => selectPresentation({ clock })}
-        />
-
-        {/* Offered even with the clock off, where it changes nothing: hiding it
-            would move the controls under it every time somebody tried Off. */}
-        <SelectField<ClockSide>
-          label="Timestamp place"
-          value={presentation.clockSide}
-          options={CLOCK_SIDES.map(({ id, name }) => ({ value: id, label: name }))}
-          onChange={(clockSide) => selectPresentation({ clockSide })}
-        />
-
-        <SelectField<ClockEmphasis>
-          label="Timestamp emphasis"
-          value={presentation.clockEmphasis}
-          options={CLOCK_EMPHASES.map(({ id, name }) => ({ value: id, label: name }))}
-          onChange={(clockEmphasis) => selectPresentation({ clockEmphasis })}
-        />
-
-        <SelectField<TimelineAlign>
-          label="Conversation position"
-          value={presentation.align}
-          options={TIMELINE_ALIGNS.map(({ id, name }) => ({ value: id, label: name }))}
-          onChange={(align) => selectPresentation({ align })}
-        />
-
-        <SelectField<TimelineMeasure>
-          label="Line width"
-          value={presentation.measure}
-          options={TIMELINE_MEASURES.map(({ id, name }) => ({ value: id, label: name }))}
-          onChange={(measure) => selectPresentation({ measure })}
-        />
-
-        <CheckField
-          label="Spine"
-          hint="The rule at the rail. Its colour names the conversation a run belongs to, which nothing else on the row says."
-          checked={presentation.spine}
-          onChange={(spine) => selectPresentation({ spine })}
-        />
-
-        <CheckField
-          label="Nickname on every line"
-          hint="Each line states who said it and when, instead of the run stating it once above them."
-          checked={presentation.nickEveryLine}
-          onChange={(nickEveryLine) => selectPresentation({ nickEveryLine })}
-        />
-
-        <CheckField
-          label="Compact single-message runs"
-          hint="Puts the nickname and time in front of the message when a run has only one line."
-          checked={presentation.compactSingletons}
-          onChange={(compactSingletons) => selectPresentation({ compactSingletons })}
-        />
-
-        <CheckField
-          label="Angle brackets around nicknames"
-          hint="<alice> rather than alice, wherever the name is written, as clients that named every line wrote it."
-          checked={presentation.nickBrackets}
-          onChange={(nickBrackets) => selectPresentation({ nickBrackets })}
-        />
-
-        <CheckField
-          label="Nickname colours"
-          hint="Uses colour to make speakers faster to spot. Names still identify them when this is off."
-          checked={presentation.nickColors}
-          onChange={(nickColors) => selectPresentation({ nickColors })}
-        />
-      </Group>
-
-      <Group title="Type">
-        <SelectField<MessageSize>
-          label="Message text"
-          value={presentation.messageSize}
-          options={MESSAGE_SIZES.map(({ id, name }) => ({ value: id, label: name }))}
-          onChange={(messageSize) => selectPresentation({ messageSize })}
-        />
-
-        <SelectField
-          label="Prose"
-          value={typography.prose}
-          options={PROSE_FACES.map((face) => ({ value: face.id, label: face.name }))}
-          onChange={(prose) => selectTypography({ prose })}
-        />
-
-        <SelectField
-          label="Identifiers and code"
-          value={typography.mono}
-          options={MONO_FACES.map((face) => ({ value: face.id, label: face.name }))}
-          onChange={(mono) => selectTypography({ mono })}
-        />
-      </Group>
-
-      <Group title="Start from">
-        {/* Buttons rather than the radios the density above gets, and the
-            difference is the point: a preset is not a mode the window is in.
-            It writes the theme, the timeline and the faces and stops existing,
-            each of them still the reader's afterwards — so there is nothing
-            here for a mark to be true of. */}
-        <ul className="flex flex-col gap-1">
-          {PRESETS.map((preset) => (
-            <li key={preset.id}>
-              {/* Named apart from the theme of the same name, which is a card
-                  on the left and is only half of what this does. */}
-              <button
-                type="button"
-                aria-label={`Start from ${preset.name}`}
-                onClick={() => selectPreset(preset)}
-                className="flex w-full flex-col items-start gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--surface-hover)]"
-              >
-                <span className="text-[13px] text-[var(--text-primary)]">{preset.name}</span>
-                <span className="text-[11px] text-[var(--text-muted)]">{preset.detail}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <Note>
-          A preset sets the theme, the timeline and the faces together. Each of them stays yours
-          to change afterwards.
-        </Note>
-      </Group>
-    </div>
+function PresetList() {
+  return (
+    <Group title="Start from">
+      <ul className="flex flex-col gap-1">
+        {PRESETS.map((preset) => (
+          <li key={preset.id}>
+            <button
+              type="button"
+              aria-label={`Start from ${preset.name}`}
+              onClick={() => selectPreset(preset)}
+              className="flex w-full flex-col items-start gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--surface-hover)]"
+            >
+              <span className="text-[13px] text-[var(--text-primary)]">{preset.name}</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{preset.detail}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <Note>
+        A preset sets the theme, the timeline and the faces together. Each stays yours to change
+        afterwards.
+      </Note>
+    </Group>
   );
 }
 
@@ -362,11 +414,11 @@ function ChoiceList<T extends string>({
 }: {
   label: string;
   value: T;
-  options: readonly { id: T; name: string; detail: string }[];
+  options: readonly { id: T; name: string }[];
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-col gap-1">
+    <div role="radiogroup" aria-label={label} className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border-default)]">
       {options.map((option) => {
         const chosen = option.id === value;
         return (
@@ -376,21 +428,12 @@ function ChoiceList<T extends string>({
             role="radio"
             aria-checked={chosen}
             onClick={() => onChange(option.id)}
-            className="flex items-start gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left hover:bg-[var(--surface-hover)]"
+            className={clsx(
+              "border-r border-[var(--border-default)] px-2 py-2 text-center text-[12px] last:border-r-0 hover:bg-[var(--surface-hover)]",
+              chosen ? "bg-[var(--accent-muted)] text-[var(--accent)]" : "text-[var(--text-secondary)]",
+            )}
           >
-            <span
-              aria-hidden
-              className={clsx(
-                "mt-[3px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border",
-                chosen ? "border-[var(--accent)]" : "border-[var(--border-strong)]",
-              )}
-            >
-              {chosen && <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
-            </span>
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-[13px] text-[var(--text-primary)]">{option.name}</span>
-              <span className="text-[11px] text-[var(--text-muted)]">{option.detail}</span>
-            </span>
+            {option.name}
           </button>
         );
       })}

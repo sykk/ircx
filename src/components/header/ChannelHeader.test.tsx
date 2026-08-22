@@ -30,6 +30,7 @@ beforeEach(() => {
         hasMore: true,
         loadingOlder: false,
         askedBehind: "older",
+        detachedAt: null,
       },
       [targetKey("libera", "#rust")]: {
         messages: [makeMessage({ id: "other", target: "#rust" })],
@@ -37,6 +38,7 @@ beforeEach(() => {
         hasMore: true,
         loadingOlder: false,
         askedBehind: null,
+        detachedAt: null,
       },
     },
     setup: null,
@@ -175,6 +177,7 @@ describe("ChannelHeader", () => {
       hasMore: false,
       loadingOlder: false,
       askedBehind: null,
+      detachedAt: null,
     });
     expect(state.timelines[targetKey("libera", "#rust")]?.messages[0]?.id).toBe("other");
   });

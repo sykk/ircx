@@ -100,6 +100,27 @@ export interface TimelineState {
   readMarker: string | null;
   /** False once the backend reports no older messages remain. */
   hasMore: boolean;
+  /**
+   * The newest message of a window that does not reach the present, and null
+   * while the timeline is the live conversation. #618.
+   *
+   * A search jump does not scroll — it files a window read around the hit over
+   * whatever the pane held, and that window can end hours short of now.
+   * `hasMore` answers for the other end, and nothing in the client ever asks
+   * for a message newer than the ones it holds, so without this the pane sat at
+   * the bottom of a 200-message window and called that following the
+   * conversation: no way back, and the channel's next line drawn under a
+   * message 281 older as an ordinary change of speaker.
+   *
+   * Naming the message rather than setting a flag is what lets the rows say so.
+   * The hole is between this message and whatever follows it, so `buildRows`
+   * has everything it needs to draw the break, and the same field is what tells
+   * `Jump to latest` it has to read the tail back rather than scroll to it.
+   *
+   * Not persisted, and a relaunch ends the detachment: the window is in memory
+   * and the archive was never wrong.
+   */
+  detachedAt: string | null;
   loadingOlder: boolean;
   /**
    * The message the server was last asked for the page behind, and null before

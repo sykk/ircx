@@ -140,6 +140,7 @@ function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
       hasMore: true,
       loadingOlder: false,
       askedBehind: null,
+      detachedAt: null,
     },
   });
 }
@@ -565,7 +566,7 @@ describe("Timeline", () => {
         messages: makeConversation({ count: 20, seed: 6 }),
         unreadFrom: null, readMarker: null,
         hasMore: false,
-        loadingOlder: false, askedBehind: null
+        loadingOlder: false, askedBehind: null, detachedAt: null
       },
     });
     render(<Timeline view={TEST_VIEW} />);
@@ -1668,6 +1669,73 @@ describe("Timeline", () => {
     expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
     expect(useAppStore.getState().viewAnchor[TEST_VIEW]).toBe(null);
     expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+  });
+
+  /**
+   * #618. A search jump files a window read around the hit, and the pane at the
+   * bottom of it is at the bottom of nothing — the conversation carried on 281
+   * messages ago. The scroller's own geometry cannot know that, so the control
+   * that ends it was the one thing confirming it: no pill while the window was
+   * untouched, and a pill that scrolled to the last row held once one was.
+   */
+  describe("a window a search jump left short of the present", () => {
+    function detach(messages: ChatMessage[]) {
+      seed(messages);
+      useAppStore.setState((s) => ({
+        timelines: {
+          ...s.timelines,
+          [KEY]: { ...s.timelines[KEY]!, detachedAt: messages[messages.length - 1]!.id },
+        },
+      }));
+    }
+
+    it("offers the way back from the bottom of the window", () => {
+      detach(makeConversation({ count: 30, seed: 11 }));
+      render(<Timeline view={TEST_VIEW} />);
+
+      expect(screen.getByRole("button", { name: "Jump to latest" })).toBeTruthy();
+    });
+
+    it("reads the tail back rather than scrolling to the last row it holds", async () => {
+      const window = makeConversation({ count: 30, seed: 11 });
+      const tail = makeConversation({ count: 30, seed: 12 });
+      detach(window);
+      render(<Timeline view={TEST_VIEW} />);
+      ipcMock.loadHistory.mockResolvedValue(tail);
+
+      fireEvent.click(screen.getByRole("button", { name: "Jump to latest" }));
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.detachedAt).toBe(null),
+      );
+
+      expect(ipcMock.loadHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ before: null }),
+      );
+      expect(useAppStore.getState().timelines[KEY]!.messages.map((m) => m.id)).toEqual(
+        tail.map((m) => m.id),
+      );
+    });
+
+    /** The rule is drawn off the message above the hole, so the pane has to be
+     * holding both sides of it before there is anything to draw. */
+    it("rules off the line the channel says next", () => {
+      const window = makeConversation({ count: 5, seed: 11 });
+      detach(window);
+      render(<Timeline view={TEST_VIEW} />);
+      expect(screen.queryByText("Messages in between are not shown")).toBeNull();
+
+      act(() => {
+        useAppStore.getState().applyEvent({
+          type: "messagesAppended",
+          network: "libera",
+          target: "#ctf-ops",
+          messages: [makeMessage({ id: "later", timestamp: "2030-01-01T00:00:00.000Z" })],
+          answers: null,
+        });
+      });
+
+      expect(screen.getByText("Messages in between are not shown")).toBeTruthy();
+    });
   });
 
   it("comes back to the row it recorded rather than to the top", () => {

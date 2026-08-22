@@ -1,7 +1,9 @@
 import { useCallback, useState } from "react";
+import type { NetworkConfig } from "@/types";
 import { ipc, reasonOr } from "@/lib/ipc";
 import {
   emptyDraft,
+  applyIdentity,
   presetDraft,
   PUBLIC_NETWORKS,
   toConfig,
@@ -29,9 +31,11 @@ export interface OnboardingStart {
 export function Onboarding({
   onDone,
   start,
+  identities = [],
 }: {
   onDone: () => void;
   start?: OnboardingStart;
+  identities?: NetworkConfig[];
 }) {
   const [step, setStep] = useState<Step>(start?.step ?? "choose");
   /** Where "Edit settings" goes back to from the connect step. */
@@ -145,6 +149,8 @@ export function Onboarding({
         {(step === "server" || step === "advanced") && (
           <ServerForm
             draft={draft}
+            identities={identities}
+            onIdentity={(identity) => setDraft((current) => applyIdentity(current, identity))}
             advanced={step === "advanced"}
             onChange={change}
             onSubmit={submit}
@@ -237,4 +243,3 @@ function Choice({
     </button>
   );
 }
-

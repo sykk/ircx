@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { SaslMechanism } from "@/types";
+import type { NetworkConfig, SaslMechanism } from "@/types";
 import { chooseFile, ipc, reasonOr } from "@/lib/ipc";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import {
@@ -24,6 +24,8 @@ import {
 
 interface Props {
   draft: Draft;
+  identities?: NetworkConfig[];
+  onIdentity?: (identity: NetworkConfig) => void;
   /** Whether the whole `NetworkConfig` is on show or only the four fields a
    * server needs. */
   advanced: boolean;
@@ -57,6 +59,8 @@ const MECHANISMS: { value: SaslMechanism | "none"; label: string }[] = [
 
 export function ServerForm({
   draft,
+  identities = [],
+  onIdentity,
   advanced,
   onChange,
   onSubmit,
@@ -109,6 +113,33 @@ export function ServerForm({
           onChange={(name) => onChange({ name })}
           placeholder={draft.host.trim() || "Example"}
           hint="What the sidebar calls it. Defaults to the address."
+        />
+      )}
+
+      {onIdentity && identities.length > 0 && (
+        <SelectField
+          label="Use identity from"
+          value=""
+          options={[
+            { value: "", label: "Choose a saved network…" },
+            ...identities.flatMap((identity) =>
+              identity.id === null
+                ? []
+                : [
+                    {
+                      value: String(identity.id),
+                      label: `${identity.nick} on ${identity.name}`,
+                    },
+                  ],
+            ),
+          ]}
+          onChange={(id) => {
+            const identity = identities.find(
+              (candidate) => candidate.id !== null && String(candidate.id) === id,
+            );
+            if (identity) onIdentity(identity);
+          }}
+          hint="Copies names, SASL settings, client certificate, and connect commands. Passwords stay with their network."
         />
       )}
 

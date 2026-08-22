@@ -45,14 +45,28 @@ export const HISTORY_HEAD_PX = 24;
  * it measures at exactly the estimate and every other row does not. */
 const FRAME_PX = ESTIMATED_ROW_PX - LINE_PX;
 /** Where prose wraps. Narrow enough that the fixtures' longer lines take two. */
-const CHARS_PER_LINE = 56;
+export const CHARS_PER_LINE = 56;
+let charsPerLine = CHARS_PER_LINE;
+
+/**
+ * Narrows the pane, which is the one thing a reader can do to a conversation
+ * that changes the height of every row in it at once. Rows above the fold, the
+ * row they are inside and rows below it all rewrap on the same commit, and each
+ * is answered by something different.
+ *
+ * The width rather than the height, because the height moves nothing: a pane
+ * that got shorter draws fewer rows and the ones it draws are where they were.
+ */
+export function wrapAt(chars: number): void {
+  charsPerLine = chars;
+}
 
 /** How many lines a string takes at this width, newlines included: a fenced
  * block is several lines of one message. */
 function wrapped(text: string): number {
   let lines = 0;
   for (const line of text.split("\n")) {
-    lines += Math.max(1, Math.ceil(line.length / CHARS_PER_LINE));
+    lines += Math.max(1, Math.ceil(line.length / charsPerLine));
   }
   return lines;
 }
@@ -213,6 +227,7 @@ function changedSince(watch: Observation): ResizeObserverEntry[] {
  * prototype because the elements they belong to are React's to create.
  */
 export function installLayout(): void {
+  charsPerLine = CHARS_PER_LINE;
   class ModelledResizeObserver implements ResizeObserver {
     private readonly watch: Observation;
 

@@ -1,0 +1,30 @@
+#613 in the engine: a pane narrowed under a reader parked inside a run, on
+`docs/end-to-end-42/lab` in webkit2gtk-4.1.
+
+`resize-lab.sh <dir>`, three sittings, identical every time. Every one parks
+halfway into a row holding thirty messages and narrows the scroller from 824px
+to 340px, which takes its rows from one line to three.
+
+  before   scrollTop 548,  width 824, row 872px,  the reader's line 451 into it
+           the line the fold cuts through  line 0825 at y 15
+           the line after it               line 0826 at y 40
+
+  after    scrollTop 1123, width 340, row 2114px, the reader's line 1072 into it
+           the line the fold cuts through  y 61
+           the line after it               y 86
+
+  settled  two seconds on, both unchanged: y 61 and y 86
+
+The reader's line gained 621px above it inside its own row and the pane was paid
+575px, so it is 46px short and the reader moved by 46px. The correction ran and
+came up short, which is #601's shape rather than #611's, where nothing ran at
+all.
+
+**The first sitting narrowed to 620px and nothing rewrapped at all** — row 872px
+before and after, the reader held to the pixel. The fixture's lines still fit at
+that width, so a walk of this has to check that the rows really changed height
+rather than assume a narrower pane means a taller row. `rowPx` in the record is
+that check.
+
+`Timeline.layout.test.tsx` says the reader holds across the same rewrap, to the
+pixel, and passes. Which of the two is wrong is #613 and is not settled here.

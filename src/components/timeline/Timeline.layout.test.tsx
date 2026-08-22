@@ -9,7 +9,7 @@ import { ESTIMATED_ROW_PX, LOAD_OLDER_PX, Timeline } from "./Timeline";
 import { makeConversation, makeMessage } from "./fixtures";
 import { assignGroups } from "./groups";
 import { buildRows } from "./rows";
-import { LINE_PX, flushLayout, installLayout } from "./layoutHarness";
+import { CHARS_PER_LINE, LINE_PX, VIEWPORT_PX, flushLayout, installLayout, wrapAt } from "./layoutHarness";
 
 /**
  * The timeline where the rows are uneven, which is every timeline the app draws
@@ -139,6 +139,20 @@ function lineAtTheFold(scroller: HTMLElement): string {
     if (eyeLine(scroller, msgid) >= 0) return msgid;
   }
   throw new Error("no message's line is drawn below the fold");
+}
+
+/** The line the fold cuts through, which is who the anchor holds: the last
+ * message whose own line starts at or above the top of the viewport (#608).
+ * `lineAtTheFold` above is the one after it, and a rewrap moves them apart. */
+function lineTheFoldCuts(scroller: HTMLElement): string {
+  let cut: string | null = null;
+  for (const line of scroller.querySelectorAll<HTMLElement>("[data-msgid]")) {
+    const msgid = line.dataset.msgid!;
+    if (eyeLine(scroller, msgid) > 0) break;
+    cut = msgid;
+  }
+  if (cut === null) throw new Error("no message's line starts above the fold");
+  return cut;
 }
 
 /** The page a scroll to the top is answered with, 200 messages behind the
@@ -1282,5 +1296,132 @@ describe("a row above the reader that grows, which is not the row they are in", 
     flushLayout();
 
     expect(eyeLine(scroller, watching)).toBe(before + 200);
+  });
+});
+
+describe("a pane that gets narrower under the reader", () => {
+  // The width is the model's and outlives a test, so a second one would open on
+  // a pane the first left narrow.
+  beforeEach(() => wrapAt(CHARS_PER_LINE));
+
+  /**
+   * A run long enough to park inside, at the end of the channel rather than the
+   * start of it, and every line long enough to take two once the pane narrows.
+   *
+   * At the end because a reader parked near the top of the content is a reader
+   * the history head is about to arrive over, and a head arriving is #508 — a
+   * different case with a different answer, which moves the pane by exactly the
+   * one line a rewrap would be measured in.
+   */
+  function aRunToSitIn(from: number, count: number): ChatMessage[] {
+    const started = Date.parse("2026-07-28T00:00:00.000Z");
+    const opens = from + count - 60;
+    return Array.from({ length: count }, (_, i) => {
+      const n = from + i;
+      return makeMessage({
+        id: `line${n}`,
+        nick: n >= opens ? "historian" : ["archivist", "curator"][n % 2]!,
+        text: `line ${String(n).padStart(4, "0")} the reader is somewhere in this run`,
+        timestamp: new Date(started + n * 90).toISOString(),
+      });
+    });
+  }
+
+  /** Parks the reader inside the run rather than at the top of a row, which is
+   * where the two answers below differ: everything above them is the
+   * virtualiser's to pay for and their own row is the anchor's. */
+  function parkInsideTheRun(scroller: HTMLElement): HTMLElement {
+    // The wheel is the pane being handed to its reader; from here nothing is
+    // putting it back.
+    fireEvent.wheel(scroller);
+    scroller.scrollTop = scroller.scrollHeight - VIEWPORT_PX - 800;
+    fireEvent.scroll(scroller);
+    flushLayout();
+    // Whichever row the run turned out to be, read off the pane rather than
+    // named: which messages a row holds is `groups.ts`'s to decide.
+    const rows = [...scroller.querySelectorAll<HTMLElement>("[data-index]")];
+    const run = rows.reduce((most, row) =>
+      row.querySelectorAll("[data-msgid]").length > most.querySelectorAll("[data-msgid]").length
+        ? row
+        : most,
+    );
+    const index = run.dataset.index;
+    scroller.scrollTop = topOf(run) + Math.round(run.offsetHeight / 2);
+    fireEvent.scroll(scroller);
+    flushLayout();
+    // Re-queried, because the element drawing an index before a scroll is not
+    // necessarily the one drawing it after.
+    return scroller.querySelector<HTMLElement>(`[data-index="${index}"]`)!;
+  }
+
+  /**
+   * What #609 gave the reader and nothing asserted. A rewrap changes the height
+   * of every row at once, and the three kinds are answered by three different
+   * things: rows above the fold by the virtualiser, the row the reader is
+   * inside by the `grown` branch — the virtualiser declines a row that spans
+   * the fold — and rows below by nobody, there being nothing to answer.
+   *
+   * The reader's own line is what holds, not the row's top: their row grows
+   * above them as well as below, and a pane that put the row back would leave
+   * them reading a line they had already passed. Which line that is, is the
+   * line the fold *cuts through* rather than the first one under it — the two
+   * are a different message wherever the reader is parked inside a run, and the
+   * one after cannot hold when the one the fold cuts gains a line.
+   *
+   * **The engine does not agree, and #613 is that.** Narrowed for real in
+   * `webkit2gtk-4.1` the same reader moves 46px, because the pane is paid 575
+   * of the 621 their line gained above it. So what passes here is the model,
+   * and the model is either too kind or missing something the engine does;
+   * #599 is the last time those two disagreed and what settling it took.
+   */
+  it("holds the line the fold cuts through", () => {
+    seed(aRunToSitIn(201, 400));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    const run = parkInsideTheRun(scroller);
+
+    // Inside the run and not at the top of it, which is the arrangement rather
+    // than an assumption about where the parking landed.
+    expect(topOf(run)).toBeLessThan(scroller.scrollTop);
+    expect(topOf(run) + run.offsetHeight).toBeGreaterThan(scroller.scrollTop);
+
+    const reading = lineTheFoldCuts(scroller);
+    const before = eyeLine(scroller, reading);
+    const tall = run.offsetHeight;
+
+    wrapAt(40);
+    flushLayout();
+
+    // The rewrap happened, which a test that only asserted the hold could pass
+    // without.
+    expect(run.offsetHeight).toBeGreaterThan(tall);
+    expect(eyeLine(scroller, reading)).toBe(before);
+  });
+
+  /**
+   * And the line under it does not, which is the same hold stated as what it
+   * costs. The line the fold cuts through keeps its own top; the line after it
+   * is pushed down by however much that one gained in the rewrap, because the
+   * two cannot both be held and it is the first the reader is reading.
+   */
+  it("pushes the line after it down by what the rewrap added above it", () => {
+    seed(aRunToSitIn(201, 400));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    parkInsideTheRun(scroller);
+
+    const reading = lineTheFoldCuts(scroller);
+    const next = lineAtTheFold(scroller);
+    expect(next).not.toBe(reading);
+    const between = eyeLine(scroller, next) - eyeLine(scroller, reading);
+
+    wrapAt(40);
+    flushLayout();
+
+    // One line where there was none, which is the line the fold cuts through
+    // taking two after the rewrap.
+    expect(eyeLine(scroller, next) - eyeLine(scroller, reading)).toBe(between + LINE_PX);
   });
 });

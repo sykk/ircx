@@ -68,6 +68,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     memberFilter: {},
     paletteOpen: false,
     searchOpen: false,
+    searchMode: "search",
     setup: null,
     uploadRequest: null,
     plugins: [],

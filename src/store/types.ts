@@ -52,6 +52,7 @@ export interface ConsoleInput {
 /** `row` puts the two panes side by side, `column` stacks them. */
 export type SplitDirection = "row" | "column";
 export type SidebarFilter = "unread" | "mentions" | "drafts" | null;
+export type SearchMode = "search" | "bookmarks" | "attention";
 
 /**
  * How the panes divide the window. A tree rather than a list of panes with one
@@ -256,6 +257,7 @@ export interface AppState {
   memberFilter: Record<ViewId, string>;
   paletteOpen: boolean;
   searchOpen: boolean;
+  searchMode: SearchMode;
   /**
    * Which screen the Networks page is on: null for the list, otherwise the id
    * of the network whose form is open — or null inside, for one that does not

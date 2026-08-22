@@ -35,6 +35,7 @@ import type {
   ChatView,
   ConsoleInput,
   Layout,
+  SearchMode,
   SplitDirection,
   SidebarFilter,
   StoredLayout,
@@ -141,7 +142,8 @@ export interface AppActions {
    * empty one. */
   setMemberFilter: (view: ViewId, text: string | null) => void;
   togglePalette: (open?: boolean) => void;
-  toggleSearch: (open?: boolean) => void;
+  openSearch: (mode?: SearchMode) => void;
+  closeSearch: () => void;
   /** Opens settings on the Networks page, showing one network's form — or a
    * blank one for a null id. */
   openSetup: (network: string | null) => void;
@@ -214,6 +216,7 @@ const initialState: AppState = {
   memberFilter: {},
   paletteOpen: false,
   searchOpen: false,
+  searchMode: "search",
   setup: null,
   uploadRequest: null,
   channelsOpen: null,
@@ -743,7 +746,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }),
 
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
-  toggleSearch: (open) => set((s) => ({ searchOpen: open ?? !s.searchOpen })),
+  openSearch: (searchMode = "search") => set({ searchOpen: true, searchMode }),
+  closeSearch: () => set({ searchOpen: false }),
 
   openSetup: (network) => set({ setup: { network }, settings: "networks" }),
   closeSetup: () => set({ setup: null }),

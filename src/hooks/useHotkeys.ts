@@ -133,7 +133,7 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
 
     return {
       "palette.toggle": () => useAppStore.getState().togglePalette(),
-      "search.open": () => useAppStore.getState().toggleSearch(true),
+      "search.open": () => useAppStore.getState().openSearch(),
       "settings.open": () => useAppStore.getState().openSettings(),
       "roster.toggle": () => {
         const { activeViewId, toggleRoster } = useAppStore.getState();
@@ -165,7 +165,7 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       "overlay.dismiss": () => {
         const state = useAppStore.getState();
         if (state.paletteOpen) state.togglePalette(false);
-        else if (state.searchOpen) state.toggleSearch(false);
+        else if (state.searchOpen) state.closeSearch();
         // Nothing of ours is open, so let the composer clear its reply.
         else return false;
       },

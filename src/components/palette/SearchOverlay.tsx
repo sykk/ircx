@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
+import { useShallow } from "zustand/react/shallow";
 import { formatClock } from "@/components/timeline/rows";
 import { ipc } from "@/lib/ipc";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { useAppStore } from "@/store";
-import { targetKey, useActiveTarget } from "@/store/selectors";
+import { isHighlight, targetKey, useActiveTarget } from "@/store/selectors";
+import type { AppState, SearchMode } from "@/store/types";
+import type { TargetKey } from "@/store/keys";
 import type { SearchHit } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
@@ -42,12 +45,22 @@ function Search() {
   const [age, setAge] = useState<SearchAge>("any");
   const [openedAt] = useState(Date.now);
   const [saved, setSaved] = useState(loadSavedSearches);
-  const [mode, setMode] = useState<"search" | "bookmarks">("search");
+  const initialMode = useAppStore((s) => s.searchMode);
+  const [mode, setMode] = useState<SearchMode>(initialMode);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   const [selected, setSelected] = useState(0);
   const clockFormat = useAppStore((s) => s.presentation.clock);
+  const attentionState = useAppStore(useShallow((s) => ({
+    networks: s.networks,
+    channels: s.channels,
+    queries: s.queries,
+    members: s.members,
+    timelines: s.timelines,
+    highlightWords: s.highlightWords,
+  })));
+  const attention = useMemo(() => attentionHits(attentionState).slice(0, HIT_LIMIT), [attentionState]);
 
   const network = active?.network ?? null;
   const target = active?.target ?? null;
@@ -56,10 +69,14 @@ function Search() {
   const after = searchAfter(age, openedAt);
   // Too short to search: the last answer stays in state but is not shown, so
   // clearing it would only cost a render.
-  const shown = mode === "search" && [...text].length < MIN_QUERY ? [] : hits;
+  const shown = mode === "attention"
+    ? attention
+    : mode === "search" && [...text].length < MIN_QUERY
+      ? []
+      : hits;
 
   useEffect(() => {
-    if (mode === "search" && [...text].length < MIN_QUERY) return;
+    if (mode === "attention" || (mode === "search" && [...text].length < MIN_QUERY)) return;
 
     let live = true;
     const timer = setTimeout(() => {
@@ -94,7 +111,7 @@ function Search() {
     };
   }, [text, network, target, senderFilter, after, mode]);
 
-  const close = () => useAppStore.getState().toggleSearch(false);
+  const close = () => useAppStore.getState().closeSearch();
 
   async function jump(index: number) {
     const hit = shown[index];
@@ -167,14 +184,14 @@ function Search() {
         ref={dialog}
         role="dialog"
         aria-modal="true"
-        aria-label="Search history"
+        aria-label={mode === "attention" ? "Attention" : "Search history"}
         tabIndex={-1}
         onKeyDown={onKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
         className="relative flex max-h-[74vh] w-[min(720px,92vw)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"
       >
         <div className="flex border-b border-[var(--border-subtle)] px-3 pt-2">
-          {(["search", "bookmarks"] as const).map((choice) => (
+          {(["search", "bookmarks", "attention"] as const).map((choice) => (
             <button key={choice} type="button" aria-pressed={mode === choice} onClick={() => { setMode(choice); setHits([]); setSelected(0); }} className={clsx("rounded-t-[var(--radius-sm)] px-3 py-1.5 text-[12px] capitalize", mode === choice ? "bg-[var(--surface-active)] text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]")}>{choice}</button>
           ))}
         </div>
@@ -262,7 +279,10 @@ function Search() {
             >
               <div className="flex items-baseline gap-2 text-[11px] text-[var(--text-muted)]">
                 <span className="text-[var(--text-secondary)]">{hit.message.sender.nick}</span>
-                <span>{hit.message.target}</span>
+                <span>
+                  {hit.message.target}
+                  {mode === "attention" && ` · ${attentionState.networks[hit.message.network]?.name ?? hit.message.network}`}
+                </span>
                 <span className="ml-auto">
                   {formatClock(hit.message.timestamp, clockFormat)}
                 </span>
@@ -283,6 +303,8 @@ function Search() {
             <p className="px-4 py-6 text-center text-[var(--text-muted)]">
               {mode === "bookmarks"
                 ? "No bookmarks in this conversation"
+                : mode === "attention"
+                ? "No unread highlights or direct messages"
                 : [...text].length < MIN_QUERY
                 ? "Search this conversation"
                 : `Nothing matches ${text}`}
@@ -292,6 +314,50 @@ function Search() {
       </div>
     </div>
   );
+}
+
+type AttentionState = Pick<
+  AppState,
+  "networks" | "channels" | "queries" | "members" | "timelines" | "highlightWords"
+>;
+
+export function attentionHits(state: AttentionState): SearchHit[] {
+  const hits: SearchHit[] = [];
+
+  const timelines = Object.entries(state.timelines) as [
+    TargetKey,
+    AppState["timelines"][TargetKey],
+  ][];
+  for (const [key, timeline] of timelines) {
+    if (timeline.unreadFrom === null) continue;
+    const unreadAt = timeline.messages.findIndex((message) => message.id === timeline.unreadFrom);
+    if (unreadAt < 0) continue;
+
+    const query = state.queries[key];
+    const channel = state.channels[key];
+    if (!query && !channel) continue;
+    const networkId = query?.network ?? channel?.network;
+    if (!networkId) continue;
+    const network = state.networks[networkId];
+    if (!network) continue;
+    const present = channel
+      ? new Set((state.members[key] ?? []).map((member) => member.nick.toLowerCase()))
+      : undefined;
+
+    for (const message of timeline.messages.slice(unreadAt)) {
+      const counts = !message.sender.isSelf && (
+        message.kind === "privmsg" || message.kind === "notice" || message.kind === "action"
+      );
+      const wanted = counts && (query !== undefined || (message.raisedBy?.length ?? 0) > 0 || isHighlight(
+        message,
+        { nick: network.currentNick, words: state.highlightWords },
+        present,
+      ));
+      if (wanted) hits.push({ message, snippet: message.text });
+    }
+  }
+
+  return hits.sort((a, b) => b.message.timestamp.localeCompare(a.message.timestamp));
 }
 
 export function searchAfter(age: SearchAge, now = Date.now()): string | null {

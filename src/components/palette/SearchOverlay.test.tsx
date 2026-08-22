@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
-import { activeTarget, oneView } from "@/components/shell/fixtures";
+import { targetKey } from "@/store/keys";
+import { activeTarget, makeChannel, makeNetwork, makeQuery, oneView } from "@/components/shell/fixtures";
 import type { ChatMessage, SearchHit } from "@/types";
 import { SearchOverlay, searchAfter, snippetSegments } from "./SearchOverlay";
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     searchOpen: true,
+    searchMode: "search",
   });
 });
 
@@ -160,6 +162,67 @@ describe("SearchOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: "bookmarks" }));
     await waitFor(() => expect(listBookmarks).toHaveBeenCalledWith("libera", "#ctf-ops", 50));
     expect(await screen.findAllByRole("option")).toHaveLength(2);
+  });
+
+  it("lists unread highlights and direct messages across networks", () => {
+    const channelKey = targetKey("libera", "#ctf-ops");
+    const queryKey = targetKey("oftc", "phrack");
+    const ordinary = { ...message("ordinary", "status is green"), target: "#ctf-ops" };
+    const highlight = { ...message("highlight", "sable: deploy failed"), target: "#ctf-ops" };
+    const raised = {
+      ...message("raised", "the canary failed"),
+      target: "#ctf-ops",
+      timestamp: "2026-07-29T02:43:00Z",
+      raisedBy: ["deploys"],
+    };
+    const direct = {
+      ...message("direct", "can you check the build?"),
+      network: "oftc",
+      target: "phrack",
+      timestamp: "2026-07-29T02:42:00Z",
+    };
+    useAppStore.setState({
+      networks: {
+        libera: makeNetwork("libera"),
+        oftc: makeNetwork("oftc", { name: "OFTC" }),
+      },
+      channels: { [channelKey]: makeChannel("libera", "#ctf-ops", { unread: 3, highlights: 2 }) },
+      queries: { [queryKey]: makeQuery("oftc", "phrack", { unread: 1 }) },
+      members: {},
+      timelines: {
+        [channelKey]: {
+          messages: [ordinary, highlight, raised],
+          unreadFrom: "ordinary",
+          readMarker: null,
+          hasMore: false,
+          detachedAt: null,
+          loadingOlder: false,
+          askedBehind: null,
+        },
+        [queryKey]: {
+          messages: [direct],
+          unreadFrom: "direct",
+          readMarker: null,
+          hasMore: false,
+          detachedAt: null,
+          loadingOlder: false,
+          askedBehind: null,
+        },
+      },
+      highlightWords: [],
+      searchMode: "attention",
+    });
+
+    render(<SearchOverlay />);
+
+    const labels = screen.getAllByRole("option").map((option) => option.textContent);
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toContain("the canary failed");
+    expect(labels[1]).toContain("can you check the build?");
+    expect(labels[2]).toContain("sable: deploy failed");
+    expect(labels[1]).toContain("OFTC");
+    expect(screen.queryByText("status is green")).toBeNull();
+    expect(searchHistory).not.toHaveBeenCalled();
   });
 
   it("renders the backend's mark spans as highlights", async () => {

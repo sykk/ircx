@@ -33,7 +33,7 @@ export function ChannelHeader({
   const focused = useAppStore((s) => s.viewOrder.length < 2 || s.activeViewId === view);
   const rosterShown = useAppStore((s) => (view ? s.rosterHidden[view] !== true : false));
   const toggleRoster = useAppStore((s) => s.toggleRoster);
-  const toggleSearch = useAppStore((s) => s.toggleSearch);
+  const openSearch = useAppStore((s) => s.openSearch);
   const clearBuffer = useAppStore((s) => s.clearBuffer);
   const openSetup = useAppStore((s) => s.openSetup);
 
@@ -121,7 +121,7 @@ export function ChannelHeader({
 
           <HeaderButton
             label={`Search ${channel.name}`}
-            onClick={() => toggleSearch(true)}
+            onClick={() => openSearch()}
           >
             <SearchIcon size={16} />
           </HeaderButton>

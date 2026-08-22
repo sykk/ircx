@@ -189,6 +189,9 @@ function Palette() {
       case "search":
         store.openSearch(action.mode);
         break;
+      case "browseChannels":
+        store.browseChannels(action.network);
+        break;
       case "sidebarFilter":
         store.setSidebarFilter(action.filter);
         break;

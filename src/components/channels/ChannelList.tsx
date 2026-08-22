@@ -1,9 +1,9 @@
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TextField } from "@/components/onboarding/fields";
 import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import type { ChannelListing } from "@/types";
+import { SERVER_TARGET, type ChannelListing } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
@@ -34,8 +34,10 @@ export function ChannelList() {
 function Sheet({ network }: { network: string }) {
   const close = useAppStore((s) => s.showChannels);
   const held = useAppStore((s) => s.channelList[network]);
+  const networkName = useAppStore((s) => s.networks[network]?.name ?? network);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const requested = useRef(false);
   useAnnounce(error);
   // Typing stays responsive while twenty-two thousand rows are re-filtered.
   const needle = useDeferredValue(filter).trim().toLowerCase();
@@ -48,6 +50,23 @@ function Sheet({ network }: { network: string }) {
   const dialog = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useDialogFocus(dialog);
+
+  useEffect(() => {
+    if (held !== undefined || requested.current) return;
+    requested.current = true;
+    let live = true;
+    ipc.submitInput(network, SERVER_TARGET, "/list").then(
+      (outcome) => {
+        if (live && outcome.kind === "rejected") setError(outcome.value);
+      },
+      (reason: unknown) => {
+        if (live) setError(reasonOr(reason, `Channels on ${network} could not be listed.`));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [held, network]);
 
   // Nothing the virtualiser returns leaves this component, so the compiler
   // skipping it costs nothing.
@@ -65,6 +84,7 @@ function Sheet({ network }: { network: string }) {
   async function join(name: string) {
     try {
       await ipc.joinChannel(network, name);
+      useAppStore.getState().showTarget({ network, target: name });
       close(null);
     } catch (reason) {
       setError(reasonOr(reason, `${name} could not be joined.`));
@@ -81,7 +101,7 @@ function Sheet({ network }: { network: string }) {
         ref={dialog}
         role="dialog"
         aria-modal="true"
-        aria-label={`Channels on ${network}`}
+        aria-label={`Channels on ${networkName}`}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -93,7 +113,7 @@ function Sheet({ network }: { network: string }) {
       >
         <div className="flex flex-col gap-3 p-5 pb-3">
           <h2 className="text-[15px] font-medium text-[var(--text-primary)]">
-            Channels on {network}
+            Channels on {networkName}
           </h2>
           <TextField
             label="Filter"
@@ -109,7 +129,9 @@ function Sheet({ network }: { network: string }) {
           {shown.length === 0 ? (
             <p className="px-3 py-4 text-[12px] text-[var(--text-muted)]">
               {held === undefined
-                ? "Nothing listed yet. Run /list to ask the server."
+                ? error === null
+                  ? "Loading channels…"
+                  : "No channels were listed."
                 : "No channel here matches that."}
             </p>
           ) : (

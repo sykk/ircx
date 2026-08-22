@@ -30,6 +30,7 @@ export type CandidateAction =
   | { type: "split"; direction: SplitDirection }
   | { type: "closePane" }
   | { type: "search"; mode?: "search" | "attention" }
+  | { type: "browseChannels"; network: string }
   | { type: "sidebarFilter"; filter: SidebarFilter }
   | { type: "unread"; direction: 1 | -1 }
   | { type: "connect"; network: string }
@@ -213,6 +214,17 @@ export function buildCandidates(state: CandidateSources): Candidate[] {
       hay: prepare(`${network.name} settings`),
       key: null,
       action: { type: "openSetup", network: id },
+      unread: 0,
+    });
+
+    candidates.push({
+      id: `channels:${id}`,
+      kind: "action",
+      label: `Browse channels on ${network.name}`,
+      detail: "Search channel names and topics, then join",
+      hay: prepare(`Browse channels on ${network.name}`),
+      key: null,
+      action: { type: "browseChannels", network: id },
       unread: 0,
     });
 

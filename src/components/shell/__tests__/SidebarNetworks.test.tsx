@@ -63,6 +63,17 @@ describe("SidebarNetworks", () => {
     expect(screen.getByRole("button", { name: "Add a network" })).toBeTruthy();
   });
 
+  it("opens the channel browser from a network's menu", () => {
+    seedStore([makeNetwork("libera", { name: "Libera.Chat" })]);
+    render(<SidebarNetworks />);
+    openRowMenu("Libera.Chat");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Browse channels" }));
+
+    expect(useAppStore.getState().channelsOpen).toBe("libera");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("renders one group per network with its channels", () => {
     seedMockupWorkspace();
     render(<SidebarNetworks />);

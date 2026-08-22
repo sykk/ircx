@@ -168,6 +168,16 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
+  it("opens a network's channel browser", () => {
+    render(<CommandPalette />);
+    type("Browse channels on Libera.Chat");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().channelsOpen).toBe("libera");
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("marks the matched characters in the result", () => {
     const { container } = render(<CommandPalette />);
     type("ctfo");

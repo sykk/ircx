@@ -1,0 +1,62 @@
+Run 48 — the unread seam across a search jump, and #622's rule.
+
+Four sittings: two on the branch of #624 (fixed-*), two on main (main-*).
+The only difference between the arms is src/store/index.ts; the binary,
+the server, the seed and the walk are one and the same.
+
+Every frame, by the messages it painted — docs/end-to-end-42/sequence.py
+reading the stripes VITE_SWATCH draws from the line numbers.
+
+=== fixed-1 ===
+at-live     stripes at x=327, 23 messages painted 478..500 painted, 0 steps 
+returned    stripes at x=327, 10 messages painted 1..10 painted, 0 steps 
+seam        stripes at x=327, 20 messages painted 493..512 painted, 0 steps 
+jumped      stripes at x=327, 23 messages painted 108..130 painted, 0 steps 
+parked      stripes at x=327, 23 messages painted 197..219 painted, 0 steps 
+after-talk  stripes at x=327, 21 messages painted y 559: 219 is followed by 513 205..518 painted, 1 steps 
+latest      stripes at x=327, 18 messages painted 501..518 painted, 0 steps 
+
+=== fixed-2 ===
+at-live     stripes at x=327, 23 messages painted 478..500 painted, 0 steps 
+returned    stripes at x=327, 10 messages painted 1..10 painted, 0 steps 
+seam        stripes at x=327, 20 messages painted 493..512 painted, 0 steps 
+jumped      stripes at x=327, 23 messages painted 108..130 painted, 0 steps 
+parked      stripes at x=327, 23 messages painted 197..219 painted, 0 steps 
+after-talk  stripes at x=327, 21 messages painted y 559: 219 is followed by 513 205..518 painted, 1 steps 
+latest      stripes at x=327, 18 messages painted 501..518 painted, 0 steps 
+
+=== main-1 ===
+at-live     stripes at x=323, 23 messages painted 478..500 painted, 0 steps 
+returned    stripes at x=323, 10 messages painted 1..10 painted, 0 steps 
+seam        stripes at x=323, 20 messages painted 493..512 painted, 0 steps 
+jumped      stripes at x=323, 23 messages painted 108..130 painted, 0 steps 
+parked      stripes at x=323, 23 messages painted 197..219 painted, 0 steps 
+after-talk  stripes at x=323, 21 messages painted y 559: 219 is followed by 513 205..518 painted, 1 steps 
+latest      stripes at x=323, 21 messages painted 498..518 painted, 0 steps 
+
+=== main-2 ===
+at-live     stripes at x=327, 23 messages painted 478..500 painted, 0 steps 
+returned    stripes at x=327, 10 messages painted 1..10 painted, 0 steps 
+seam        stripes at x=327, 20 messages painted 493..512 painted, 0 steps 
+jumped      stripes at x=327, 23 messages painted 108..130 painted, 0 steps 
+parked      stripes at x=327, 23 messages painted 197..219 painted, 0 steps 
+after-talk  stripes at x=327, 21 messages painted y 559: 219 is followed by 513 205..518 painted, 1 steps 
+latest      stripes at x=327, 21 messages painted 498..518 painted, 0 steps 
+
+=== what the talkers said, every sitting ===
+fixed-1  said 500 lines from 0001 into #run48fixed-1 said 12 lines from 0501 into #run48fixed-1 said 6 lines from 0513 into #run48fixed-1 
+fixed-2  said 500 lines from 0001 into #run48fixed-2 said 12 lines from 0501 into #run48fixed-2 said 6 lines from 0513 into #run48fixed-2 
+main-1   said 500 lines from 0001 into #run48main-1 said 12 lines from 0501 into #run48main-1 said 6 lines from 0513 into #run48main-1 
+main-2   said 500 lines from 0001 into #run48main-2 said 12 lines from 0501 into #run48main-2 said 6 lines from 0513 into #run48main-2 
+
+=== the pane coming back to the conversation, fixed-1 (#625) ===
+Seconds are from the frame before the return; elsewhere.png at 17:25:28.381,
+returned.png at 17:25:33.735.
+  2.54s stack  top=0 rows=0 line=None
+  2.54s stack  top=0 rows=0 line=None
+  2.86s stack  top=24 rows=8 line={'id': '_bs99adjn4pjj7i43d2umvy4das', 'i': 2, 'within': 30, 'top': 92, 'y': 122}
+  3.15s stack  top=24 rows=8 line={'id': '_bs99adjn4pjj7i43d2umvy4das', 'i': 2, 'within': 30, 'top': 112, 'y': 142}
+  3.23s scroll top=24 sh=14687 ch=629
+  3.44s stack  top=24 rows=8 line={'id': '_bs99adjn4pjj7i43d2umvy4das', 'i': 2, 'within': 30, 'top': 112, 'y': 142}
+  3.67s stack  top=24 rows=8 line={'id': '_bs99adjn4pjj7i43d2umvy4das', 'i': 2, 'within': 30, 'top': 112, 'y': 142}
+  3.87s stack  top=24 rows=8 line={'id': '_bs99adjn4pjj7i43d2umvy4das', 'i': 2, 'within': 30, 'top': 112, 'y': 142}

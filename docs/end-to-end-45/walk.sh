@@ -8,6 +8,12 @@
 # binary built once: `cargo build --manifest-path src-tauri/Cargo.toml
 # --no-default-features`.
 #
+# `WINDOW=--release` drives the app anybody runs instead, built by
+# `VITE_PROBE=1 VITE_SWATCH=1 npm run tauri build -- --no-bundle`. Both flags
+# have to be set at build time there: the release frontend is bundled into the
+# binary, so a probe the build did not compile in is a probe the walk cannot
+# turn on — and this walk's reactor fires on the probe.
+#
 # One pane, not two: nothing pages here and nothing lands, so the second pane
 # run 40 needed to make one ask has nothing to do. The parking is 60 notches
 # rather than 305 for the same reason — what this wants is room *above* the
@@ -81,7 +87,7 @@ echo "-- $(grep '^holding ' "$DIR/reactor.log")"
   echo "quit"
 } | IRCX_PROBE="$DIR/probe.log" VITE_PROBE=1 VITE_SWATCH=1 \
     node "$TREE/.claude/skills/run-ircx/window.mjs" --server "127.0.0.1:$ERGO" \
-    --join "$CHANNEL" > "$DIR/walk.log" 2>&1 \
+    --join "$CHANNEL" ${WINDOW:-} > "$DIR/walk.log" 2>&1 \
   || echo "    the walk exited $?"
 
 echo "-- what the reactor did --"

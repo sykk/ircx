@@ -22,6 +22,24 @@ first time as the reader scrolls into them, which the virtualiser pays for going
 either way. What #611 is about is the small ones — one row of reaction chips —
 and they are told apart by size here rather than by guesswork: `--chip` is what
 a first reaction on a message adds.
+
+**Paid is read off the reader and not off the arithmetic.** The release app lays
+out at fractional pixels, so a growth of 28 paid in full reads as 26 there and a
+rule comparing those two numbers calls it a debt. What settles it is the reader:
+the same message at the fold, drawn where it was.
+
+How far they moved is read the same way, and which way depends on what the
+record can say. The same message somewhere else is the distance between the two
+drawings of it. A *different* message at the fold is a displacement whose size
+that subtraction cannot reach — it is the growth, which is what put the other
+message there.
+
+**And a commit the reader wheeled in cannot be read at all.** The pane moving by
+neither nothing nor the growth is a notch landing in the same commit as a row of
+chips, and then the message at the fold changed because the reader went looking
+for it. Those are counted apart rather than called either thing: on the debug
+build they do not happen — the gesture is a notch every 120ms and the commits
+fall between — and on the release build they happen once or twice a walk.
 """
 
 import json
@@ -38,24 +56,45 @@ for line in open(sys.argv[1]):
     if record.get("kind") == "commit" and record.get("top") is not None:
         records.append(record)
 
-paid, unpaid = [], []
+# The release app lays out at fractional pixels, so a payment and a hold are
+# both a couple of pixels loose there and exact on the debug build.
+SLACK = 2
+
+paid, unpaid, wheeled = [], [], []
 was = None
 for record in records:
     if was is not None and record["sh"] - was["sh"] == CHIP:
         grew = record["sh"] - was["sh"]
         by = record["top"] - was["top"]
         before, after = was.get("fold") or {}, record.get("fold") or {}
-        held = before.get("id") == after.get("id")
-        (paid if by == grew else unpaid).append((record["n"], grew, by, held, before, after))
+        same = before.get("id") == after.get("id")
+        slid = abs(after.get("y", 0) - before.get("y", 0)) if same else grew
+        row = (record["n"], grew, by, slid, same, before, after)
+        if abs(by) > SLACK and abs(by - grew) > SLACK:
+            wheeled.append(row)
+        elif same and slid <= SLACK:
+            paid.append(row)
+        else:
+            unpaid.append(row)
     was = record
 
-print(f"{len(records)} commits, {len(paid) + len(unpaid)} of them a row of chips going in above the reader")
-for n, grew, by, held, before, after in sorted(paid + unpaid):
-    if held:
-        print(f"  commit {n}: content +{grew}, pane +{by} — the reader held on {before.get('id')} at y {after.get('y')}")
+print(
+    f"{len(records)} commits, {len(paid) + len(unpaid) + len(wheeled)} of them "
+    "a row of chips going in above the reader"
+)
+for row in sorted(paid + unpaid + wheeled):
+    n, grew, by, slid, _, before, after = row
+    if row in paid:
+        print(f"  commit {n}: content +{grew}, pane {by:+d} — the reader held on {before.get('id')} at y {after.get('y')}")
+    elif row in wheeled:
+        print(f"  commit {n}: content +{grew}, pane {by:+d} — the reader wheeled in this commit, so it says nothing")
     else:
         print(
-            f"  commit {n}: content +{grew}, pane +{by} — the reader went from "
+            f"  commit {n}: content +{grew}, pane {by:+d} — the reader moved {slid}px, from "
             f"{before.get('id')} at y {before.get('y')} to {after.get('id')} at y {after.get('y')}"
         )
-print(f"  {len(paid)} paid for, {len(unpaid)} not, {sum(grew for _, grew, _, _, _, _ in unpaid)}px owed")
+print(
+    f"  {len(paid)} paid for, {len(unpaid)} not, "
+    f"{sum(slid for _, _, _, slid, _, _, _ in unpaid)}px of reader moved"
+    + (f", {len(wheeled)} unreadable" if wheeled else "")
+)

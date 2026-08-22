@@ -1171,3 +1171,116 @@ describe("a row that grows under the reader following it", () => {
     expect(belowTheFold(scroller)).toBe(0);
   });
 });
+
+describe("a row above the reader that grows, which is not the row they are in", () => {
+  const STARTED = Date.parse("2026-07-29T00:00:00.000Z");
+
+  /**
+   * Parks a pane well past `LOAD_OLDER_PX`, then moves it one step, because the
+   * virtualiser's guard on a row it re-measures reads which way the reader is
+   * going and nothing else: it compensates a row entirely above the fold going
+   * forward and declines the same row going backward, to head off a cascade of
+   * its own. The wheel first is the pane being handed to its reader.
+   */
+  function park(scroller: HTMLElement, direction: "forward" | "backward") {
+    fireEvent.wheel(scroller);
+    scroller.scrollTop = LOAD_OLDER_PX + 3_000;
+    fireEvent.scroll(scroller);
+    flushLayout();
+    scroller.scrollTop += direction === "backward" ? -60 : 60;
+    fireEvent.scroll(scroller);
+    flushLayout();
+  }
+
+  /** A message the reader has read past, in a row of its own that is wholly
+   * above the fold — which is what makes this #611 and not #608. */
+  function readPast(scroller: HTMLElement, fold: string): string {
+    const foldRow = scroller
+      .querySelector(`[data-msgid="${fold}"]`)!
+      .closest<HTMLElement>("[data-index]")!;
+    const above = [...scroller.querySelectorAll<HTMLElement>("[data-msgid]")].filter((line) => {
+      const row = line.closest<HTMLElement>("[data-index]")!;
+      return row !== foldRow && topOf(row) + row.offsetHeight < scroller.scrollTop;
+    });
+    const read = above.at(-2);
+    if (!read) throw new Error("no row is drawn wholly above the fold");
+    return read.dataset.msgid!;
+  }
+
+  function grow(msgid: string) {
+    const message = useAppStore.getState().timelines[KEY]!.messages.find((m) => m.id === msgid)!;
+    act(() => {
+      useAppStore.getState().applyEvent({
+        type: "messageUpdated",
+        message: { ...message, text: `${message.text} ${"and then it was said again ".repeat(4)}` },
+      });
+    });
+    flushLayout();
+  }
+
+  /**
+   * #611. A line the reader has already scrolled past gains two lines — a
+   * reaction arriving on it, a preview finishing, a delivery failure gaining
+   * its reason — and the conversation below it comes down by that much under
+   * eyes that asked for none of it.
+   *
+   * Both directions are asserted because the two are answered by different
+   * things and the reader cannot tell them apart. Going forward the virtualiser
+   * corrects the pane itself and the anchor finds it already there; going
+   * backward the virtualiser declines and the anchor is what puts the reader
+   * back.
+   *
+   * **The engine agrees**, on `docs/end-to-end-45/backscroll-lab.sh`: the same
+   * arrangement in `webkit2gtk-4.1`, one step of 60px each way with a growth of
+   * 46px fired from the scroll listener so it lands inside the 150ms the
+   * virtualiser still calls the scroll backward. Twice of twice, the reader's
+   * line moved by the 60px they asked for and by nothing else.
+   */
+  for (const direction of ["forward", "backward"] as const) {
+    it(`holds the reader while they are scrolling ${direction}`, () => {
+      seed(walkedChannel(400, 1_000, STARTED, () => "live"));
+      render(<Timeline view={TEST_VIEW} />);
+      flushLayout();
+      const scroller = screen.getByTestId("timeline-scroller");
+      park(scroller, direction);
+
+      const watching = lineAtTheFold(scroller);
+      const before = eyeLine(scroller, watching);
+      const read = readPast(scroller, watching);
+      expect(read).not.toBe(watching);
+
+      grow(read);
+
+      expect(eyeLine(scroller, watching)).toBe(before);
+    });
+  }
+
+  /**
+   * And what pays the pane back is still the reader's own scrolling to spend.
+   * The rule this replaced declined every re-measurement going backward, so the
+   * risk it was guarding against is a pane that answers a scroll up by putting
+   * the reader back where they were trying to leave.
+   *
+   * Asserted in the conversation rather than in `scrollTop`, because the two
+   * are not the same claim: scrolling up brings rows into the window that were
+   * estimates, and a pane paying for the first sight of them is `scrollTop`
+   * moving to hold the very line this asks about.
+   */
+  it("goes where the reader takes it after the growth", () => {
+    seed(walkedChannel(400, 1_000, STARTED, () => "live"));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    park(scroller, "backward");
+    const watching = lineAtTheFold(scroller);
+    grow(readPast(scroller, watching));
+    const before = eyeLine(scroller, watching);
+
+    fireEvent.wheel(scroller);
+    scroller.scrollTop -= 200;
+    fireEvent.scroll(scroller);
+    flushLayout();
+
+    expect(eyeLine(scroller, watching)).toBe(before + 200);
+  });
+});

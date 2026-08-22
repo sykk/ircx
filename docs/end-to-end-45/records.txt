@@ -1,0 +1,28 @@
+#611 in the engine: a row entirely above the fold grown 46px while the reader
+takes one 60px step, on `docs/end-to-end-42/lab` in webkit2gtk-4.1.
+
+`backscroll-lab.sh <dir> <forward|backward>`, two sittings of each arm on each
+build, identical both times. Every walk parks at scrollTop 3508 with `line 0931`
+drawn at y 57 and grows `line 0898`, 906px above it, in a row of its own whose
+bottom is above the fold — `entirelyAbove: 90`, so the row is not the reader's.
+
+The reader asked to move 60px. What they got:
+
+  build         arm        scrollTop           the reader's line
+  ------------  ---------  ------------------  ---------------------------
+  main          forward    3568 -> 3614 (+46)  y 57 -> -3     (-60, asked)
+  main          backward   3448 -> 3448 ( +0)  y 57 -> 163    (+106, asked 60)
+  with the fix  forward    3568 -> 3614 (+46)  y 57 -> -3     (-60, asked)
+  with the fix  backward   3448 -> 3494 (+46)  y 57 -> 117    (+60, asked)
+
+The forward arm is the control and it does not move: the predicate reproduces
+the virtualiser's own rule term for term where that rule already acted, and the
+46px it pays out there is the same 46px it now pays out going backward.
+
+`firedAt` equals the scroll the growth was fired from in all eight, which is the
+arrangement asserted rather than assumed — the growth landed inside the 150ms
+the virtualiser still calls the scroll a backward one, which a round trip
+through `lab.py` would not have.
+
+main-backward-after.png and fixed-backward-after.png are the same second of the
+same walk on the two builds.

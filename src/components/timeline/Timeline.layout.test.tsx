@@ -751,28 +751,24 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
   });
 
   /**
-   * **This asserts what the app does, and what it does is #608.** The anchor
-   * holds the first message of the reader's row, and where that row is a run of
-   * twenty it is nowhere near the line they are reading: a page merging in
-   * between the two moved a live reader 618px in run 43 while every term the
-   * anchor computes read held.
+   * #608, which was the anchor holding the first message of the reader's row:
+   * where that row is a run of twenty it is nowhere near the line they are
+   * reading, and a page merging in between the two moved a live reader 618px in
+   * run 43 while every term the anchor computed read held.
    *
    * Nothing has to arrive for that gap to open. A line already in the row
    * getting taller does it too, and needs no landing, no merge and no
-   * re-ordering: the row's top does not move and `lineWithinRow` of the message
-   * the anchor holds does not change, so `tookIn` reads zero and nothing is
-   * corrected. The reader is moved by exactly what the line above them gained.
+   * re-ordering: the row's top does not move, so the correction was not short
+   * here — it was never asked for, `movedInList` being false for a message that
+   * only changed height. The `grown` branch is what asks.
    *
-   * The line to flip when #608 is answered is the last one: the reader's own
-   * line should end where it started, as the anchor's message already does.
-   *
-   * **The window agrees.** `docs/end-to-end-43/grow-lab.sh` puts the same
-   * arrangement in `webkit2gtk-4.1` and grows the same kind of line: the fold
-   * moves 46px and the anchor's message does not move at all, twice of twice.
-   * The model is not manufacturing this one, which is the question #599 left
+   * **The window agreed with the defect.** `docs/end-to-end-43/grow-lab.sh` put
+   * the same arrangement in `webkit2gtk-4.1` and grew the same kind of line: the
+   * fold moved 46px and the anchor's message did not move at all, twice of
+   * twice. The model was not manufacturing it, which is the question #599 left
    * behind it.
    */
-  it("moves the parked reader by whatever a line above them gains, which is #608", () => {
+  it("holds the parked reader when a line above them grows", () => {
     seed(longRunAcrossTheBoundary(201, 400));
     const second = openSecondView();
     render(
@@ -818,10 +814,11 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     });
     flushLayout();
 
-    // The message the anchor holds is exactly where it was, and the message the
-    // reader is looking at is two lines further down the pane.
-    expect(eyeLine(parked!, "line201")).toBe(anchored);
-    expect(eyeLine(parked!, watching)).toBe(before + 2 * LINE_PX);
+    // The reader's own line is exactly where it was, and the message the row is
+    // named for has gone up by the two lines the pane came down — which is the
+    // fix stated as a reading: the first message of a run is not the reader.
+    expect(eyeLine(parked!, watching)).toBe(before);
+    expect(eyeLine(parked!, "line201")).toBe(anchored - 2 * LINE_PX);
   });
 
   /**
@@ -831,13 +828,12 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
    * into the reader's row between the message the anchor holds and the line
    * they are reading.
    *
-   * The anchor does not run for this either, and for a different reason than
-   * the growth above: the fill lands *behind* the anchor's own message in the
-   * list, so its index does not change, `movedInList` is false, and the branch
-   * that would correct anybody is never taken. What arrives above the reader is
-   * arriving below the message that speaks for them.
+   * This one needs no branch of its own. A fill that lands above the reader's
+   * eyes lands in front of the message at the fold however far behind the row's
+   * first message it is, so naming the reader by their own line is the whole of
+   * what makes `movedInList` true and the existing correction run.
    */
-  it("moves the parked reader by a gap fill landing inside their row, which is #608", () => {
+  it("holds the parked reader when a gap fill lands inside their row", () => {
     // Read back rather than lived through, because `rows.ts` closes the open
     // run where `source` changes: a fill is history, and history landing in a
     // window of live messages opens a row of its own rather than joining
@@ -903,8 +899,8 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     ).toBe(parked!.querySelector('[data-msgid="line201"]')!.closest<HTMLElement>("[data-index]"));
     expect(eyeLine(parked!, "fill0")).toBeLessThan(0);
 
-    expect(eyeLine(parked!, "line201")).toBe(anchored);
-    expect(eyeLine(parked!, watching)).toBe(before + 4 * LINE_PX);
+    expect(eyeLine(parked!, watching)).toBe(before);
+    expect(eyeLine(parked!, "line201")).toBe(anchored - 4 * LINE_PX);
   });
 
   /**
@@ -919,7 +915,7 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
    * live window does not apply here: the line joins the run rather than opening
    * one, and there is nothing about the arrangement a reader could avoid.
    */
-  it("moves the parked reader by a live line stamped into their row, which is #608", () => {
+  it("holds the parked reader when a live line is stamped into their row", () => {
     seed(longRunAcrossTheBoundary(201, 400));
     const second = openSecondView();
     render(
@@ -973,8 +969,8 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     );
     expect(eyeLine(parked!, "late")).toBeLessThan(0);
 
-    expect(eyeLine(parked!, "line201")).toBe(anchored);
-    expect(eyeLine(parked!, watching)).toBe(before + LINE_PX);
+    expect(eyeLine(parked!, watching)).toBe(before);
+    expect(eyeLine(parked!, "line201")).toBe(anchored - LINE_PX);
   });
 
   /**

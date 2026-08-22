@@ -641,7 +641,10 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
         const tail = await ipc.loadHistory({
           network,
           target,
+          // The newest page the archive holds, which is what `before` null is
+          // answered with — there is no boundary message to name.
           before: null,
+          beforeId: null,
           limit: PAGE_SIZE,
         });
         setLoadError(null);

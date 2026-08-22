@@ -67,15 +67,44 @@ function open(patch: Partial<AppState> = {}) {
   return render(<AppearancePage onDone={done} />);
 }
 
+function showTab(name: "Style" | "Messages" | "Text & scale") {
+  const tab = screen.getByRole("tab", { name });
+  if (tab.getAttribute("aria-selected") !== "true") fireEvent.click(tab);
+}
+
 function button(name: string | RegExp): HTMLButtonElement {
+  const label = String(name);
+  if (/Larger|Smaller/.test(label)) showTab("Text & scale");
+  if (/Start from|ircx (Dark|Light|Classic)|Install a theme|Open the themes/.test(label)) {
+    showTab("Style");
+  }
   return screen.getByRole("button", { name }) as HTMLButtonElement;
 }
 
 function radio(name: string | RegExp): HTMLElement {
+  if (/Compact|Comfortable|Read/.test(String(name))) showTab("Messages");
   return screen.getByRole("radio", { name });
 }
 
 function field(token: string): HTMLInputElement {
+  if (
+    [
+      "Timestamp",
+      "Timestamp place",
+      "Timestamp emphasis",
+      "Conversation position",
+      "Line width",
+      "Spine",
+      "Nickname on every line",
+      "Compact single-message runs",
+      "Angle brackets around nicknames",
+      "Nickname colours",
+    ].includes(token)
+  ) {
+    showTab("Messages");
+  } else if (["Message text", "Prose", "Identifiers and code", "Compact sidebar"].includes(token)) {
+    showTab("Text & scale");
+  }
   return screen.getByLabelText(token) as HTMLInputElement;
 }
 
@@ -104,6 +133,20 @@ function preview(): HTMLElement {
 }
 
 describe("AppearancePage", () => {
+  it("groups the controls into local tabs", () => {
+    open();
+
+    expect(screen.getByRole("tab", { name: "Style" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("tabpanel", { name: "Style" })).toBeTruthy();
+
+    showTab("Messages");
+
+    expect(screen.getByRole("tabpanel", { name: "Messages" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Density" })).toBeTruthy();
+  });
+
   it("names every theme by author and appearance, and says which is in use", () => {
     open({ themeId: "ircx-dark" });
 
@@ -205,10 +248,13 @@ describe("AppearancePage", () => {
   describe("density", () => {
     it("offers the three and no others", () => {
       open();
+      showTab("Messages");
 
-      expect(screen.getByText("For operators and log reading")).toBeTruthy();
-      expect(screen.getByText("For being in the conversation")).toBeTruthy();
-      expect(screen.getByText("For nine hours of backlog")).toBeTruthy();
+      expect(screen.getAllByRole("radio").map((option) => option.textContent)).toEqual([
+        "Compact",
+        "Comfortable",
+        "Read",
+      ]);
     });
 
     it("repaints the timeline on the one that was chosen", () => {

@@ -44,7 +44,7 @@ export function ThemeCards({
   onEdit: (theme: string) => void;
 }) {
   return (
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-3">
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(145px,1fr))] gap-3">
       {themes.map((theme) => {
         const chosen = theme.id === themeId;
         const tokens = { ...theme.tokens, ...overrides[theme.id] } as CSSProperties;

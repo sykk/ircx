@@ -54,7 +54,7 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="flex flex-col gap-6 px-8 py-6">
+    <div className="flex flex-col gap-6 px-6 py-6">
       <header className="flex items-start justify-between gap-6">
         <div className="flex flex-col gap-1">
           <h2 className="text-[22px] font-semibold text-[var(--text-primary)]">Appearance</h2>
@@ -69,58 +69,9 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
         <SecondaryButton onClick={onDone}>Done</SecondaryButton>
       </header>
 
-      {/* The rail goes beside the preview where there is room for both, and
-          stacks under it rather than squeezing the sample where there is not.
-          Measured against the pane rather than the window: this page is a pane
-          of the client's layout now, and a viewport breakpoint kept the rail
-          beside a 476px pane in a 1200px window, which is where the row of
-          accents was found running off the edge. */}
-      <div className="grid items-start gap-6 @3xl:grid-cols-[minmax(0,1fr)_290px]">
-        <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid items-start gap-5 @4xl:grid-cols-[minmax(440px,1.65fr)_minmax(260px,1fr)]">
+        <div className="min-w-0 @4xl:sticky @4xl:top-6">
           <Preview />
-
-          <ThemeCards
-            themes={themes}
-            themeId={themeId}
-            overrides={overrides}
-            onEdit={edit}
-          />
-
-          <InstallTheme />
-
-          {broken.length > 0 && (
-            <section className="flex flex-col gap-3">
-              <h3 className="text-[10px] font-semibold tracking-[0.09em] text-[var(--text-muted)] uppercase">
-                Themes that would not load
-              </h3>
-              {/* Listed whole. Each sentence names the field or the property
-                  that is wrong and what belongs in it, and is written to be
-                  acted on by the person holding the file. */}
-              <ul className="flex flex-col gap-3">
-                {broken.map((theme) => (
-                  <li key={theme.id} className="flex flex-col gap-1">
-                    <h4 className="font-mono text-[12px] text-[var(--text-primary)]">
-                      {theme.id}
-                    </h4>
-                    {theme.problems.map((problem) => (
-                      <p
-                        key={problem}
-                        className="selectable text-[11px] leading-[1.6] text-[var(--danger)]"
-                      >
-                        {problem}
-                      </p>
-                    ))}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <p className="text-[11px] text-[var(--text-muted)]">
-            Themes live in <span className="font-mono">&lt;app data&gt;/themes</span>. A theme
-            is a folder holding a theme.json and a theme.css; copy one in and it appears here
-            without a relaunch.
-          </p>
         </div>
 
         <AppearanceRail
@@ -132,6 +83,54 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
           presentation={presentation}
           typography={typography}
           onEditTokens={() => edit(themeId)}
+          themesPanel={
+            <div className="flex flex-col gap-4">
+              <section className="flex flex-col gap-3">
+                <h3 className="text-[10px] font-semibold tracking-[0.09em] text-[var(--text-muted)] uppercase">
+                  Theme
+                </h3>
+                <ThemeCards
+                  themes={themes}
+                  themeId={themeId}
+                  overrides={overrides}
+                  onEdit={edit}
+                />
+              </section>
+
+              <InstallTheme />
+
+              {broken.length > 0 && (
+                <section className="flex flex-col gap-3">
+                  <h3 className="text-[10px] font-semibold tracking-[0.09em] text-[var(--text-muted)] uppercase">
+                    Themes that would not load
+                  </h3>
+                  <ul className="flex flex-col gap-3">
+                    {broken.map((theme) => (
+                      <li key={theme.id} className="flex flex-col gap-1">
+                        <h4 className="font-mono text-[12px] text-[var(--text-primary)]">
+                          {theme.id}
+                        </h4>
+                        {theme.problems.map((problem) => (
+                          <p
+                            key={problem}
+                            className="selectable text-[11px] leading-[1.6] text-[var(--danger)]"
+                          >
+                            {problem}
+                          </p>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Themes live in <span className="font-mono">&lt;app data&gt;/themes</span>. A
+                theme is a folder holding a theme.json and a theme.css; copy one in and it
+                appears here without a relaunch.
+              </p>
+            </div>
+          }
         />
       </div>
     </div>

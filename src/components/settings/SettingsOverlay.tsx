@@ -85,8 +85,8 @@ function Dialog({ section }: { section: SectionId }) {
            the app behind is separated by one pixel of border and a shadow that
            is black on near-black. The overlay surface is the token for a thing
            floating over the client, which is what this is. */
-        className="relative grid h-[min(680px,84vh)] w-[min(1024px,92vw)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"
-        style={{ gridTemplateColumns: "220px minmax(0, 1fr)" }}
+        className="relative grid h-[min(760px,88vh)] w-[min(1240px,94vw)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]"
+        style={{ gridTemplateColumns: "196px minmax(0, 1fr)" }}
       >
         <SettingsSidebar section={section} onChoose={setSettingsSection} />
 

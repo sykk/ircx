@@ -93,6 +93,7 @@ fn a_message_written_on_one_connection_is_found_on_the_other() {
             network: "libera".into(),
             target: "#two".into(),
             before: None,
+            before_id: None,
             limit: 50,
         })
         .expect("the history loads");

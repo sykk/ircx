@@ -114,6 +114,14 @@ pub struct HistoryRequest {
     pub target: TargetName,
     /// RFC 3339. Pages backwards from the oldest message already shown.
     pub before: Option<String>,
+    /// That message's id, which is what tells the page boundary apart from
+    /// the messages sharing its millisecond (#619). A timestamp alone cannot:
+    /// a channel can say a dozen things inside one, and the archive orders
+    /// them by rowid afterwards. Optional because a caller need not be paging
+    /// from a message the archive holds — a page asked for from a line still
+    /// on its way to disk names an id no row has, and the answer is the one
+    /// the timestamp alone gives.
+    pub before_id: Option<String>,
     pub limit: u32,
 }
 

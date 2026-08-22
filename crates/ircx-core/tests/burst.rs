@@ -181,6 +181,7 @@ async fn measure(size: usize) -> Option<String> {
             network: format!("burst-{size}"),
             target: channel.clone(),
             before: None,
+            before_id: None,
             limit: 100_000,
         })
         .map(|messages| messages.len())

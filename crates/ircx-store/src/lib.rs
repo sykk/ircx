@@ -307,9 +307,44 @@ impl Store {
     /// to the page — and a reader paging back paid for the whole distance
     /// again on every page. Written as a plain comparison it is a range the
     /// index serves, and the walk starts where it was asked to.
+    ///
+    /// The boundary is the timestamp *and* the row, which is #619. The order
+    /// is total — timestamp, then rowid — and a filter naming the timestamp
+    /// alone is not: every message sharing the oldest held one's millisecond
+    /// falls between the page and the window, and the next ask names a bound
+    /// that has moved past them. They stay in the archive, unreachable. The
+    /// rowid is looked up rather than sent because the caller has the msgid
+    /// and not the row, exactly as `load_history_around` does it below.
+    ///
+    /// This disjunction is not the one #527 was about. That one asked whether
+    /// the *parameter* was null, which left SQLite nothing to seek to; this one
+    /// is bounded above either way, and the planner reads `timestamp <= ?3` out
+    /// of it and serves the same index seek as the plain comparison did.
     pub fn load_history(&self, req: &HistoryRequest) -> Result<Vec<ChatMessage>, StoreError> {
-        let sql = match req.before {
-            Some(_) => format!(
+        let conn = self.reading();
+        let boundary = match (&req.before, &req.before_id) {
+            (Some(_), Some(id)) => conn
+                .query_row(
+                    "SELECT id FROM messages
+                     WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3",
+                    params![req.network, req.target, id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?,
+            _ => None,
+        };
+
+        let sql = match (&req.before, boundary) {
+            (Some(_), Some(_)) => format!(
+                "SELECT {columns}
+                 FROM messages m
+                 WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
+                   AND (m.timestamp < ?3 OR (m.timestamp = ?3 AND m.id < ?4))
+                 ORDER BY m.timestamp DESC, m.id DESC
+                 LIMIT ?5",
+                columns = message::COLUMNS,
+            ),
+            (Some(_), None) => format!(
                 "SELECT {columns}
                  FROM messages m
                  WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
@@ -318,7 +353,7 @@ impl Store {
                  LIMIT ?4",
                 columns = message::COLUMNS,
             ),
-            None => format!(
+            (None, _) => format!(
                 "SELECT {columns}
                  FROM messages m
                  WHERE m.network = ?1 AND m.target = ?2 COLLATE NOCASE
@@ -328,11 +363,15 @@ impl Store {
             ),
         };
 
-        let conn = self.reading();
         let mut stmt = conn.prepare(&sql)?;
-        let mut rows = match &req.before {
-            Some(before) => stmt.query(params![req.network, req.target, before, req.limit])?,
-            None => stmt.query(params![req.network, req.target, req.limit])?,
+        let mut rows = match (&req.before, boundary) {
+            (Some(before), Some(row_id)) => {
+                stmt.query(params![req.network, req.target, before, row_id, req.limit])?
+            }
+            (Some(before), None) => {
+                stmt.query(params![req.network, req.target, before, req.limit])?
+            }
+            (None, _) => stmt.query(params![req.network, req.target, req.limit])?,
         };
         let mut page = Vec::new();
         while let Some(row) = rows.next()? {

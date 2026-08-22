@@ -617,12 +617,30 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }),
 
   replaceHistory: (key, messages) =>
-    set((s) => ({
-      timelines: {
-        ...s.timelines,
-        [key]: { ...EMPTY_TIMELINE, messages, detachedAt: detachedAt(s.timelines[key], messages) },
-      },
-    })),
+    set((s) => {
+      const held = s.timelines[key];
+      return {
+        timelines: {
+          ...s.timelines,
+          [key]: {
+            ...EMPTY_TIMELINE,
+            messages,
+            // Where the reader stopped is not a fact about the window, and a
+            // jump is not a departure — `leftBehind` declines for the target
+            // already being shown, and `readingTarget` says why. Both survive
+            // the write, so the rule comes back with the tail (#623).
+            //
+            // The msgid can name a message this window does not hold, which
+            // every reader of it already answers for: `buildRows` never
+            // matches it, and `catchUpMessages` and the mention cursor both
+            // give back nothing on `-1`.
+            unreadFrom: held?.unreadFrom ?? null,
+            readMarker: held?.readMarker ?? null,
+            detachedAt: detachedAt(held, messages),
+          },
+        },
+      };
+    }),
 
   clearBuffer: (key) =>
     set((s) => ({

@@ -357,6 +357,69 @@ describe("a window filed over a conversation", () => {
   });
 });
 
+/**
+ * #623. Two of the fields `replaceHistory` reset are not facts about the window
+ * it files: the seam, and the marker that places one in a page nobody was here
+ * for. A jump is not a departure — `leftBehind` declines for the target already
+ * on screen, and `readingTarget` says why — so both hold across it.
+ */
+describe("the seam under a window filed over a conversation", () => {
+  const said = (id: string, minute: number) =>
+    makeMessage({ id, timestamp: `2026-08-15T12:${String(minute).padStart(2, "0")}:00.000Z` });
+
+  function hold(messages: ChatMessage[], unreadFrom: string | null, readMarker: string | null) {
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: { ...s.timelines[KEY]!, messages, unreadFrom, readMarker },
+      },
+    }));
+  }
+
+  it("holds where the reader stopped, however far back the window lands", () => {
+    hold([said("old", 1), said("live", 30)], "live", null);
+
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    expect(timeline()?.unreadFrom).toBe("live");
+  });
+
+  /** The window the jump filed does not hold the message the seam names, and
+   * the tail read back over it does. */
+  it("has the message to draw the rule against again when the tail comes back", () => {
+    hold([said("old", 1), said("live", 30)], "live", null);
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    useAppStore.getState().replaceHistory(KEY, [said("live", 30), said("later", 31)]);
+
+    expect(timeline()?.unreadFrom).toBe("live");
+    expect(timeline()?.detachedAt).toBe(null);
+  });
+
+  /** The marker outlasts every window: nothing sets it but the server, so a
+   * jump that took it left `seamAt` with nothing to place a rule against for
+   * the rest of the session. #566. */
+  it("keeps the marker a page nobody was here for is measured against", () => {
+    const marker = "2026-08-15T12:10:00.000Z";
+    hold([said("old", 1)], null, marker);
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [
+        makeMessage({ id: "read", timestamp: "2026-08-15T12:09:00.000Z", source: "serverHistory" }),
+        makeMessage({ id: "missed", timestamp: "2026-08-15T12:11:00.000Z", source: "serverHistory" }),
+      ],
+      answers: null,
+    });
+
+    expect(timeline()?.readMarker).toBe(marker);
+    expect(timeline()?.unreadFrom).toBe("missed");
+  });
+});
+
 describe("paging backwards", () => {
   /** #331 states the invariant — paging backwards stops at TIMELINE_CAP —
    * but only the auto-fill effect honoured it; the scroll handler paged

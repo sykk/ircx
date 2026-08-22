@@ -1,12 +1,16 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
-import { resetStore } from "@/components/shell/fixtures";
+import { ipc } from "@/lib/ipc";
+import { activeTarget, makeNetwork, resetStore } from "@/components/shell/fixtures";
 import type { ChannelListing } from "@/types";
 import { ChannelList } from "./ChannelList";
 
 vi.mock("@/lib/ipc", () => ({
-  ipc: { joinChannel: vi.fn().mockResolvedValue(undefined) },
+  ipc: {
+    joinChannel: vi.fn().mockResolvedValue(undefined),
+    submitInput: vi.fn().mockResolvedValue({ kind: "handled" }),
+  },
   onIrcxEvent: vi.fn(),
 }));
 
@@ -30,7 +34,10 @@ afterAll(() => {
   }
 });
 
-beforeEach(resetStore);
+beforeEach(() => {
+  resetStore();
+  vi.mocked(ipc.submitInput).mockReset().mockResolvedValue({ kind: "handled" });
+});
 
 function listing(name: string, users: number, topic = ""): ChannelListing {
   return { name, users, topic };
@@ -54,6 +61,28 @@ describe("the channel list", () => {
   it("stays out of the way until a list arrives", () => {
     const { container } = render(<ChannelList />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("asks the server when the browser opens without a list", () => {
+    useAppStore.setState({ channelsOpen: "libera" });
+    render(<ChannelList />);
+
+    expect(screen.getByText("Loading channels…")).toBeTruthy();
+    expect(ipc.submitInput).toHaveBeenCalledWith("libera", "*", "/list");
+  });
+
+  it("shows why the server refused to list channels", async () => {
+    vi.mocked(ipc.submitInput).mockResolvedValueOnce({
+      kind: "rejected",
+      value: "Connect to libera before listing its channels.",
+    });
+    useAppStore.setState({ channelsOpen: "libera" });
+    render(<ChannelList />);
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "Connect to libera before listing its channels.",
+    );
   });
 
   it("shows what the server said about each channel", () => {
@@ -127,6 +156,7 @@ describe("the channel list", () => {
   });
 
   it("puts itself away when a channel is chosen", async () => {
+    useAppStore.setState({ networks: { libera: makeNetwork("libera") } });
     show([listing("#ircx", 1)]);
 
     await act(async () => {
@@ -134,5 +164,6 @@ describe("the channel list", () => {
     });
 
     expect(useAppStore.getState().channelsOpen).toBeNull();
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ircx" });
   });
 });

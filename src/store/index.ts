@@ -154,6 +154,7 @@ export interface AppActions {
   setUploadRequest: (paths: string[] | null) => void;
   /** Shows the channel list a network answered, or puts it away. */
   showChannels: (network: string | null) => void;
+  browseChannels: (network: string) => void;
   /** The words that raise a conversation beside the reader's nickname. Held
    * here rather than fetched where they are used: the timeline asks the
    * question once per message, and the answer is one round trip per launch. */
@@ -755,6 +756,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setUploadRequest: (paths) =>
     set({ uploadRequest: paths === null || paths.length === 0 ? null : paths }),
   showChannels: (network) => set({ channelsOpen: network }),
+  browseChannels: (network) =>
+    set((s) => {
+      const { [network]: _stale, ...channelList } = s.channelList;
+      return { channelsOpen: network, channelList };
+    }),
   setHighlightWords: (highlightWords) => set({ highlightWords }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),

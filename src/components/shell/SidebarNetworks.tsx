@@ -76,6 +76,7 @@ export function SidebarNetworks() {
   const openConsole = useAppStore((s) => s.openConsole);
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
+  const browseChannels = useAppStore((s) => s.browseChannels);
   const togglePinnedTarget = useAppStore((s) => s.togglePinnedTarget);
   const setSidebarFilter = useAppStore((s) => s.setSidebarFilter);
 
@@ -317,6 +318,7 @@ export function SidebarNetworks() {
             onConnection={() => void toggleConnection(row.network)}
             onReconnect={() => void reconnect(row.network)}
             onRawLog={() => openConsole(row.network.id, true)}
+            onBrowseChannels={() => browseChannels(row.network.id)}
             onSettings={() => openSetup(row.network.id)}
           />
           <CloseButton
@@ -681,6 +683,7 @@ function NetworkMenu({
   onConnection,
   onReconnect,
   onRawLog,
+  onBrowseChannels,
   onSettings,
 }: {
   network: Network;
@@ -694,6 +697,7 @@ function NetworkMenu({
   onConnection: () => void;
   onReconnect: () => void;
   onRawLog: () => void;
+  onBrowseChannels: () => void;
   onSettings: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -777,6 +781,7 @@ function NetworkMenu({
           {(network.status.state === "failed" || network.status.state === "reconnecting") && (
             <MenuItem onClick={choose(onReconnect)}>Reconnect now</MenuItem>
           )}
+          <MenuItem onClick={choose(onBrowseChannels)}>Browse channels</MenuItem>
           <MenuItem onClick={choose(onRawLog)}>Raw protocol log</MenuItem>
           <MenuItem onClick={choose(onSettings)}>{network.name} settings</MenuItem>
         </div>

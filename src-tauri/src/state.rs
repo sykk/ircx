@@ -1102,6 +1102,7 @@ mod tests {
                         network: id.clone(),
                         target: target.clone(),
                         before: None,
+                        before_id: None,
                         limit: 50,
                     })
                     .unwrap();

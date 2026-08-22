@@ -426,6 +426,10 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
         network,
         target,
         before: current.messages[0]?.timestamp ?? null,
+        // Which message the timestamp belongs to, because a channel can say a
+        // dozen things inside one millisecond and the archive would otherwise
+        // have to skip all of them to answer (#619).
+        beforeId: current.messages[0]?.id ?? null,
         limit: PAGE_SIZE,
       });
       setLoadError(null);

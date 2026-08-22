@@ -192,6 +192,7 @@ fn page(store: &Store, before: Option<String>, limit: u32) -> (Duration, usize) 
         network: NETWORK.into(),
         target: TARGET.into(),
         before,
+        before_id: None,
         limit,
     };
     let began = Instant::now();

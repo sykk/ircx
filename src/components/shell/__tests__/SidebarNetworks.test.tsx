@@ -271,6 +271,15 @@ describe("SidebarNetworks", () => {
       expect(document.activeElement).toBe(button);
     });
 
+    it("closes the menu when clicking elsewhere in the app", () => {
+      render(<SidebarNetworks />);
+      openRowMenu("Libera.Chat");
+
+      fireEvent.pointerDown(document.body);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
     it("shows one network's menu at a time", () => {
       seedStore([
         makeNetwork("libera", { name: "Libera.Chat" }),

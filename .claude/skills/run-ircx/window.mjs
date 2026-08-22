@@ -39,7 +39,7 @@
 //
 // Needs `gcc`, `libXtst`, `Xvfb`, `xprop` and ImageMagick's `import`.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,10 +186,19 @@ async function waitForWindow(what, timeoutMs = 90_000) {
   throw new Error(`timed out waiting for ${what}\n${appSaid.trim()}`);
 }
 
-/* Vite serves the frontend a debug binary loads: tauri.conf.json pins port 5183
+/* Vite serves the frontend a debug binary loads: tauri.conf.json pins the port
  * with strictPort, so a dev server from another checkout fails this outright
  * rather than serving somebody else's working tree. #233. A release build reads
- * none of this — the frontend is inside it. */
+ * none of this — the frontend is inside it.
+ *
+ * The number is read out of `tauri.conf.json` rather than written here, the way
+ * `vite.config.ts` reads it: another session holding 5183 is the reason to move
+ * `devUrl`, and a harness that has the old number in it cannot be moved with
+ * everything else. */
+const DEV_PORT = Number(
+  new URL(JSON.parse(readFileSync(join(ROOT, "src-tauri/tauri.conf.json"), "utf8")).build.devUrl)
+    .port,
+);
 if (!RELEASE) {
   const vite = spawn("npm", ["run", "dev"], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
   children.push(vite);
@@ -201,7 +210,7 @@ if (!RELEASE) {
       /* The served URL rather than the port number: "Port 5183 is already in
        * use" carries the port too, and matching that reports a dev server
        * belonging to another checkout as this one starting up. */
-      if (!/http:\/\/localhost:5183\//.test(buffer)) return;
+      if (!buffer.includes(`http://localhost:${DEV_PORT}/`)) return;
       clearTimeout(timer);
       resolve();
     };

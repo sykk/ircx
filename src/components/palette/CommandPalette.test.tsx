@@ -157,6 +157,17 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
+  it("opens the attention view", () => {
+    render(<CommandPalette />);
+    type("Attention");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().searchOpen).toBe(true);
+    expect(useAppStore.getState().searchMode).toBe("attention");
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("marks the matched characters in the result", () => {
     const { container } = render(<CommandPalette />);
     type("ctfo");

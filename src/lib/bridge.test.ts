@@ -62,7 +62,7 @@ describe("marking a conversation read", () => {
     const store = useAppStore.getState();
     store.setActive({ network: "libera", target: "#ctf-ops" });
     // Anything else touching the store must not look like reading it again.
-    store.toggleSearch(true);
+    store.openSearch();
     store.setActive({ network: "libera", target: "#ctf-ops" });
 
     expect(ipcMock.markRead).toHaveBeenCalledTimes(1);

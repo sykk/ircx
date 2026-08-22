@@ -342,7 +342,7 @@ describe("useAppHotkeys", () => {
     render(<AppHost />);
     const store = useAppStore.getState();
     store.togglePalette(true);
-    store.toggleSearch(true);
+    store.openSearch();
 
     press(document, { key: "Escape" });
     expect(useAppStore.getState().paletteOpen).toBe(false);

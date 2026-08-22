@@ -29,7 +29,7 @@ export type CandidateAction =
   | { type: "filterMembers" }
   | { type: "split"; direction: SplitDirection }
   | { type: "closePane" }
-  | { type: "search" }
+  | { type: "search"; mode?: "search" | "attention" }
   | { type: "sidebarFilter"; filter: SidebarFilter }
   | { type: "unread"; direction: 1 | -1 }
   | { type: "connect"; network: string }
@@ -389,6 +389,11 @@ const STATIC_ACTIONS: readonly { label: string; detail: string; action: Candidat
     label: "Search this conversation",
     detail: "Search the current target's history",
     action: { type: "search" },
+  },
+  {
+    label: "Attention",
+    detail: "Unread highlights and direct messages across every network",
+    action: { type: "search", mode: "attention" },
   },
   {
     label: "Sidebar: All conversations",

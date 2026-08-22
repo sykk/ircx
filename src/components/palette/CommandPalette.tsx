@@ -187,7 +187,7 @@ function Palette() {
         }
         break;
       case "search":
-        store.toggleSearch(true);
+        store.openSearch(action.mode);
         break;
       case "sidebarFilter":
         store.setSidebarFilter(action.filter);

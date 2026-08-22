@@ -1,0 +1,136 @@
+===== ship =====
+-- what the reactor did --
+reacted line 0713 while the fold was line 0813 at y -19 and top 5945
+reacted line 0710 while the fold was line 0810 at y -8 and top 5887
+reacted line 0709 while the fold was line 0809 at y -16 and top 5870
+reacted line 0706 while the fold was line 0806 at y -22 and top 5801
+reacted line 0703 while the fold was line 0803 at y -11 and top 5743
+reacted line 0700 while the fold was line 0800 at y 0 and top 5685
+reacted line 0699 while the fold was line 0799 at y -31 and top 5655
+reacted line 0696 while the fold was line 0796 at y -20 and top 5597
+reacted line 0689 while the fold was line 0789 at y -23 and top 5453
+reacted line 0686 while the fold was line 0786 at y -12 and top 5395
+reacted line 0683 while the fold was line 0783 at y -1 and top 5309
+reacted line 0681 while the fold was line 0781 at y -11 and top 5251
+-- the pane, parked --
+816..838 painted, 0 steps
+-- the pane, settled --
+709..727 painted, 0 steps
+-- what the pane was paid --
+155 commits, 12 of them a row of chips going in above the reader
+  commit 108: content +28, pane +28 — the reader held on t29sjht32dhjdznyjycakua7gs at y -19
+  commit 120: content +28, pane +28 — the reader held on biejridiecruesk98aq3iq77bi at y -22
+  commit 124: content +28, pane +28 — the reader held on a6mt57kavftrcpe4d45iq6dm9n at y -11
+  commit 128: content +28, pane +28 — the reader held on x2uhvxa2v9yj64xzjanwv8aypn at y 0
+  commit 132: content +28, pane +28 — the reader held on x2uhvxa2v9yj64xzjanwv8aypn at y 0
+  commit 136: content +28, pane +28 — the reader held on d7pm8j4xgrmnc6nd4qmdf8u926 at y -31
+  commit 143: content +28, pane +28 — the reader held on akpgfd8x5vh8g94w27k7kte3pw at y -9
+  commit 147: content +28, pane +28 — the reader held on h9kvufuzz52xrku42gywjs6gie at y -23
+  commit 154: content +28, pane +28 — the reader held on 3nrw7hz8idducqeea74cskdw3w at y -1
+  commit 158: content +28, pane +28 — the reader held on f7pm4pxwad3mibf88wur6dcvte at y -11
+  commit 162: content +28, pane +28 — the reader held on f7pm4pxwad3mibf88wur6dcvte at y -11
+  commit 166: content +28, pane +28 — the reader held on akjiktdsntyx49uxtuskawu7n6 at y -5
+  12 paid for, 0 not, 0px owed
+
+===== shipb =====
+-- what the reactor did --
+reacted line 0710 while the fold was line 0810 at y -9 and top 5860
+reacted line 0706 while the fold was line 0806 at y -23 and top 5802
+reacted line 0703 while the fold was line 0803 at y -12 and top 5716
+reacted line 0700 while the fold was line 0800 at y -1 and top 5658
+reacted line 0699 while the fold was line 0799 at y -32 and top 5600
+reacted line 0696 while the fold was line 0796 at y -21 and top 5542
+reacted line 0693 while the fold was line 0793 at y -10 and top 5484
+reacted line 0689 while the fold was line 0789 at y -24 and top 5398
+reacted line 0686 while the fold was line 0786 at y -13 and top 5340
+reacted line 0683 while the fold was line 0783 at y -2 and top 5310
+reacted line 0681 while the fold was line 0781 at y -12 and top 5252
+reacted line 0679 while the fold was line 0779 at y -6 and top 5194
+-- the pane, parked --
+814..835 painted, 0 steps
+-- the pane, settled --
+707..727 painted, 0 steps
+-- what the pane was paid --
+156 commits, 12 of them a row of chips going in above the reader
+  commit 112: content +28, pane +28 — the reader held on 64qkp2ek8u2fqat8yra5x496d6 at y -9
+  commit 122: content +28, pane +28 — the reader held on qi43fiunhiuywckhtnipg8afvn at y -12
+  commit 126: content +28, pane +28 — the reader held on d5v7heqacd2n9niezisfhmk87a at y -1
+  commit 131: content +28, pane +28 — the reader held on wsp4g9t7x5iwbqp4268hq8fzas at y -32
+  commit 138: content +28, pane +28 — the reader held on pcefst6mh2ktye8qac9xuuw67w at y -21
+  commit 145: content +28, pane +28 — the reader held on 462etvts2rtswqdg75bbxrsm7a at y -24
+  commit 149: content +28, pane +28 — the reader held on bw7e2wi45cdjfijs6tf4dww396 at y -13
+  commit 153: content +28, pane +28 — the reader held on bw7e2wi45cdjfijs6tf4dww396 at y -13
+  commit 157: content +28, pane +28 — the reader held on queakdv6wen63scjhrta6wkj8s at y -2
+  commit 162: content +28, pane +28 — the reader held on c72mf5mwdsdip69k8vwc85c2t2 at y -12
+  commit 166: content +28, pane +28 — the reader held on 467i79vajdrd3c6c9yvcvxw6ss at y -6
+  commit 175: content +28, pane +28 — the reader held on ute3sg9egm8buz5eeee59qnhj2 at y -9
+  12 paid for, 0 not, 0px owed
+
+===== main =====
+-- what the reactor did --
+reacted line 0710 while the fold was line 0810 at y -9 and top 5860
+reacted line 0706 while the fold was line 0806 at y -23 and top 5802
+reacted line 0703 while the fold was line 0803 at y -12 and top 5716
+reacted line 0700 while the fold was line 0800 at y 27 and top 5630
+reacted line 0699 while the fold was line 0799 at y -45 and top 5613
+reacted line 0698 while the fold was line 0798 at y -1 and top 5544
+reacted line 0688 while the fold was line 0788 at y -23 and top 5372
+reacted line 0684 while the fold was line 0784 at y -9 and top 5286
+reacted line 0681 while the fold was line 0781 at y -16 and top 5200
+reacted line 0679 while the fold was line 0779 at y -10 and top 5142
+reacted line 0674 while the fold was line 0774 at y -11 and top 5046
+reacted line 0671 while the fold was line 0771 at y -10 and top 4970
+-- the pane, parked --
+814..835 painted, 0 steps
+-- the pane, settled --
+696..710 painted, 0 steps
+-- what the pane was paid --
+149 commits, 12 of them a row of chips going in above the reader
+  commit 112: content +28, pane +28 — the reader held on k5cs5dyuzuszefqscg4teewzz6 at y -9
+  commit 122: content +28, pane +0 — the reader went from 2xep7isuwi8xdc3r5pkiw95t3w at y -12 to q9vaa8qbgd2gprg2cddxjv4eee at y -9
+  commit 126: content +28, pane +0 — the reader went from gwhv44umyuqcwxc3e6u745p9yn at y 27 to f2usw4hnickrkiqfy67psi49ge at y -62
+  commit 132: content +28, pane +0 — the reader went from hhy3erkjuu6efwnh2bpmvae5hi at y -1 to kchi5249bzc5pwy74f7z94z7xa at y -23
+  commit 135: content +28, pane +0 — the reader went from 8uqeepxvtva9g6e28vdh32gd4w at y -12 to mntffjchjkefbsh2e8yfwq2aae at y -9
+  commit 138: content +28, pane +0 — the reader went from iga3c6cd7humpy6mpu69e55b6n at y -23 to a4xtbjcudvt9iq6twqca82rjwn at y -20
+  commit 142: content +28, pane +0 — the reader went from 3hfb6mz5iaiecyhvbnp7ywekuw at y -9 to taqi32r8sz8sxybgngfgs9rk52 at y -6
+  commit 145: content +28, pane +28 — the reader held on pjcynfcvn87iprxjnjwxuhskus at y -16
+  commit 151: content +28, pane +0 — the reader went from 4nca9ekyqcnhqh69zfb8puus8e at y -10 to y2stqgjxepu9rk78ayjgrk6s96 at y -7
+  commit 157: content +28, pane +0 — the reader went from qqui9m3qw3m44yxapiujqmwdas at y -10 to kui778pfrq6fr9wvnuav7fczxs at y -7
+  commit 158: content +28, pane +28 — the reader held on kui778pfrq6fr9wvnuav7fczxs at y -7
+  commit 162: content +28, pane +0 — the reader went from ps2eqv9tdadfshi7fxcx3kvgh2 at y -21 to km2akwq6zn43xiqy4pxq3i7hbw at y -64
+  3 paid for, 9 not, 252px owed
+
+===== mainb =====
+-- what the reactor did --
+reacted line 0716 while the fold was line 0816 at y -22 and top 6023
+reacted line 0715 while the fold was line 0816 at y -18 and top 6047
+reacted line 0713 while the fold was line 0813 at y -11 and top 5965
+reacted line 0710 while the fold was line 0810 at y 0 and top 5907
+reacted line 0705 while the fold was line 0805 at y -11 and top 5821
+reacted line 0700 while the fold was line 0800 at y -22 and top 5735
+reacted line 0699 while the fold was line 0799 at y -25 and top 5649
+reacted line 0695 while the fold was line 0795 at y -11 and top 5563
+reacted line 0692 while the fold was line 0792 at y 0 and top 5505
+reacted line 0687 while the fold was line 0787 at y -11 and top 5419
+reacted line 0684 while the fold was line 0784 at y 0 and top 5361
+reacted line 0681 while the fold was line 0781 at y -7 and top 5275
+-- the pane, parked --
+819..840 painted, 0 steps
+-- the pane, settled --
+700..716 painted, 0 steps
+-- what the pane was paid --
+155 commits, 12 of them a row of chips going in above the reader
+  commit 106: content +28, pane +28 — the reader held on 2mpy536jf5p5es5edavbsqdjhs at y -22
+  commit 114: content +28, pane +28 — the reader held on bfm8xegkwzyzx7c658fyf572ei at y -11
+  commit 118: content +28, pane +0 — the reader went from 98r56x5qmzih5vbiqsgdb5qses at y 0 to 5b84wk6ki2b3vxu43uk3httpp2 at y -22
+  commit 123: content +28, pane +0 — the reader went from cbhkywpprnb6zhe73g823qb9ta at y -10 to hymtfi3sv8bpxmzi3giiidc4ws at y -7
+  commit 129: content +28, pane +0 — the reader held on gcgcsu4r6y8p3an9f5uh27d9u2 at y 7
+  commit 132: content +28, pane +0 — the reader went from 7j4cwfx4dpkppudc9xwayz57qw at y -25 to zr8yucaa2ukdkykprkebdku4r6 at y -22
+  commit 135: content +28, pane +28 — the reader held on ce8tdgu6ushneyxu83nnjaps42 at y -11
+  commit 139: content +28, pane +0 — the reader went from ihgimiarmbe39hrs7yw4w67vme at y 0 to zmf9frffa583ztzimzv3q9ufcn at y -22
+  commit 142: content +28, pane +28 — the reader held on f2xk5abmn7xvj924u4veg8b4yw at y -11
+  commit 146: content +28, pane +0 — the reader went from 33axenh6mvmgbwp8xvegqsb2n6 at y 0 to j26qcg8a8r3j68rrymdc9rgw72 at y -68
+  commit 150: content +28, pane +28 — the reader held on wrvgj2unxxyhcytsu4irpxifyi at y -7
+  commit 154: content +28, pane +0 — the reader went from 56yvdd52wthxqrf67ddb3bxyte at y -1 to fnri3n48bxpkewnb3rwgd46gvn at y -23
+  5 paid for, 7 not, 196px owed
+

@@ -58,6 +58,7 @@ const EMPTY_TIMELINE: TimelineState = {
   hasMore: true,
   loadingOlder: false,
   askedBehind: null,
+  detachedAt: null,
 };
 
 /** Sequential rather than random so a test can name the view it just opened. */
@@ -619,7 +620,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { ...EMPTY_TIMELINE, messages },
+        [key]: { ...EMPTY_TIMELINE, messages, detachedAt: detachedAt(s.timelines[key], messages) },
       },
     })),
 
@@ -1052,6 +1053,32 @@ function afterHistoryLanded(
   const answered = timeline.askedBehind !== null && answers === timeline.askedBehind;
   if (!answered) return { askedBehind: timeline.askedBehind, hasMore: timeline.hasMore };
   return { askedBehind: null, hasMore: fresh === 0 ? false : timeline.hasMore };
+}
+
+/** Whether a window filed over a conversation reaches the present, and where it
+ * stops if it does not (#618).
+ *
+ * What the pane already held is the evidence: a window that ends earlier than
+ * what was on screen is one that stops short of it. That reads both ways, which
+ * is why it is a comparison rather than a flag — the tail read back by `Jump to
+ * latest` ends *later* than the detached window it replaces, and the same line
+ * says so and clears the mark.
+ *
+ * A pane holding nothing is taken to be detached, because nothing here can say
+ * otherwise — a jump into a conversation this run has never opened is answered
+ * out of the archive, and the archive's own newest is not what was asked for.
+ * It errs toward offering the way back: a reader who did not need it reads the
+ * same messages again, and one who did is not stranded, which is the bug.
+ */
+function detachedAt(
+  held: TimelineState | undefined,
+  filed: readonly ChatMessage[],
+): string | null {
+  const newest = filed[filed.length - 1];
+  if (!newest) return null;
+  const wasNewest = held?.messages[held.messages.length - 1];
+  if (!wasNewest) return newest.id;
+  return Date.parse(newest.timestamp) < Date.parse(wasNewest.timestamp) ? newest.id : null;
 }
 
 /** Older messages stay in SQLite, so the window keeps its newest `TIMELINE_CAP`

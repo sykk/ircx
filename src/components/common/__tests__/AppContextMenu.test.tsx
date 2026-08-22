@@ -72,6 +72,7 @@ describe("buildContextMenuItems", () => {
           loadingOlder: false,
           unreadFrom: null, readMarker: null,
           askedBehind: null,
+          detachedAt: null,
         },
       },
       networks: {

@@ -464,7 +464,7 @@ describe("what is still waiting to send", () => {
           messages,
           unreadFrom: null, readMarker: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, detachedAt: null
         },
       },
     });

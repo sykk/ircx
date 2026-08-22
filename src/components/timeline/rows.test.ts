@@ -388,6 +388,75 @@ describe("formatClock", () => {
   });
 });
 
+/**
+ * #618. A search jump files a window read around the hit over the conversation,
+ * and that window can end hours short of the present. The line the channel says
+ * next is drawn under it, and nothing in either message says the two are not
+ * each other's neighbours.
+ */
+describe("buildRows gap rule", () => {
+  const held = [at(0, { id: "a" }), at(1000, { id: "b" })];
+
+  it("draws no rule while the window still reaches the present", () => {
+    const rows = buildRows(held, null, NO_HIGHLIGHT, new Map(), undefined, null);
+
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block"]);
+  });
+
+  it("draws none for a detached window nothing has landed on yet", () => {
+    const rows = buildRows(held, null, NO_HIGHLIGHT, new Map(), undefined, "b");
+
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block"]);
+  });
+
+  it("breaks the run where the present resumes", () => {
+    const rows = buildRows(
+      [...held, at(2000, { id: "c" })],
+      null,
+      NO_HIGHLIGHT,
+      new Map(),
+      undefined,
+      "b",
+    );
+
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block", "gap", "block"]);
+  });
+
+  /** The two sides of a gap are minutes apart as often as days, and a date rule
+   * under the break would restate a day the reader was just shown. */
+  it("does not restate the day where the gap does not span one", () => {
+    const rows = buildRows(
+      [
+        makeMessage({ id: "a", timestamp: new Date(2026, 6, 29, 12, 6).toISOString() }),
+        makeMessage({ id: "b", timestamp: new Date(2026, 6, 29, 12, 7).toISOString() }),
+      ],
+      null,
+      NO_HIGHLIGHT,
+      new Map(),
+      undefined,
+      "a",
+    );
+
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block", "gap", "block"]);
+  });
+
+  it("still states it where the gap does", () => {
+    const rows = buildRows(
+      [
+        makeMessage({ id: "a", timestamp: new Date(2026, 6, 28, 23, 55).toISOString() }),
+        makeMessage({ id: "b", timestamp: new Date(2026, 6, 29, 12, 7).toISOString() }),
+      ],
+      null,
+      NO_HIGHLIGHT,
+      new Map(),
+      undefined,
+      "a",
+    );
+
+    expect(rows.map((row) => row.kind)).toEqual(["date", "block", "gap", "date", "block"]);
+  });
+});
+
 describe("buildRows at scale", () => {
   it("covers every fixture message exactly once, under unique keys", () => {
     const messages: ChatMessage[] = makeConversation({ count: 5000 });

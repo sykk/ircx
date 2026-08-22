@@ -55,6 +55,19 @@ export function HistoryDivider({ opens }: { opens: boolean }) {
   );
 }
 
+/**
+ * Where a window opened by a search jump stops and the present resumes. #618.
+ *
+ * In the date rule's grey for the reason the history rule is: it is a fact
+ * about what the pane is holding, and the thing to act on is the pill below it
+ * rather than the rule. What it says is not how much is missing — the client
+ * does not know, having never asked — only that the two messages it sits
+ * between are not each other's neighbours.
+ */
+export function GapDivider() {
+  return <Rule tint="var(--text-faint)">Messages in between are not shown</Rule>;
+}
+
 /** The size of what is about to be read is the part a skim cannot recover. */
 export function UnreadDivider({ seam }: { seam: Seam }) {
   return (

@@ -43,7 +43,11 @@ export type TimelineRow =
   | { kind: "unread"; id: string; seam: Seam }
   /** Where what the server replayed begins, and where it gives way to what
    * this client heard said. */
-  | { kind: "history"; id: string; opens: boolean };
+  | { kind: "history"; id: string; opens: boolean }
+  /** Where the window a search jump opened stops and the present resumes.
+   * The messages either side are hours and hundreds of lines apart, and
+   * nothing in either of them says so. #618. */
+  | { kind: "gap"; id: string };
 
 /** Which lines failed together, and whether this is the one that says so. */
 export interface FailureRun {
@@ -204,6 +208,7 @@ export function buildRows(
   highlight: HighlightRule = NO_HIGHLIGHT,
   groups: ReadonlyMap<string, Group> = new Map(),
   present?: ReadonlySet<string>,
+  detachedAt: string | null = null,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
   let open: Extract<TimelineRow, { kind: "block" | "system" }> | null = null;
@@ -215,6 +220,17 @@ export function buildRows(
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!;
+
+    // Above the date rule, because it is the outermost fact there is about the
+    // two messages either side of it: everything below describes a conversation
+    // the window holds whole. `openDay` is deliberately left alone — a gap that
+    // spans days draws the date rule under it anyway, and one that does not
+    // would otherwise restate the day for no reason.
+    if (detachedAt !== null && i > 0 && messages[i - 1]!.id === detachedAt) {
+      open = null;
+      openGroupId = null;
+      rows.push({ kind: "gap", id: `g:${message.id}` });
+    }
 
     // A rule across the pane ends the group's rule with it: a line that runs
     // past a date change or the unread seam claims those are one exchange, and

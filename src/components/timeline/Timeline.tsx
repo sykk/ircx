@@ -11,7 +11,7 @@ import { readingMeasure } from "@/lib/theme";
 import { EMPTY_TIMELINE, TIMELINE_CAP, serverMsgid, useAppStore } from "@/store";
 import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type HighlightRule } from "@/store/selectors";
 import type { TimelineState, ViewId } from "@/store/types";
-import { DateSeparator, HistoryDivider, UnreadDivider } from "./Divider";
+import { DateSeparator, GapDivider, HistoryDivider, UnreadDivider } from "./Divider";
 import { Clock } from "./Clock";
 import { assignGroups } from "./groups";
 import { MessageBlock, TIMELINE_BLOCK_MAX } from "./MessageBlock";
@@ -130,7 +130,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   // reading it as a subscription would fight every scroll event with a stale
   // value. Cleared when the pane is back where it was and the reader has it.
   const restoreTo = useRef(useAppStore.getState().viewAnchor[view] ?? null);
-  const { messages, unreadFrom } = timeline;
+  const { messages, unreadFrom, detachedAt } = timeline;
   const [following, setFollowing] = useState(
     restoreTo.current === null && unreadFrom === null,
   );
@@ -161,8 +161,9 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   );
 
   const rows = useMemo(
-    () => buildRows(visibleMessages, catchUp ? null : unreadFrom, highlight, groups, roster),
-    [visibleMessages, catchUp, unreadFrom, highlight, groups, roster],
+    () =>
+      buildRows(visibleMessages, catchUp ? null : unreadFrom, highlight, groups, roster, detachedAt),
+    [visibleMessages, catchUp, unreadFrom, highlight, groups, roster, detachedAt],
   );
   const seam = rows.find((row) => row.kind === "unread")?.seam ?? null;
   const unreadAt = rows.findIndex((row) => row.kind === "unread");
@@ -629,14 +630,42 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     jump(mentions[mentionCursor.current]!.id);
   }, [jump, mentions]);
 
-  const jumpLatest = useCallback(() => {
+  const jumpLatest = useCallback(async () => {
     if (rows.length === 0) return;
+    // The last row held is not the latest message when a search jump left the
+    // window short of the present (#618), so on a detached window this reads
+    // the tail back before scrolling to it — the control that exists to end
+    // the detachment otherwise confirmed it instead.
+    if (detachedAt !== null) {
+      try {
+        const tail = await ipc.loadHistory({
+          network,
+          target,
+          // The newest page the archive holds, which is what `before` null is
+          // answered with — there is no boundary message to name.
+          before: null,
+          beforeId: null,
+          limit: PAGE_SIZE,
+        });
+        setLoadError(null);
+        useAppStore.getState().replaceHistory(targetKey(network, target), tail);
+      } catch (e) {
+        setLoadError(String(e));
+        return;
+      }
+      // Where to scroll to is a row of a list this render does not have yet, so
+      // the ask is filed the way the composer files it after sending a line:
+      // the effect below runs it again once the tail has rows, and the window
+      // is no longer detached by then.
+      useAppStore.getState().setLatestJump(view, true);
+      return;
+    }
     followingRef.current = true;
     setFollowing(true);
     setCaughtUp(true);
     useAppStore.getState().setViewAnchor(view, null);
     virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
-  }, [rows.length, view, virtualizer]);
+  }, [detachedAt, network, rows.length, target, view, virtualizer]);
 
   useHotkeys({
     "timeline.unread": () => {
@@ -649,7 +678,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     },
     "timeline.latest": () => {
       if (!active || rows.length === 0) return false;
-      jumpLatest();
+      void jumpLatest();
     },
   });
 
@@ -672,7 +701,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   // row.
   useEffect(() => {
     if (!requestedLatest || rows.length === 0) return;
-    jumpLatest();
+    void jumpLatest();
     useAppStore.getState().setLatestJump(view, false);
   }, [requestedLatest, rows.length, jumpLatest, view]);
   useEffect(() => {
@@ -792,12 +821,12 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
             mentions={mentions.length}
             onUnread={jumpUnread}
             onMention={jumpMention}
-            onLatest={jumpLatest}
+            onLatest={() => void jumpLatest()}
           />
-        ) : !following && rows.length > 0 ? (
+        ) : (!following || detachedAt !== null) && rows.length > 0 ? (
           <button
             type="button"
-            onClick={jumpLatest}
+            onClick={() => void jumpLatest()}
             className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] px-2.5 py-1 font-[family-name:var(--font-ui)] text-[12px] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] hover:bg-[var(--surface-hover)]"
           >
             Jump to latest
@@ -1039,6 +1068,7 @@ export function isCatchUpMessage(
 export function renderRow(row: TimelineRow, context: RowContext) {
   if (row.kind === "unread") return <UnreadDivider seam={row.seam} />;
   if (row.kind === "history") return <HistoryDivider opens={row.opens} />;
+  if (row.kind === "gap") return <GapDivider />;
   if (row.kind === "date") return <DateSeparator at={row.at} />;
   if (row.kind === "system")
     return <SystemMessage messages={row.messages} ownNick={context.ownNick} />;

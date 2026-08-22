@@ -111,6 +111,7 @@ describe("a read marker from another client", () => {
           hasMore: false,
           loadingOlder: false,
           askedBehind: null,
+          detachedAt: null,
         },
       },
     }));
@@ -136,6 +137,7 @@ describe("a read marker from another client", () => {
           hasMore: false,
           loadingOlder: false,
           askedBehind: null,
+          detachedAt: null,
         },
       },
     }));
@@ -280,6 +282,81 @@ describe("the raw log over one batch", () => {
   });
 });
 
+/**
+ * #618. A search jump does not scroll — it files a window read around the hit
+ * over whatever the pane held, and that window can end well short of the
+ * present. Nothing in the client ever asks for a message newer than the ones it
+ * holds, so a window that stops short has to say so or the pane sits at the
+ * bottom of it calling that the conversation.
+ */
+describe("a window filed over a conversation", () => {
+  const said = (id: string, minute: number) =>
+    makeMessage({ id, timestamp: `2026-08-15T12:${String(minute).padStart(2, "0")}:00.000Z` });
+
+  function hold(messages: ChatMessage[]) {
+    useAppStore.setState((s) => ({
+      timelines: {
+        ...s.timelines,
+        [KEY]: { ...s.timelines[KEY]!, messages },
+      },
+    }));
+  }
+
+  beforeEach(() => hold([]));
+
+  it("is marked where it stops, when it stops behind what was on screen", () => {
+    hold([said("old", 1), said("live", 30)]);
+
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    expect(timeline()?.detachedAt).toBe("b");
+  });
+
+  it("is not marked when it ends on the message the pane was already at", () => {
+    hold([said("a", 5), said("b", 6)]);
+
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    expect(timeline()?.detachedAt).toBe(null);
+  });
+
+  /** The archive's own newest is not what a jump asks for, so nothing here can
+   * say the window reaches it. Offering the way back costs a reader who did not
+   * need it one reload; not offering it is the bug. */
+  it("is marked when there was nothing on screen to compare it against", () => {
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    expect(timeline()?.detachedAt).toBe("b");
+  });
+
+  it("clears the mark when the tail is read back over it", () => {
+    hold([said("a", 5), said("b", 6)]);
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    useAppStore.getState().replaceHistory(KEY, [said("y", 29), said("z", 30)]);
+
+    expect(timeline()?.detachedAt).toBe(null);
+  });
+
+  /** The line that lands next is where the hole is, and the pane draws its rule
+   * off the message above it. */
+  it("keeps the mark where it is when the channel says something else", () => {
+    hold([said("old", 1), said("live", 30)]);
+    useAppStore.getState().replaceHistory(KEY, [said("a", 5), said("b", 6)]);
+
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [said("next", 31)],
+      answers: null,
+    });
+
+    expect(timeline()?.detachedAt).toBe("b");
+    expect(timeline()?.messages.map((m) => m.id)).toEqual(["a", "b", "next"]);
+  });
+});
+
 describe("paging backwards", () => {
   /** #331 states the invariant — paging backwards stops at TIMELINE_CAP —
    * but only the auto-fill effect honoured it; the scroll handler paged
@@ -293,7 +370,7 @@ describe("paging backwards", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [KEY]: { messages: seed, unreadFrom: null, readMarker: null, hasMore: true, loadingOlder: true, askedBehind: null },
+        [KEY]: { messages: seed, unreadFrom: null, readMarker: null, hasMore: true, loadingOlder: true, askedBehind: null, detachedAt: null },
       },
     }));
 
@@ -700,7 +777,7 @@ describe("showing a target", () => {
     useAppStore.setState((s) => ({
       timelines: {
         ...s.timelines,
-        [key]: { messages: [], unreadFrom: from, readMarker: null, hasMore: true, loadingOlder: false, askedBehind: null },
+        [key]: { messages: [], unreadFrom: from, readMarker: null, hasMore: true, loadingOlder: false, askedBehind: null, detachedAt: null },
       },
     }));
   }
@@ -828,7 +905,7 @@ describe("a message a notification rule raised", () => {
           messages: [makeMessage({ id: "m1", nick: "buildbot", text: "deploy failed on main" })],
           unreadFrom: null, readMarker: null,
           hasMore: true,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, detachedAt: null
         },
       },
     }));
@@ -986,7 +1063,7 @@ describe("a query whose other end renames", () => {
           messages: [makeMessage({ id: "a", nick: "oldname", target: "oldname" })],
           unreadFrom: null, readMarker: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, detachedAt: null
         },
       },
       replyTo: { [OLD]: "msgid-1" },
@@ -1571,7 +1648,7 @@ describe("deleting a network", () => {
           messages: [makeMessage({ id: "m1", network: "oftc", target: "#linux" })],
           unreadFrom: null, readMarker: null,
           hasMore: false,
-          loadingOlder: false, askedBehind: null
+          loadingOlder: false, askedBehind: null, detachedAt: null
         },
       },
     });

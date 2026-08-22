@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NetworkConfig } from "@/types";
 import {
+  applyIdentity,
   draftOf,
   draftProblems,
   emptyDraft,
@@ -52,6 +53,48 @@ describe("parsePort", () => {
 
   it.each(["0", "65536", "abc", "", "66.9"])("rejects %o", (text) => {
     expect(parsePort(text)).toBeNull();
+  });
+});
+
+describe("applyIdentity", () => {
+  it("copies identity fields without the source password or network choices", () => {
+    const destination = liberaDraft({
+      id: "oftc",
+      name: "OFTC",
+      host: "irc.oftc.net",
+      autojoin: "#debian",
+      autoConnect: false,
+    });
+    const source: NetworkConfig = {
+      ...toConfig(liberaDraft({
+        nick: "sable",
+        altNicks: "sable_ sable__",
+        username: "sbl",
+        realname: "Sable",
+        mechanism: "PLAIN",
+        account: "sable-account",
+        password: "hunter2",
+        connectCommands: "mode sable +i",
+      })),
+      id: "libera",
+      sasl: { mechanism: "PLAIN", account: "sable-account", password: null },
+    };
+
+    expect(applyIdentity(destination, source)).toMatchObject({
+      id: "oftc",
+      name: "OFTC",
+      host: "irc.oftc.net",
+      autojoin: "#debian",
+      autoConnect: false,
+      nick: "sable",
+      altNicks: "sable_ sable__",
+      username: "sbl",
+      realname: "Sable",
+      mechanism: "PLAIN",
+      account: "sable-account",
+      password: "",
+      connectCommands: "mode sable +i",
+    });
   });
 });
 

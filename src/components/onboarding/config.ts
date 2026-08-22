@@ -120,6 +120,22 @@ export function draftOf(config: NetworkConfig): Draft {
   };
 }
 
+export function applyIdentity(draft: Draft, source: NetworkConfig): Draft {
+  const mechanism = source.sasl?.mechanism ?? "none";
+  return {
+    ...draft,
+    nick: source.nick,
+    altNicks: source.altNicks.join(" "),
+    username: source.username,
+    realname: source.realname,
+    mechanism,
+    account: source.sasl?.account ?? "",
+    password: needsPassword(mechanism) ? "" : null,
+    clientCertificate: mechanism === "EXTERNAL" ? (source.clientCertificate ?? "") : "",
+    connectCommands: source.connectCommands.join("\n"),
+  };
+}
+
 /**
  * Whether the mechanism authenticates with a password the user has to give.
  *

@@ -4,6 +4,7 @@ import { Onboarding, type OnboardingStart } from "@/components/onboarding/Onboar
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import type { NetworkConfig } from "@/types";
 import { NetworkList } from "./NetworkList";
 
 /**
@@ -69,15 +70,16 @@ function Form({ network, onDone }: { network: string | null; onDone: () => void 
     network === null ? { step: "server", draft: emptyDraft() } : null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [identities, setIdentities] = useState<NetworkConfig[]>([]);
   useAnnounce(error);
 
   useEffect(() => {
-    if (network === null) return;
-
     let live = true;
     void ipc.listNetworkConfigs().then(
       (configs) => {
         if (!live) return;
+        setIdentities(configs.filter((config) => config.id !== network));
+        if (network === null) return;
         const config = configs.find((c) => c.id === network);
         // `draftOf` leaves the password null because `save_network` writes it
         // to the keyring and never reads it back; the form says so rather than
@@ -112,5 +114,5 @@ function Form({ network, onDone }: { network: string | null; onDone: () => void 
   }
   // `start` is what makes Back leave the flow rather than fall through to the
   // chooser, and leaving the flow here is returning to the list.
-  return <Onboarding onDone={onDone} start={start} />;
+  return <Onboarding onDone={onDone} start={start} identities={identities} />;
 }

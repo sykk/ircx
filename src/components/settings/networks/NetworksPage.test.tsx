@@ -156,7 +156,21 @@ describe("the form", () => {
   it("opens the server form for a network that does not exist yet", () => {
     open(null);
     expect(screen.getByRole("heading", { name: "Connect to an IRC server" })).toBeTruthy();
-    expect(listNetworkConfigs).not.toHaveBeenCalled();
+    expect(listNetworkConfigs).toHaveBeenCalled();
+  });
+
+  it("copies an identity from a saved network without its password", async () => {
+    open(null);
+    const identity = await screen.findByLabelText("Use identity from");
+
+    fireEvent.change(identity, { target: { value: "libera" } });
+    expect(screen.getByLabelText("Nickname").getAttribute("value")).toBe("sable");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show every setting" }));
+    expect((await screen.findByLabelText(/Alternate nicknames/)).getAttribute("value")).toBe("sable_");
+    expect(screen.getByLabelText(/Account name/).getAttribute("value")).toBe("sable");
+    expect(screen.getByLabelText("Password").getAttribute("value")).toBe("");
+    expect(screen.getByLabelText(/Channels to join/).getAttribute("value")).toBe("");
   });
 
   // The reason #45 exists: this path had a unit test but no route, so nobody

@@ -116,6 +116,14 @@ function topOf(row: HTMLElement): number {
   return Number.parseFloat(row.style.transform.replace(/[^-\d.]/g, ""));
 }
 
+/** How tall a message's own line is, which a rewrap changes and the row's
+ * height cannot be read for: a row is a run and every line in it grew. */
+function linePx(scroller: HTMLElement, msgid: string): number {
+  const line = scroller.querySelector<HTMLElement>(`[data-msgid="${msgid}"]`);
+  if (!line) throw new Error(`${msgid} is not drawn in this pane`);
+  return line.offsetHeight;
+}
+
 /** The message under the reader's eyes: the first one drawn at or below the top
  * of the viewport. Read off the pane rather than named by the test, because
  * which message that is depends on the heights being modelled. */
@@ -1365,16 +1373,14 @@ describe("a pane that gets narrower under the reader", () => {
    * above them as well as below, and a pane that put the row back would leave
    * them reading a line they had already passed. Which line that is, is the
    * line the fold *cuts through* rather than the first one under it — the two
-   * are a different message wherever the reader is parked inside a run, and the
-   * one after cannot hold when the one the fold cuts gains a line.
+   * are a different message wherever the reader is parked inside a run.
    *
-   * **The engine does not agree, and #613 is that.** Narrowed for real in
-   * `webkit2gtk-4.1` the same reader moves 46px, because the pane is paid 575
-   * of the 621 their line gained above it. So what passes here is the model,
-   * and the model is either too kind or missing something the engine does;
-   * #599 is the last time those two disagreed and what settling it took.
+   * **And it is held by the end of it, which is #613.** The window is cutting
+   * that message in half, so a rewrap gives it lines below the fold, between the
+   * reader and everything they were reading. Holding its top drew them there:
+   * 46px in `webkit2gtk-4.1`, and these tests asserted it.
    */
-  it("holds the line the fold cuts through", () => {
+  it("holds where the line the fold cuts through ends", () => {
     seed(aRunToSitIn(201, 400));
     render(<Timeline view={TEST_VIEW} />);
     flushLayout();
@@ -1387,7 +1393,10 @@ describe("a pane that gets narrower under the reader", () => {
     expect(topOf(run) + run.offsetHeight).toBeGreaterThan(scroller.scrollTop);
 
     const reading = lineTheFoldCuts(scroller);
-    const before = eyeLine(scroller, reading);
+    // The window really is cutting it, which is the arrangement the hold below
+    // is the answer to rather than a fact about this seed.
+    expect(eyeLine(scroller, reading)).toBeLessThan(0);
+    const ended = eyeLine(scroller, reading) + linePx(scroller, reading);
     const tall = run.offsetHeight;
 
     wrapAt(40);
@@ -1396,16 +1405,15 @@ describe("a pane that gets narrower under the reader", () => {
     // The rewrap happened, which a test that only asserted the hold could pass
     // without.
     expect(run.offsetHeight).toBeGreaterThan(tall);
-    expect(eyeLine(scroller, reading)).toBe(before);
+    expect(eyeLine(scroller, reading) + linePx(scroller, reading)).toBe(ended);
   });
 
   /**
-   * And the line under it does not, which is the same hold stated as what it
-   * costs. The line the fold cuts through keeps its own top; the line after it
-   * is pushed down by however much that one gained in the rewrap, because the
-   * two cannot both be held and it is the first the reader is reading.
+   * Which is the hold stated as what the reader sees: the first line they can
+   * read whole does not move. It is the line after the one the fold cuts, the
+   * two cannot both hold, and this is the one being read.
    */
-  it("pushes the line after it down by what the rewrap added above it", () => {
+  it("holds the line after it, which is the first the reader can read", () => {
     seed(aRunToSitIn(201, 400));
     render(<Timeline view={TEST_VIEW} />);
     flushLayout();
@@ -1415,13 +1423,41 @@ describe("a pane that gets narrower under the reader", () => {
     const reading = lineTheFoldCuts(scroller);
     const next = lineAtTheFold(scroller);
     expect(next).not.toBe(reading);
-    const between = eyeLine(scroller, next) - eyeLine(scroller, reading);
+    const before = eyeLine(scroller, next);
+    const started = eyeLine(scroller, reading);
 
     wrapAt(40);
     flushLayout();
 
-    // One line where there was none, which is the line the fold cuts through
-    // taking two after the rewrap.
-    expect(eyeLine(scroller, next) - eyeLine(scroller, reading)).toBe(between + LINE_PX);
+    expect(eyeLine(scroller, next)).toBe(before);
+    // And what it costs, which is where the lines the cut message gained went:
+    // above the fold, out of a message the window was already cutting.
+    expect(eyeLine(scroller, reading)).toBe(started - LINE_PX);
+  });
+
+  /**
+   * Not a message drawn *at* the fold, which is the arrangement a restore
+   * leaves: the reader asked for that message, its first line is the one they
+   * are reading, and pushing it up out of the window to hold what is under it
+   * would be the same defect the other way round.
+   */
+  it("holds the top of a message the fold does not cut", () => {
+    seed(aRunToSitIn(201, 400));
+    render(<Timeline view={TEST_VIEW} />);
+    flushLayout();
+    const scroller = screen.getByTestId("timeline-scroller");
+    parkInsideTheRun(scroller);
+
+    // On the message rather than inside it, which is the whole difference.
+    const reading = lineAtTheFold(scroller);
+    scroller.scrollTop += eyeLine(scroller, reading);
+    fireEvent.scroll(scroller);
+    flushLayout();
+    expect(eyeLine(scroller, reading)).toBe(0);
+
+    wrapAt(40);
+    flushLayout();
+
+    expect(eyeLine(scroller, reading)).toBe(0);
   });
 });

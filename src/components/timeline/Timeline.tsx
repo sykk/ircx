@@ -226,13 +226,16 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = paysForGrowthAbove;
 
   /**
-   * How far into its row a message's own line is drawn, and undefined where the
-   * row is not on the screen to be measured.
+   * Where a message's own line starts and ends inside its row, and undefined
+   * where the row is not on the screen to be measured.
    *
    * The DOM rather than the virtualiser, which measures rows and cannot answer
    * this. It is the distance between two boxes inside one row, so the transform
    * the row is drawn at — a render behind on the commit a page lands in, which
    * is what #477 is about — cancels out of it.
+   *
+   * Both edges, because a message that rewraps is taller than it was and the
+   * anchor holds whichever of the two the reader can see (#613).
    *
    * Undefined rather than zero, and the difference is the whole of what makes
    * this safe. The rows rendered on the commit a page lands in are the ones the
@@ -241,7 +244,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
    * every reader by the name over their own run. The anchor keeps what it last
    * measured for exactly this.
    */
-  const lineWithinRow = useCallback((id: string) => {
+  const lineBoxInRow = useCallback((id: string) => {
     const drawn = scrollRef.current?.querySelectorAll<HTMLElement>("[data-msgid]");
     // Compared rather than selected on: an id is the server's or this client's
     // and neither is written to be a selector, and `CSS.escape` is not in every
@@ -249,7 +252,9 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     const line = [...(drawn ?? [])].find((candidate) => candidate.dataset.msgid === id);
     const row = line?.closest<HTMLElement>("[data-index]");
     if (!line || !row) return undefined;
-    return line.getBoundingClientRect().top - row.getBoundingClientRect().top;
+    const box = line.getBoundingClientRect();
+    const top = row.getBoundingClientRect().top;
+    return { top: box.top - top, bottom: box.bottom - top };
   }, []);
 
   /** The row drawn at a place in the list, or null where it is off the screen.
@@ -277,7 +282,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
         virtualizer.getTotalSize();
         return virtualizer.getOffsetForIndex(index, "start")?.[0];
       },
-      lineWithinRow,
+      lineBoxInRow,
       rowUnmeasured: (id) => {
         const index = rowIndexOfMessage(rows, id);
         if (index === -1) return false;
@@ -318,7 +323,7 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
         return undefined;
       },
     }),
-    [rows, virtualizer, lineWithinRow, drawnRow],
+    [rows, virtualizer, lineBoxInRow, drawnRow],
   );
 
   // `headPx` and not the head itself: it is the margin the offsets above were

@@ -141,6 +141,12 @@ function drawnBottom(sizer: HTMLElement): number {
 
 function heightOf(el: HTMLElement): number {
   if (el.hasAttribute("data-index")) return rowPx(el);
+  // A message is as tall as the lines it wraps to, which is the one height here
+  // that a rewrap changes without changing what the row draws. Answered because
+  // the anchor holds the bottom of a message the window cuts through (#613);
+  // before that nothing read a piece's own box and the viewport below was a
+  // stand-in for every element that was not a row.
+  if (el.hasAttribute("data-msgid")) return piecePx(el);
   if (el.dataset.testid === "timeline-head") return HISTORY_HEAD_PX;
   return VIEWPORT_PX;
 }

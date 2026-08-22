@@ -14,6 +14,11 @@
 # above the fold by the virtualiser, the row the reader is inside by the anchor's
 # `grown` branch, and rows below by nobody. So it is worth asking the engine
 # whether they agree with each other, which no model can be asked.
+#
+# **`cut` below is not the message the fold cuts through.** It is the first one
+# drawn at or below the fold, and the one the fold cuts is the message above it
+# — which is the one the anchor holds. #613 was written off this script reading
+# one for the other; `fold-lab.sh` beside it measures both.
 set -euo pipefail
 TREE=${TREE:?the checkout to walk}
 DIR=${1:?output directory}

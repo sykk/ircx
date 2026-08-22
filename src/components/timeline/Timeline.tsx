@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, UIEvent } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
 import type { ChatMessage, PageBackOutcome } from "@/types";
 import { ipc } from "@/lib/ipc";
 import { probe } from "@/lib/probe";
@@ -28,6 +28,39 @@ export const LOAD_OLDER_PX = 400;
 /** Slack below the bottom that still counts as following the conversation. */
 const STUCK_PX = 48;
 const FLASH_MS = 1_200;
+
+/**
+ * Whether a row the virtualiser has just measured at a new height is one the
+ * pane should be paid back for. Its own rule, term for term, minus the clause
+ * that declines while the reader is scrolling up (#611).
+ *
+ * A row measured for the first time is compensated wherever it *starts* above
+ * the fold, the whole of the block it was estimated at having been up there. A
+ * row measured again is compensated only where it *ends* above the fold,
+ * because one that spans the fold grew below the reader's eyes rather than
+ * above them — the reader is inside that row, and #608's `grown` branch is what
+ * answers for it.
+ *
+ * The clause taken out is deliberate upstream: it heads off re-measurements
+ * chasing a scroll that is still moving. A conversation does not produce that
+ * cascade. A row's height here is what its text and the pane's width make it,
+ * so a row re-measured taller is a row whose content changed, and one that
+ * merely scrolls back into the window measures what it measured before and asks
+ * for nothing. What the clause costs is the case it cannot tell from a cascade:
+ * a reaction landing on a line the reader has read past, a preview finishing, a
+ * delivery failure gaining its reason. Each of them moves everything below it,
+ * and the reader is below it.
+ */
+function paysForGrowthAbove(
+  item: VirtualItem,
+  _delta: number,
+  instance: Virtualizer<HTMLDivElement, Element>,
+): boolean {
+  // `scrollAdjustments` is what the virtualiser has already written this tick
+  // and not yet heard a scroll event for, so the fold is the offset plus it.
+  const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments;
+  return instance.itemSizeCache.has(item.key) ? item.end <= fold : item.start < fold;
+}
 
 export function Timeline({ view, catchUp = false }: { view: ViewId | null; catchUp?: boolean }) {
   const pane = useView(view);
@@ -185,6 +218,12 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
     scrollMargin: headPx,
     overscan: 10,
   });
+  // On the instance and not in the options above, which is where it looks like
+  // it belongs: `shouldAdjustScrollPositionOnItemSizeChange` is declared on the
+  // virtualiser and read off it, and nothing copies it out of the options it is
+  // passed in. Assigned in the render rather than in an effect because rows are
+  // measured in this commit's ref callbacks, which run first.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = paysForGrowthAbove;
 
   /**
    * How far into its row a message's own line is drawn, and undefined where the

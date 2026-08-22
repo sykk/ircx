@@ -851,6 +851,7 @@ impl Context {
             network: self.network.clone(),
             target: target.to_string(),
             before: None,
+            before_id: None,
             limit: CONTEXT_MESSAGES,
         };
         // A plugin asking for the conversation is asking for what was said,
@@ -1623,6 +1624,7 @@ mod tests {
                     network: "test".into(),
                     target: "#burst".into(),
                     before: None,
+                    before_id: None,
                     limit: 10_000,
                 })
                 .expect("read the archive")

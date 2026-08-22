@@ -56,6 +56,7 @@ fn history(target: &str, before: Option<&str>, limit: u32) -> HistoryRequest {
         network: "libera".into(),
         target: target.into(),
         before: before.map(str::to_owned),
+        before_id: None,
         limit,
     }
 }
@@ -366,6 +367,102 @@ fn history_pages_backwards_across_a_boundary() {
         .load_history(&history("#ircx", Some(&oldest[0].timestamp), 2))
         .unwrap()
         .is_empty());
+}
+
+/// #619. A channel can say a dozen things inside one millisecond, and the
+/// archive orders them by rowid afterwards — so a page boundary landing in the
+/// middle of such a run is a boundary a timestamp cannot name. Asked with the
+/// timestamp alone, the store answered from before the whole run and the
+/// messages between were behind a bound that had moved past them: still in the
+/// archive, unreachable by anything the pane could ask.
+#[test]
+fn history_pages_from_inside_one_millisecond() {
+    let store = Store::open_in_memory().unwrap();
+    const CROWDED: &str = "2026-01-01T00:00:03.500Z";
+    let messages: Vec<ChatMessage> = (0..10)
+        .map(|index| {
+            let timestamp = match index {
+                3..=7 => CROWDED.to_string(),
+                _ => format!("2026-01-01T00:00:0{index}.000Z"),
+            };
+            message(
+                &format!("id-{index}"),
+                "#ircx",
+                &timestamp,
+                &format!("line {index}"),
+            )
+        })
+        .collect();
+    store.append_messages(&messages).unwrap();
+
+    let newest = store.load_history(&history("#ircx", None, 3)).unwrap();
+    assert_eq!(
+        newest.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["line 7", "line 8", "line 9"]
+    );
+
+    // The oldest message held is `line 7`, four of whose neighbours share its
+    // millisecond. The page behind it is those four, not what came before them.
+    let older = store
+        .load_history(&HistoryRequest {
+            before_id: Some(newest[0].id.clone()),
+            ..history("#ircx", Some(&newest[0].timestamp), 3)
+        })
+        .unwrap();
+    assert_eq!(
+        older.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["line 4", "line 5", "line 6"]
+    );
+
+    // And paging on reaches every message once, which is the assertion the
+    // ends of a page cannot make on their own.
+    let mut walked: Vec<String> = vec![older[0].text.clone()];
+    let mut boundary = Some(older[0].clone());
+    while let Some(oldest) = boundary {
+        let page = store
+            .load_history(&HistoryRequest {
+                before_id: Some(oldest.id.clone()),
+                ..history("#ircx", Some(&oldest.timestamp), 3)
+            })
+            .unwrap();
+        boundary = page.first().cloned();
+        let mut earlier: Vec<String> = page.iter().map(|m| m.text.clone()).collect();
+        earlier.extend(walked);
+        walked = earlier;
+    }
+    assert_eq!(
+        walked,
+        (0..=4)
+            .map(|index| format!("line {index}"))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// A page asked for from a message the archive does not hold — one still on
+/// its way to disk, or one the server replayed and nothing wrote down — is
+/// answered by the timestamp alone, which is what this did before there was an
+/// id to send.
+#[test]
+fn history_pages_from_a_message_the_archive_has_never_seen() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message("a", "#ircx", "2026-01-01T00:00:00Z", "said"),
+            message("b", "#ircx", "2026-01-01T00:00:01Z", "and said"),
+        ])
+        .unwrap();
+
+    let page = store
+        .load_history(&HistoryRequest {
+            before_id: Some("never-archived".into()),
+            ..history("#ircx", Some("2026-01-01T00:00:01Z"), 10)
+        })
+        .unwrap();
+
+    assert_eq!(
+        page.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["said"]
+    );
 }
 
 #[test]

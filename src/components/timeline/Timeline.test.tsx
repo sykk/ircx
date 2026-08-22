@@ -1555,6 +1555,7 @@ describe("Timeline", () => {
       network: "libera",
       target: "#ctf-ops",
       before: null,
+      beforeId: null,
       limit: 200,
     });
     expect(screen.queryByText("Nothing here yet")).toBe(null);
@@ -1575,6 +1576,7 @@ describe("Timeline", () => {
       network: "libera",
       target: "#ctf-ops",
       before: null,
+      beforeId: null,
       limit: 200,
     });
     expect(screen.queryByText("Nothing here yet")).toBe(null);
@@ -1591,6 +1593,7 @@ describe("Timeline", () => {
         network: "libera",
         target: "#ctf-ops",
         before: note.timestamp,
+        beforeId: note.id,
         limit: 200,
       }),
     );
@@ -1614,6 +1617,7 @@ describe("Timeline", () => {
       network: "libera",
       target: "#ctf-ops",
       before: messages[0]!.timestamp,
+      beforeId: messages[0]!.id,
       limit: 200,
     });
   });

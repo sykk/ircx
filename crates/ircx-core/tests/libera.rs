@@ -1317,6 +1317,7 @@ async fn archive(report: &mut Report, db: &Path, marker: &str, store: Arc<Store>
         network: "libera".into(),
         target: CHANNEL.into(),
         before: None,
+        before_id: None,
         limit: 500,
     };
     let live_rows = match store.load_history(&request) {

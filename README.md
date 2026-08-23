@@ -33,8 +33,9 @@ This milestone does not include:
 
 ## Build
 
-Requires Rust 1.85+, Node 24+, and the Tauri system dependencies for your
-platform ([Tauri prerequisites](https://tauri.app/start/prerequisites/)).
+Requires Rust 1.94.0, Node 24, and the
+[Tauri system dependencies](https://tauri.app/start/prerequisites/) for your
+platform.
 
 ### Windows
 
@@ -45,7 +46,7 @@ platform ([Tauri prerequisites](https://tauri.app/start/prerequisites/)).
 3. From the project root:
 
 ```sh
-npm install
+npm ci
 npm run tauri:dev
 ```
 
@@ -73,7 +74,7 @@ UI hooks and rules.
 ### Linux / macOS
 
 ```sh
-npm install
+npm ci
 npm run tauri dev
 ```
 

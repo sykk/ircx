@@ -2,7 +2,7 @@
 name = "ircx-plugin"
 version.workspace = true
 edition.workspace = true
-rust-version = "1.94"
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false

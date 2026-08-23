@@ -215,6 +215,12 @@ impl SessionState {
         input: &str,
         reply_to: Option<&str>,
     ) -> CommandOutcome {
+        if !self.registered && (!input.starts_with('/') || input.starts_with("//")) {
+            return CommandOutcome::Rejected(format!(
+                "Not connected to {} yet",
+                self.network_name()
+            ));
+        }
         let Some(rest) = input.strip_prefix('/') else {
             return self.say_here(target, input, MessageKind::Privmsg, reply_to);
         };

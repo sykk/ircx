@@ -3,10 +3,13 @@ import { PrimaryButton, SecondaryButton } from "@/components/onboarding/fields";
 import { formatBytes } from "@/lib/bytes";
 import { ipc, onFileDrop, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
-import { useActiveTarget } from "@/store/selectors";
+import { selectActiveTarget, useActiveTarget } from "@/store/selectors";
+import type { ActiveTarget } from "@/store/types";
 import type { FileToUpload } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
+
+type PendingUpload = { files: FileToUpload[]; destination: ActiveTarget };
 
 /**
  * Dropping a file on the window uploads it to the conversation in focus.
@@ -23,24 +26,28 @@ import { useDialogFocus } from "@/hooks/useDialogFocus";
 export function DropToUpload() {
   const active = useActiveTarget();
   const [hovering, setHovering] = useState(false);
-  const [pending, setPending] = useState<FileToUpload[] | null>(null);
+  const [pending, setPending] = useState<PendingUpload | null>(null);
   const [host, setHost] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   /** An address that was stored and will not open, held so it can be read and
    * copied rather than sent. */
-  const [dead, setDead] = useState<{ link: string; why: string } | null>(null);
+  const [dead, setDead] = useState<
+    { link: string; why: string; destination: ActiveTarget } | null
+  >(null);
 
   // Described before the confirmation is drawn, so the size and the refusal are
   // things the user reads rather than discovers on clicking. Both ways in ask
   // the same question of the same files, so both arrive here.
   const describe = useCallback((paths: string[]) => {
+    const destination = selectActiveTarget(useAppStore.getState());
+    if (destination === null) return;
     setError(null);
     void ipc.describeUploads(paths).then(
-      (files) => setPending(files),
+      (files) => setPending({ files, destination }),
       (reason: unknown) => {
-        setPending(paths.map(unreadable));
+        setPending({ files: paths.map(unreadable), destination });
         setError(reasonOr(reason, "The files could not be read."));
       },
     );
@@ -90,27 +97,35 @@ export function DropToUpload() {
     };
   }, [pending]);
 
-  if (active === null) return null;
+  if (active === null && pending === null && dead === null) return null;
 
   async function send() {
-    if (pending === null || active === null) return;
+    if (pending === null) return;
     setBusy(true);
     setError(null);
     try {
       // One at a time, in the order they were dropped, so the links arrive in
       // the conversation in the order the user sees them listed.
-      for (const file of pending) {
+      for (const file of pending.files) {
         const uploaded = await ipc.uploadFile(file.path);
         // A stored file is not a readable one, and sending an address that
         // opens for nobody is worse than not sending it: the sender finds out
         // from whoever they sent it to. Found by walking an upload to a bucket
         // that was private, which is what every bucket is until it is not.
         if (uploaded.unreadable !== null) {
-          setDead({ link: uploaded.link, why: uploaded.unreadable });
+          setDead({
+            link: uploaded.link,
+            why: uploaded.unreadable,
+            destination: pending.destination,
+          });
           setBusy(false);
           return;
         }
-        await ipc.submitInput(active.network, active.target, uploaded.link);
+        await ipc.submitInput(
+          pending.destination.network,
+          pending.destination.target,
+          uploaded.link,
+        );
       }
       setPending(null);
     } catch (reason) {
@@ -121,7 +136,7 @@ export function DropToUpload() {
 
   return (
     <>
-      {hovering && (
+      {hovering && active !== null && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
           <div className="absolute inset-0 bg-[var(--scrim)]" />
           <p
@@ -162,8 +177,11 @@ export function DropToUpload() {
             </PrimaryButton>
             <SecondaryButton
               onClick={() => {
-                if (active === null) return;
-                void ipc.submitInput(active.network, active.target, dead.link);
+                void ipc.submitInput(
+                  dead.destination.network,
+                  dead.destination.target,
+                  dead.link,
+                );
                 setDead(null);
                 setPending(null);
               }}
@@ -183,10 +201,12 @@ export function DropToUpload() {
           onEscape={busy ? undefined : () => setPending(null)}
         >
           <h2 className="text-[15px] font-semibold">
-            {pending.length === 1 ? "Upload this file?" : `Upload ${pending.length} files?`}
+            {pending.files.length === 1
+              ? "Upload this file?"
+              : `Upload ${pending.files.length} files?`}
           </h2>
           <ul className="flex flex-col gap-1 text-[13px]">
-            {pending.map((file) => (
+            {pending.files.map((file) => (
               <li key={file.path} className="flex items-baseline justify-between gap-3">
                 <span className="truncate font-[family-name:var(--font-mono)]">{file.name}</span>
                 <span
@@ -210,7 +230,7 @@ export function DropToUpload() {
             ) : (
               <>
                 It goes to <strong>{host}</strong>, and the link is sent to{" "}
-                <strong>{active.target}</strong>. Anyone with the link can read it.
+                <strong>{pending.destination.target}</strong>. Anyone with the link can read it.
               </>
             )}
           </p>
@@ -223,7 +243,7 @@ export function DropToUpload() {
 
           <div className="flex items-center gap-2">
             <PrimaryButton
-              disabled={busy || host === null || pending.some(refused)}
+              disabled={busy || host === null || pending.files.some(refused)}
               onClick={() => void send()}
             >
               {busy ? "Uploading…" : "Upload"}

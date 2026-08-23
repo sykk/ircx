@@ -1025,6 +1025,23 @@ fn an_unknown_command_is_refused_in_words() {
     assert!(session.sent().is_empty());
 }
 
+#[test]
+fn plain_and_escaped_text_are_refused_before_registration() {
+    let mut session = Harness::new(config());
+
+    for input in ["hello", "//hello"] {
+        match session.submit("#ircx", input) {
+            CommandOutcome::Rejected(reason) => {
+                assert_eq!(reason, "Not connected to Libera yet")
+            }
+            other => panic!("expected {input:?} to be rejected, got {other:?}"),
+        }
+    }
+
+    assert!(session.sent().is_empty());
+    assert!(session.messages().is_empty());
+}
+
 /// `/invite` in a query has no channel to fall back on, and inventing one
 /// would invite someone somewhere the user did not name.
 #[test]
@@ -5980,10 +5997,8 @@ mod what_a_sent_message_claims {
         );
     }
 
-    /// A message typed while the connection is down is not refused — plain text
-    /// never reaches the `registered` guard — so the line is built, queued, and
-    /// dropped for want of a transport. Saying it was sent is the one answer
-    /// that is wrong.
+    /// If the socket closes before its writer reaches a queued message, the
+    /// optimistic copy is failed rather than left pending or called sent.
     #[test]
     fn a_line_the_connection_outlived_is_failed_rather_than_sent() {
         let mut session = joined("");

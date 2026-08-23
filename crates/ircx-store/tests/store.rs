@@ -922,6 +922,34 @@ mod what_a_deleted_message_owned {
     }
 
     #[test]
+    fn goes_with_a_deleted_network_archive() {
+        let store = Store::open_in_memory().unwrap();
+        let deleted = haunted(&store);
+        let mut elsewhere = with_msgid(
+            message("o", "#other", "2026-01-01T00:01:00Z", "still here"),
+            "msgid-2",
+        );
+        elsewhere.network = "oftc".into();
+        store
+            .append_messages(std::slice::from_ref(&elsewhere))
+            .unwrap();
+        store
+            .set_reaction("oftc", "msgid-2", "nick2", "yes", true)
+            .unwrap();
+
+        store.delete_network_archive("libera").unwrap();
+
+        let read = archived_again(&store, &deleted);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
+        let mut request = history("#other", None, 10);
+        request.network = "oftc".into();
+        let held = store.load_history(&request).unwrap();
+        assert_eq!(held[0].reactions.len(), 1);
+    }
+
+    #[test]
     fn goes_with_a_retention_expiry() {
         let store = Store::open_in_memory().unwrap();
         let old = with_msgid(message("m", "#ircx", ANCIENT, "hello"), "msgid-1");
@@ -2252,10 +2280,16 @@ mod archive_controls {
         let mut elsewhere = message("d", "#other", "2026-07-31T09:03:00Z", "still here");
         elsewhere.network = "oftc".into();
         store.append_messages(&[elsewhere]).unwrap();
+        store.set_draft("oftc", "#other", "still typing").unwrap();
 
         store.delete_network_archive("libera").unwrap();
 
         assert_eq!(store.archive_size().unwrap().messages, 1);
+        assert_eq!(store.get_draft("libera", "#ircx").unwrap(), None);
+        assert_eq!(
+            store.get_draft("oftc", "#other").unwrap().as_deref(),
+            Some("still typing")
+        );
         let hits = store
             .search(&SearchRequest {
                 query: "still here".into(),
@@ -2358,6 +2392,36 @@ fn deleting_everything_gives_the_space_back() {
     assert!(
         empty * 2 < full,
         "an emptied archive should not still weigh what it did: {empty} against {full}"
+    );
+}
+
+#[test]
+fn deleting_one_network_gives_its_space_back() {
+    let store = Store::open_in_memory().unwrap();
+    let bulk: Vec<ChatMessage> = (0..2000)
+        .map(|i| {
+            message(
+                &format!("m{i}"),
+                "#ircx",
+                &format!("2026-07-31T09:{:02}:{:02}Z", i / 60 % 60, i % 60),
+                "a line with enough words in it to take up room on the disk",
+            )
+        })
+        .collect();
+    store.append_messages(&bulk).unwrap();
+    let mut elsewhere = message("elsewhere", "#other", "2026-07-31T10:00:00Z", "keep this");
+    elsewhere.network = "oftc".into();
+    store.append_messages(&[elsewhere]).unwrap();
+    let full = store.archive_size().unwrap().bytes;
+
+    store.delete_network_archive("libera").unwrap();
+    let remaining = store.archive_size().unwrap();
+
+    assert_eq!(remaining.messages, 1);
+    assert!(
+        remaining.bytes * 2 < full,
+        "the remaining network should not retain the deleted network's pages: {} against {full}",
+        remaining.bytes
     );
 }
 

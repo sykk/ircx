@@ -1418,6 +1418,7 @@ impl Store {
             params![network, target],
         )?;
         tx.commit()?;
+        conn.execute_batch("VACUUM")?;
         Ok(())
     }
 
@@ -1433,6 +1434,7 @@ impl Store {
         tx.execute("DELETE FROM messages WHERE network = ?1", params![network])?;
         tx.execute("DELETE FROM drafts WHERE network = ?1", params![network])?;
         tx.commit()?;
+        conn.execute_batch("VACUUM")?;
         Ok(())
     }
 }

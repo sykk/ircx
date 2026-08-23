@@ -2,7 +2,8 @@ import type { CSSProperties } from "react";
 import clsx from "clsx";
 import { Icon } from "@/components/common/Icon";
 import { nickColor } from "@/lib/nickColor";
-import { selectTheme, type Overrides, type Theme } from "@/lib/theme";
+import type { Overrides, Theme } from "@/lib/theme";
+import { selectTheme } from "@/lib/theme/session";
 
 /** The six tokens a card shows as chips: the ground a theme is built on, then
  * the three colours it says things with. Enough to tell two dark themes apart

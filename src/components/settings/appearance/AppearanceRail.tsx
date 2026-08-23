@@ -19,12 +19,6 @@ import {
   TIMELINE_ALIGNS,
   TIMELINE_MEASURES,
   ZOOM_LEVELS,
-  selectDensity,
-  selectOverrides,
-  selectPresentation,
-  selectPreset,
-  selectSidebarCompact,
-  selectTypography,
   type ClockFormat,
   type ClockSide,
   type ClockEmphasis,
@@ -37,6 +31,14 @@ import {
   type TimelineMeasure,
   type Typography,
 } from "@/lib/theme";
+import {
+  selectDensity,
+  selectOverrides,
+  selectPresentation,
+  selectPreset,
+  selectSidebarCompact,
+  selectTypography,
+} from "@/lib/theme/session";
 import { ACCENTS, accentTokens, type Accent } from "./accents";
 
 /**

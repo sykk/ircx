@@ -110,8 +110,9 @@ function field(token: string): HTMLInputElement {
 
 /** Opening the editor is also choosing the theme, so every test below that
  * types a value is editing the theme the window is actually painting. */
-function editLight() {
+async function editLight() {
   fireEvent.click(button("Edit the colours of ircx Light"));
+  await screen.findByLabelText("--accent");
 }
 
 function token(name: string): string {
@@ -644,9 +645,9 @@ describe("AppearancePage", () => {
   });
 
   describe("editing a token", () => {
-    it("paints the value and keeps it across a re-render", () => {
+    it("paints the value and keeps it across a re-render", async () => {
       const { rerender } = open({ themeId: "ircx-dark" });
-      editLight();
+      await editLight();
       fireEvent.change(field("--accent"), { target: { value: "#2c8a6d" } });
 
       expect(token("--accent")).toBe("#2c8a6d");
@@ -658,16 +659,17 @@ describe("AppearancePage", () => {
 
     /** The swatch row is seven of the tokens this screen holds all of, so it
      * has to be the way out to the rest of them. */
-    it("is where Custom… leads, on the theme in force", () => {
+    it("is where Custom… leads, on the theme in force", async () => {
       open({ themeId: "ircx-light" });
       fireEvent.click(button("Custom…"));
+      const accent = (await screen.findByLabelText("--accent")) as HTMLInputElement;
 
-      expect(field("--accent").value).toBe("#0969da");
+      expect(accent.value).toBe("#0969da");
     });
 
-    it("gives the token back to the theme's author on reset", () => {
+    it("gives the token back to the theme's author on reset", async () => {
       open({ themeId: "ircx-dark" });
-      editLight();
+      await editLight();
       fireEvent.change(field("--accent"), { target: { value: "#2c8a6d" } });
 
       fireEvent.click(button("Reset --accent"));
@@ -681,9 +683,9 @@ describe("AppearancePage", () => {
      * remote file the moment a mention is drawn — the one security property the
      * theme system claims. The value is refused rather than warned about
      * because it is not a matter of taste. */
-    it("refuses a value that would fetch, and does not paint it", () => {
+    it("refuses a value that would fetch, and does not paint it", async () => {
       open({ themeId: "ircx-dark" });
-      editLight();
+      await editLight();
       fireEvent.change(field("--mention-bg"), {
         target: { value: "url(https://tracker.example/pixel.png)" },
       });
@@ -700,9 +702,9 @@ describe("AppearancePage", () => {
      * leaving `--surface-base` unset and showing through to the dark theme
      * global.css imports statically. jsdom stores such a value verbatim, so
      * what is asserted here is the refusal rather than the paint. */
-    it("refuses a value carrying the semicolon it was copied with", () => {
+    it("refuses a value carrying the semicolon it was copied with", async () => {
       open({ themeId: "ircx-dark" });
-      editLight();
+      await editLight();
       fireEvent.change(field("--surface-base"), { target: { value: "#0969da;" } });
 
       expect(screen.getByRole("alert").textContent).toContain("--surface-base has a ;");
@@ -712,9 +714,9 @@ describe("AppearancePage", () => {
     /* An edit made here is one person's palette on one machine, and the client
      * is not the arbiter of what they can read: the sentence appears beside a
      * value that applied. */
-    it("warns about a nick that fails contrast without withholding it", () => {
+    it("warns about a nick that fails contrast without withholding it", async () => {
       open({ themeId: "ircx-dark" });
-      editLight();
+      await editLight();
       fireEvent.change(field("--nick-1"), { target: { value: "#7fd4e0" } });
 
       expect(

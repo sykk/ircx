@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { draftOf, emptyDraft } from "@/components/onboarding/config";
+import { draftOf } from "@/components/onboarding/config";
 import { Onboarding, type OnboardingStart } from "@/components/onboarding/Onboarding";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc } from "@/lib/ipc";
@@ -66,9 +66,7 @@ export function NetworksPage({ onDone }: { onDone: () => void }) {
 }
 
 function Form({ network, onDone }: { network: string | null; onDone: () => void }) {
-  const [start, setStart] = useState<OnboardingStart | null>(
-    network === null ? { step: "server", draft: emptyDraft() } : null,
-  );
+  const [start, setStart] = useState<OnboardingStart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [identities, setIdentities] = useState<NetworkConfig[]>([]);
   useAnnounce(error);
@@ -108,6 +106,9 @@ function Form({ network, onDone }: { network: string | null; onDone: () => void 
         {error}
       </p>
     );
+  }
+  if (network === null) {
+    return <Onboarding onDone={onDone} identities={identities} />;
   }
   if (start === null) {
     return <p className="px-8 py-6 text-[var(--text-muted)]">Reading the saved settings…</p>;

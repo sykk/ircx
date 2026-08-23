@@ -153,14 +153,27 @@ describe("the list of networks", () => {
 });
 
 describe("the form", () => {
-  it("opens the server form for a network that does not exist yet", () => {
+  it("offers every setup path for a network that does not exist yet", () => {
     open(null);
-    expect(screen.getByRole("heading", { name: "Connect to an IRC server" })).toBeTruthy();
+
+    expect(screen.getByRole("button", { name: /Connect through Soju/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Connect through ZNC/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Connect to an IRC server/ })).toBeTruthy();
     expect(listNetworkConfigs).toHaveBeenCalled();
+  });
+
+  it("returns from the new-network chooser to the network list", () => {
+    open(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    expect(store().setup).toBeNull();
+    expect(screen.getByRole("heading", { name: "Networks", level: 2 })).toBeTruthy();
   });
 
   it("copies an identity from a saved network without its password", async () => {
     open(null);
+    fireEvent.click(screen.getByRole("button", { name: /Connect to an IRC server/ }));
     const identity = await screen.findByLabelText("Use identity from");
 
     fireEvent.change(identity, { target: { value: "libera" } });

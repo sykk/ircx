@@ -28,7 +28,7 @@ export type ViewId = string;
 /**
  * One chat pane. Splitting the window creates another of these, so anything
  * that differs between two panes showing the same channel lives here rather
- * than beside the channel's data — see docs/multiwindow.md.
+ * than beside the channel's data.
  */
 export interface ChatView {
   id: ViewId;

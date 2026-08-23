@@ -1,9 +1,0 @@
-# What ircx put on the wire when the reader typed /react.
-1787252315.718 >> @+typing=active TAGMSG #run36
-1787252316.647 >> @+typing=done TAGMSG #run36
-1787252337.394 >> @+typing=active TAGMSG #run36
-1787252338.329 >> @+typing=done TAGMSG #run36
-1787252338.331 >> @+reply=2dp4sgjgy943y7anp6ahckncnn/react;+draft/react=6zfgw7rcmxtuhng94pgdays7bi TAGMSG #run36
-1787252387.205 >> @+typing=active TAGMSG #run36
-1787252388.420 >> @+typing=done TAGMSG #run36
-1787252388.422 >> @+reply=6zfgw7rcmxtuhng94pgdays7bi;+draft/react=hot TAGMSG #run36

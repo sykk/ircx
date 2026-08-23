@@ -4,9 +4,7 @@
 //! the transport presents one (`ircx-net/tests/client_certificate.rs`), the
 //! config carries one, the form chooses one. None of that watched a server
 //! decide. This does, and it is the first SASL mechanism whose *success* path a
-//! test can re-run — PLAIN's and SCRAM's needed a real account on a real
-//! network, and `docs/manual-verification.md` records them as walked by the
-//! owner.
+//! test can re-run — PLAIN's and SCRAM's need a real account on a real network.
 //!
 //! What makes it possible is that a certfp server matches a fingerprint rather
 //! than building a chain, so a self-signed certificate made in thirty seconds
@@ -26,9 +24,6 @@
 //! IRCX_STRANGER_CERT=/path/to/stranger.pem \
 //!   cargo test -p ircx-core --test external_ergo -- --ignored --nocapture
 //! ```
-//!
-//! `docs/manual-verification.md` has the run this was written from, with the
-//! configuration in full.
 
 use std::path::PathBuf;
 use std::sync::Arc;

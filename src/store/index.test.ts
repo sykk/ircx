@@ -491,8 +491,8 @@ describe("paging backwards", () => {
 
   /**
    * #602. A server stamps at millisecond resolution and a burst arrives inside
-   * one of them: `ergo` gave `line 0611` to `line 0619` the same
-   * `18:04:42.886Z` in end-to-end run 42. So the window holds a run of messages
+   * one of them: `ergo` gave nine consecutive messages the same timestamp. So
+   * the window holds a run of messages
    * the timestamp cannot order, and the page that lands in front of them shares
    * it — and a merge that reads the clock alone has nothing to go on.
    *

@@ -1046,10 +1046,9 @@ describe("Timeline", () => {
        * of a reconnect clearing it, and the reader left at the top of a
        * conversation that says it has more and cannot be made to go and look.
        *
-       * Asking again is the wrong repair and the walk in `docs/end-to-end-27`
-       * is why — the same msgid went out 26 times in a walk, 65ms apart, which
-       * is #487 again. The server answered. What it answered with is that there
-       * is nothing behind this message, whatever the page's size said about
+       * Asking again is the wrong repair: it repeats the same msgid as fast as
+       * the scroll effect runs, which is #487 again. The server answered that
+       * there is nothing behind this message, whatever the page's size said about
        * fullness, so the paging stops and the pane says where the history ends.
        */
       it("stops paging when the page that answered it moved nothing", async () => {
@@ -1966,8 +1965,8 @@ describe("reaction chips", () => {
     return screen.getByRole("button", { name: new RegExp(`^${emoji} — `) });
   }
 
-  // readability/READABILITY.md study 14: a count on its own is a popularity
-  // metric. The names are the information, and your own is written as `you`.
+  // A count on its own is a popularity metric. The names are the information,
+  // and your own is written as `you`.
   it("names who reacted rather than only counting them", () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade", "sable", "wren"] }]);
     render(<Timeline view={TEST_VIEW} />);
@@ -2370,7 +2369,7 @@ describe("links in a message", () => {
 
   /**
    * The text used to be the destination character for character. It is the
-   * host and an elided path now, which is study 07 — but the host itself is
+   * host and an elided path now, but the host itself is
    * never shortened, because it is the part that settles where the link goes.
    */
   it("writes the host out as the text", () => {
@@ -2567,9 +2566,9 @@ describe("a message a notification rule raised", () => {
 });
 
 /**
- * #221 and #222, both found by the third end-to-end run. Ergo replays a
- * channel's comings and goings inside the history batch as ordinary messages
- * from `HistServ`, and one of them says the reader's own name.
+ * #221 and #222. Ergo replays a channel's comings and goings inside the history
+ * batch as ordinary messages from `HistServ`, and one of them says the reader's
+ * own name.
  */
 describe("a conversation the server replayed", () => {
   const narration = () =>

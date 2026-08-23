@@ -1,11 +1,9 @@
 //! What a page of history costs to read.
 //!
-//! `docs/end-to-end-run-17.md` argued that the archive read is what a loaded
-//! machine stretches, and named the shape of it: `load_history` reads the page
-//! and then fills it in with `attach_reactions`, `attach_annotations` and
-//! `attach_raised`, "each of those runs **one statement per message** — six
-//! hundred executions behind a Tauri command". That was the mechanism behind a
-//! race the run spent eighty walks on, and nothing has ever timed it.
+//! `load_history` reads the page and then fills it in with
+//! `attach_reactions`, `attach_annotations`, and `attach_raised`. Those passes
+//! once ran one statement per message, putting six hundred executions behind a
+//! full-page Tauri command.
 //!
 //! `docs/measurements.md` had no figure for a history page at all. This is
 //! that figure, and the arms are what separate the two costs it turned out to
@@ -27,10 +25,9 @@
 //! entirely, which is the best case and neither of the two the argument was
 //! about. Two more arms are what the first figure's *Not measured* named:
 //!
-//! - **Under load**, because that is what run 17 claimed the read was
-//!   sensitive to. Its walks contended for CPU and nothing else — the profile
-//!   is on tmpfs and the server is a local socket — so the arm leaves twice the
-//!   cores spinning and reads the same pages again.
+//! - **Under load**, because the read is sensitive to CPU contention. The
+//!   profile is on tmpfs and the server is a local socket — so the arm leaves
+//!   twice the cores spinning and reads the same pages again.
 //! - **Off a cold archive**, because every figure here was taken seconds after
 //!   the fill wrote the file. `page_cache` takes the cache off it between
 //!   rounds, the same way `cold_archive.rs` does for the export, and the page
@@ -232,9 +229,9 @@ fn cores() -> usize {
 
 /// How many threads to leave spinning for the loaded arm.
 ///
-/// Twice the cores, which is what the walks behind run 17's argument ran under:
-/// enough that every reader waits for a core rather than finding one free, and
-/// not so many that the machine is only measuring its own scheduler.
+/// Twice the cores: enough that every reader waits for a core rather than
+/// finding one free, and not so many that the machine is only measuring its own
+/// scheduler.
 fn spinners() -> usize {
     std::env::var("IRCX_SPINNERS")
         .ok()

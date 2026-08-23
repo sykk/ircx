@@ -3,15 +3,13 @@
 //! A plugin is JavaScript with a manifest. It runs in its own QuickJS runtime,
 //! on its own thread, and reaches the client only through the host functions
 //! its grants allow — there is no filesystem, no socket and no clock beyond
-//! what `sandbox.rs` installs. `docs/plugin-isolation.md` is why QuickJS and
-//! not a subprocess or wasm: a subprocess enforces two of the seven
-//! permissions the spec names, and this enforces all seven, plus the eighth
-//! the annotator adds.
+//! what `sandbox.rs` installs. A native subprocess would keep the user's own
+//! filesystem and network access, so withholding a host function would not
+//! enforce those grants.
 //!
-//! The one extension point built here is the custom slash command. Message
-//! renderers, link and attachment providers, notification rules and protocol
-//! adapters are the same shape — the host hands a value over, the plugin
-//! returns one, the host applies a deadline — and are follow-up work.
+//! Custom slash commands, annotators, and notification rules are built. Message
+//! renderers, link and attachment providers, and protocol adapters are outside
+//! this milestone.
 //!
 //! What a broken plugin costs the host is asserted in `tests/failure_modes.rs`
 //! rather than described: it panics, loops, allocates and backtracks, and the

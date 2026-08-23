@@ -620,9 +620,8 @@ impl SessionState {
         // A query has no counter to reach, and deliberately none: its badge is
         // already the loud one, because somebody opened a conversation with the
         // reader and nobody else. A rule can raise in one and this will not
-        // move — `docs/notifications.md` argues it, and `docs/plugins.md` tells
-        // a rule author. What the raise leaves there is the archive row and the
-        // line under the message.
+        // move. What the raise leaves there is the archive row and the line
+        // under the message.
         if let Some(channel) = self.channels.get_mut(&key) {
             channel.highlights += 1;
             self.emit_channel(&key);

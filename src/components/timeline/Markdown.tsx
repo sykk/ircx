@@ -152,8 +152,7 @@ const CHIP = {
  * middle-click and "copy link address", which is the trade.
  *
  * The host leads at full weight and the path follows behind it, quieter and
- * elided once long — `readability/READABILITY.md` study 07, which is about the
- * kinds of thing IRC carries that are not prose and should not be set as prose.
+ * elided once long because URLs are data rather than prose.
  *
  * The text no longer states the destination character for character, which was
  * a property this had and gave up. What it states is the host, resolved by

@@ -238,10 +238,9 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
            pane that was all roster, the timeline gone, the composer's hint
            wrapped one word wide.
 
-           440 is measured, not picked. Three widths dragged in Chrome and read
-           off the screenshots in `docs/end-to-end-run-7.md`: a 323px pane wraps
-           message text to one character a line, 403 wraps at word boundaries and
-           reads, 483 is comfortable. Those had a 157px roster and its ceiling is
+           440 is measured, not picked. In Chrome, a 323px pane wraps message
+           text to one character a line, 403 wraps at word boundaries and reads,
+           and 483 is comfortable. Those had a 157px roster and its ceiling is
            208, so a pane wants about 208 + 232 before it can hold both. Below
            that the roster is what goes, because a conversation without a member
            list is still a conversation and a member list without a conversation

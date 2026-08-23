@@ -1651,8 +1651,8 @@ function sortsBefore(a: ChatMessage, b: ChatMessage, orTie: boolean): boolean {
  * happening, which is what tells the merge above which side a tied stamp goes
  * to.
  *
- * **A stamp is a millisecond and a burst is not.** `ergo` gave nine of run 42's
- * messages the same `18:04:42.886Z`, and the page that landed in front of them
+ * **A stamp is a millisecond and a burst is not.** `ergo` gave nine consecutive
+ * messages the same timestamp, and the page that landed in front of them
  * shared it — so the clock cannot order the two runs, and something else has to.
  * A merge that breaks the tie towards the window puts the page after messages it
  * precedes, and then the rest of the page after the first stamp that differs:

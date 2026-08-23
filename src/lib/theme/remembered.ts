@@ -11,8 +11,8 @@ const STORAGE_KEY = "ircx.theme.installed";
  * async has happened. A theme in `<app data>/themes` cannot be read that way —
  * it takes a command to the backend — so the opening paint had nothing to show
  * for it and fell through to the dark theme `global.css` imports statically.
- * Every launch on an installed theme flashed dark, measured at about 130ms in
- * `docs/end-to-end-run-6.md`, which on a light theme is the whole window.
+ * Every launch on an installed light theme therefore flashed the whole window
+ * dark.
  *
  * The source rather than the tokens it parses to, so `catalogue` validates this
  * on the way back in exactly as it validates the backend's copy. localStorage

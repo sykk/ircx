@@ -1,2 +1,0 @@
-{"call": "ready", "name": "org.freedesktop.Notifications", "t": 0.0}
-{"call": "notify", "id": 1, "app": "ircx", "summary": "sable in #ign38", "body": "walker: before the ignore", "actions": [], "t": 70.88}

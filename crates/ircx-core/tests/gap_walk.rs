@@ -23,8 +23,6 @@
 //!     -e 's/6667/6687/' ircd.yaml > ircd-6687.yaml   # and fakelag off
 //! ergo initdb --conf ircd-6687.yaml && ergo run --conf ircd-6687.yaml
 //! ```
-//!
-//! `docs/manual-verification.md` records the run this was written from.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

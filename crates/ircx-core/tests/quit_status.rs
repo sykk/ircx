@@ -1,6 +1,6 @@
 //! A session asked to stop says it stopped. #587.
 //!
-//! Run 38 found `/quit` leaving the window on `Connected`: the task returned
+//! `/quit` left the window on `Connected`: the task returned
 //! before `on_disconnected`, so nothing published the status the sidebar and
 //! the status bar read, and only the composer — which asks the backend rather
 //! than the store — knew the socket was gone.

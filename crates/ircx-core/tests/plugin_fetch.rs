@@ -2,10 +2,9 @@
 //!
 //! `crates/ircx-plugin/tests/permissions.rs` covers the grant, the host list and
 //! the budget against a fetcher that answers without a network, and
-//! `crates/ircx-net` covers the socket against its own loopback server. Nothing
-//! ran the two together, which is what `docs/manual-verification.md` records as
-//! the last gap in the plugin section: the seam is `network_for_plugins`, which
-//! turns a plugin's request into a `FetchPolicy` and hands it to `ircx-net`.
+//! `crates/ircx-net` covers the socket against its own loopback server. This
+//! joins them at `network_for_plugins`, which turns a plugin's request into a
+//! `FetchPolicy` and hands it to `ircx-net`.
 //!
 //! The seam carries one thing neither side can be asked about alone. A plugin's
 //! policy is `FetchPolicy::default()` with the budget written over it, and that

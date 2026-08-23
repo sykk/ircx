@@ -47,8 +47,8 @@
    * Warm hues are reserved for security and connection state. An
    * unconstrained palette collides with them: the previous values put a nick
    * on --danger at 4deg and on --success at 125deg, so a nickname could render
-   * in the colour that means "connection error". See
-   * readability/READABILITY.md, finding 1.
+   * in the colour that means "connection error". See the Nick colors section
+   * in readability/READABILITY.md.
    *
    * Hues are spread evenly across 186-335deg, which keeps every entry more
    * than 20deg from --danger, --warning and --success in both themes. Each is
@@ -93,8 +93,8 @@
    * lasts as long as the rate limiter holds the line. */
   --pending-opacity: 0.55;
 
-  /* How tightly the timeline packs. readability/READABILITY.md study 05 asks
-   * for three of these — compact for log reading, comfortable for being in the
+  /* How tightly the timeline packs. readability/READABILITY.md defines three
+   * densities — compact for log reading, comfortable for being in the
    * conversation, read for nine hours of backlog — and a density is these
    * three numbers and nothing else, which is what makes it a theme rather than
    * a fork. The values below are comfortable.
@@ -125,9 +125,8 @@
   --timeline-actions-col: 60px;
   --timeline-actions-gap: 16px;
 
-  /* A reply quote's connector. Solid because a reply_to is a fact the sender
-   * declared over the protocol, and at study 19's "declared" weight — the
-   * heaviest of the three grades, the only one a human named. */
+  /* A reply quote's connector. Solid because reply_to is a fact the sender
+   * declared over the protocol. */
   --timeline-quote-width: 2px;
 
   /* The focus ring is an accessibility affordance before it is a style: a

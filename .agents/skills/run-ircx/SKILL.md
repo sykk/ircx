@@ -96,8 +96,8 @@ quit
 
 The seed holds one network, `#ircx`, `#rust`, a 300-message `#long` to park in
 the middle of, a `#band` whose sixty lines are one block tall enough to scroll
-its own author off the top — which is what draws the sticky author band, and
-what run 37 measured under it — and a query. `#ircx`'s members are picked for the roster's width
+its own author off the top — which is what draws the sticky author band — and a
+query. `#ircx`'s members are picked for the roster's width
 arithmetic: a voiced one, an away one, and `wallabywombat` to reach the ceiling.
 A line typed into the composer is kept, so `ArrowUp` brings it back.
 
@@ -194,8 +194,7 @@ script with the same credentials is the second session.
 
 **`--profile` is how "does it survive a restart" is asked.** A run seeds a fresh
 profile, so a draft, a pane layout, a theme and its edits are all gone by the
-next one — and a good deal of `docs/manual-verification.md` is written in that
-shape. Keep a profile, do the thing, quit, and launch again on the same
+next one. Keep a profile, do the thing, quit, and launch again on the same
 directory; nothing is seeded the second time.
 
 **`--release` is what a figure has to be measured on**, and the build for it is
@@ -212,9 +211,8 @@ Tailwind v4 wraps every `hover:` and `group-hover:` utility in
 `@media (hover: hover)`, and WebKitGTK on `Xvfb` answers that query `hover:
 none` — there is no pointer device on that display, whatever `move` does with
 XTEST. So a control drawn `hidden group-hover:block` is invisible for the whole
-of a walk, and reads as a control the app does not have. Run 35 lost an hour to
-exactly that; `docs/end-to-end-35/hover-probe.html` is the four-line page that
-settles it, and the same engine on a real session answers `hover: hover`.
+of a walk and reads as a control the app does not have. The same engine on a
+real pointer session answers `hover: hover`.
 
 Reach such a control by its focus twin instead — `group-focus-within:` is not
 inside the media query, so clicking anything focusable in the same group draws
@@ -224,18 +222,16 @@ Tailwind variant, which is the only kind this harness can see.
 **A timeline can only be scrolled with `wheel`.** The scroller is a `div`
 nothing focuses, so no key sent to the window moves it, and `click` lands on a
 message rather than dragging a bar. **How far a notch goes is not a constant.**
-It has been about a third of a message, and it was three whole messages — 75px
-at 1200x800 — in run 37's channel, so a coordinate read off one screenshot is
-stale after a single notch. Measure it in the pane being walked before counting
-them, and take the screenshot the coordinate comes from after the last one.
+It has been about a third of a message and as much as three whole messages, so a
+coordinate read off one screenshot is stale after a single notch. Measure it
+in the pane being walked before counting them, and take the screenshot the
+coordinate comes from after the last one.
 
 **Two frames with nothing between them is how the app is caught moving on its
 own.** Send an input, photograph, wait, photograph again — any difference is the
 app rather than you, and `md5sum` on the pair is the whole test, since a still
-pane is byte-identical. Run 12 measured a scroll defect that way: 78 of 80 pairs
-identical, and the two that were not are where a page of history landed. What
-the difference *is* takes a real measurement — `shift.py` slides a band of one
-frame over the other and answers in pixels.
+pane is byte-identical. What the difference *is* takes a real measurement:
+`shift.py` slides a band of one frame over the other and answers in pixels.
 
 **Two things it cannot do**, and both bite quietly:
 
@@ -250,8 +246,8 @@ frame over the other and answers in pixels.
 
 **Read the wire from a second client, not from ircx.** Its timeline draws local
 copies the moment Enter is pressed and its raw log records the queue rather than
-the socket, so neither is a clock. A dozen lines of socket code joined to the
-same channel is what `docs/end-to-end-run-4.md` timed everything from.
+the socket, so neither is a clock. A small socket client joined to the same
+channel reads what the server received.
 
 ## Measure startup
 
@@ -392,7 +388,7 @@ already one directory per worktree — see Gotchas for what sharing one costs.
 
   Navigate it by clicking instead. Put the folder somewhere the chooser already
   lists — the app's own working directory is where it opens — then click its row
-  and click Open. `docs/end-to-end-run-8.md` walks it that way.
+  and click Open.
 - **Backend-dependent UI is empty, not broken.** Without `--seeded` every
   `invoke` rejects, so the network list, plugins, uploads and themes installed on
   disk show their backend-absent state — the plugins sheet renders "no backend:

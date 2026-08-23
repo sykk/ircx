@@ -10,11 +10,10 @@ import {
   hue,
 } from "@/lib/theme/contrast";
 
-// readability/READABILITY.md finding 1: an unconstrained nick palette collides
-// with the security and connection colours, and a nick rendered in the colour
-// that means "error" is a lie the user cannot see. These assert the constraint
-// rather than the specific values, so retuning a hue stays cheap and stepping
-// outside the band does not.
+// An unconstrained nick palette collides with the status colours, and a nick
+// rendered in the colour that means "error" is a lie the user cannot see. These
+// assert the constraint rather than the specific values, so retuning a hue
+// stays cheap and stepping outside the band does not.
 //
 // Every theme shipped is held to it, not just the two that were here first: a
 // theme is the one thing that can put a nick back on top of --danger.

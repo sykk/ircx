@@ -49,8 +49,7 @@ const openers = new WeakMap<HTMLElement, Element | null>();
  * markup, which is why no test caught it: jsdom implements no sequential focus
  * navigation, so a `keydown` of `Tab` moves nothing there and a vitest test
  * cannot see either half. `useDialogFocus.test.tsx` asserts what this hook
- * decides; the walk in `docs/manual-verification.md` is what asserts the
- * behaviour.
+ * decides; the release checklist covers the browser's focus navigation.
  */
 export function useDialogFocus(dialog: RefObject<HTMLElement | null>): void {
   /* Read during render, which is the only moment it is still true: an

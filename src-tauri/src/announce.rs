@@ -6,7 +6,7 @@
 //! pipeline — so what a person types into a control is reported and nothing the
 //! page writes ever is. Orca compounds it: its live-region presenter answers
 //! only to `object:text-changed:insert`, which is the one event that will never
-//! arrive. `docs/manual-verification.md` has the measurements.
+//! arrive.
 //!
 //! The window is not subject to any of that. ATK carries an `announcement`
 //! signal, the bridge relays it as `object:announcement`, and Orca speaks that

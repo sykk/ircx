@@ -545,8 +545,7 @@ describe("CommandPalette", () => {
   });
 
   /**
-   * #85. `readability/READABILITY.md` study 05 asked for three densities and
-   * left how a person picks one unanswered. The palette is how this client
+   * #85. The timeline has three densities. The palette is how this client
    * answers "how do I do a thing" everywhere else.
    */
   describe("choosing a density", () => {

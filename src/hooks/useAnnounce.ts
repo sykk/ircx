@@ -10,8 +10,7 @@ import { ipc } from "@/lib/ipc";
  * for text the page rewrites, and for an alert it does mount it reports an
  * insertion Orca declines — the branch that would present one tests
  * `Role.ALERT` while WebKit maps an ARIA alert to `Role.NOTIFICATION`.
- * `src-tauri/src/announce.rs` and `docs/manual-verification.md` have the
- * measurements.
+ * `src-tauri/src/announce.rs` sends the native announcement that Orca accepts.
  *
  * Pass `null` or `""` for nothing to say. Announcing is best-effort — most
  * desktops run no accessibility bus, and there is no backend at all in the

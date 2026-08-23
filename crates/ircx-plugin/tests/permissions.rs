@@ -3,8 +3,7 @@
 //!
 //! A permission is only real if the mechanism can refuse the capability when
 //! the grant is withheld, so every one of these grants it, withholds it, and
-//! asserts both answers. `docs/plugin-isolation.md` is the write-up that says
-//! why a subprocess could only do two of them.
+//! asserts both answers.
 
 use std::path::Path;
 

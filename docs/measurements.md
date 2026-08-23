@@ -41,9 +41,8 @@ RPL_WELCOME with no UI. Most of that is Libera's identd timeout rather than
 anything ircx does — worth confirming before anyone treats it as a startup
 figure.
 
-> The end-to-end runs in `docs/end-to-end-run.md` and `-run-2.md` used a **debug**
-> binary against the Vite dev server. Nothing in those documents is a startup
-> measurement, and they should not be cited as one.
+Earlier assembled-application checks used a debug binary against the Vite dev
+server. They are not startup measurements.
 
 ### With something in the profile
 
@@ -560,8 +559,7 @@ was about. The two arms below are the ones that stood here as *not measured*.
 #### The same page on a loaded machine
 
 **Measured 2026-08-14** by the same probe's second pass: 32 spinner threads on
-16 cores, which is the contention `docs/end-to-end-run-17.md` ran its walks
-under — that profile is on tmpfs and its server is a local socket, so CPU is
+16 cores. The profile is on tmpfs and its server is a local socket, so CPU is
 all there is to contend for. Six sittings of the build that ships and four of a
 control built from `2dd01c4`, which is the commit before #526 and reproduces
 the *before* column above to three digits. Medians of nine, and the ranges are
@@ -576,7 +574,7 @@ across sittings.
 | 200 at 90,000 back | 11.5–11.9 ms | 22.3–66.1 ms | 0.82–0.83 ms | 1.78–7.48 ms |
 | 10 at 50,000 back | 5.25–5.41 ms | 10.4–22.3 ms | 0.109–0.111 ms | 0.212–0.225 ms |
 
-**Run 17 was right, and the quiet table understates what the fix is worth.** A
+**The quiet table understates what the fix is worth.** A
 page at 90,000 back is 14× faster than it was on an idle machine, and on a
 loaded one it is 22.3–66.1 ms against 1.78–7.48 — the two columns do not
 overlap at any depth, and the gap between their medians runs from 9× to 37×
@@ -723,14 +721,14 @@ reach dominates once it is, because most answers are out of reach before
 crossing is consulted.
 
 **Excludes:** how many conversations a real channel actually runs at once, which
-is what would place a real client on these rows. `docs/manual-verification.md`
-records the attempt and why it failed — Libera carried 3 messages in 3 minutes
-across eight channels holding 8,400 people.
+is what would place a real client on these rows. The attempted sample carried 3
+messages in 3 minutes across eight Libera channels holding 8,400 people.
 
 ## Plugin isolation
 
-Added cost per mechanism, measured exec-to-answer over 200 runs on the release
-profile. Full method and the reasoning in `docs/plugin-isolation.md`.
+Added cost per mechanism, measured exec-to-answer over 200 process launches on
+the release profile. The prototype binaries differed only in the plugin backend;
+permission enforcement, not startup cost, selected QuickJS.
 
 | backend | median | added |
 |---|---|---|
@@ -1071,8 +1069,8 @@ come from: an export hammered by 2,241 searches takes 330 ms rather than 266 ms.
 
 **60,000 messages was the modest end of the fault.** The export is linear in the
 archive and the delete worse than linear: at 240,000 they are 1.09 s and 3.45 s,
-and a search typed then waited about that long. Run 11 walked a
-100,021-message export at 563 ms in the assembled app.
+and a search typed then waited about that long. The 100,021-message assembled
+app profile above exported in 563 ms.
 
 **What the search itself costs, for scale:** 0.11 ms for a term matching one
 row, 14.8 ms for a term every row has, where FTS matches all 60,000 and the
@@ -1086,10 +1084,9 @@ which nothing in the client issues.
 
 ### What an export costs in memory
 
-**Measured 2026-08-07**, in the assembled release app on `Xvfb`, walked in
-`docs/end-to-end-run-11.md`. The section above times the export from inside the
-process; this one asks the question run 5 left open, which is whether it renders
-the archive before writing it.
+**Measured 2026-08-07**, in the assembled release app on `Xvfb`. The section
+above times the export from inside the process; this one asks whether the
+frontend renders the archive before writing it.
 
 100,021 messages, 56 MB archive, three networks connected. Three runs of `Export
 everything` from the sheet, destination and archive both on btrfs. The
@@ -1125,8 +1122,7 @@ past 56 MB — both of which the section below measures.
 **Measured 2026-08-07.** `an_export_of_an_archive_nobody_has_read_yet` in
 `crates/ircx-store/tests/cold_archive.rs`. Every export figure above was taken
 seconds after the archive was seeded, so the file was entirely in the kernel's
-page cache. Run 11 said as much and listed *"an archive that does not fit in the
-page cache"* among what it had not reached.
+page cache. This probe covers an archive the kernel is not already holding.
 
 The same export runs twice a round: once against a cached file, then again with
 `posix_fadvise(POSIX_FADV_DONTNEED)` over the database and its write-ahead log.
@@ -1188,9 +1184,9 @@ line is the same sentence and repetition is what an index does not pay twice
 for. The first round of each run is the exception and reads the file whole,
 because the fill had just written all of it.
 
-**What it does to the figure above.** Run 11's 0.5–0.6 s for 100,021 messages is
-a warm number; multiply by about 1.6 for an archive nobody has read since the
-machine booted. Do not read 431 ms against that walk's 563 ms — this is a bare
+**What it does to the figure above.** The assembled app's 0.5–0.6 s for 100,021
+messages is a warm number; multiply by about 1.6 for an archive nobody has read
+since the machine booted. Do not read 431 ms against that walk's 563 ms — this is a bare
 `Store` writing to a sink, and that is the assembled app with three connections
 live putting 54 MB on btrfs. The ratio transfers; the absolute does not.
 
@@ -1200,7 +1196,7 @@ database and write-ahead log the kernel is holding none of, at three sizes.
 NVMe; and a fragmented or aged file, since all three were written in one pass
 minutes before they were read. The seeded line is one sentence with its index
 appended, which comes to 468 bytes a message on disk against the 560 of the
-profile run 11 walked — lighter per row, and lighter again in the full-text
+100,021-message assembled profile — lighter per row, and lighter again in the full-text
 indexes, though the scan does not read those.
 
 ## The narrowest a settings page can be
@@ -1261,10 +1257,9 @@ stops fitting.
   at the cap instead of one.
 - A netsplit against a real server, end to end, **as a figure**. Both halves are
   measured separately — the frontend stages in jsdom, everything below them
-  against a local `ergo` — and neither has WebKit in it. A burst has since been
-  driven through a running window and watched, which is written up under *The
-  netsplit half is measured* in `docs/manual-verification.md`; it establishes
-  that the fold and the archive hold at that scale, and it timed nothing.
+  against a local `ergo` — and neither has WebKit in it. An untimed burst driven
+  through a running window established that the fold and archive hold at that
+  scale.
 - A real netsplit. What the section above measures is a few thousand ordinary
   clients whose sockets close at once, which is the arrival rate without the
   server link, the `*.net *.split` reason or the `NETSPLIT` batch.

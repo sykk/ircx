@@ -212,8 +212,8 @@ describe("usePrependAnchor", () => {
   });
 
   /**
-   * #535, photographed in end-to-end run 31. The page's last message is by the
-   * person whose run the window opens with, so the two sides are drawn as one
+   * #535. The page's last message is by the person whose run the window opens
+   * with, so the two sides are drawn as one
    * block: the reader's message opened a row and is now the second line of one.
    * Its row starts 200px higher than the message does, and a pane put back by
    * the row leaves the reader a message lower than they were.
@@ -296,11 +296,10 @@ describe("usePrependAnchor", () => {
 
   /**
    * #532. The page lands and the rows above the reader are measured over the
-   * commits that follow — fourteen of them in end-to-end run 30, two to three
-   * milliseconds apart, inside a single frame. The assertion above answers the
-   * first of those and the anchor then stood down, so everything measured after
-   * it moved the reader: 22 to 46px in the release app, in the pane that asked
-   * for the page.
+   * commits that follow, several milliseconds apart inside one frame. The
+   * assertion above answers the first of those and the anchor then stood down,
+   * so everything measured after it moved the reader: 22 to 46px in the
+   * release app, in the pane that asked for the page.
    *
    * Two rows measuring on two separate commits is the smallest version of that,
    * and it is the same shape: the reader is put back on the first and left

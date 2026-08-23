@@ -2,9 +2,9 @@
 
 A plugin is JavaScript with a manifest. It runs in its own QuickJS runtime on
 its own thread and reaches the client only through the functions its grants
-allow. `docs/plugin-isolation.md` is why QuickJS: a subprocess enforces two of
-the seven permissions the spec names, and this enforces all seven, plus the two
-the hooks that read on arrival add.
+allow. QuickJS exposes no filesystem or socket of its own, so the host can
+enforce every permission by withholding the corresponding value or function. A
+native subprocess would retain the user's filesystem and network access.
 
 The extension points built are the **custom slash command**, the **annotator**
 and the **notification rule**. Message renderers, link and attachment providers
@@ -191,22 +191,12 @@ constraints on future work, not things already banked.
   the lie is in what it was legitimately allowed to return. `render-content`
   governs what a plugin may show **of its own**, and nothing more.
 
-  It bounds the unbuilt work as much as the built. A message renderer may
-  annotate — its own text, attributed, beside what it is about — and may not
-  transform. A protocol adapter handling a capability ircx does not know may
-  produce messages and may not rewrite the ones already there.
-
-  `docs/renderers.md` works that through for renderers and finds one shape the
-  rule leaves standing: spans over the sender's own text, where the plugin says
-  where and which and is never asked for a character. It also finds that the
-  rule needs a second half — hiding text is forgery by omission — and
-  recommends not building it yet.
-
-  `docs/adapters.md` does the same for protocol capability adapters, the one
-  extension point that could put a plugin in the connection's path. It may
-  read and never write: `ircx.send` is closed because the bound that makes a
-  plugin's sends safe is the keystroke, and that bound does not survive a
-  plugin answering a server.
+  It bounds the unbuilt work as much as the built. A message renderer could
+  return spans over the sender's text from a closed host-defined style set; it
+  could not return replacement text, links, or a style that makes text vanish.
+  A protocol adapter could request a capability and annotate unhandled parsed
+  lines, but could not write to the socket. Neither extension point is part of
+  this milestone.
 - **Hooks are synchronous.** A promise nobody settles leaves the job queue empty
   with no bytecode running, so nothing trips the deadline. Making hooks
   asynchronous means putting a deadline around the microtask pump.
@@ -451,7 +441,7 @@ somebody opened a conversation with the reader and nobody else, and a second
 colour would say the same thing twice. In a **muted** conversation, because
 that is what the reader asked for — and the rule is still asked, and what it
 raised is still written down, because mute is a statement about being
-interrupted rather than about the record. `docs/notifications.md` argues both.
+interrupted rather than about the record.
 
 A rule cannot tell the difference and is not meant to: it answers what was
 worth reading, and where that lands is the client's.
@@ -516,7 +506,7 @@ more than the message in front of it, such as the third failure this hour.
 
 ## What is not built
 
-- **The other two extension points' shapes.** Providers and protocol adapters
-  are still only described.
+- **Three plugin extension points.** Message renderers, link and attachment
+  providers, and protocol adapters are outside this milestone.
 - **A second plugin's marginal cost.** Every figure in `docs/measurements.md` is
   one plugin.

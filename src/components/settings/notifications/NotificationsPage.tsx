@@ -25,9 +25,6 @@ import type { IgnoredPerson, MutedConversation } from "@/types";
  * What is allowed to interrupt the reader: the words that raise a conversation,
  * and the conversations that may not.
  *
- * What a match then does — a desktop notification, a sound — is the rest of the
- * section, and `docs/notifications.md` argues its shape.
- *
  * Both lists are read here rather than out of the store, because this window
  * runs no event bridge and nothing has primed one for it. They are the
  * backend's anyway: the badge is counted there, against the same words and the

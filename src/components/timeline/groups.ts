@@ -3,9 +3,9 @@ import type { ChatMessage } from "@/types";
 /**
  * Which messages belong together, on the evidence of what people typed.
  *
- * `readability/ircx-live-studies.html` names three grades: a bracketed topic
- * the sender typed is a fact, IRC's `nick:` convention is near-certain, and
- * everything else is a guess from timing and participants. Two are built.
+ * A bracketed topic the sender typed is a fact, IRC's `nick:` convention is
+ * near-certain, and everything else would be a guess from timing and
+ * participants. Only the first two are built.
  *
  * **The guess is not, and the reason is worth keeping.** It shipped, and a run
  * against a real channel showed what it does: grouping exists to separate
@@ -19,8 +19,7 @@ import type { ChatMessage } from "@/types";
  * clustering rather than a timer.
  *
  * So the spine is coloured where somebody's own words grouped it, and stays
- * neutral otherwise. Hue names the group — `READABILITY.md:236` — taken from
- * whoever opened it.
+ * neutral otherwise. Hue names the group and comes from whoever opened it.
  */
 export type Grade = "declared" | "addressed";
 

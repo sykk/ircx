@@ -750,12 +750,9 @@ mod tests {
         out.len()
     }
 
-    /// **A disk that is full raises `ENOSPC`, and nothing had ever checked that
-    /// it arrives as `StorageFull`.** `docs/manual-verification.md` walked a
-    /// destination that refuses the write with a `mkfifo` and got `BrokenPipe`,
-    /// and said what that left: *"what is untested is only whether
-    /// `StorageFull` arrives where it is expected to."* Every other test here
-    /// builds the kind by hand and so can only prove the wording.
+    /// A disk that is full raises `ENOSPC`; this asserts it arrives as
+    /// `StorageFull` rather than proving only the wording from a constructed
+    /// error kind.
     ///
     /// `/dev/full` answers every write with `ENOSPC`. This is the export short
     /// enough that all of it is still in the buffer when the file is closed, so

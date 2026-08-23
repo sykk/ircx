@@ -31,8 +31,7 @@ interface Props {
 }
 
 /**
- * `readability/READABILITY.md` study 14: a count on its own is a popularity
- * metric, and in a nine-person channel the names are the information. They
+ * A count on its own is a popularity metric. The names are the information and
  * arrive with the reaction, so every chip carries them.
  */
 export function Reactions({ reactions, ownNick, onToggle }: Props) {

@@ -57,8 +57,8 @@ pub struct ChatMessage {
     pub raised_by: Vec<String>,
 }
 
-/// One `+draft/react` value and everyone who sent it. The readability studies
-/// ask for names rather than counts, so the nicks travel and a count is
+/// One `+draft/react` value and everyone who sent it. Names carry more
+/// information than a count, so the nicks cross the boundary and a count is
 /// whatever the frontend makes of their number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]

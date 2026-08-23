@@ -176,9 +176,8 @@ function olderPage(seedNumber: number): ChatMessage[] {
 /**
  * A channel whose page boundary falls inside one person's run: `historian` says
  * the last line of the page and the first two of the window, so the two sides
- * are one block once both are drawn. Run 31 photographed exactly this at lines
- * 0232 and 0233 — the seeder's speaker function repeats where a run happens to
- * straddle wherever the window begins, which is not a shape a walk can arrange.
+ * are one block once both are drawn. The speaker function repeats where a run
+ * happens to straddle the window boundary.
  *
  * Everything else alternates, so the block the reader opens is two messages
  * rather than the channel.
@@ -198,11 +197,10 @@ function runAcrossTheBoundary(from: number, count: number): ChatMessage[] {
 }
 
 /**
- * The channel run 22 walked, which is not the channel this file's other tests
- * draw. `seed.py` picked its shape to keep `groups.ts` out of the measurement:
- * two people alternating every line, nothing opening with `[` or with `nick:`,
- * three body lengths and the lot sent back to back. So no run is longer than a
- * message, no group is ever assigned, and every row is one line or two.
+ * An alternating channel that keeps `groups.ts` out of the measurement: two
+ * people alternating every line, nothing opening with `[` or with `nick:`, and
+ * three body lengths sent back to back. No run is longer than a message, no
+ * group is assigned, and every row is one or two lines.
  *
  * `source` is what the restore leaves behind it: the archive it read, then what
  * the server replayed on top, then what the session heard live — which is where
@@ -311,9 +309,8 @@ describe("a timeline whose rows are the heights it draws", () => {
    *
    * `scrollAnchor.ts` says that departure "needs no term of its own: it leaves
    * on the commit that prepends the page, where the offsets on both sides are
-   * measured from the top of the scroller and carry it". End-to-end run 30
-   * watched that commit and found the write exact and the reader moved 22 to
-   * 46px all the same.
+   * measured from the top of the scroller and carry it". The write can be
+   * exact while later measurement commits still move the reader.
    */
   it("holds the reader still when the page lands under a head that is leaving", async () => {
     ipcMock.loadHistory.mockResolvedValue(olderPage(7));
@@ -339,8 +336,8 @@ describe("a timeline whose rows are the heights it draws", () => {
   });
 
   /**
-   * #535, photographed in end-to-end run 31: the pane that asked was at the top
-   * of its content, the page landed with a message by the same person a moment
+   * #535: the pane that asked was at the top of its content, the page landed
+   * with a message by the same person a moment
    * earlier, and the reader's own line was drawn 84px lower afterwards.
    *
    * The page boundary falls inside one person's run here, so `groups.ts` draws
@@ -499,10 +496,9 @@ describe("two panes on one channel, one of them parked", () => {
 });
 
 /**
- * #508's own conditions on #508's own channel. Run 22 measured five landings in
- * eighteen moving a parked pane by exactly one line of text, and this is what
- * it drove: a restored layout with both panes on the channel, the right one
- * wheeled up the archive and then left alone while the left one pages twice.
+ * #508's conditions: a restored layout with both panes on the channel, the
+ * right one wheeled up the archive and then left alone while the left one pages
+ * twice.
  *
  * The pane does not move here, and the negative is the useful part. Whatever
  * displaces it in the release app, it is not the head arriving or leaving, not
@@ -510,13 +506,12 @@ describe("two panes on one channel, one of them parked", () => {
  * and not a history rule landing above the reader — all four are in this test
  * and the pane holds through them.
  *
- * What this channel has not got is a row whose height can change after it is
- * drawn. `seed.py` chose that shape deliberately, to keep `groups.ts` out of
- * the measurement, and it keeps out more than it meant to: with no group ever
- * assigned and no run longer than a message, a page landing cannot alter a row
+ * This channel has no row whose height can change after it is drawn. Keeping
+ * `groups.ts` out of the measurement also means no group is ever assigned and
+ * no run is longer than a message, so a page landing cannot alter a row that
  * that is already on the screen.
  */
-describe("the channel run 22 walked", () => {
+describe("a parked pane without regrouping", () => {
   const ARCHIVE = Date.parse("2026-07-29T00:00:00.000Z");
 
   /** The two panes as a restore brings them back, each aimed at the row its
@@ -546,8 +541,8 @@ describe("the channel run 22 walked", () => {
     flushLayout();
 
     const [reading, parked] = screen.getAllByTestId("timeline-scroller");
-    // The wheel is what hands a pane to its reader, and it is how run 22 parked
-    // the right one: from here neither is being put back.
+    // The wheel hands each pane to its reader; from here neither is being put
+    // back.
     fireEvent.wheel(reading!);
     fireEvent.wheel(parked!);
     parked!.scrollTop = 4_000;
@@ -704,15 +699,10 @@ describe("a page that regroups the window it lands above", () => {
 });
 
 /**
- * #535 in the pane that did not ask, which end-to-end run 31 could not park a
- * pane for.
- *
  * The band it needs is real and narrow: a pane closer than `LOAD_OLDER_PX` to
  * the top of its content asks for that page itself and is the asker, and a pane
  * further down than the arriving page can reach holds nothing a merge could
- * move. Run 31 tried to aim a wheel burst into it — 700 notches left the pane on
- * line 0253, 750 on 0206, 850 on 0217 — and abandoned the parking on its own
- * evidence.
+ * move. Pointer-wheel steps cannot reliably park inside that narrow band.
  *
  * The two are only irreconcilable while a row is a message tall. A block of
  * twenty is 400px of one row, so a reader sitting inside it is past the
@@ -811,7 +801,7 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
    * #608, which was the anchor holding the first message of the reader's row:
    * where that row is a run of twenty it is nowhere near the line they are
    * reading, and a page merging in between the two moved a live reader 618px in
-   * run 43 while every term the anchor computed read held.
+   * a browser trace while every term the anchor computed read held.
    *
    * Nothing has to arrive for that gap to open. A line already in the row
    * getting taller does it too, and needs no landing, no merge and no
@@ -819,11 +809,8 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
    * here — it was never asked for, `movedInList` being false for a message that
    * only changed height. The `grown` branch is what asks.
    *
-   * **The window agreed with the defect.** `docs/end-to-end-43/grow-lab.sh` put
-   * the same arrangement in `webkit2gtk-4.1` and grew the same kind of line: the
-   * fold moved 46px and the anchor's message did not move at all, twice of
-   * twice. The model was not manufacturing it, which is the question #599 left
-   * behind it.
+   * The same arrangement in `webkit2gtk-4.1` moved the fold 46px while the
+   * anchor's message did not move. The model was not manufacturing the defect.
    */
   it("holds the parked reader when a line above them grows", () => {
     seed(longRunAcrossTheBoundary(201, 400));
@@ -852,7 +839,7 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     expect(topOf(opening) + opening.offsetHeight).toBeGreaterThan(parked!.scrollTop);
 
     // The line under the reader's eyes, and the line the anchor is holding,
-    // which are the two readings run 43 disagreed on.
+    // which are the two readings the trace disagreed on.
     const watching = lineAtTheFold(parked!);
     const before = eyeLine(parked!, watching);
     const anchored = eyeLine(parked!, "line201");
@@ -894,8 +881,7 @@ describe("a neighbour parked inside the run the arriving page merges into", () =
     // Read back rather than lived through, because `rows.ts` closes the open
     // run where `source` changes: a fill is history, and history landing in a
     // window of live messages opens a row of its own rather than joining
-    // theirs. Which is run 40's finding about a restored window from the other
-    // side — the arrangement exists only where the two are the same kind.
+    // theirs. The arrangement exists only where the two are the same kind.
     seed(longRunAcrossTheBoundary(201, 400).map((m) => ({ ...m, source: "serverHistory" as const })));
     const second = openSecondView();
     render(
@@ -1287,11 +1273,9 @@ describe("a row above the reader that grows, which is not the row they are in", 
    * backward the virtualiser declines and the anchor is what puts the reader
    * back.
    *
-   * **The engine agrees**, on `docs/end-to-end-45/backscroll-lab.sh`: the same
-   * arrangement in `webkit2gtk-4.1`, one step of 60px each way with a growth of
-   * 46px fired from the scroll listener so it lands inside the 150ms the
-   * virtualiser still calls the scroll backward. Twice of twice, the reader's
-   * line moved by the 60px they asked for and by nothing else.
+   * The same arrangement in `webkit2gtk-4.1`, one 60px step each way with a
+   * 46px growth fired from the scroll listener, moved the reader's line by the
+   * 60px requested and nothing else.
    */
   for (const direction of ["forward", "backward"] as const) {
     it(`holds the reader while they are scrolling ${direction}`, () => {

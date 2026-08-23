@@ -6,6 +6,7 @@ export type SectionId =
   | "uploads"
   | "privacy"
   | "plugins"
+  | "diagnostics"
   | "networks";
 
 export interface Section {
@@ -19,9 +20,9 @@ export interface Section {
  *
  * The order is how far each one reaches: what the window looks like, then what
  * is allowed to interrupt you, then where files go, then what is written down
- * about you, then what other people's code is allowed to do, and last the
- * machines this client talks to — the only one of the six that reaches off
- * this computer.
+ * about you, then what other people's code is allowed to do, then what those
+ * connections report, and last the machines this client talks to — the only
+ * one of the seven that reaches off this computer.
  *
  * Networks was the deliberate gap while settings was a window of its own:
  * configuring a network is the onboarding flow, its last step watches the
@@ -37,6 +38,6 @@ export const SECTIONS: readonly Section[] = [
   { id: "uploads", name: "Uploads", icon: "paperclip" },
   { id: "privacy", name: "Privacy", icon: "shield" },
   { id: "plugins", name: "Plugins", icon: "plug" },
+  { id: "diagnostics", name: "Diagnostics", icon: "settings" },
   { id: "networks", name: "Networks", icon: "globe" },
 ];
-

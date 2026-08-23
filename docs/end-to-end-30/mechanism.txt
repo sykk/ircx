@@ -1,8 +1,0 @@
-note: 2 landings; the last one is read below
-before the page   msgs  203  top      0  branch none
-the landing       msgs  403  top   9245  branch moved
-  the write       drawn 9381 - delta 136 = 9245, and the pane went to 9245
-  the head        headPx 0 against margin 24, lag -24
-
-the settling, 14 commits
-  the same message, delta -2 at the landing and -13 at the end: -11px under the reader

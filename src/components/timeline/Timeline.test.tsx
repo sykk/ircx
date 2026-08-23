@@ -107,6 +107,12 @@ function letItScroll(scroller: HTMLElement) {
   }) as HTMLElement["scrollTo"];
 }
 
+async function paintFrame() {
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+}
+
 function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
@@ -534,7 +540,7 @@ describe("Timeline", () => {
     expect(rendered.length).toBeLessThan(80);
   });
 
-  it("follows the tail when new lines merge into the row that is already open", () => {
+  it("follows the tail when new lines merge into the row that is already open", async () => {
     // A console is nothing but system messages, so a minute of output is a
     // single row and the fifteen lines a `/help` adds land inside the row
     // already on screen. Nothing about the row count changes.
@@ -569,9 +575,11 @@ describe("Timeline", () => {
       });
     });
 
-    const open = document.querySelector('[data-msgid="motd19"]')!.closest("[data-index]")!;
-    expect(open.contains(document.querySelector('[data-msgid="help14"]'))).toBe(true);
-    expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+    await waitFor(() => {
+      const open = document.querySelector('[data-msgid="motd19"]')!.closest("[data-index]")!;
+      expect(open.contains(document.querySelector('[data-msgid="help14"]'))).toBe(true);
+      expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+    });
   });
 
   it("puts the head of history in the content it labels rather than over it", () => {
@@ -648,9 +656,11 @@ describe("Timeline", () => {
     );
 
     expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
-    const grew = scroller.scrollHeight - heightBefore;
-    expect(grew).toBeGreaterThan(0);
-    expect(scroller.scrollTop).toBe(100 + grew);
+    await waitFor(() => {
+      const grew = scroller.scrollHeight - heightBefore;
+      expect(grew).toBeGreaterThan(0);
+      expect(scroller.scrollTop).toBe(100 + grew);
+    });
   });
 
   /**
@@ -1038,10 +1048,9 @@ describe("Timeline", () => {
        * of a reconnect clearing it, and the reader left at the top of a
        * conversation that says it has more and cannot be made to go and look.
        *
-       * Asking again is the wrong repair and the walk in `docs/end-to-end-27`
-       * is why — the same msgid went out 26 times in a walk, 65ms apart, which
-       * is #487 again. The server answered. What it answered with is that there
-       * is nothing behind this message, whatever the page's size said about
+       * Asking again is the wrong repair: it repeats the same msgid as fast as
+       * the scroll effect runs, which is #487 again. The server answered that
+       * there is nothing behind this message, whatever the page's size said about
        * fullness, so the paging stops and the pane says where the history ends.
        */
       it("stops paging when the page that answered it moved nothing", async () => {
@@ -1414,6 +1423,7 @@ describe("Timeline", () => {
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
 
+    await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore));
     const grew = scroller.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(scroller.scrollTop).toBe(100 + grew);
@@ -1466,7 +1476,7 @@ describe("Timeline", () => {
           .applyEvent({ type: "messagesAppended", answers: null, network: "libera", target: "#ctf-ops", messages });
       });
 
-    it("leaves the reader where they were when it lands below them", () => {
+    it("leaves the reader where they were when it lands below them", async () => {
       const scroller = readBack(
         Array.from({ length: 400 }, (_, i) => line(`m${i}`, i * GAP_MS)),
         5_000,
@@ -1474,11 +1484,12 @@ describe("Timeline", () => {
       const before = eyeLine(scroller, "m110");
 
       arrive([line("live", 400 * GAP_MS)]);
+      await paintFrame();
 
       expect(eyeLine(scroller, "m110")).toBe(before);
     });
 
-    it("leaves the reader where they were when it sorts in above them", () => {
+    it("leaves the reader where they were when it sorts in above them", async () => {
       // `mergeByTime`: a server that stamps a message behind what is already
       // held puts it at its own time rather than at the bottom. The reader is
       // below the insertion point, so everything under their eyes moves.
@@ -1496,11 +1507,12 @@ describe("Timeline", () => {
           timestamp: stamp(20 * GAP_MS + 60_000),
         }),
       ]);
+      await paintFrame();
 
       expect(eyeLine(scroller, "m110")).toBe(before);
     });
 
-    it("leaves the reader where they were when the window drops its oldest", () => {
+    it("leaves the reader where they were when the window drops its oldest", async () => {
       // A pane already holding `TIMELINE_CAP` loses a message off the front for
       // every one that arrives, which takes a row out from above the reader.
       const scroller = readBack(
@@ -1510,6 +1522,7 @@ describe("Timeline", () => {
       const before = eyeLine(scroller, "m110");
 
       arrive([line("live", TIMELINE_CAP * GAP_MS)]);
+      await paintFrame();
 
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(TIMELINE_CAP);
       expect(eyeLine(scroller, "m110")).toBe(before);
@@ -1550,6 +1563,7 @@ describe("Timeline", () => {
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
 
+    await waitFor(() => expect(reading!.scrollHeight).toBeGreaterThan(heightBefore));
     const grew = reading!.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(reading!.scrollTop).toBe(100 + grew);
@@ -1736,7 +1750,7 @@ describe("Timeline", () => {
 
     /** The rule is drawn off the message above the hole, so the pane has to be
      * holding both sides of it before there is anything to draw. */
-    it("rules off the line the channel says next", () => {
+    it("rules off the line the channel says next", async () => {
       const window = makeConversation({ count: 5, seed: 11 });
       detach(window);
       render(<Timeline view={TEST_VIEW} />);
@@ -1752,7 +1766,7 @@ describe("Timeline", () => {
         });
       });
 
-      expect(screen.getByText("Messages in between are not shown")).toBeTruthy();
+      expect(await screen.findByText("Messages in between are not shown")).toBeTruthy();
     });
   });
 
@@ -1920,7 +1934,7 @@ describe("Timeline", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
-    expect(screen.getByText("fetch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Preview burp-req.png" })).toBeTruthy();
     expect(document.querySelector("img")).toBe(null);
   });
 });
@@ -1953,8 +1967,8 @@ describe("reaction chips", () => {
     return screen.getByRole("button", { name: new RegExp(`^${emoji} — `) });
   }
 
-  // readability/READABILITY.md study 14: a count on its own is a popularity
-  // metric. The names are the information, and your own is written as `you`.
+  // A count on its own is a popularity metric. The names are the information,
+  // and your own is written as `you`.
   it("names who reacted rather than only counting them", () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade", "sable", "wren"] }]);
     render(<Timeline view={TEST_VIEW} />);
@@ -2019,14 +2033,14 @@ describe("reaction chips", () => {
     expect(screen.queryByRole("button", { name: "Add a reaction" })).toBe(null);
   });
 
-  it("opens the picker onto its first choice and sends the one taken", () => {
+  it("opens the picker onto its first choice and sends the one taken", async () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);
 
     const add = screen.getByRole("button", { name: "Add a reaction" });
     fireEvent.click(add);
 
-    const picker = screen.getByRole("group", { name: "React with" });
+    const picker = await screen.findByRole("group", { name: "React with" });
     const choices = within(picker).getAllByRole("button");
     expect(document.activeElement).toBe(choices[0]);
 
@@ -2048,13 +2062,13 @@ describe("reaction chips", () => {
     expect(add.closest("[data-ui='timeline']")).not.toBe(null);
   });
 
-  it("closes the picker on Escape and gives the focus back", () => {
+  it("closes the picker on Escape and gives the focus back", async () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);
 
     const add = screen.getByRole("button", { name: "Add a reaction" });
     fireEvent.click(add);
-    fireEvent.keyDown(screen.getByRole("group", { name: "React with" }), { key: "Escape" });
+    fireEvent.keyDown(await screen.findByRole("group", { name: "React with" }), { key: "Escape" });
 
     expect(screen.queryByRole("group", { name: "React with" })).toBe(null);
     expect(document.activeElement).toBe(add);
@@ -2357,7 +2371,7 @@ describe("links in a message", () => {
 
   /**
    * The text used to be the destination character for character. It is the
-   * host and an elided path now, which is study 07 — but the host itself is
+   * host and an elided path now, but the host itself is
    * never shortened, because it is the part that settles where the link goes.
    */
   it("writes the host out as the text", () => {
@@ -2554,9 +2568,9 @@ describe("a message a notification rule raised", () => {
 });
 
 /**
- * #221 and #222, both found by the third end-to-end run. Ergo replays a
- * channel's comings and goings inside the history batch as ordinary messages
- * from `HistServ`, and one of them says the reader's own name.
+ * #221 and #222. Ergo replays a channel's comings and goings inside the history
+ * batch as ordinary messages from `HistServ`, and one of them says the reader's
+ * own name.
  */
 describe("a conversation the server replayed", () => {
   const narration = () =>

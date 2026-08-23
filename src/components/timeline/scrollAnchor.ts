@@ -179,8 +179,8 @@ export function movedInList(
  *
  * **It is held until the measuring stops rather than spent on one commit**, and
  * #532 is the difference. A page of two hundred rows is measured over the
- * commits that follow it — fourteen of them in end-to-end run 30, two to three
- * milliseconds apart and inside one frame — and a single second pass answers
+ * commits that follow it, several milliseconds apart inside one frame, and a
+ * single second pass answers
  * the first of them and leaves the rest to move the reader.
  *
  * Which commit moves them cannot be guessed at. Thirteen of those fourteen
@@ -335,8 +335,8 @@ export function usePrependAnchor(
      * #508 is those landings, and it is why the shift is always exactly one
      * head's height: the head arrives, the branch below adds it, a row above
      * the fold is measured a moment later, and the correction takes it away
-     * again. Measured 6 times in 100 landings in end-to-end run 24, against 145
-     * arrivals where nothing wrote in that window and the reader held.
+     * again. It appeared in 6 of 100 measured landings, against 145 arrivals
+     * where nothing wrote in that window and the reader held.
      *
      * The event the browser sends afterwards costs nothing: the position it
      * reports is the one this already told it about.

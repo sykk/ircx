@@ -15,9 +15,8 @@ export interface Density {
 }
 
 /**
- * `readability/READABILITY.md` study 05. A density is three numbers and
- * nothing else — the vertical rhythm — which is what lets it be a setting
- * rather than a second theme.
+ * A density is three numbers and nothing else — the vertical rhythm — which is
+ * what lets it be a setting rather than a second theme.
  */
 export const DENSITIES: readonly Density[] = [
   {

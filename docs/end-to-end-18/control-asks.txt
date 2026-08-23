@@ -1,5 +1,0 @@
-   10.479 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_ffw7zvyg86eaajf2cpvw42kyhi 200
-  111.565 end asks=1 dropped=202
-  123.566 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_vqqm2a6nsktyjqcgj3zwhn5rc2 200
-  224.670 end asks=1 dropped=202
-  236.583 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_k6t7k2nirftva5q99gtxidgpna 200

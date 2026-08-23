@@ -14,7 +14,7 @@
 //! What is unverified here needs a server that **relays client tags**, which
 //! Libera does not: it allows `+typing` and drops everything else, so reactions
 //! and replies reach nobody there and cannot be exercised. Ergo relays all of
-//! them. `docs/manual-verification.md` records how that was established.
+//! them.
 //!
 //! The plumbing is its own rather than shared with `libera.rs`. That harness
 //! carries the TLS and collision machinery this has no use for, and a refactor

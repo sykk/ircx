@@ -2781,9 +2781,6 @@ fn a_react_command_in_the_server_tab_has_nothing_to_address() {
     assert!(session.sent().is_empty());
 }
 
-/// The oldest gap in `docs/manual-verification.md`: neither Libera run met a
-/// netsplit, and the churn they did see was one JOIN in 45 seconds.
-///
 /// A split is a burst of QUITs whose reason is the two servers that lost each
 /// other, and the rejoin is a burst of JOINs, sometimes with the NAMES list
 /// sent again. Nothing about that is special on the wire, which is the point:
@@ -4445,7 +4442,7 @@ mod what_a_backfill_counts {
     /// during it, so a watermark that took the join read the whole backlog as
     /// something already held: six mentions arrived, were drawn, and the
     /// sidebar said nothing had happened. A query has no join and counted
-    /// correctly, which is what the walk in `docs/end-to-end-run-33.md` found.
+    /// correctly.
     #[test]
     fn a_stamped_rejoin_is_not_the_backlog_being_read() {
         let mut session = registered_holding("#ircx", "2026-07-31T08:00:00.000Z");

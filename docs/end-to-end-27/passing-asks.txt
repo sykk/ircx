@@ -1,2 +1,0 @@
-   16.309 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=6uhih9dhv8nsyz468nqf68pszn 200
-   30.424 ask @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=y8nr7ecwkbah868ji687y8xsvs 200

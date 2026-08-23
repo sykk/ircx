@@ -59,7 +59,7 @@ export const PRESETS: readonly Preset[] = [
   {
     id: "ircx",
     name: "ircx",
-    detail: "The dark theme and the layout the readability studies argue for",
+    detail: "The dark theme with ircx's default timeline layout",
     theme: FALLBACK_THEME_ID,
     presentation: {
       spine: true,

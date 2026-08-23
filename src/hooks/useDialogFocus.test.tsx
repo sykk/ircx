@@ -11,8 +11,6 @@ import { useDialogFocus } from "./useDialogFocus";
  * here would have caught the defect. What it can show is what the hook decides
  * — which stop it turns focus around at, and where it puts focus back — with
  * the keystroke the browser would have acted on dispatched by hand.
- *
- * The behaviour itself is walked in Chrome, in `docs/manual-verification.md`.
  */
 function Dialog({ stops = 2 }: { stops?: number }) {
   const dialog = useRef<HTMLDivElement>(null);

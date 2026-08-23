@@ -19,11 +19,9 @@ const STORAGE_KEY = "ircx.notifications";
 /**
  * What is worth raising a desktop notification for.
  *
- * Two switches rather than the three `docs/notifications.md` proposed. The
- * sound went, because it could not be told the truth: the plugin takes the
- * *name* of a sound to play, so turning it off leaves whatever the desktop
- * plays for a notification anyway. A switch labelled Sound that cannot make one
- * silent is worse than no switch.
+ * There is no sound switch because the plugin takes only the name of a sound;
+ * turning it off would still leave whatever the desktop plays for a
+ * notification. Such a switch could not promise silence.
  *
  * Both default to off. A client that starts interrupting somebody the first
  * time it is run has decided something that was theirs to decide.

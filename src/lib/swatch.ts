@@ -13,10 +13,9 @@
  * `VITE_SWATCH=1` at build time is what turns it on, and without it `ON` is a
  * false constant and the call below is a branch the minifier drops.
  *
- * The number comes out of the text because that is where a walk's seed puts it
- * — `docs/end-to-end-40/seed.py` writes `line 0613` at the head of every line it
- * sends. A message that carries no such number is left unpainted rather than
- * given a colour that means nothing.
+ * The number comes out of the text because diagnostic profiles prefix seeded
+ * messages with values such as `line 0613`. A message that carries no such
+ * number is left unpainted rather than given a colour that means nothing.
  */
 const ON = import.meta.env.VITE_SWATCH === "1";
 

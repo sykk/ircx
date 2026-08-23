@@ -795,7 +795,7 @@ describe("Composer emoji", () => {
     box.setSelectionRange(6, 6);
 
     fireEvent.click(screen.getByRole("button", { name: "Insert emoji" }));
-    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "fire" } });
+    fireEvent.change(await screen.findByLabelText("Search emoji"), { target: { value: "fire" } });
     fireEvent.click(screen.getByRole("button", { name: "Fire" }));
 
     expect(box.value).toBe("hello 🔥");
@@ -805,7 +805,9 @@ describe("Composer emoji", () => {
   it("inserts multiple picks in click order", async () => {
     const box = await mount();
     fireEvent.click(screen.getByRole("button", { name: "Insert emoji" }));
-    fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "eggplant" } });
+    fireEvent.change(await screen.findByLabelText("Search emoji"), {
+      target: { value: "eggplant" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Eggplant" }));
     fireEvent.change(screen.getByLabelText("Search emoji"), { target: { value: "droplets" } });
     fireEvent.click(screen.getByRole("button", { name: "Sweat Droplets" }));

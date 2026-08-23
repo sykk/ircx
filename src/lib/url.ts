@@ -1,8 +1,7 @@
 /**
  * How much of the tail is worth reading. Past this the path is scenery: it
  * pushes the host — the part that decides where the link goes — off toward the
- * far end of the measure, which is the failure `readability/READABILITY.md`
- * study 07 is about.
+ * far end of the measure.
  */
 const TAIL_MAX = 28;
 

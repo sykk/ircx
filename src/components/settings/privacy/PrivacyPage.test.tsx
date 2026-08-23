@@ -229,10 +229,6 @@ describe("the privacy page", () => {
     await waitFor(() => expect(exportArchive).not.toHaveBeenCalled());
   });
 
-  /**
-   * The run in `docs/end-to-end-run-5.md` met this: an export written, then a
-   * second aimed at a folder that refused it, and the sheet held both at once.
-   */
   it("drops the last success when the next export fails", async () => {
     save.mockResolvedValue("/tmp/first.jsonl");
     render_();

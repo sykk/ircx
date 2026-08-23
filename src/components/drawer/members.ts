@@ -1,8 +1,9 @@
 import type { Member } from "@/types";
 
 /* The store exports a three-way `MemberGroup` splitting voiced off from plain
- * members. The list draws two groups (READABILITY.md §4.2), so it is shadowed
- * here rather than changed there; voice still shows as the row's `+` sigil. */
+ * members. The list draws two groups (READABILITY.md, Member list), so it is
+ * shadowed here rather than changed there; voice still shows as the row's `+`
+ * sigil. */
 export type MemberGroup = "operators" | "members";
 
 export const GROUP_ORDER: MemberGroup[] = ["operators", "members"];
@@ -73,7 +74,7 @@ export const MEMBERS_PREVIEW = 10;
 
 /** Sections to a flat row list, which is what the virtualiser indexes into.
  * Operators are enumerated whatever their number; only the members group
- * truncates, and only until `expandMembers` (READABILITY.md §4.2). */
+ * truncates, and only until `expandMembers`. */
 export function toRows(sections: MemberSection[], expandMembers = false): MemberRow[] {
   const rows: MemberRow[] = [];
   for (const section of sections) {

@@ -1,8 +1,0 @@
-   10.412 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_quxmmhkiixv79xy4zt2mga8uwa 200
-  103.653 ask @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=_quxmmhkiixv79xy4zt2mga8uwa 200
-  111.639 end asks=2 dropped=404
-  123.530 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_degxs94y2gkiq3mmc32apvi862 200
-  216.709 ask @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=_degxs94y2gkiq3mmc32apvi862 200
-  224.686 end asks=2 dropped=404
-  236.639 ask @label=ircx-1 CHATHISTORY BEFORE #scrollback msgid=_8pa728wri9z4m2fbqe4ytbsfui 200
-  329.821 ask @label=ircx-2 CHATHISTORY BEFORE #scrollback msgid=_8pa728wri9z4m2fbqe4ytbsfui 200

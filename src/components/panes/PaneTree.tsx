@@ -15,10 +15,10 @@ const KEY_STEP = 0.02;
  * 1200px window is 147px, and 147px of conversation wraps message text to about
  * a character a line.
  *
- * 280 is measured, in `docs/end-to-end-run-7.md` and again in run 10. A pane
- * with its roster dropped — which happens below 440px, `ContextPanel` — is all
- * conversation, and 280 of it is where the text goes back to wrapping at word
- * boundaries. The roster case is not this constant's business precisely because
+ * Browser measurements put the readable floor at 280px. A pane with its roster
+ * dropped — which happens below 440px, `ContextPanel` — is all conversation,
+ * and 280px is where the text goes back to wrapping at word boundaries. The
+ * roster case is not this constant's business precisely because
  * the roster gets out of the way first: these two work together, and a floor
  * big enough to hold a roster as well would be 440 and would leave the divider
  * ±40px of travel on a 1200px window, which is most of a control given up.

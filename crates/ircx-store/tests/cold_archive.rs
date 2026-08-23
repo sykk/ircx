@@ -1,21 +1,16 @@
 //! What an export costs when the archive is not already in the page cache.
 //!
-//! `docs/end-to-end-run-11.md` walked `Export everything` over 100,021 messages
-//! and 56 MB and got 0.5–0.6 s, and listed what it had not reached: *"An
-//! archive that does not fit in the page cache. 56 MB is read back at 96 MB/s
-//! from a file the machine had just written. A year of real channels is the
-//! same code path against a colder file."* Every figure this project has for
-//! the export was taken seconds after seeding it, which is the best case the
-//! machine can give and not the one a person opening the app in the morning
-//! gets.
+//! Earlier export figures used a 56 MB archive seconds after seeding it, which
+//! is the best case the machine can give and not the one a person opening the
+//! app in the morning gets.
 //!
 //! So the same export is run twice a round: once against a file the kernel has
 //! entirely in cache, and once with that cache taken off it. Nothing else
 //! differs — same archive, same connection code, same rows.
 //!
 //! The destination is a counting sink rather than a file, so what separates the
-//! two numbers is the read. Run 11's 563 ms includes writing 54 MB to btrfs and
-//! is not comparable to either; what is comparable is warm against cold here.
+//! two numbers is the read. An assembled-app export also includes writing the
+//! destination and is not comparable; warm against cold here is.
 //!
 //! **The measurement only exists on a filesystem that has a page cache to
 //! take off.** `tempfile::tempdir` follows `TMPDIR`, which is a tmpfs on most
@@ -50,7 +45,7 @@ use page_cache::{evict_archive, eviction_failed, held, page_size};
 /// Enough rounds that one run of a busy machine cannot carry either figure.
 const ROUNDS: usize = 3;
 
-/// How many messages to archive. The default is the profile run 11 walked and
+/// How many messages to archive. The default is the profile
 /// `docs/measurements.md` times startup against, so the figure lands beside
 /// numbers taken over the same archive.
 ///

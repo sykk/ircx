@@ -45,8 +45,9 @@ import type {
 
 /** Older messages stay in SQLite; the window is what the timeline can scroll.
  * Paging backwards stops at the same figure, because the size the window is
- * meant to be is one answer and not two (#331). */
-const TIMELINE_CAP = 10_000;
+ * meant to be is one answer and not two (#331). Four thousand leaves one
+ * archive page above the largest burst walked in WebKit (about 3,800). */
+const TIMELINE_CAP = 4_000;
 const RAW_LOG_CAP = 2_000;
 const RECENT_CAP = 50;
 /** Per conversation, and only for this run — nothing here is written to disk. */
@@ -285,7 +286,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         if (timelines.size === 0) return;
         const held = { ...next.timelines };
         for (const [key, timeline] of timelines) {
-          // Capped here rather than per event. It is the same last 10,000
+          // Capped here rather than per event. It is the same newest window
           // either way; what differs is that an echo of a message the cap would
           // have dropped mid-batch is still recognised as one.
           held[key] = {
@@ -1133,7 +1134,7 @@ function capped(messages: ChatMessage[]): ChatMessage[] {
  *
  * The batch rather than the window: a page walks a gap oldest first, so the
  * first message past the marker is in the page that reaches it, and scanning
- * the window would sweep ten thousand rows per delivery to learn the same.
+ * the window would sweep thousands of rows per delivery to learn the same.
  */
 function seamAt(
   fresh: ChatMessage[],
@@ -1650,8 +1651,8 @@ function sortsBefore(a: ChatMessage, b: ChatMessage, orTie: boolean): boolean {
  * happening, which is what tells the merge above which side a tied stamp goes
  * to.
  *
- * **A stamp is a millisecond and a burst is not.** `ergo` gave nine of run 42's
- * messages the same `18:04:42.886Z`, and the page that landed in front of them
+ * **A stamp is a millisecond and a burst is not.** `ergo` gave nine consecutive
+ * messages the same timestamp, and the page that landed in front of them
  * shared it — so the clock cannot order the two runs, and something else has to.
  * A merge that breaks the tie towards the window puts the page after messages it
  * precedes, and then the rest of the page after the first stamp that differs:

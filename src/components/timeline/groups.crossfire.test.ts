@@ -5,14 +5,10 @@ import { assignGroups } from "./groups";
 /**
  * What grouping costs when several conversations run at once.
  *
- * `docs/manual-verification.md` carried this as an open question — two
- * exchanges go unmarked where one crosses the other, and no round had shown
- * how often. It cannot be answered by staging a channel, because in a staged
- * channel how often two exchanges cross is whatever the generator was told to
- * do. What a generator *can* answer is the shape: at a given number of
- * simultaneous conversations, how many exchanges survive and which rule takes
- * the rest. Where a real channel sits on that curve is still unmeasured, and
- * `docs/manual-verification.md` says so.
+ * A staged channel cannot answer how often exchanges cross, because that is
+ * whatever the generator was told to do. It can answer the shape: at a given
+ * number of simultaneous conversations, how many exchanges survive and which
+ * rule takes the rest. Where a real channel sits on that curve is unmeasured.
  *
  * The interleaving is the load-bearing assumption. Each step picks uniformly
  * among the conversations still owing a turn, which spaces two conversations

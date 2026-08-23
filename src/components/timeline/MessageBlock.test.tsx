@@ -145,9 +145,8 @@ describe("the spine", () => {
    * broke the group's line once per author. Continuing blocks move the gap onto
    * the content column, leaving the spine to span the whole row.
    *
-   * Asserted on the mechanism rather than on the pixels: jsdom lays nothing
-   * out, so nothing here can see the seam this exists to close. The screenshot
-   * in `docs/manual-verification.md` is what saw it.
+   * Asserted on the mechanism rather than on the pixels because jsdom lays
+   * nothing out and cannot see the seam this exists to close.
    */
   it("hands the gap to the content column when it continues a group", () => {
     const continues = block({ group: declared(), opensGroup: false }).container;

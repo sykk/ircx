@@ -10,12 +10,9 @@ would have drawn it.
 
 How the conversation *reads* — grouping, gutter timestamps, nick colour,
 presence digests, the unread seam, typography — follows
-`readability/READABILITY.md`, which supersedes the mockup on those points. Its
-studies assume an encryption layer this milestone does not build; take the
-structural findings and leave the verdict machinery. Three deliberate departures
-from it: typography stays semantic (prose in the text face, data in mono); the
-nick palette stays inside 186-335deg, asserted by `src/styles/tokens.test.ts`;
-and a message in no group keeps a neutral spine where the study draws nothing.
+`readability/READABILITY.md`, which supersedes the mockup on those points. The
+code and tests remain authoritative for constants: the nick palette stays
+inside 186-335deg, asserted by `src/styles/tokens.test.ts`.
 
 The spine carries grouping, and its hue names the group — taken from whoever
 opened it. `src/components/timeline/groups.ts` assigns each message to at most
@@ -128,7 +125,7 @@ clip; the Appearance rail was found doing exactly that, and asks its container
 rather than the viewport for the room to sit beside the preview. The dialog is
 sized so that it has it on the window this app opens at.
 
-`readability/ircx-live-studies.html` names a third grade, guessed, from timing
+`readability/READABILITY.md` records a third grouping grade, guessed from timing
 and participants. **It shipped and was taken out again**, and the reason is the
 useful part: grouping separates conversations happening at once, so a channel
 where everybody is in the same conversation has nothing to separate. A live run
@@ -174,21 +171,19 @@ settings window lists them beside the mutes, which is where the difference
 between the two is worth stating and where an ignore made on a network nobody is
 connected to can still be undone.
 
-`docs/multiwindow.md` describes split panes and per-pane context. The layout
-tree is built, and every pane on a channel draws its own member list inside it —
-the three context-panel modes that doc originally specified are gone, and the
-doc says why. A split carries a ratio and its divider moves, by pointer or by
-arrow key. The tree survives a restart, written down as the conversations its
-panes hold; one whose conversation is gone takes its pane with it.
+Every pane on a channel draws its own member list inside it. A split carries a
+ratio and its divider moves by pointer or arrow key. The layout tree survives a
+restart, written down as the conversations its panes hold; one whose
+conversation is gone takes its pane with it.
 
 `docs/measurements.md` holds every figure this project claims, with the method
 behind it. The spec justifies the stack on startup, memory and size, so those
 claims live in one place and say what they exclude. Do not cite a number from a
 PR description; if it is load-bearing, put it there.
 
-`docs/manual-verification.md` lists what no test covers — SASL against a real
-account, and the gaps the live Libera runs left open. Add to it rather than
-letting an unverified path pass for a verified one.
+`docs/manual-verification.md` lists only what no test can establish. Keep
+historical results in Git, add a test when a check becomes repeatable, and do
+not let an unverified path pass for a verified one.
 
 ## Layer boundaries
 
@@ -209,9 +204,9 @@ crates/ircx-ipc      types crossing the Tauri boundary
 nothing about what it means. Neither depends on `ircx-ipc`. `ircx-plugin` knows
 nothing about IRC: it takes a command and gives back what the plugin asked the
 host to do, and `ircx-core` is what turns that into messages. `docs/plugins.md`
-is the permission model. `docs/renderers.md` and `docs/adapters.md` are the
-design notes for the two extension points that are still only described; both
-say what they would be and neither recommends building it yet.
+is the permission model. Message renderers, link and attachment providers, and
+protocol adapters are outside this milestone; the same document records the
+constraints future implementations must keep.
 
 ## The IPC contract
 

@@ -1,6 +1,0 @@
-    run1 session 2: line 0606 -> line 0406 -> line 0206 -> line 0006
-    run2 session 2: line 0610 -> line 0410 -> line 0210 -> line 0010
-    run3 session 2: line 0614 -> line 0414 -> line 0214 -> line 0014
-    run4 session 2: line 0618 -> line 0418 -> line 0218 -> line 0018
-    run5 session 2: line 0622 -> line 0422 -> line 0222 -> line 0022
-    run6 session 2: line 0626 -> line 0426 -> line 0226 -> line 0026

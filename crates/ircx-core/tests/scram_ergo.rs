@@ -1,16 +1,9 @@
-//! The SCRAM walks in `docs/manual-verification.md`, scripted.
+//! SCRAM against a real server, scripted and repeatable.
 //!
-//! That file's **SCRAM** section already records all of this, walked by hand:
-//! SHA-256 against `ergo` on 2026-07-31, SHA-512 against Libera over TLS 1.3
-//! and both failure paths on 2026-08-01, and a proxy that replaces the server's
-//! `v=` with zeroes to see the client walk away. Nothing here is a discovery.
-//!
-//! What it is instead is repeatable. `src/scram.rs` is otherwise covered by the
-//! RFC 7677 vectors and a scripted exchange in `tests/session.rs`, both of which
-//! supply the server's half — a reused nonce, a salt decoded wrong or a proof
-//! over the wrong bytes passes every one of them. So the only thing standing
-//! between a change to that file and a wrong answer nobody notices is a manual
-//! walk, and a manual walk is what gets skipped. Ergo advertises
+//! `src/scram.rs` is otherwise covered by RFC 7677 vectors and a scripted
+//! exchange in `tests/session.rs`, both of which supply the server's half. A
+//! reused nonce, a wrongly decoded salt, or a proof over the wrong bytes passes
+//! every one of them, so this test exercises a real server. Ergo advertises
 //! `sasl=PLAIN,EXTERNAL,SCRAM-SHA-256` with `advertise-scram: true`, the
 //! default, and registers an account with one line.
 //!

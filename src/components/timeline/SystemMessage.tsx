@@ -2,10 +2,15 @@ import { useState } from "react";
 import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
-import { ChevronIcon } from "@/components/header/icons";
 import { Clock } from "./Clock";
 import { Block } from "./MessageBlock";
-import { describePresenceRun, partitionSystemRun } from "./rows";
+import {
+  describePresenceRun,
+  describePresenceSpan,
+  partitionSystemRun,
+  presenceInvolving,
+  summarizePresence,
+} from "./rows";
 
 /**
  * Backends that phrase the event themselves win; the fallback exists so a bare
@@ -40,6 +45,70 @@ function systemText(message: ChatMessage): string {
   }
 }
 
+function presenceColor(kind: MessageKind, verb: string): string {
+  switch (kind) {
+    case "join":
+      return "var(--success)";
+    case "part":
+    case "quit":
+      return "var(--danger)";
+    case "mode":
+      return verb === "blocked outside" || verb === "allowed outside"
+        ? "var(--accent)"
+        : "var(--warning)";
+    case "nick":
+      return "var(--accent)";
+    default:
+      return "var(--text-muted)";
+  }
+}
+
+function PresenceIcon({ kind }: { kind: MessageKind | "involving" }) {
+  const paths = (() => {
+    switch (kind) {
+      case "join":
+        return (
+          <>
+            <circle cx="5.5" cy="5" r="2.2" />
+            <path d="M1.8 13c0-2 1.7-3.2 3.7-3.2S9.2 11 9.2 13M12.5 4.5v5M10 7h5" />
+          </>
+        );
+      case "part":
+      case "quit":
+        return <path d="M6.5 3H3v10h3.5M9.5 5l3 3-3 3M5.5 8h7" />;
+      case "mode":
+        return <path d="M8 1.8 13 4v3.4c0 3-2 5.5-5 6.8-3-1.3-5-3.8-5-6.8V4zM8 5v4M6 7h4" />;
+      case "nick":
+        return <path d="M3 5h9M9 2l3 3-3 3M13 11H4M7 8l-3 3 3 3" />;
+      default:
+        return (
+          <>
+            <circle cx="8" cy="5" r="2.3" />
+            <path d="M3.5 13c0-2.2 2-3.5 4.5-3.5s4.5 1.3 4.5 3.5" />
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      data-ui="presence-icon"
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      {paths}
+    </svg>
+  );
+}
+
 /**
  * Presence is weather, not speech: comings and goings fold into one line of
  * prose. Anything that changes who can read or speak is named in the first
@@ -61,39 +130,74 @@ export function SystemMessage({
   // is not: a run of it is nothing but these lines, and spacing each one apart
   // would set a whole `/help` as far apart as the channel it printed into.
   const digest = loud.length > 0 || presence.length > 0;
+  const presenceSummary = summarizePresence(presence);
+  const presenceSpan = describePresenceSpan(presence);
+  const involving = presenceInvolving(presence, ownNick);
 
   return (
     <Block spine={false}>
       <div
-        className="flex items-baseline gap-2 text-[12px]"
+        className="flex items-start gap-2 text-[12px]"
         style={digest ? { paddingBlock: "var(--timeline-rule-gap)" } : undefined}
       >
         <Clock at={messages[0]!.timestamp} />
-        {loud.length > 0 && (
-          <span style={{ color: "var(--warning)" }}>
-            {loud.map(systemText).join(", ")}
-            {presence.length > 0 && " —"}
-          </span>
-        )}
-        {presence.length > 0 && (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((open) => !open)}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"
-            style={{ color: "var(--text-muted)" }}
-          >
-            <span className="min-w-0">
-              {describePresenceRun(presence, ownNick)}
-            </span>
-            <span
-              className={clsx("shrink-0 transition-transform", expanded && "rotate-180")}
-              style={{ color: "var(--text-faint)" }}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {loud.length > 0 && (
+            <span style={{ color: "var(--warning)" }}>{loud.map(systemText).join(", ")}</span>
+          )}
+          {presence.length > 0 && (
+            <button
+              type="button"
+              aria-label={describePresenceRun(presence, ownNick)}
+              aria-expanded={expanded}
+              onClick={() => setExpanded((open) => !open)}
+              className="min-w-0 cursor-pointer text-left font-[family-name:var(--font-mono)]"
+              style={{ color: "var(--text-muted)" }}
             >
-              <ChevronIcon size={12} />
-            </span>
-          </button>
-        )}
+              <span className="flex flex-col gap-1">
+                {presenceSpan !== null && (
+                  <span
+                    data-ui="presence-span"
+                    className="text-[10px] font-medium uppercase tracking-[0.08em]"
+                    style={{ color: "var(--text-faint)" }}
+                  >
+                    {presenceSpan}
+                  </span>
+                )}
+                <span
+                  data-ui="presence-events"
+                  className="flex flex-wrap items-center gap-x-4 gap-y-1"
+                >
+                  {presenceSummary.map(({ kind, verb, count }) => (
+                    <span
+                      key={verb}
+                      data-event-kind={kind}
+                      className="flex items-center gap-1.5"
+                      style={{ color: presenceColor(kind, verb) }}
+                    >
+                      <PresenceIcon kind={kind} />
+                      <span>
+                        {count} {verb}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+                {involving > 0 && (
+                  <span
+                    data-ui="presence-involving"
+                    className="flex items-center gap-1.5"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    <PresenceIcon kind="involving" />
+                    <span>
+                      {involving} {involving === 1 ? "involves" : "involve"} you
+                    </span>
+                  </span>
+                )}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {expanded && presence.map((message) => <SystemLine key={message.id} message={message} />)}

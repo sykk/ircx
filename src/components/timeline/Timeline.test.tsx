@@ -448,9 +448,7 @@ describe("Timeline", () => {
     );
     render(<Timeline view={TEST_VIEW} />);
 
-    expect(screen.getByText(/joined/).textContent).toBe(
-      "Over 5 minutes: 4 joined.",
-    );
+    expect(screen.getByRole("button", { name: "Over 5 minutes: 4 joined." })).toBeTruthy();
   });
 
   it("counts your own coming and going as involving you", () => {
@@ -473,7 +471,14 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    expect(screen.getByText(/joined/).textContent).toBe("2 joined. 1 of them involves you.");
+    const digest = screen.getByRole("button", {
+      name: "2 joined. 1 of them involves you.",
+    });
+    expect(within(digest).getByText("2 joined").parentElement?.style.color).toBe(
+      "var(--success)",
+    );
+    expect(within(digest).getByText("1 involves you")).toBeTruthy();
+    expect(digest.querySelectorAll('[data-ui="presence-icon"]')).toHaveLength(2);
   });
 
   /** Modes fold now: a channel handing out ops all day used to read as one
@@ -490,6 +495,13 @@ describe("Timeline", () => {
         timestamp: new Date(base + 1000).toISOString(),
       }),
       makeMessage({
+        id: "n",
+        nick: "ChanServ",
+        kind: "mode",
+        text: "blocked messages from outside the channel",
+        timestamp: new Date(base + 1500).toISOString(),
+      }),
+      makeMessage({
         id: "q",
         nick: "wren",
         kind: "quit",
@@ -499,9 +511,22 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    // Counted with the rest, in the words core wrote rather than in `+o`.
-    expect(screen.getByText(/joined/).textContent).toBe("1 joined, 1 took ops, 1 quit.");
-    fireEvent.click(screen.getByRole("button", { name: /1 joined, 1 took ops, 1 quit/ }));
+    // Counted with the rest, in reader-facing phrases rather than in `+o`.
+    const digest = screen.getByRole("button", {
+      name: "1 joined, 1 took ops, 1 blocked outside, 1 quit.",
+    });
+    expect(within(digest).getByText("1 joined").parentElement?.style.color).toBe(
+      "var(--success)",
+    );
+    expect(within(digest).getByText("1 took ops").parentElement?.style.color).toBe(
+      "var(--warning)",
+    );
+    expect(within(digest).getByText("1 blocked outside").parentElement?.style.color).toBe(
+      "var(--accent)",
+    );
+    expect(within(digest).getByText("1 quit").parentElement?.style.color).toBe("var(--danger)");
+    expect(digest.querySelectorAll('[data-ui="presence-icon"]')).toHaveLength(4);
+    fireEvent.click(digest);
     // Opened, the line names who holds it — which the count cannot.
     expect(screen.getByText("ChanServ took ops")).toBeTruthy();
     expect(screen.getByText("kade joined")).toBeTruthy();
@@ -651,9 +676,10 @@ describe("Timeline", () => {
     scroller.scrollTop = 100;
     fireEvent.scroll(scroller);
 
-    await waitFor(() =>
-      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
-    );
+    await waitFor(() => {
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600);
+      expect(scroller.scrollHeight).toBeGreaterThan(heightBefore);
+    });
 
     expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
     const grew = scroller.scrollHeight - heightBefore;

@@ -226,6 +226,23 @@ describe("buildRows system runs", () => {
     ];
     expect(describePresence(presence)).toBe("2 joined, 1 left, 1 renamed");
   });
+
+  it("shortens channel-message modes in the digest", () => {
+    expect(
+      describePresence([
+        at(0, {
+          id: "a",
+          kind: "mode",
+          text: "blocked messages from outside the channel",
+        }),
+        at(1, {
+          id: "b",
+          kind: "mode",
+          text: "allowed messages from outside the channel",
+        }),
+      ]),
+    ).toBe("1 blocked outside, 1 allowed outside");
+  });
 });
 
 describe("describePresenceRun", () => {

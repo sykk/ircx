@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeMessage } from "@/components/timeline/fixtures";
 import { ESTIMATED_ROW_PX } from "@/components/timeline/Timeline";
@@ -189,7 +189,7 @@ describe("the server console", () => {
       fireEvent.submit(commandBox());
     });
 
-    expect(screen.getByText("/join #channel [key]")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("/join #channel [key]")).toBeTruthy());
   });
 
   // One line and no prose, so the arrows have no caret work to do here and

@@ -49,6 +49,7 @@ function Search() {
   const [mode, setMode] = useState<SearchMode>(initialMode);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<{ message: string; text: string } | null>(null);
   useAnnounce(error);
   const [selected, setSelected] = useState(0);
   const clockFormat = useAppStore((s) => s.presentation.clock);
@@ -133,6 +134,30 @@ function Search() {
       const view = useAppStore.getState().activeViewId;
       if (view) useAppStore.getState().setMessageJump(view, hit.message.id);
       close();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
+  async function saveNote(hit: SearchHit) {
+    if (editingNote === null) return;
+    try {
+      const note = editingNote.text.trim();
+      await ipc.setBookmarkNote(
+        hit.message.network,
+        hit.message.target,
+        hit.message.id,
+        note,
+      );
+      setHits((current) =>
+        current.map((candidate) =>
+          candidate.message.id === hit.message.id
+            ? { ...candidate, note: note === "" ? null : note }
+            : candidate,
+        ),
+      );
+      setEditingNote(null);
+      setError(null);
     } catch (reason) {
       setError(String(reason));
     }
@@ -262,12 +287,16 @@ function Search() {
           </>
         )}
 
-        <ul role="listbox" aria-label="Search results" className="overflow-y-auto py-1">
+        <ul
+          role={mode === "bookmarks" ? "list" : "listbox"}
+          aria-label="Search results"
+          className="overflow-y-auto py-1"
+        >
           {shown.map((hit, i) => (
             <li
               key={hit.message.id}
-              role="option"
-              aria-selected={i === selected}
+              role={mode === "bookmarks" ? "listitem" : "option"}
+              aria-selected={mode === "bookmarks" ? undefined : i === selected}
               ref={(el) => {
                 if (i === selected) el?.scrollIntoView?.({ block: "nearest" });
               }}
@@ -290,6 +319,62 @@ function Search() {
               <p className="selectable text-[var(--text-primary)]">
                 <Snippet snippet={hit.snippet} />
               </p>
+              {mode === "bookmarks" && (
+                <div
+                  className="mt-1"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {editingNote?.message === hit.message.id ? (
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        autoFocus
+                        aria-label="Bookmark note"
+                        rows={2}
+                        value={editingNote.text}
+                        onChange={(event) =>
+                          setEditingNote({ message: hit.message.id, text: event.target.value })
+                        }
+                        onKeyDown={(event) => {
+                          event.stopPropagation();
+                          if (event.key === "Escape") setEditingNote(null);
+                        }}
+                        className="selectable min-w-0 flex-1 resize-none rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-raised)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveNote(hit)}
+                        className="rounded-[var(--radius-sm)] px-2 py-1.5 text-[12px] text-[var(--accent)] hover:bg-[var(--surface-hover)]"
+                      >
+                        Save note
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingNote(null)}
+                        className="rounded-[var(--radius-sm)] px-2 py-1.5 text-[12px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-baseline gap-2">
+                      {hit.note !== null && (
+                        <p className="selectable min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">
+                          {hit.note}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingNote({ message: hit.message.id, text: hit.note ?? "" })
+                        }
+                        className="ml-auto shrink-0 text-[11px] text-[var(--accent)]"
+                      >
+                        {hit.note === null ? "Add note" : "Edit note"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -353,7 +438,7 @@ export function attentionHits(state: AttentionState): SearchHit[] {
         { nick: network.currentNick, words: state.highlightWords },
         present,
       ));
-      if (wanted) hits.push({ message, snippet: message.text });
+      if (wanted) hits.push({ message, snippet: message.text, note: null });
     }
   }
 

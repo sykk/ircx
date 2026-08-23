@@ -170,9 +170,10 @@ pub struct SearchRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
+/// `snippet` carries FTS5 `<mark>` tags around matches.
 pub struct SearchHit {
     pub message: ChatMessage,
-    /// FTS5 snippet with `<mark>` around matches.
+    pub note: Option<String>,
     pub snippet: String,
 }
 

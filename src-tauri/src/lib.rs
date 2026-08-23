@@ -190,6 +190,7 @@ pub fn run() {
             commands::search_history,
             commands::list_bookmarks,
             commands::set_bookmark,
+            commands::set_bookmark_note,
             commands::mark_read,
             commands::set_typing,
             commands::load_preview,

@@ -9,11 +9,13 @@ import { SearchOverlay, searchAfter, snippetSegments } from "./SearchOverlay";
 const searchHistory = vi.fn();
 const loadHistoryAround = vi.fn();
 const listBookmarks = vi.fn();
+const setBookmarkNote = vi.fn();
 vi.mock("@/lib/ipc", () => ({
   ipc: {
     searchHistory: (req: unknown) => searchHistory(req),
     loadHistoryAround: (...args: unknown[]) => loadHistoryAround(...args),
     listBookmarks: (...args: unknown[]) => listBookmarks(...args),
+    setBookmarkNote: (...args: unknown[]) => setBookmarkNote(...args),
   },
 }));
 
@@ -44,10 +46,12 @@ const hits: SearchHit[] = [
   {
     message: message("1", "got the LFI on the template loader"),
     snippet: "got the <mark>LFI</mark> on the template loader",
+    note: null,
   },
   {
     message: message("2", "the LFI needs double encoding"),
     snippet: "the <mark>LFI</mark> needs <mark>double</mark> encoding",
+    note: "Try the proxy logs",
   },
 ];
 
@@ -59,6 +63,8 @@ beforeEach(() => {
   loadHistoryAround.mockResolvedValue(hits.map((hit) => hit.message));
   listBookmarks.mockReset();
   listBookmarks.mockResolvedValue(hits);
+  setBookmarkNote.mockReset();
+  setBookmarkNote.mockResolvedValue(undefined);
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
     searchOpen: true,
@@ -161,7 +167,31 @@ describe("SearchOverlay", () => {
     render(<SearchOverlay />);
     fireEvent.click(screen.getByRole("button", { name: "bookmarks" }));
     await waitFor(() => expect(listBookmarks).toHaveBeenCalledWith("libera", "#ctf-ops", 50));
-    expect(await screen.findAllByRole("option")).toHaveLength(2);
+    expect(await screen.findAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("Try the proxy logs")).toBeTruthy();
+  });
+
+  it("adds a note without opening the message", async () => {
+    render(<SearchOverlay />);
+    fireEvent.click(screen.getByRole("button", { name: "bookmarks" }));
+    await screen.findAllByRole("listitem");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Add note" })[0]!);
+    fireEvent.change(screen.getByLabelText("Bookmark note"), {
+      target: { value: "  Recheck after deploy  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+
+    await waitFor(() =>
+      expect(setBookmarkNote).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "1",
+        "Recheck after deploy",
+      ),
+    );
+    expect(screen.getByText("Recheck after deploy")).toBeTruthy();
+    expect(loadHistoryAround).not.toHaveBeenCalled();
   });
 
   it("lists unread highlights and direct messages across networks", () => {

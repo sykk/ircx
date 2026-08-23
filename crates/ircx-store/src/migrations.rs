@@ -22,6 +22,7 @@ const MIGRATIONS: &[&str] = &[
     STS_POLICY,
     BOOKMARKS,
     IGNORED,
+    BOOKMARK_NOTES,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -393,6 +394,10 @@ CREATE TABLE bookmarks (
 );
 "#;
 
+const BOOKMARK_NOTES: &str = r#"
+ALTER TABLE bookmarks ADD COLUMN note TEXT NOT NULL DEFAULT '';
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,10 +444,10 @@ mod tests {
     }
 
     /// The upgrade a user with an existing archive takes. Every earlier
-    /// migration has to still apply on top of real rows, and the new table has
-    /// to arrive without touching them.
+    /// migration has to still apply on top of real rows, and the latest schema
+    /// change has to arrive without touching them.
     #[test]
-    fn an_archive_one_version_behind_gains_the_table_and_keeps_its_rows() {
+    fn an_archive_one_version_behind_gains_the_schema_and_keeps_its_rows() {
         let mut conn = Connection::open_in_memory().unwrap();
         for sql in MIGRATIONS.iter().take(MIGRATIONS.len() - 1) {
             conn.execute_batch(sql).unwrap();
@@ -468,6 +473,11 @@ mod tests {
             [],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks(message) SELECT id FROM messages WHERE message_id = 'm1'",
+            [],
+        )
+        .unwrap();
 
         migrate(&mut conn).unwrap();
 
@@ -475,6 +485,10 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
             .unwrap();
         assert_eq!(held, 1, "the upgrade keeps what was already archived");
+        let note: String = conn
+            .query_row("SELECT note FROM bookmarks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(note, "");
         // Whatever the last migration added, reached through the row that was
         // already there. Naming the column rather than a table keeps this
         // honest as migrations are appended: it was an insert into `raised`

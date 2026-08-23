@@ -583,6 +583,16 @@ fn bookmarks_are_idempotent_and_scoped() {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].message.id, "a");
     assert_eq!(hits[0].snippet, "save this");
+    assert_eq!(hits[0].note, None);
+
+    assert!(store
+        .set_bookmark_note("libera", "#IRCX", "a", "Check the fix")
+        .unwrap());
+    let hits = store.bookmarks(Some("libera"), Some("#ircx"), 10).unwrap();
+    assert_eq!(hits[0].note.as_deref(), Some("Check the fix"));
+    assert!(!store
+        .set_bookmark_note("libera", "#ircx", "missing", "Lost")
+        .unwrap());
 
     assert!(store.set_bookmark("libera", "#ircx", "a", false).unwrap());
     assert!(store.bookmarks(None, None, 10).unwrap().is_empty());

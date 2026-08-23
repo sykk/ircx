@@ -37,6 +37,7 @@ export type CandidateAction =
   | { type: "disconnect"; network: string }
   | { type: "openSetup"; network: string }
   | { type: "settings"; section?: SectionId }
+  | { type: "shortcuts" }
   | { type: "theme"; id: string }
   | { type: "density"; id: DensityId }
   /** Carries what it will leave the setting at rather than reading the store
@@ -357,6 +358,11 @@ function withChord(detail: string, action: ActionId): string {
 }
 
 const STATIC_ACTIONS: readonly { label: string; detail: string; action: CandidateAction }[] = [
+  {
+    label: "Keyboard shortcuts",
+    detail: withChord("Reference for every keyboard command", "palette.toggle"),
+    action: { type: "shortcuts" },
+  },
   {
     label: "Next unread conversation",
     detail: withChord("Highlights first, then other unread conversations", "target.nextUnread"),

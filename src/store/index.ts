@@ -142,6 +142,8 @@ export interface AppActions {
    * empty one. */
   setMemberFilter: (view: ViewId, text: string | null) => void;
   togglePalette: (open?: boolean) => void;
+  openShortcuts: () => void;
+  closeShortcuts: () => void;
   openSearch: (mode?: SearchMode) => void;
   closeSearch: () => void;
   /** Opens settings on the Networks page, showing one network's form — or a
@@ -216,6 +218,7 @@ const initialState: AppState = {
   rosterHidden: {},
   memberFilter: {},
   paletteOpen: false,
+  shortcutsOpen: false,
   searchOpen: false,
   searchMode: "search",
   setup: null,
@@ -747,6 +750,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }),
 
   togglePalette: (open) => set((s) => ({ paletteOpen: open ?? !s.paletteOpen })),
+  openShortcuts: () => set({ shortcutsOpen: true }),
+  closeShortcuts: () => set({ shortcutsOpen: false }),
   openSearch: (searchMode = "search") => set({ searchOpen: true, searchMode }),
   closeSearch: () => set({ searchOpen: false }),
 

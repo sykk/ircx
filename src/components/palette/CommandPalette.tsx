@@ -208,6 +208,9 @@ function Palette() {
       case "settings":
         store.openSettings(action.section);
         break;
+      case "shortcuts":
+        store.openShortcuts();
+        break;
       case "connect":
         attempt(ipc.connectNetwork(action.network));
         return;

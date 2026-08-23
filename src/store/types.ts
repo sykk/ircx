@@ -256,6 +256,7 @@ export interface AppState {
    */
   memberFilter: Record<ViewId, string>;
   paletteOpen: boolean;
+  shortcutsOpen: boolean;
   searchOpen: boolean;
   searchMode: SearchMode;
   /**

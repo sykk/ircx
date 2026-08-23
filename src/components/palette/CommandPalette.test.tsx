@@ -168,6 +168,16 @@ describe("CommandPalette", () => {
     expect(useAppStore.getState().paletteOpen).toBe(false);
   });
 
+  it("opens the keyboard shortcut reference", () => {
+    render(<CommandPalette />);
+    type("keyboard shortcuts");
+
+    fireEvent.keyDown(input(), { key: "Enter" });
+
+    expect(useAppStore.getState().shortcutsOpen).toBe(true);
+    expect(useAppStore.getState().paletteOpen).toBe(false);
+  });
+
   it("opens a network's channel browser", () => {
     render(<CommandPalette />);
     type("Browse channels on Libera.Chat");

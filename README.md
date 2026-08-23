@@ -9,9 +9,27 @@ capability negotiation are configured for you and stay visible when you want the
 
 ## Status
 
-Pre-alpha. The MVP targets Libera.Chat: TLS connection, capability negotiation,
-SASL, channels and queries, member list, message timeline, slash commands, and
-local SQLite history.
+Pre-alpha. The current build connects to IRCv3 networks, with Libera.Chat as
+the primary compatibility target.
+
+It includes:
+
+- TLS, capability negotiation, reconnect, and SASL PLAIN, SCRAM-SHA-256,
+  SCRAM-SHA-512, and EXTERNAL
+- channels, queries, a raw server console, slash commands, a command palette,
+  split panes, and per-pane member lists
+- server history, replies, reactions, typing indicators, unread markers, and
+  desktop notifications
+- a local SQLite archive with full-text search, drafts, retention, export,
+  deletion, mute, and ignore controls
+- themes, S3-compatible uploads, and permissioned QuickJS plugins for commands,
+  annotations, and notification rules
+
+This milestone does not include:
+
+- message encryption, voice, built-in file hosting, threads, or cloud sync
+- plugin message renderers or protocol adapters
+- automatic remote previews; ircx fetches a preview only when you ask
 
 ## Build
 

@@ -165,6 +165,7 @@ export function useAppHotkeys(bindings: readonly Binding[] = DEFAULT_BINDINGS): 
       "overlay.dismiss": () => {
         const state = useAppStore.getState();
         if (state.paletteOpen) state.togglePalette(false);
+        else if (state.shortcutsOpen) state.closeShortcuts();
         else if (state.searchOpen) state.closeSearch();
         // Nothing of ours is open, so let the composer clear its reply.
         else return false;

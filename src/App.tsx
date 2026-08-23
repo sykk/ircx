@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Onboarding } from "@/components/onboarding/Onboarding";
-import { CommandPalette, SearchOverlay } from "@/components/palette";
+import { CommandPalette, SearchOverlay, ShortcutReference } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
 import { SettingsOverlay } from "@/components/settings";
 import { ChannelList } from "@/components/channels";
@@ -84,6 +84,7 @@ export function App() {
           nobody can read. */}
       <SettingsOverlay />
       <CommandPalette />
+      <ShortcutReference />
       <SearchOverlay />
       <DropToUpload />
       <ChannelList />

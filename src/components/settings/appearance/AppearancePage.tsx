@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Note, SecondaryButton } from "@/components/onboarding/fields";
 import { chooseFolder, ipc, reasonOr, revealFolder } from "@/lib/ipc";
-import { selectTheme } from "@/lib/theme";
+import { selectTheme } from "@/lib/theme/session";
 import { useAppStore } from "@/store";
 import { AppearanceRail } from "./AppearanceRail";
 import { Preview } from "./Preview";
 import { ThemeCards } from "./ThemeCards";
-import { TokenEditor } from "./TokenEditor";
+
+const TokenEditor = lazy(() =>
+  import("./TokenEditor").then(({ TokenEditor }) => ({ default: TokenEditor })),
+);
 
 /**
  * The themes that loaded, everything about how the timeline is set, and the
@@ -48,7 +51,9 @@ export function AppearancePage({ onDone }: { onDone: () => void }) {
   if (editingTheme !== null) {
     return (
       <div className="mx-auto max-w-[900px] px-8 py-6">
-        <TokenEditor theme={editingTheme} onBack={() => setEditing(null)} />
+        <Suspense fallback={null}>
+          <TokenEditor theme={editingTheme} onBack={() => setEditing(null)} />
+        </Suspense>
       </div>
     );
   }

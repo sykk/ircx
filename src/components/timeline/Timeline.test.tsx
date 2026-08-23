@@ -2032,14 +2032,14 @@ describe("reaction chips", () => {
     expect(screen.queryByRole("button", { name: "Add a reaction" })).toBe(null);
   });
 
-  it("opens the picker onto its first choice and sends the one taken", () => {
+  it("opens the picker onto its first choice and sends the one taken", async () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);
 
     const add = screen.getByRole("button", { name: "Add a reaction" });
     fireEvent.click(add);
 
-    const picker = screen.getByRole("group", { name: "React with" });
+    const picker = await screen.findByRole("group", { name: "React with" });
     const choices = within(picker).getAllByRole("button");
     expect(document.activeElement).toBe(choices[0]);
 
@@ -2061,13 +2061,13 @@ describe("reaction chips", () => {
     expect(add.closest("[data-ui='timeline']")).not.toBe(null);
   });
 
-  it("closes the picker on Escape and gives the focus back", () => {
+  it("closes the picker on Escape and gives the focus back", async () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);
 
     const add = screen.getByRole("button", { name: "Add a reaction" });
     fireEvent.click(add);
-    fireEvent.keyDown(screen.getByRole("group", { name: "React with" }), { key: "Escape" });
+    fireEvent.keyDown(await screen.findByRole("group", { name: "React with" }), { key: "Escape" });
 
     expect(screen.queryByRole("group", { name: "React with" })).toBe(null);
     expect(document.activeElement).toBe(add);

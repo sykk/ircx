@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { KeyboardEvent } from "react";
 import type { ChatMessage, CommandOutcome } from "@/types";
-import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { Icon } from "@/components/common/Icon";
 import { chooseFiles, ipc, reasonOr } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
@@ -20,6 +28,10 @@ const DRAFT_DEBOUNCE_MS = 400;
 /** The server-side indicator lasts several seconds; resending sooner is noise. */
 const TYPING_INTERVAL_MS = 3_000;
 const CHANNEL_PREFIX = /^[#&!+]/;
+
+const EmojiPicker = lazy(() =>
+  import("@/components/common/EmojiPicker").then(({ EmojiPicker }) => ({ default: EmojiPicker })),
+);
 
 export function Composer({ view }: { view: ViewId | null }) {
   const pane = useView(view);
@@ -454,7 +466,9 @@ function ComposerFor({
           </button>
           {emojiOpen && (
             <span className="absolute bottom-full right-0 z-10 mb-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] shadow-[var(--shadow-overlay)]">
-              <EmojiPicker onPick={insertEmoji} />
+              <Suspense fallback={null}>
+                <EmojiPicker onPick={insertEmoji} />
+              </Suspense>
             </span>
           )}
         </span>

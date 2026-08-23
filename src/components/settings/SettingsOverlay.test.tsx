@@ -95,11 +95,11 @@ describe("the settings dialog", () => {
   /** Escape in a field abandons the value being typed. The token editor behind
    * Custom… is nothing but fields, and losing the dialog from one of them
    * would be a trap. */
-  it("stays open for an Escape inside a field", () => {
+  it("stays open for an Escape inside a field", async () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Custom…" }));
 
-    fireEvent.keyDown(screen.getByLabelText("--accent"), { key: "Escape" });
+    fireEvent.keyDown(await screen.findByLabelText("--accent"), { key: "Escape" });
 
     expect(store().settings).toBe("appearance");
   });

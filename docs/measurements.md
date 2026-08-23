@@ -100,6 +100,49 @@ restored conversation is drawn** — the frame that puts messages on screen is
 another buffer on the same surface and the compositor cannot tell it from any
 later one. That it is drawn at all was checked by screenshot rather than timed.
 
+### After splitting the frontend boot path
+
+**Measured 2026-08-23**, before and after moving the emoji picker, settings
+dialog and token editor behind dynamic imports. The baseline was commit
+`2f9a5f8cd30cc795745ef3b3d27cc1887beb9bbc`; both builds used `npm run tauri
+build -- --no-bundle`. Each build ran the four conditions above three times
+with:
+
+```bash
+env GDK_BACKEND=wayland node .agents/skills/run-ircx/startup.mjs \
+  --messages 100000 --networks 3 --runs 3
+```
+
+The figures below combine all twelve runs for each build. The first three are
+medians. The last remains two clusters; a median between them would describe no
+run.
+
+| from process exec to | one boot chunk | split boot path |
+|---|---:|---:|
+| first message to the compositor | 48.0 ms | 48.1 ms |
+| surface committed, no content yet | 82.7 ms | 82.5 ms |
+| first frame committed | 726.4 ms | 724.0 ms |
+| webview content committed | 778.1–793.1 ms / 869.6–887.5 ms | 780.0–782.5 ms / 860.3–878.2 ms |
+
+The median inside each content cluster moved from 782.6 and 878.8 ms to 781.3
+and 865.1 ms. The cluster mix also changed from six runs in each to two low and
+ten high. Both ranges overlap the baseline, and the builds were measured in
+order rather than interleaved. These runs do not separate the 2.4 ms
+first-frame difference or either content-cluster difference from run-order
+noise.
+
+| production output | one boot chunk | split boot path | change |
+|---|---:|---:|---:|
+| initial JavaScript | 994,017 bytes | 503,418 bytes | −490,599 bytes (−49.4%) |
+| all JavaScript | 994,017 bytes | 997,380 bytes | +3,363 bytes (+0.34%) |
+| release binary | 13,234,048 bytes | 13,242,496 bytes | +8,448 bytes (+0.06%) |
+
+The initial chunk fell 49.4%. Tauri still embeds the lazy chunks, and the extra
+chunk machinery and files made the release binary 8.25 KiB larger. This
+measurement covers warm page cache on one compositor and the same four seeded
+profiles as the table above. It excludes a packaged bundle and a cold page
+cache.
+
 ## Size
 
 | | measured | bytes | |

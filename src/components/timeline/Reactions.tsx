@@ -1,13 +1,16 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import type { Reaction } from "@/types";
-import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { Tooltip } from "@/components/common/Tooltip";
 import { Icon } from "@/components/common/Icon";
 
 /** More names than this and the tooltip runs off the window, so the rest of
  * them stay a count. */
 const NAMES_SHOWN = 12;
+
+const EmojiPicker = lazy(() =>
+  import("@/components/common/EmojiPicker").then(({ EmojiPicker }) => ({ default: EmojiPicker })),
+);
 
 const CHIP = "flex items-center rounded-[var(--radius-sm)] border px-2 py-[3px]";
 
@@ -202,18 +205,22 @@ export function RowControls({
               <span
                 ref={picker}
                 className={clsx(
-                  "absolute left-0 z-10 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]",
+                  // The unloaded shell stays as tall as the compact picker, so
+                  // the position calculation above does not measure an empty chunk.
+                  "absolute left-0 z-10 min-h-[36px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]",
                   above ? "bottom-full mb-1" : "top-full mt-1",
                 )}
               >
-                <EmojiPicker
-                  compact
-                  onPick={(emoji) => {
-                    onPick(emoji);
-                    setOpen(false);
-                    anchor.current?.focus();
-                  }}
-                />
+                <Suspense fallback={null}>
+                  <EmojiPicker
+                    compact
+                    onPick={(emoji) => {
+                      onPick(emoji);
+                      setOpen(false);
+                      anchor.current?.focus();
+                    }}
+                  />
+                </Suspense>
               </span>
             )}
           </>

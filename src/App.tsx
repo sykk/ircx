@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { CommandPalette, SearchOverlay, ShortcutReference } from "@/components/palette";
 import { PaneTree } from "@/components/panes/PaneTree";
-import { SettingsOverlay } from "@/components/settings";
 import { ChannelList } from "@/components/channels";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { AppShell } from "@/components/shell/AppShell";
@@ -23,9 +22,14 @@ import { useAppStore } from "@/store";
  * the connection it just started. */
 type Startup = "loading" | "onboarding" | "ready";
 
+const SettingsOverlay = lazy(() =>
+  import("@/components/settings").then(({ SettingsOverlay }) => ({ default: SettingsOverlay })),
+);
+
 export function App() {
   useAppHotkeys();
   const [startup, setStartup] = useState<Startup>("loading");
+  const settingsOpen = useAppStore((state) => state.settings !== null);
 
   useEffect(() => {
     const themes = startThemes();
@@ -82,7 +86,11 @@ export function App() {
           it is open and share its stacking level — later in the tree paints on
           top, and a palette drawn under the settings dialog is a palette
           nobody can read. */}
-      <SettingsOverlay />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsOverlay />
+        </Suspense>
+      )}
       <CommandPalette />
       <ShortcutReference />
       <SearchOverlay />

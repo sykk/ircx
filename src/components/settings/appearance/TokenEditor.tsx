@@ -12,7 +12,6 @@ import {
   COOL_MAX,
   COOL_MIN,
   hue,
-  selectOverrides,
   SURFACES,
   toHex,
   TOKEN_CATALOGUE,
@@ -21,6 +20,7 @@ import {
   type Theme,
   type TokenSpec,
 } from "@/lib/theme";
+import { selectOverrides } from "@/lib/theme/session";
 import { useAppStore } from "@/store";
 
 /**

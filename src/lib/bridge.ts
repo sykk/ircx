@@ -1,4 +1,5 @@
-import { ipc, onIrcxEvent } from "@/lib/ipc";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { insideTauri, ipc, onIrcxEvent } from "@/lib/ipc";
 import { notifyForEvents } from "@/lib/notifications";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
@@ -58,19 +59,70 @@ export async function startBridge(): Promise<() => void> {
  * of a split is not one the user is reading.
  */
 function followFocus(): () => void {
-  let last: string | null = null;
+  const appWindow = insideTauri() ? getCurrentWindow() : null;
+  let focused = appWindow === null;
+  let lastTarget: string | null = null;
+  let lastUnread = 0;
+  let stopped = false;
+  let stopWindow = () => {};
 
-  return useAppStore.subscribe((state) => {
+  const markCurrent = (force = false) => {
+    const state = useAppStore.getState();
     const view = state.activeViewId ? state.views[state.activeViewId] : undefined;
-    if (!view || !view.network || view.target === "") return;
+    if (!view || !view.network || view.target === "") {
+      lastTarget = null;
+      lastUnread = 0;
+      return;
+    }
 
     const at = targetKey(view.network, view.target);
-    if (at === last) return;
-    last = at;
+    const unread = state.channels[at]?.unread ?? state.queries[at]?.unread ?? 0;
+    const moved = at !== lastTarget;
+    const grew = !moved && unread > lastUnread;
+    lastTarget = at;
+    lastUnread = unread;
+    if (!focused || (!force && !moved && !grew)) return;
+
     // `mark_read` is `tell_if_connected`, so a conversation with no session
     // costs nothing and cannot fail in a way the user sees.
     void ipc.markRead(view.network, view.target).catch(() => {});
-  });
+  };
+
+  const stopStore = useAppStore.subscribe(() => markCurrent());
+  if (appWindow !== null) {
+    let focusVersion = 0;
+    void (async () => {
+      try {
+        const unlisten = await appWindow.onFocusChanged(({ payload }) => {
+          if (stopped) return;
+          focusVersion += 1;
+          focused = payload;
+          if (focused) markCurrent(true);
+        });
+        if (stopped) {
+          unlisten();
+          return;
+        }
+        stopWindow = unlisten;
+
+        const versionBeforeQuery = focusVersion;
+        const initiallyFocused = await appWindow.isFocused();
+        if (stopped || focusVersion !== versionBeforeQuery) return;
+        focused = initiallyFocused;
+        if (focused) markCurrent(true);
+      } catch (reason) {
+        focused = false;
+        if (stopped) return;
+        console.warn("ircx could not follow whether its window has focus", reason);
+      }
+    })();
+  }
+
+  return () => {
+    stopped = true;
+    stopStore();
+    stopWindow();
+  };
 }
 
 /** The snapshot is the same state the events describe, so it goes in as

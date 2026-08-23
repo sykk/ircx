@@ -116,6 +116,25 @@ describe("dropping a file on the window", () => {
     );
   });
 
+  it("keeps the destination that was named when another pane takes focus", async () => {
+    render(<DropToUpload />);
+    drop(["/home/sable/photo.png"]);
+    await screen.findByText("files.example.com");
+
+    act(() => useAppStore.getState().setActive({ network: "oftc", target: "#elsewhere" }));
+
+    expect(screen.getByText("#ctf-ops")).toBeTruthy();
+    expect(screen.queryByText("#elsewhere")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    await waitFor(() =>
+      expect(ipcMock.submitInput).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "https://files.example.com/ab-photo.png",
+      ),
+    );
+  });
+
   /** Nowhere to send it is not something to discover after clicking Upload. */
   it("says so, and offers nothing, when no provider is configured", async () => {
     ipcMock.getUploadProvider.mockResolvedValue(null);
@@ -263,6 +282,22 @@ describe("an address that will not open", () => {
   it("can be sent anyway", async () => {
     await dropAndConfirm();
     fireEvent.click(await screen.findByRole("button", { name: "Send it anyway" }));
+
+    await waitFor(() =>
+      expect(ipcMock.submitInput).toHaveBeenCalledWith(
+        "libera",
+        "#ctf-ops",
+        "https://s3.example.com/bucket/ab-photo.png",
+      ),
+    );
+  });
+
+  it("sends an unreadable link to the destination that accepted the upload", async () => {
+    await dropAndConfirm();
+    await screen.findByRole("button", { name: "Send it anyway" });
+    act(() => useAppStore.getState().setActive({ network: "oftc", target: "#elsewhere" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Send it anyway" }));
 
     await waitFor(() =>
       expect(ipcMock.submitInput).toHaveBeenCalledWith(

@@ -3565,19 +3565,23 @@ const CREDENTIAL_VERBS: &[&str] = &[
 /// well type "identify yourself" in one. #269, found when a connect command put
 /// a NickServ password in a log that was then pasted into a bug report.
 fn redact(line: &str) -> String {
-    if let Some(rest) = line.strip_prefix("AUTHENTICATE ") {
+    let Some((command, rest)) = line.split_once(' ') else {
+        return line.to_string();
+    };
+    if command.eq_ignore_ascii_case("AUTHENTICATE") {
         return match rest {
-            "+" | "PLAIN" | "EXTERNAL" => line.to_string(),
-            _ => "AUTHENTICATE <credentials>".to_string(),
+            "+" => line.to_string(),
+            mechanism
+                if mechanism.eq_ignore_ascii_case("PLAIN")
+                    || mechanism.eq_ignore_ascii_case("EXTERNAL") =>
+            {
+                line.to_string()
+            }
+            _ => format!("{command} <credentials>"),
         };
     }
-    for command in ["PASS", "OPER"] {
-        if line
-            .strip_prefix(command)
-            .is_some_and(|r| r.starts_with(' '))
-        {
-            return format!("{command} <credentials>");
-        }
+    if command.eq_ignore_ascii_case("PASS") || command.eq_ignore_ascii_case("OPER") {
+        return format!("{command} <credentials>");
     }
     redact_service_message(line).unwrap_or_else(|| line.to_string())
 }
@@ -3586,7 +3590,7 @@ fn redact(line: &str) -> String {
 /// taken out and the verb left in, so the log still says what was attempted.
 fn redact_service_message(line: &str) -> Option<String> {
     let (command, rest) = line.split_once(' ')?;
-    if !matches!(command, "PRIVMSG" | "NOTICE") {
+    if !command.eq_ignore_ascii_case("PRIVMSG") && !command.eq_ignore_ascii_case("NOTICE") {
         return None;
     }
     let (target, text) = rest.split_once(" :")?;
@@ -3609,6 +3613,8 @@ mod redaction {
         assert_eq!(redact("PRIVMSG #ircx :hello"), "PRIVMSG #ircx :hello");
         assert_eq!(redact("AUTHENTICATE PLAIN"), "AUTHENTICATE PLAIN");
         assert_eq!(redact("AUTHENTICATE +"), "AUTHENTICATE +");
+        assert_eq!(redact("authenticate PLAIN"), "authenticate PLAIN");
+        assert_eq!(redact("AuThEnTiCaTe +"), "AuThEnTiCaTe +");
         assert_eq!(redact("PASSWORD_RESET foo"), "PASSWORD_RESET foo");
     }
 
@@ -3620,6 +3626,36 @@ mod redaction {
         );
         assert_eq!(redact("PASS hunter2"), "PASS <credentials>");
         assert_eq!(redact("OPER syk hunter2"), "OPER <credentials>");
+    }
+
+    #[test]
+    fn takes_out_credentials_regardless_of_command_case() {
+        for (line, expected) in [
+            ("authenticate aGVsbG8=", "authenticate <credentials>"),
+            ("AuThEnTiCaTe aGVsbG8=", "AuThEnTiCaTe <credentials>"),
+            ("pass hunter2", "pass <credentials>"),
+            ("PaSs hunter2", "PaSs <credentials>"),
+            ("oper syk hunter2", "oper <credentials>"),
+            ("OpEr syk hunter2", "OpEr <credentials>"),
+            (
+                "privmsg NickServ :identify hunter2",
+                "privmsg NickServ :identify <credentials>",
+            ),
+            (
+                "PrIvMsG NickServ :identify hunter2",
+                "PrIvMsG NickServ :identify <credentials>",
+            ),
+            (
+                "notice NickServ :setpass syk key new",
+                "notice NickServ :setpass <credentials>",
+            ),
+            (
+                "NoTiCe NickServ :setpass syk key new",
+                "NoTiCe NickServ :setpass <credentials>",
+            ),
+        ] {
+            assert_eq!(redact(line), expected);
+        }
     }
 
     /// #269: a connect command put one of these in a log that was then pasted
@@ -3651,6 +3687,10 @@ mod redaction {
         assert_eq!(
             redact("PRIVMSG &local :register your account"),
             "PRIVMSG &local :register your account"
+        );
+        assert_eq!(
+            redact("pRiVmSg #ircx :identify yourself"),
+            "pRiVmSg #ircx :identify yourself"
         );
     }
 

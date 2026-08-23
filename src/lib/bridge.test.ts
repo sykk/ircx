@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetStore } from "@/components/shell/fixtures";
+import { makeChannel, resetStore } from "@/components/shell/fixtures";
 import { useAppStore } from "@/store";
 
-const { ipcMock, onIrcxEvent } = vi.hoisted(() => ({
+const { insideTauri, ipcMock, onIrcxEvent, windowMock } = vi.hoisted(() => ({
+  insideTauri: vi.fn(),
   ipcMock: {
     getSnapshot: vi.fn(),
     listMembers: vi.fn(),
@@ -10,20 +11,28 @@ const { ipcMock, onIrcxEvent } = vi.hoisted(() => ({
     listBookmarks: vi.fn(),
   },
   onIrcxEvent: vi.fn(),
+  windowMock: {
+    isFocused: vi.fn(),
+    onFocusChanged: vi.fn(),
+  },
 }));
 
-vi.mock("@/lib/ipc", () => ({ ipc: ipcMock, onIrcxEvent }));
+vi.mock("@/lib/ipc", () => ({ insideTauri, ipc: ipcMock, onIrcxEvent }));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => windowMock }));
 
 const { startBridge } = await import("./bridge");
 
 beforeEach(() => {
   resetStore();
   vi.clearAllMocks();
+  insideTauri.mockReturnValue(false);
   ipcMock.getSnapshot.mockResolvedValue({ networks: [], channels: [], queries: [], drafts: [] });
   ipcMock.listMembers.mockResolvedValue([]);
   ipcMock.markRead.mockResolvedValue(undefined);
   ipcMock.listBookmarks.mockResolvedValue([]);
   onIrcxEvent.mockResolvedValue(() => {});
+  windowMock.isFocused.mockResolvedValue(true);
+  windowMock.onFocusChanged.mockResolvedValue(() => {});
 });
 
 it("loads persisted draft identities without loading their text", async () => {
@@ -67,6 +76,78 @@ describe("marking a conversation read", () => {
 
     expect(ipcMock.markRead).toHaveBeenCalledTimes(1);
     stop();
+  });
+
+  it("says so again when unread grows in the focused conversation", async () => {
+    const stop = await startBridge();
+    const store = useAppStore.getState();
+    store.setActive({ network: "libera", target: "#ctf-ops" });
+    ipcMock.markRead.mockClear();
+
+    store.applyEvent({
+      type: "channelUpdated",
+      channel: makeChannel("libera", "#ctf-ops", { unread: 1 }),
+    });
+
+    expect(ipcMock.markRead).toHaveBeenCalledWith("libera", "#ctf-ops");
+    stop();
+  });
+
+  it("keeps unread while blurred and clears it on refocus", async () => {
+    insideTauri.mockReturnValue(true);
+    const stop = await startBridge();
+    await vi.waitFor(() => expect(windowMock.onFocusChanged).toHaveBeenCalled());
+    const changed = windowMock.onFocusChanged.mock.calls[0]?.[0];
+    const store = useAppStore.getState();
+    store.setActive({ network: "libera", target: "#ctf-ops" });
+    ipcMock.markRead.mockClear();
+
+    changed?.({ payload: false });
+    store.applyEvent({
+      type: "channelUpdated",
+      channel: makeChannel("libera", "#ctf-ops", { unread: 1 }),
+    });
+    expect(ipcMock.markRead).not.toHaveBeenCalled();
+
+    changed?.({ payload: true });
+    expect(ipcMock.markRead).toHaveBeenCalledWith("libera", "#ctf-ops");
+    stop();
+  });
+
+  it("does not let a late focus query overwrite a newer blur", async () => {
+    let resolveFocus: ((focused: boolean) => void) | undefined;
+    windowMock.isFocused.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveFocus = resolve;
+      }),
+    );
+    insideTauri.mockReturnValue(true);
+    const stop = await startBridge();
+    await vi.waitFor(() => expect(windowMock.onFocusChanged).toHaveBeenCalled());
+    const changed = windowMock.onFocusChanged.mock.calls[0]?.[0];
+    changed?.({ payload: false });
+    useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
+    ipcMock.markRead.mockClear();
+
+    resolveFocus?.(true);
+    await Promise.resolve();
+
+    expect(ipcMock.markRead).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("ignores a focus callback already in flight after cleanup", async () => {
+    insideTauri.mockReturnValue(true);
+    const stop = await startBridge();
+    await vi.waitFor(() => expect(windowMock.onFocusChanged).toHaveBeenCalled());
+    const changed = windowMock.onFocusChanged.mock.calls[0]?.[0];
+    useAppStore.getState().setActive({ network: "libera", target: "#ctf-ops" });
+    ipcMock.markRead.mockClear();
+
+    stop();
+    changed?.({ payload: true });
+
+    expect(ipcMock.markRead).not.toHaveBeenCalled();
   });
 
   it("says so again when focus moves to a different conversation", async () => {

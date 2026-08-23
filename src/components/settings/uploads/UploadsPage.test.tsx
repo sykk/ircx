@@ -102,6 +102,8 @@ describe("the uploads page", () => {
         form: null,
       }),
     );
+    await screen.findByText("Saved.");
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
   });
 
   /** The user cannot see the stored token, so an endpoint correction must not
@@ -157,12 +159,29 @@ describe("the uploads page", () => {
        page in a window that stays open has to say it in words, and the
        sentence has to be the one that matters: no provider means no files. */
     expect(await screen.findByText(/ircx will send no files/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
     expect(done).not.toHaveBeenCalled();
     await waitFor(() =>
       expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(
         false,
       ),
     );
+  });
+
+  it("releases the page when removal fails", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://files.example.com/{name}",
+      method: "PUT",
+      authHeader: null,
+      token: null,
+    });
+    ipcMock.removeUploadProvider.mockRejectedValue("The keyring is locked");
+    open();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove provider" }));
+
+    expect(await screen.findByText("The keyring is locked")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
   });
 
   /** An empty address is not "no provider": saving it would leave a provider
@@ -173,6 +192,7 @@ describe("the uploads page", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("Remove the provider instead");
     expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
   });
 
   /** It used to say "saved" whenever a provider was saved, which is a different
@@ -218,6 +238,7 @@ describe("the uploads page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("The keyring is locked")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
     expect(done).not.toHaveBeenCalled();
   });
 });
@@ -276,6 +297,7 @@ describe("an S3-compatible provider", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
   });
 
   it("comes back as an S3 provider when one is stored", async () => {
@@ -344,6 +366,7 @@ describe("a form host", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(ipcMock.saveUploadProvider).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveProperty("disabled", false);
   });
 
   it("comes back as a form provider when one is stored", async () => {

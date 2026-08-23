@@ -13,6 +13,7 @@ import { isHighlight, targetKey, useMembers, useTimelineForView, useView, type H
 import type { TimelineState, ViewId } from "@/store/types";
 import { DateSeparator, GapDivider, HistoryDivider, UnreadDivider } from "./Divider";
 import { Clock } from "./Clock";
+import { useFrameMessages } from "./frameMessages";
 import { assignGroups } from "./groups";
 import { MessageBlock, TIMELINE_BLOCK_MAX } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
@@ -130,7 +131,8 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   // reading it as a subscription would fight every scroll event with a stale
   // value. Cleared when the pane is back where it was and the reader has it.
   const restoreTo = useRef(useAppStore.getState().viewAnchor[view] ?? null);
-  const { messages, unreadFrom, detachedAt } = timeline;
+  const { messages: storedMessages, unreadFrom, detachedAt } = timeline;
+  const messages = useFrameMessages(storedMessages);
   const [following, setFollowing] = useState(
     restoreTo.current === null && unreadFrom === null,
   );

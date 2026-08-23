@@ -107,6 +107,12 @@ function letItScroll(scroller: HTMLElement) {
   }) as HTMLElement["scrollTo"];
 }
 
+async function paintFrame() {
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+}
+
 function seedTimelines(timelines: AppState["timelines"]) {
   useAppStore.setState({
     ...oneView({ network: "libera", target: "#ctf-ops" }),
@@ -534,7 +540,7 @@ describe("Timeline", () => {
     expect(rendered.length).toBeLessThan(80);
   });
 
-  it("follows the tail when new lines merge into the row that is already open", () => {
+  it("follows the tail when new lines merge into the row that is already open", async () => {
     // A console is nothing but system messages, so a minute of output is a
     // single row and the fifteen lines a `/help` adds land inside the row
     // already on screen. Nothing about the row count changes.
@@ -569,9 +575,11 @@ describe("Timeline", () => {
       });
     });
 
-    const open = document.querySelector('[data-msgid="motd19"]')!.closest("[data-index]")!;
-    expect(open.contains(document.querySelector('[data-msgid="help14"]'))).toBe(true);
-    expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+    await waitFor(() => {
+      const open = document.querySelector('[data-msgid="motd19"]')!.closest("[data-index]")!;
+      expect(open.contains(document.querySelector('[data-msgid="help14"]'))).toBe(true);
+      expect(scroller.scrollTop).toBe(scroller.scrollHeight - VIEWPORT_PX);
+    });
   });
 
   it("puts the head of history in the content it labels rather than over it", () => {
@@ -1414,6 +1422,7 @@ describe("Timeline", () => {
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
 
+    await waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(heightBefore));
     const grew = scroller.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(scroller.scrollTop).toBe(100 + grew);
@@ -1466,7 +1475,7 @@ describe("Timeline", () => {
           .applyEvent({ type: "messagesAppended", answers: null, network: "libera", target: "#ctf-ops", messages });
       });
 
-    it("leaves the reader where they were when it lands below them", () => {
+    it("leaves the reader where they were when it lands below them", async () => {
       const scroller = readBack(
         Array.from({ length: 400 }, (_, i) => line(`m${i}`, i * GAP_MS)),
         5_000,
@@ -1474,11 +1483,12 @@ describe("Timeline", () => {
       const before = eyeLine(scroller, "m110");
 
       arrive([line("live", 400 * GAP_MS)]);
+      await paintFrame();
 
       expect(eyeLine(scroller, "m110")).toBe(before);
     });
 
-    it("leaves the reader where they were when it sorts in above them", () => {
+    it("leaves the reader where they were when it sorts in above them", async () => {
       // `mergeByTime`: a server that stamps a message behind what is already
       // held puts it at its own time rather than at the bottom. The reader is
       // below the insertion point, so everything under their eyes moves.
@@ -1496,11 +1506,12 @@ describe("Timeline", () => {
           timestamp: stamp(20 * GAP_MS + 60_000),
         }),
       ]);
+      await paintFrame();
 
       expect(eyeLine(scroller, "m110")).toBe(before);
     });
 
-    it("leaves the reader where they were when the window drops its oldest", () => {
+    it("leaves the reader where they were when the window drops its oldest", async () => {
       // A pane already holding `TIMELINE_CAP` loses a message off the front for
       // every one that arrives, which takes a row out from above the reader.
       const scroller = readBack(
@@ -1510,6 +1521,7 @@ describe("Timeline", () => {
       const before = eyeLine(scroller, "m110");
 
       arrive([line("live", TIMELINE_CAP * GAP_MS)]);
+      await paintFrame();
 
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(TIMELINE_CAP);
       expect(eyeLine(scroller, "m110")).toBe(before);
@@ -1550,6 +1562,7 @@ describe("Timeline", () => {
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
 
+    await waitFor(() => expect(reading!.scrollHeight).toBeGreaterThan(heightBefore));
     const grew = reading!.scrollHeight - heightBefore;
     expect(grew).toBeGreaterThan(0);
     expect(reading!.scrollTop).toBe(100 + grew);
@@ -1736,7 +1749,7 @@ describe("Timeline", () => {
 
     /** The rule is drawn off the message above the hole, so the pane has to be
      * holding both sides of it before there is anything to draw. */
-    it("rules off the line the channel says next", () => {
+    it("rules off the line the channel says next", async () => {
       const window = makeConversation({ count: 5, seed: 11 });
       detach(window);
       render(<Timeline view={TEST_VIEW} />);
@@ -1752,7 +1765,7 @@ describe("Timeline", () => {
         });
       });
 
-      expect(screen.getByText("Messages in between are not shown")).toBeTruthy();
+      expect(await screen.findByText("Messages in between are not shown")).toBeTruthy();
     });
   });
 

@@ -458,7 +458,9 @@ describe("two panes on one channel, one of them parked", () => {
     );
     flushLayout();
 
-    expect(within(parked).queryByText("Loading older messages")).toBeNull();
+    await waitFor(() =>
+      expect(within(parked).queryByText("Loading older messages")).toBeNull(),
+    );
   });
 
   it("leaves the parked pane's page where it was while the other pane asks", () => {
@@ -562,6 +564,9 @@ describe("the channel run 22 walked", () => {
     );
 
     for (const page of [0, 1]) {
+      await waitFor(() =>
+        expect(useAppStore.getState().timelines[KEY]!.loadingOlder).toBe(false),
+      );
       const held = useAppStore.getState().timelines[KEY]!.messages.length;
       let land = () => {};
       ipcMock.loadHistory.mockReturnValue(
@@ -579,14 +584,16 @@ describe("the channel run 22 walked", () => {
             );
         }),
       );
+      const asksBefore = ipcMock.loadHistory.mock.calls.length;
 
       reading.scrollTop = 100 + page;
       fireEvent.scroll(reading);
       flushLayout();
+      await waitFor(() => expect(ipcMock.loadHistory).toHaveBeenCalledTimes(asksBefore + 1));
 
       const watching = atTheFold(parked);
       const before = eyeLine(parked, watching);
-      land();
+      await act(async () => land());
       await waitFor(() =>
         expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(held + 200),
       );

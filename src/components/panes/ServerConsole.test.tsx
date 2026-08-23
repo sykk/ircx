@@ -189,7 +189,7 @@ describe("the server console", () => {
       fireEvent.submit(commandBox());
     });
 
-    expect(screen.getByText("/join #channel [key]")).toBeTruthy();
+    expect(await screen.findByText("/join #channel [key]")).toBeTruthy();
   });
 
   // One line and no prose, so the arrows have no caret work to do here and

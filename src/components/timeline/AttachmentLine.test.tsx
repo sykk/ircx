@@ -36,7 +36,8 @@ describe("AttachmentLine", () => {
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
     expect(screen.getByText("1.1 MB")).toBeTruthy();
-    expect(screen.getByText("fetch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Preview burp-req.png" })).toBeTruthy();
+    expect(document.querySelector('[data-ui="attachment-offer"]')).toBeTruthy();
     expect(ipcMock.loadPreview).not.toHaveBeenCalled();
   });
 
@@ -46,14 +47,15 @@ describe("AttachmentLine", () => {
     );
     render(<AttachmentLine attachment={makeAttachment()} />);
 
-    fireEvent.click(screen.getByText("fetch"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview burp-req.png" }));
 
     await waitFor(() => expect(document.querySelector("img")).toBeTruthy());
     expect(ipcMock.loadPreview).toHaveBeenCalledWith("https://files.example/burp-req.png");
     expect(document.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,AAAA",
     );
-    expect(screen.getByText(/^· fetched \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByText(/^4 × 4 · 1.1 MB · fetched \d\d:\d\d$/)).toBeTruthy();
+    expect(document.querySelector('[data-ui="attachment-preview"]')).toBeTruthy();
   });
 
   it("renders an already-loaded preview without a control", () => {
@@ -66,7 +68,8 @@ describe("AttachmentLine", () => {
     );
 
     expect(document.querySelector("img")).toBeTruthy();
-    expect(screen.queryByText("fetch")).toBe(null);
+    expect(screen.getByText("8 × 8 · 1.1 MB")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Preview burp-req.png" })).toBe(null);
   });
 
   it("falls back to the last path segment when there is no filename", () => {
@@ -100,7 +103,7 @@ describe("what a preview is offered for", () => {
       />,
     );
 
-    expect(screen.queryByText("fetch")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preview article" })).toBeNull();
     expect(screen.getByText("article")).toBeTruthy();
   });
 

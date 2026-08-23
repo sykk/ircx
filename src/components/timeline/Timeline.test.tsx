@@ -1932,7 +1932,7 @@ describe("Timeline", () => {
     render(<Timeline view={TEST_VIEW} />);
 
     expect(screen.getByText("burp-req.png")).toBeTruthy();
-    expect(screen.getByText("fetch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Preview burp-req.png" })).toBeTruthy();
     expect(document.querySelector("img")).toBe(null);
   });
 });

@@ -386,6 +386,20 @@ describe("Timeline", () => {
     expect(row.textContent).toContain("<b>not a tag</b>");
   });
 
+  it("conceals spoilers until they are revealed", () => {
+    seed([makeMessage({ id: "a", nick: "phrack", text: "the answer is ||sable **wins**||" })]);
+    render(<Timeline view={TEST_VIEW} />);
+
+    const reveal = screen.getByRole("button", { name: "Reveal spoiler" });
+    expect(reveal.textContent).toBe("sable wins");
+    expect(reveal.querySelector("strong")).toBeNull();
+
+    fireEvent.click(reveal);
+
+    expect(screen.queryByRole("button", { name: "Reveal spoiler" })).toBeNull();
+    expect(screen.getByText("wins").tagName).toBe("STRONG");
+  });
+
   it("digests a burst of joins and parts into one line, expandable in place", () => {
     const base = Date.parse("2026-07-29T02:00:00.000Z");
     seed(

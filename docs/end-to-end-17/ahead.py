@@ -24,8 +24,8 @@ is the oldest thing it holds, and the wire says that without one:
   - **repeat** — two asks naming one msgid, which is the `#487` guard not
     firing and the shape #496 predicted.
 
-`TIMELINE_CAP` is 10,000 and no walk here holds a tenth of that, so a window
-that trimmed its own oldest row cannot be what puts an ask ahead.
+No walk here gets close to `TIMELINE_CAP`, so a window that trimmed its own
+oldest row cannot be what puts an ask ahead.
 
 The comparison is against what had been delivered **when the ask went out**,
 and getting that wrong is not a subtle error. Resolving each ask against the

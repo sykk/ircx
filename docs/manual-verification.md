@@ -761,8 +761,8 @@ test reaches.
   `SystemMessage.tsx` maps every folded message with no cap and no
   virtualisation, so this was the plausible way to reach the unscrollable
   channel that the fold exists to prevent. Worth knowing what bounds it: a
-  timeline holds `TIMELINE_CAP` messages, so 10,000 is the worst a digest can
-  be, and this walked between a fifth and a third of that. Observed rather than
+  timeline holds `TIMELINE_CAP` messages, so 4,000 is the worst a digest can
+  be, and this walked between half and nearly all of that. Observed rather than
   timed, on a debug build — which is the slow direction, so a release build is
   no worse.
 
@@ -3397,7 +3397,7 @@ What that leaves:
   staged in `Timeline.test.tsx` rather than on a socket. The route to it live is
   a `CHATHISTORY` batch landing behind a message that arrived while it was in
   flight, which is a race a walk would have to win rather than ask for.
-- **The window at its cap.** The other half of #484 needs 10,000 messages held
+- **The window at its cap.** The other half of #484 needs 4,000 messages held
   and the reader scrolled back inside them. 250 is what this run flooded.
 - **A notch is about 69 px here**, not the third of a message the skill's note
   suggests, so 78 of them put the reader at the top of the history rather than

@@ -654,6 +654,7 @@ describe("Timeline", () => {
     await waitFor(() =>
       expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
     );
+    await paintFrame();
 
     expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
     await waitFor(() => {

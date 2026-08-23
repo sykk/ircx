@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeChannel, makeNetwork, resetStore, seedStore } from "@/components/shell/fixtures";
 import { catalogue } from "@/lib/theme";
@@ -57,8 +57,9 @@ describe("the settings dialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("draws the section it was opened on", () => {
+  it("draws the section it was opened on", async () => {
     open("privacy");
+    await act(async () => {});
 
     expect(screen.getByRole("tab", { name: "Privacy" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Privacy", level: 2 })).toBeTruthy();
@@ -67,10 +68,12 @@ describe("the settings dialog", () => {
   /** The section is the store's, not the component's: reopening from the
    * palette lands on a section, and a copy held in component state would be a
    * second answer to which one. */
-  it("moves the store when a section is chosen", () => {
+  it("moves the store when a section is chosen", async () => {
     open();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Uploads" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Uploads" }));
+    });
 
     expect(store().settings).toBe("uploads");
     expect(screen.getByRole("heading", { name: "Uploads", level: 2 })).toBeTruthy();
@@ -123,8 +126,9 @@ describe("the settings dialog", () => {
   /** Privacy and Notifications are both asked about "this conversation". The
    * dialog is over the window that has one, so it reads it out of the store
    * rather than being handed it. */
-  it("scopes its pages to the conversation behind it", () => {
+  it("scopes its pages to the conversation behind it", async () => {
     open("privacy");
+    await act(async () => {});
 
     expect(screen.getByRole("button", { name: "Delete #ctf-ops" })).toBeTruthy();
   });

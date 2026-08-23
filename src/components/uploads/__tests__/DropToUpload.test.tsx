@@ -222,7 +222,9 @@ describe("an address that will not open", () => {
     render(<DropToUpload />);
     drop(["/home/sable/photo.png"]);
     await screen.findByText("files.example.com");
-    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    });
   }
 
   it("is not sent, and says why", async () => {

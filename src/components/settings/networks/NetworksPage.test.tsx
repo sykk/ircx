@@ -128,18 +128,22 @@ describe("the list of networks", () => {
     expect(removeNetwork).toHaveBeenCalledWith("libera");
   });
 
-  it("opens the form on the network whose row was used", () => {
+  it("opens the form on the network whose row was used", async () => {
     page();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings for Libera.Chat" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Settings for Libera.Chat" }));
+    });
 
     expect(store().setup).toEqual({ network: "libera" });
   });
 
-  it("opens a blank form for Add", () => {
+  it("opens a blank form for Add", async () => {
     page();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add a network" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add a network" }));
+    });
 
     expect(store().setup).toEqual({ network: null });
   });
@@ -153,8 +157,9 @@ describe("the list of networks", () => {
 });
 
 describe("the form", () => {
-  it("offers every setup path for a network that does not exist yet", () => {
+  it("offers every setup path for a network that does not exist yet", async () => {
     open(null);
+    await act(async () => {});
 
     expect(screen.getByRole("button", { name: /Connect through Soju/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect through ZNC/ })).toBeTruthy();
@@ -271,8 +276,9 @@ describe("the form", () => {
       expect(store().setup).toBeNull();
     });
 
-    it("offers nothing to remove while a network is being added", () => {
+    it("offers nothing to remove while a network is being added", async () => {
       open(null);
+      await act(async () => {});
       expect(screen.queryByRole("button", { name: "Remove this network" })).toBeNull();
     });
   });

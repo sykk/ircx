@@ -2230,6 +2230,46 @@ mod archive_controls {
         assert!(lines[2].contains("a private word"));
     }
 
+    #[test]
+    fn one_network_exports_only_its_conversations() {
+        let store = stocked();
+        let mut elsewhere = message("d", "#other", "2026-07-31T09:03:00Z", "not this network");
+        elsewhere.network = "oftc".into();
+        store.append_messages(&[elsewhere]).unwrap();
+
+        let mut out = Vec::new();
+        store.export_network("libera", &mut out).unwrap();
+
+        let export = String::from_utf8(out).unwrap();
+        assert!(export.contains("morning"));
+        assert!(export.contains("a private word"));
+        assert!(!export.contains("not this network"));
+    }
+
+    #[test]
+    fn deleting_one_network_leaves_the_other_network() {
+        let store = stocked();
+        let mut elsewhere = message("d", "#other", "2026-07-31T09:03:00Z", "still here");
+        elsewhere.network = "oftc".into();
+        store.append_messages(&[elsewhere]).unwrap();
+
+        store.delete_network_archive("libera").unwrap();
+
+        assert_eq!(store.archive_size().unwrap().messages, 1);
+        let hits = store
+            .search(&SearchRequest {
+                query: "still here".into(),
+                network: None,
+                target: None,
+                sender: None,
+                after: None,
+                limit: 20,
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].message.network, "oftc");
+    }
+
     /// Somebody clearing what was said is not asking to be logged out.
     #[test]
     fn deleting_everything_keeps_the_networks() {

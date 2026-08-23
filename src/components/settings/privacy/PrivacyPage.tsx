@@ -228,6 +228,16 @@ export function PrivacyPage({
                   Export {target}
                 </SecondaryButton>
               )}
+              {network !== null && (
+                <SecondaryButton
+                  onClick={() =>
+                    void exportTo({ type: "network", network }, `${network}.jsonl`)
+                  }
+                  disabled={busy}
+                >
+                  Export {networkName ?? network}
+                </SecondaryButton>
+              )}
               <SecondaryButton
                 onClick={() => void exportTo({ type: "everything" }, "ircx-archive.jsonl")}
                 disabled={busy}
@@ -251,6 +261,19 @@ export function PrivacyPage({
                     disabled={busy}
                   >
                     Delete {target}
+                  </SecondaryButton>
+                )}
+                {network !== null && (
+                  <SecondaryButton
+                    onClick={() =>
+                      setPending({
+                        scope: { type: "network", network },
+                        what: networkName ?? network,
+                      })
+                    }
+                    disabled={busy}
+                  >
+                    Delete {networkName ?? network}
                   </SecondaryButton>
                 )}
                 <SecondaryButton
@@ -314,4 +337,3 @@ export function nowKeeping(days: string): string {
   if (days === "") return "Kept forever. Nothing is removed until this changes.";
   return `Kept for ${days} days. Messages past that go on the next launch.`;
 }
-

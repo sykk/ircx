@@ -3,4 +3,4 @@
 /**
  * What an export or a delete applies to.
  */
-export type ArchiveScope = { "type": "conversation", network: string, target: string, } | { "type": "everything" };
+export type ArchiveScope = { "type": "conversation", network: string, target: string, } | { "type": "network", network: string, } | { "type": "everything" };

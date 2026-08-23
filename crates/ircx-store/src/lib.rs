@@ -1275,8 +1275,8 @@ impl Store {
         take_what_messages_owned(
             &tx,
             &format!(
-                "SELECT e.network, e.server_msgid FROM messages e
-                  WHERE e.id IN ({EXPIRED}) AND e.server_msgid IS NOT NULL"
+                "SELECT e.network, e.server_msgid, e.message_id FROM messages e
+                  WHERE e.id IN ({EXPIRED})"
             ),
             [],
         )?;
@@ -1404,9 +1404,8 @@ impl Store {
         let tx = conn.transaction()?;
         take_what_messages_owned(
             &tx,
-            "SELECT network, server_msgid FROM messages
-              WHERE network = ?1 AND target = ?2 COLLATE NOCASE
-                AND server_msgid IS NOT NULL",
+            "SELECT network, server_msgid, message_id FROM messages
+              WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
         )?;
         tx.execute(
@@ -1427,8 +1426,8 @@ impl Store {
         let tx = conn.transaction()?;
         take_what_messages_owned(
             &tx,
-            "SELECT network, server_msgid FROM messages
-              WHERE network = ?1 AND server_msgid IS NOT NULL",
+            "SELECT network, server_msgid, message_id FROM messages
+              WHERE network = ?1",
             params![network],
         )?;
         tx.execute("DELETE FROM messages WHERE network = ?1", params![network])?;
@@ -1440,20 +1439,33 @@ impl Store {
 }
 
 /// Takes the reactions, annotations and raised marks of the messages `owned`
-/// selects, before those messages go. Only rows a doomed message actually
-/// claims: one still waiting for a message that never arrived is a different
-/// thing — arrival-before-archive is why these tables have no foreign key —
-/// and it keeps waiting. What this stops is who-reacted-with-what and a
-/// plugin's paraphrase of a message outliving the message a retention window
-/// or a deletion was asked to remove.
+/// selects, before those messages go. A reaction names the server's msgid;
+/// annotations and raises name the id the window drew, which stays local when
+/// an echo later adds a server msgid. One still waiting for a message that never
+/// arrived keeps waiting — arrival-before-archive is why these tables have no
+/// foreign key.
 fn take_what_messages_owned(
     tx: &rusqlite::Transaction,
     owned: &str,
     params: impl rusqlite::Params + Clone,
 ) -> Result<(), StoreError> {
-    for table in ["reactions", "annotations", "raised"] {
+    tx.execute(
+        &format!(
+            "WITH owned(network, server_msgid, message_id) AS ({owned})
+             DELETE FROM reactions WHERE (network, msgid) IN (
+                 SELECT network, server_msgid FROM owned WHERE server_msgid IS NOT NULL
+             )"
+        ),
+        params.clone(),
+    )?;
+    for table in ["annotations", "raised"] {
         tx.execute(
-            &format!("DELETE FROM {table} WHERE (network, msgid) IN ({owned})"),
+            &format!(
+                "WITH owned(network, server_msgid, message_id) AS ({owned})
+                 DELETE FROM {table} WHERE (network, msgid) IN (
+                     SELECT network, message_id FROM owned
+                 )"
+            ),
             params.clone(),
         )?;
     }

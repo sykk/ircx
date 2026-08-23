@@ -173,20 +173,18 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       return;
     }
     setError(null);
+    const signing = draft.kind === "s3";
+    if (signing && draft.accessKeyId.trim() === "") {
+      setError("An access key id is needed to sign the request.");
+      return;
+    }
+    const asForm = !signing && draft.shape === "form";
+    if (asForm && draft.fileField.trim() === "") {
+      setError("A form upload needs the name of the field the file goes in.");
+      return;
+    }
     setBusy(true);
     try {
-      const signing = draft.kind === "s3";
-      if (signing && draft.accessKeyId.trim() === "") {
-        setError("An access key id is needed to sign the request.");
-        setBusy(false);
-        return;
-      }
-      const asForm = !signing && draft.shape === "form";
-      if (asForm && draft.fileField.trim() === "") {
-        setError("A form upload needs the name of the field the file goes in.");
-        setBusy(false);
-        return;
-      }
       await ipc.saveUploadProvider({
         endpoint,
         // A signature covers the method, so a signed upload is a PUT and the
@@ -212,6 +210,7 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       setSaid("Saved.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be saved."));
+    } finally {
       setBusy(false);
     }
   }
@@ -228,6 +227,7 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       setSaid("Removed. ircx will send no files until a provider is set.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be removed."));
+    } finally {
       setBusy(false);
     }
   }

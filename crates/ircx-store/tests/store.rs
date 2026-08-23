@@ -908,6 +908,13 @@ mod what_a_deleted_message_owned {
         held.into_iter().next().unwrap()
     }
 
+    fn mark_by_local_id(store: &Store, message: &ChatMessage) {
+        store
+            .set_annotation("libera", &message.id, "translator", "a paraphrase")
+            .unwrap();
+        store.set_raised("libera", &message.id, "urgency").unwrap();
+    }
+
     #[test]
     fn goes_with_a_deleted_conversation() {
         let store = Store::open_in_memory().unwrap();
@@ -963,6 +970,59 @@ mod what_a_deleted_message_owned {
 
         let read = archived_again(&store, &old);
         assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+    }
+
+    #[test]
+    fn local_id_marks_go_with_a_deleted_conversation() {
+        let store = Store::open_in_memory().unwrap();
+        let message = message("local-1", "#ircx", "2026-01-01T00:00:00Z", "hello");
+        store
+            .append_messages(std::slice::from_ref(&message))
+            .unwrap();
+        mark_by_local_id(&store, &message);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        let read = archived_again(&store, &message);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
+    }
+
+    #[test]
+    fn local_id_marks_go_with_a_retention_expiry() {
+        let store = Store::open_in_memory().unwrap();
+        let old = message("local-1", "#ircx", ANCIENT, "hello");
+        store.append_messages(std::slice::from_ref(&old)).unwrap();
+        mark_by_local_id(&store, &old);
+        store.set_retention("libera", None, Some(30)).unwrap();
+
+        assert_eq!(store.prune().unwrap(), 1);
+
+        let read = archived_again(&store, &old);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
+    }
+
+    #[test]
+    fn confirmed_self_message_cleans_both_local_and_server_keys() {
+        let store = Store::open_in_memory().unwrap();
+        let mut message = message("local-1", "#ircx", "2026-01-01T00:00:00Z", "hello");
+        message.sender.is_self = true;
+        message.tags.push(("msgid".into(), Some("server-1".into())));
+        store
+            .append_messages(std::slice::from_ref(&message))
+            .unwrap();
+        store
+            .set_reaction("libera", "server-1", "nick2", "lol", true)
+            .unwrap();
+        mark_by_local_id(&store, &message);
+
+        store.delete_target("libera", "#ircx").unwrap();
+
+        let read = archived_again(&store, &message);
+        assert!(read.reactions.is_empty(), "{:?}", read.reactions);
+        assert!(read.annotations.is_empty(), "{:?}", read.annotations);
+        assert!(read.raised_by.is_empty(), "{:?}", read.raised_by);
     }
 
     #[test]

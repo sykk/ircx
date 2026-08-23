@@ -3,6 +3,7 @@ import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { isTextEntry } from "@/lib/keybindings";
 import { useAppStore } from "@/store";
 import { AppearancePage } from "./appearance/AppearancePage";
+import { DiagnosticsPage } from "./diagnostics/DiagnosticsPage";
 import { PluginsPage } from "./plugins/PluginsPage";
 import { NetworksPage } from "./networks/NetworksPage";
 import { NotificationsPage } from "./notifications/NotificationsPage";
@@ -102,6 +103,7 @@ function Dialog({ section }: { section: SectionId }) {
           {section === "uploads" && <UploadsPage onDone={close} />}
           {section === "privacy" && <PrivacyPage here={scope} onDone={close} />}
           {section === "plugins" && <PluginsPage onDone={close} />}
+          {section === "diagnostics" && <DiagnosticsPage onDone={close} />}
           {section === "networks" && <NetworksPage onDone={close} />}
         </main>
       </div>

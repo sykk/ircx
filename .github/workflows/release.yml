@@ -75,5 +75,5 @@ jobs:
           generateReleaseNotes: true
           releaseDraft: true
           prerelease: true
-          uploadUpdaterJson: false
+          includeUpdaterJson: false
           args: ${{ matrix.args }}

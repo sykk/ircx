@@ -457,6 +457,8 @@ pub enum ArchiveScope {
         network: NetworkId,
         target: TargetName,
     },
+    /// Every conversation kept for one network.
+    Network { network: NetworkId },
     /// Every message this client has kept. Networks and credentials stay:
     /// clearing what was said is not asking to be logged out.
     Everything,

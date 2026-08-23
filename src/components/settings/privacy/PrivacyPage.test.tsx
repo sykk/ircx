@@ -192,6 +192,33 @@ describe("the privacy page", () => {
     );
   });
 
+  it("can delete one network without deleting the whole archive", async () => {
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Delete Libera.Chat"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByText("Delete"));
+
+    await waitFor(() =>
+      expect(deleteArchive).toHaveBeenCalledWith({ type: "network", network: "libera" }),
+    );
+  });
+
+  it("can export one network", async () => {
+    save.mockResolvedValue("/tmp/libera.jsonl");
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Export Libera.Chat"));
+
+    await waitFor(() =>
+      expect(exportArchive).toHaveBeenCalledWith(
+        { type: "network", network: "libera" },
+        "/tmp/libera.jsonl",
+      ),
+    );
+  });
+
   /** A file dialog nobody answers writes nothing. */
   it("writes nothing when the save dialog is dismissed", async () => {
     render_();

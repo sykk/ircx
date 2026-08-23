@@ -1314,6 +1314,29 @@ impl Store {
         Ok(())
     }
 
+    /// Every conversation on one network, oldest first.
+    pub fn export_network(&self, network: &str, out: &mut dyn Write) -> Result<(), StoreError> {
+        let sql = format!(
+            "SELECT {columns}
+             FROM messages m
+             WHERE m.network = ?1
+             ORDER BY m.timestamp, m.id",
+            columns = message::COLUMNS,
+        );
+
+        let conn = self.walking();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![network])?;
+        while let Some(row) = rows.next()? {
+            let mut message = message::from_row(row)?;
+            message::attach_reactions(&conn, std::slice::from_mut(&mut message))?;
+            let line = serde_json::to_string(&message)?;
+            out.write_all(line.as_bytes())?;
+            out.write_all(b"\n")?;
+        }
+        Ok(())
+    }
+
     /// How much conversation is on disk: how many messages, and what the
     /// database costs to keep.
     ///
@@ -1394,6 +1417,21 @@ impl Store {
             "DELETE FROM drafts WHERE network = ?1 AND target = ?2 COLLATE NOCASE",
             params![network, target],
         )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_network_archive(&self, network: &str) -> Result<(), StoreError> {
+        let mut conn = self.writing();
+        let tx = conn.transaction()?;
+        take_what_messages_owned(
+            &tx,
+            "SELECT network, server_msgid FROM messages
+              WHERE network = ?1 AND server_msgid IS NOT NULL",
+            params![network],
+        )?;
+        tx.execute("DELETE FROM messages WHERE network = ?1", params![network])?;
+        tx.execute("DELETE FROM drafts WHERE network = ?1", params![network])?;
         tx.commit()?;
         Ok(())
     }

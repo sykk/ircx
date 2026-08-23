@@ -560,6 +560,9 @@ fn write_export(store: &Store, scope: &ArchiveScope, path: &str) -> Result<u64, 
         ArchiveScope::Conversation { network, target } => store
             .export_target(network, target, &mut out)
             .map_err(|error| gave_up(path, error))?,
+        ArchiveScope::Network { network } => store
+            .export_network(network, &mut out)
+            .map_err(|error| gave_up(path, error))?,
         ArchiveScope::Everything => store
             .export_everything(&mut out)
             .map_err(|error| gave_up(path, error))?,
@@ -635,6 +638,9 @@ pub async fn delete_archive(app: State<'_, App>, scope: ArchiveScope) -> Result<
     match &scope {
         ArchiveScope::Conversation { network, target } => {
             store.delete_target(network, target).map_err(describe)
+        }
+        ArchiveScope::Network { network } => {
+            store.delete_network_archive(network).map_err(describe)
         }
         ArchiveScope::Everything => store.delete_everything().map_err(describe),
     }

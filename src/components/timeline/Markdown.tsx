@@ -285,5 +285,29 @@ function renderSpan(span: Span, highlight: HighlightRule | null) {
           <Spans spans={span.spans} highlight={highlight} />
         </s>
       );
+    case "spoiler":
+      return <Spoiler spans={span.spans} highlight={highlight} />;
   }
+}
+
+function Spoiler({ spans, highlight }: { spans: Span[]; highlight: HighlightRule | null }) {
+  const [revealed, setRevealed] = useState(false);
+  if (revealed) {
+    return (
+      <span className="rounded-[var(--radius-sm)] bg-[var(--surface-raised)] px-1">
+        <Spans spans={spans} highlight={highlight} />
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Reveal spoiler"
+      onClick={() => setRevealed(true)}
+      className="rounded-[var(--radius-sm)] bg-[var(--text-muted)] px-1 text-[var(--text-muted)] hover:bg-[var(--text-secondary)] hover:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+    >
+      {spansText(spans)}
+    </button>
+  );
 }

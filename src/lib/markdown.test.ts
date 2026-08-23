@@ -22,13 +22,16 @@ describe("parseSpans", () => {
     expect(parseSpans("no markup here")).toEqual([{ type: "text", text: "no markup here" }]);
   });
 
-  it("reads bold, italic, strike and inline code", () => {
+  it("reads bold, italic, strike, spoiler and inline code", () => {
     expect(parseSpans("**b**")).toEqual([
       { type: "strong", spans: [{ type: "text", text: "b" }] },
     ]);
     expect(parseSpans("*i*")).toEqual([{ type: "em", spans: [{ type: "text", text: "i" }] }]);
     expect(parseSpans("~~s~~")).toEqual([
       { type: "strike", spans: [{ type: "text", text: "s" }] },
+    ]);
+    expect(parseSpans("||hidden||")).toEqual([
+      { type: "spoiler", spans: [{ type: "text", text: "hidden" }] },
     ]);
     expect(parseSpans("`c`")).toEqual([{ type: "code", text: "c" }]);
   });
@@ -45,12 +48,16 @@ describe("parseSpans", () => {
       },
     ]);
     expect(parseSpans("`**not bold**`")).toEqual([{ type: "code", text: "**not bold**" }]);
+    expect(parseSpans("`||not hidden||`")).toEqual([
+      { type: "code", text: "||not hidden||" },
+    ]);
   });
 
   it("keeps an unmatched marker as literal text", () => {
     expect(parseSpans("2 * 3 * 4")).toEqual([{ type: "text", text: "2 * 3 * 4" }]);
     expect(parseSpans("**unclosed")).toEqual([{ type: "text", text: "**unclosed" }]);
     expect(parseSpans("a ` tick")).toEqual([{ type: "text", text: "a ` tick" }]);
+    expect(parseSpans("||unclosed")).toEqual([{ type: "text", text: "||unclosed" }]);
   });
 
   it("leaves snake_case alone", () => {
@@ -63,8 +70,8 @@ describe("parseSpans", () => {
   });
 
   it("does not lose characters", () => {
-    const source = "**a** _b_ ~~c~~ `d` plain */ 3_4";
-    expect(text(parseSpans(source))).toBe("a b c d plain */ 3_4");
+    const source = "**a** _b_ ~~c~~ ||d|| `e` plain */ 3_4";
+    expect(text(parseSpans(source))).toBe("a b c d e plain */ 3_4");
   });
 });
 

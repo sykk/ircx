@@ -1,7 +1,8 @@
 /**
- * The subset of Markdown a chat line can carry: bold, italic, strike, inline
- * code and fenced code. Parsing stops at an AST; nothing here produces HTML,
- * because message text arrives from the network and never reaches innerHTML.
+ * The subset of Markdown a chat line can carry: bold, italic, strike, spoiler,
+ * inline code and fenced code. Parsing stops at an AST; nothing here produces
+ * HTML, because message text arrives from the network and never reaches
+ * innerHTML.
  */
 
 export type Span =
@@ -10,6 +11,7 @@ export type Span =
   | { type: "strong"; spans: Span[] }
   | { type: "em"; spans: Span[] }
   | { type: "strike"; spans: Span[] }
+  | { type: "spoiler"; spans: Span[] }
   /** A bare URL, written out in full. There is no form where the text differs
    * from the destination: that is how a reader is made to click something they
    * did not intend, and in a message from a stranger the destination is the
@@ -157,6 +159,7 @@ function matchAt(
 
   if (text.startsWith("**", i)) return delimited(text, i, "**", "strong", urls);
   if (text.startsWith("~~", i)) return delimited(text, i, "~~", "strike", urls);
+  if (text.startsWith("||", i)) return delimited(text, i, "||", "spoiler", urls);
   if (ch === "*") return delimited(text, i, "*", "em", urls);
   if (ch === "_" && isWordEdge(text[i - 1])) {
     const found = delimited(text, i, "_", "em", urls);
@@ -176,7 +179,7 @@ function delimited(
   text: string,
   i: number,
   marker: string,
-  type: "strong" | "em" | "strike",
+  type: "strong" | "em" | "strike" | "spoiler",
   urls: readonly string[],
 ): { span: Span; end: number } | null {
   const from = i + marker.length;

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Ipc from "@/lib/ipc";
 import { emptyDraft, type Draft } from "../config";
@@ -124,8 +124,9 @@ describe("choosing SASL EXTERNAL", () => {
     expect(screen.getByText(/EXTERNAL logs in with a certificate/)).toBeTruthy();
   });
 
-  it("submits once one has been", () => {
+  it("submits once one has been", async () => {
     form({ mechanism: "EXTERNAL", clientCertificate: "/home/sable/.irc/libera.pem" });
+    await act(async () => {});
 
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 

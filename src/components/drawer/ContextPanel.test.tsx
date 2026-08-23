@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { TEST_VIEW, oneView, resetStore } from "@/components/shell/fixtures";
@@ -211,7 +211,9 @@ describe("filtering the roster", () => {
   it("does not follow the pane into another channel", () => {
     fireEvent.keyDown(roster(), { key: "r" });
 
-    useAppStore.getState().showTarget({ network: "libera", target: "#hackint" });
+    act(() => {
+      useAppStore.getState().showTarget({ network: "libera", target: "#hackint" });
+    });
 
     // Asserted, so that a `showTarget` that stopped moving this pane could not
     // leave the line below passing for a filter nothing had cleared.

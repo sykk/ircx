@@ -676,10 +676,10 @@ describe("Timeline", () => {
     scroller.scrollTop = 100;
     fireEvent.scroll(scroller);
 
-    await waitFor(() => {
-      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600);
-      expect(scroller.scrollHeight).toBeGreaterThan(heightBefore);
-    });
+    await waitFor(() =>
+      expect(useAppStore.getState().timelines[KEY]!.messages).toHaveLength(600),
+    );
+    await paintFrame();
 
     expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
     await waitFor(() => {

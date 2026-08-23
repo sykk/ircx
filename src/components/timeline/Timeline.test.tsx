@@ -656,9 +656,11 @@ describe("Timeline", () => {
     );
 
     expect(ipcMock.loadHistory).toHaveBeenCalledTimes(1);
-    const grew = scroller.scrollHeight - heightBefore;
-    expect(grew).toBeGreaterThan(0);
-    expect(scroller.scrollTop).toBe(100 + grew);
+    await waitFor(() => {
+      const grew = scroller.scrollHeight - heightBefore;
+      expect(grew).toBeGreaterThan(0);
+      expect(scroller.scrollTop).toBe(100 + grew);
+    });
   });
 
   /**

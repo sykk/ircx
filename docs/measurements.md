@@ -371,6 +371,13 @@ The 2.5 MiB the Rust side takes is worth reading against the 7.2 MiB that
 differently and quoted below: that harness held every message with no window to
 draw them, and this one is the whole backend of a running client.
 
+**The current 4,000-message cap is chosen from this run, not measured in a new
+one.** The largest burst manually drawn in WebKit was roughly 3,800 messages,
+so 4,000 keeps it with one 200-message archive page of room. Applying the two
+measured rates — 11.2 KiB below and 13.1 KiB here — puts that window at roughly
+44–51 MiB per conversation, against 109–128 MiB for 10,000. Those ranges are
+arithmetic projections, not another `smaps_rollup` result.
+
 **Covers:** `npm run tauri build` — see below, it is not the same as
 `cargo build --release` — driven by `.claude/skills/run-ircx/window.mjs
 --release` on `Xvfb`, connected to a local `ergo`, one channel, the flood paced

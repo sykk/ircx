@@ -168,6 +168,8 @@ export const ipc = {
     invoke<SearchHit[]>("list_bookmarks", { network, target, limit }),
   setBookmark: (network: string, target: string, messageId: string, active: boolean) =>
     invoke<void>("set_bookmark", { network, target, messageId, active }),
+  setBookmarkNote: (network: string, target: string, messageId: string, note: string) =>
+    invoke<void>("set_bookmark_note", { network, target, messageId, note }),
   markRead: (network: string, target: string) =>
     invoke<void>("mark_read", { network, target }),
   /** Silent for anything that is not a conversation. A typing notification is a

@@ -240,6 +240,25 @@ pub async fn set_bookmark(
 }
 
 #[tauri::command]
+pub async fn set_bookmark_note(
+    app: State<'_, App>,
+    network: NetworkId,
+    target: TargetName,
+    message_id: String,
+    note: String,
+) -> Result<(), String> {
+    if app
+        .store()
+        .set_bookmark_note(&network, &target, &message_id, note.trim())
+        .map_err(describe)?
+    {
+        Ok(())
+    } else {
+        Err("That bookmark is no longer in local history.".into())
+    }
+}
+
+#[tauri::command]
 pub async fn mark_read(
     app: State<'_, App>,
     network: NetworkId,

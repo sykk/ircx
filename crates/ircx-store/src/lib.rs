@@ -637,7 +637,7 @@ impl Store {
         limit: u32,
     ) -> Result<Vec<SearchHit>, StoreError> {
         let sql = format!(
-            "SELECT {columns}, m.text FROM bookmarks b
+            "SELECT {columns}, m.text, b.note FROM bookmarks b
              JOIN messages m ON m.id = b.message
              WHERE (?1 IS NULL OR m.network = ?1)
                AND (?2 IS NULL OR m.target = ?2 COLLATE NOCASE)
@@ -649,16 +649,40 @@ impl Store {
         let mut rows = stmt.query(params![network, target, limit])?;
         let mut messages = Vec::new();
         let mut snippets = Vec::new();
+        let mut notes = Vec::new();
         while let Some(row) = rows.next()? {
             messages.push(message::from_row(row)?);
             snippets.push(row.get(message::COLUMN_COUNT)?);
+            notes.push(row.get::<_, String>(message::COLUMN_COUNT + 1)?);
         }
         message::attach_reactions(&conn, &mut messages)?;
         Ok(messages
             .into_iter()
             .zip(snippets)
-            .map(|(message, snippet)| SearchHit { message, snippet })
+            .zip(notes)
+            .map(|((message, snippet), note)| SearchHit {
+                message,
+                snippet,
+                note: (!note.is_empty()).then_some(note),
+            })
             .collect())
+    }
+
+    pub fn set_bookmark_note(
+        &self,
+        network: &str,
+        target: &str,
+        message_id: &str,
+        note: &str,
+    ) -> Result<bool, StoreError> {
+        let changed = self.writing().execute(
+            "UPDATE bookmarks SET note = ?4 WHERE message IN (
+                 SELECT id FROM messages
+                 WHERE network = ?1 AND target = ?2 COLLATE NOCASE AND message_id = ?3
+             )",
+            params![network, target, message_id, note],
+        )?;
+        Ok(changed > 0)
     }
 
     /// One of the two FTS tables, asked the same question. The table name is
@@ -707,7 +731,11 @@ impl Store {
         Ok(found
             .into_iter()
             .zip(snippets)
-            .map(|(message, snippet)| SearchHit { message, snippet })
+            .map(|(message, snippet)| SearchHit {
+                message,
+                snippet,
+                note: None,
+            })
             .collect())
     }
 
@@ -763,7 +791,11 @@ impl Store {
             .into_iter()
             .map(|message| {
                 let snippet = around_match(&message.text, terms[0]);
-                SearchHit { message, snippet }
+                SearchHit {
+                    message,
+                    snippet,
+                    note: None,
+                }
             })
             .collect())
     }

@@ -25,7 +25,8 @@ endpoint: string, method: UploadMethod,
 authHeader: string | null, 
 /**
  * Write-only, as the SASL password is: `Some` when the user sets it,
- * always `None` when read back. Carries the secret access key when `s3`
+ * always `None` when read back. An empty value clears the saved secret
+ * when this provider needs none. Carries the secret access key when `s3`
  * is set — it is the provider's one secret either way.
  */
 token: string | null, 

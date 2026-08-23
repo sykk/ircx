@@ -68,12 +68,12 @@ export function Onboarding({
   }
 
   function choosePublic() {
-    setDraft((current) => presetDraft(preset, current));
+    setDraft(presetDraft(preset, emptyDraft()));
     openForm("public");
   }
 
   function chooseManual(next: "server" | "advanced") {
-    setDraft((current) => ({ ...current, name: "", host: "" }));
+    setDraft(emptyDraft());
     openForm(next);
   }
 
@@ -245,7 +245,7 @@ function Chooser({
         />
         <Choice
           title="Connect through ZNC"
-          blurb="Use a network configured in your ZNC account."
+          blurb="Use a network configured in ZNC 1.10 or newer with client SASL enabled."
           onClick={onZnc}
         />
         <Choice

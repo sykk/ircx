@@ -65,6 +65,12 @@ function open(network: string | null) {
   page();
 }
 
+async function settleForm() {
+  await act(async () => {
+    await listNetworkConfigs.mock.results.at(-1)?.value;
+  });
+}
+
 describe("the list of networks", () => {
   it("is what the page opens on", () => {
     store().openSettings("networks");
@@ -128,18 +134,20 @@ describe("the list of networks", () => {
     expect(removeNetwork).toHaveBeenCalledWith("libera");
   });
 
-  it("opens the form on the network whose row was used", () => {
+  it("opens the form on the network whose row was used", async () => {
     page();
 
     fireEvent.click(screen.getByRole("button", { name: "Settings for Libera.Chat" }));
+    await settleForm();
 
     expect(store().setup).toEqual({ network: "libera" });
   });
 
-  it("opens a blank form for Add", () => {
+  it("opens a blank form for Add", async () => {
     page();
 
     fireEvent.click(screen.getByRole("button", { name: "Add a network" }));
+    await settleForm();
 
     expect(store().setup).toEqual({ network: null });
   });
@@ -153,8 +161,9 @@ describe("the list of networks", () => {
 });
 
 describe("the form", () => {
-  it("offers every setup path for a network that does not exist yet", () => {
+  it("offers every setup path for a network that does not exist yet", async () => {
     open(null);
+    await settleForm();
 
     expect(screen.getByRole("button", { name: /Connect through Soju/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect through ZNC/ })).toBeTruthy();
@@ -271,8 +280,9 @@ describe("the form", () => {
       expect(store().setup).toBeNull();
     });
 
-    it("offers nothing to remove while a network is being added", () => {
+    it("offers nothing to remove while a network is being added", async () => {
       open(null);
+      await settleForm();
       expect(screen.queryByRole("button", { name: "Remove this network" })).toBeNull();
     });
   });

@@ -57,10 +57,14 @@ export function BouncerForm({
 
   function changeDetails(patch: Partial<BouncerDetails>) {
     const next = { ...details, ...patch };
+    const username = next.username.trim();
     onDetails(next);
     onChange({
       name: next.network,
-      account: bouncerAccount(next.kind, next.username, next.network, next.device),
+      // ZNC reads the network and client from USER, while SASL PLAIN
+      // authenticates the bare account and rejects the selector in authcid.
+      username: bouncerAccount(next.kind, username, next.network, next.device),
+      account: username,
     });
   }
 

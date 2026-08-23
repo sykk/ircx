@@ -55,6 +55,7 @@ describe("the first screen", () => {
     expect(screen.getByRole("button", { name: /Join a public network/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect through Soju/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect through ZNC/ })).toBeTruthy();
+    expect(screen.getByText(/ZNC 1\.10 or newer/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect to an IRC server/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Advanced setup/ })).toBeTruthy();
   });
@@ -69,7 +70,7 @@ describe("the first screen", () => {
 describe.each([
   ["Soju", "sable/libera@laptop"],
   ["ZNC", "sable@laptop/libera"],
-] as const)("the %s path", (kind, account) => {
+] as const)("the %s path", (kind, username) => {
   beforeEach(() => {
     mount();
     click(new RegExp(`Connect through ${kind}`));
@@ -99,7 +100,8 @@ describe.each([
       port: 6697,
       tls: true,
       nick: "sable",
-      sasl: { mechanism: "PLAIN", account, password: "hunter2" },
+      username,
+      sasl: { mechanism: "PLAIN", account: "sable", password: "hunter2" },
     });
   });
 
@@ -115,6 +117,28 @@ describe.each([
       ]),
     );
     expect(saveNetwork).not.toHaveBeenCalled();
+  });
+});
+
+it("does not carry bouncer credentials into the direct-server path", async () => {
+  mount();
+  click(/Connect through Soju/);
+  type("Bouncer address", "bouncer.example.org");
+  type("Nickname", "sable");
+  type("Bouncer username", "bouncer-user");
+  type("Network", "libera");
+  type("Bouncer password", "bouncer-password");
+
+  click("Back");
+  click(/Connect to an IRC server/);
+  type("Server address", "irc.example.org");
+  type("Nickname", "sable");
+  await connect();
+
+  expect(savedConfig()).toMatchObject({
+    host: "irc.example.org",
+    username: "sable",
+    sasl: null,
   });
 });
 

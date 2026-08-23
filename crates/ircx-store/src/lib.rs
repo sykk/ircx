@@ -526,11 +526,19 @@ impl Store {
     }
 
     /// Replaces the provider. A `token` of `None` leaves whatever is stored
-    /// alone, so saving an endpoint change does not silently drop the
-    /// credential the user cannot see.
+    /// alone; an empty token clears it when the provider needs no credential.
     pub fn save_upload_provider(&self, provider: &UploadProvider) -> Result<(), StoreError> {
-        if let Some(token) = provider.token.as_deref().filter(|t| !t.is_empty()) {
-            self.credentials.set(credentials::UPLOAD_PROVIDER, token)?;
+        match provider.token.as_deref() {
+            Some(token) if !token.is_empty() => {
+                self.credentials.set(credentials::UPLOAD_PROVIDER, token)?;
+            }
+            Some("")
+                if provider.s3.is_none()
+                    && provider.auth_header.as_deref().is_none_or(str::is_empty) =>
+            {
+                self.credentials.delete(credentials::UPLOAD_PROVIDER)?;
+            }
+            _ => {}
         }
         self.writing().execute(
             "INSERT INTO upload_provider

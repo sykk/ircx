@@ -21,7 +21,7 @@
 // project's own config rather than restating it, so a change to the port, the
 // alias or the plugin list is picked up here too.
 import { fileURLToPath } from "node:url";
-import base from "../../../vite.config.ts";
+import base from "../../vite.config.ts";
 import { SEED } from "./seed.mjs";
 
 const STUB = `
@@ -48,7 +48,7 @@ const config = typeof base === "function" ? base({ command: "serve", mode: "deve
 export default {
   ...config,
   configFile: false,
-  root: fileURLToPath(new URL("../../../", import.meta.url)),
+  root: fileURLToPath(new URL("../../", import.meta.url)),
   plugins: [
     ...(config.plugins ?? []),
     {

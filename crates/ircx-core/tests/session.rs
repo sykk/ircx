@@ -2860,9 +2860,8 @@ fn a_rejoin_that_overtakes_its_own_quit_does_not_double_a_member() {
     assert_eq!(members.len(), 3);
 }
 
-/// IRCv3 standard replies. `ircclient.md` lists them among the capabilities to
-/// support, and until now `FAIL`, `WARN` and `NOTE` fell through to a debug
-/// line — a server explaining why something did not work, discarded.
+/// IRCv3 standard replies must reach the user. `FAIL`, `WARN` and `NOTE` once
+/// fell through to a debug line and discarded the server's explanation.
 #[test]
 fn a_standard_reply_reaches_the_user_with_the_server_s_own_words() {
     let mut session = registered("");

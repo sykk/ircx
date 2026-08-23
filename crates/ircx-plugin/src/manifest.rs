@@ -14,8 +14,7 @@ use serde::{Deserialize, Serialize};
 /// become a directory name and a `/word`, so both stay short.
 const MAX_NAME: usize = 48;
 
-/// The seven permissions `ircclient.md` names, plus the two `docs/plugins.md`
-/// adds for the hooks that read on arrival. One variant each.
+/// The nine grants documented in `docs/plugins.md`. One variant each.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Permission {

@@ -410,23 +410,41 @@ const VERBS: Partial<Record<MessageKind, string>> = {
 /**
  * What one of these did, in the words the digest counts by.
  *
- * A mode carries its own: core writes `took ops` rather than `+o`, so two
- * people being handed ops are one clause and somebody losing voice is another.
- * Everything else has a verb per kind.
+ * A mode usually carries its own: core writes `took ops` rather than `+o`, so
+ * two people being handed ops are one clause and somebody losing voice is
+ * another. The outside-channel phrases are shortened because their plural
+ * noun clashes with the count in front of them.
  */
 function presenceVerb(message: ChatMessage): string {
   if (message.kind !== "mode") return VERBS[message.kind] ?? "changed";
-  return message.text.trim() === "" ? "changed the channel" : message.text.trim();
+  const verb = message.text.trim();
+  if (verb === "blocked messages from outside the channel") return "blocked outside";
+  if (verb === "allowed messages from outside the channel") return "allowed outside";
+  return verb === "" ? "changed the channel" : verb;
 }
 
 /** One line of prose for a run of comings and goings: "3 joined, 1 quit". */
 export function describePresence(messages: readonly ChatMessage[]): string {
-  const counts = new Map<string, number>();
+  return summarizePresence(messages)
+    .map(({ verb, count }) => `${count} ${verb}`)
+    .join(", ");
+}
+
+export interface PresenceSummary {
+  kind: MessageKind;
+  verb: string;
+  count: number;
+}
+
+export function summarizePresence(messages: readonly ChatMessage[]): PresenceSummary[] {
+  const counts = new Map<string, PresenceSummary>();
   for (const message of messages) {
     const verb = presenceVerb(message);
-    counts.set(verb, (counts.get(verb) ?? 0) + 1);
+    const current = counts.get(verb);
+    if (current === undefined) counts.set(verb, { kind: message.kind, verb, count: 1 });
+    else current.count += 1;
   }
-  return [...counts].map(([verb, n]) => `${n} ${verb}`).join(", ");
+  return [...counts.values()];
 }
 
 /**

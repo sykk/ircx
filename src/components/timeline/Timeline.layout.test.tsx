@@ -79,9 +79,9 @@ function seedTimelines(timelines: AppState["timelines"]) {
   });
 }
 
-function seed(messages: ChatMessage[]) {
+function seed(messages: ChatMessage[], unreadFrom: string | null = null) {
   seedTimelines({
-    [KEY]: { messages, unreadFrom: null, readMarker: null, hasMore: true, loadingOlder: false, askedBehind: null, detachedAt: null },
+    [KEY]: { messages, unreadFrom, readMarker: null, hasMore: true, loadingOlder: false, askedBehind: null, detachedAt: null },
   });
 }
 
@@ -240,6 +240,34 @@ beforeEach(() => {
 });
 
 describe("a timeline whose rows are the heights it draws", () => {
+  it("places a returning pane at its unread seam after layout is available", () => {
+    const messages = makeConversation({ count: 512, seed: 3 });
+    seed(messages, messages[500]!.id);
+    const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight")!;
+    let laidOut = false;
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.dataset.testid === "timeline-scroller" && !laidOut) return 0;
+        return this.offsetHeight;
+      },
+    });
+
+    try {
+      const { rerender } = render(<Timeline view={TEST_VIEW} />);
+      const scroller = screen.getByTestId("timeline-scroller");
+      expect(scroller.scrollTop).toBe(0);
+
+      laidOut = true;
+      rerender(<Timeline view={TEST_VIEW} />);
+      flushLayout();
+
+      expect(scroller.scrollTop).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeight);
+    }
+  });
+
   it("draws rows the estimate is wrong about, in both directions", () => {
     // The guard on everything below. A model that flattened back to the
     // estimate would leave every assertion in this file true of nothing.

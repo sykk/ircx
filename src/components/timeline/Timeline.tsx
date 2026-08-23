@@ -683,11 +683,28 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   });
 
   const placedAtUnread = useRef(false);
+  // A retargeted pane mounts before it has a height. Keep asking until the
+  // reachable seam offset holds, then leave the scroller to the reader.
   useLayoutEffect(() => {
-    if (placedAtUnread.current || unreadAt === -1 || restoreTo.current !== null) return;
-    placedAtUnread.current = true;
+    const el = scrollRef.current;
+    if (
+      placedAtUnread.current ||
+      unreadAt === -1 ||
+      restoreTo.current !== null ||
+      !el ||
+      el.clientHeight === 0
+    ) {
+      return;
+    }
+    const target = virtualizer.getOffsetForIndex(unreadAt, "start")?.[0];
+    const reachable =
+      target === undefined ? undefined : Math.min(target, el.scrollHeight - el.clientHeight);
+    if (reachable !== undefined && Math.abs(el.scrollTop - reachable) <= 1) {
+      placedAtUnread.current = true;
+      return;
+    }
     virtualizer.scrollToIndex(unreadAt, { align: "start" });
-  }, [unreadAt, virtualizer]);
+  });
 
   useLayoutEffect(() => {
     if (requestedJump === null || !byId.has(requestedJump)) return;

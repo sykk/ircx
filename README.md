@@ -65,6 +65,22 @@ Release build:
 npm run tauri build
 ```
 
+### Release
+
+Keep the version in `Cargo.toml`, `package.json`, and
+`src-tauri/tauri.conf.json` identical. After the version change is on `main`,
+push its tag:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow builds Linux, Windows, Intel macOS, and Apple Silicon
+installers and adds them to a draft GitHub release. Check the artifacts before
+publishing the draft. macOS artifacts use ad-hoc signing until release signing
+credentials are configured.
+
 ## Layout
 
 ```

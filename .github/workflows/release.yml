@@ -1,0 +1,79 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Verify release version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          package="$(node -p "require('./package.json').version")"
+          tauri="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          cargo="$(awk '/^\[workspace.package\]/{workspace=1; next} workspace && /^version = / {gsub(/[" ]/, "", $3); print $3; exit}' Cargo.toml)"
+          for version in "$package" "$tauri" "$cargo"; do
+            if [ "$version" != "$tag" ]; then
+              echo "::error::Tag v$tag does not match application version $version."
+              exit 1
+            fi
+          done
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos-') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./ -> target"
+      - run: npm ci
+      - name: Configure ad-hoc macOS signing
+        if: startsWith(matrix.platform, 'macos-')
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+      - uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ircx ${{ github.ref_name }}
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: true
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }}

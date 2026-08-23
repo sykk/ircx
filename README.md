@@ -1,6 +1,6 @@
 # ircx
 
-A lightweight IRCv3 desktop client. Terminal-inspired, keyboard-driven, and
+An IRCv3 desktop client. Terminal-inspired, keyboard-driven, and
 built to stay fast: Rust core, Tauri 2 shell, React frontend.
 
 Keeps what IRC does well — networks, channels, nicks, `/commands`, raw protocol

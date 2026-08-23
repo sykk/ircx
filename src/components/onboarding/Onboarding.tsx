@@ -8,14 +8,16 @@ import {
   PUBLIC_NETWORKS,
   toConfig,
   type Draft,
+  type BouncerKind,
   type PublicNetwork,
 } from "./config";
+import { BouncerForm, type BouncerDetails } from "./BouncerForm";
 import { Connecting } from "./Connecting";
 import { LinkButton } from "./fields";
 import { PublicNetworkForm } from "./PublicNetworkForm";
 import { ServerForm } from "./ServerForm";
 
-type FormStep = "public" | "server" | "advanced";
+type FormStep = "public" | "bouncer" | "server" | "advanced";
 type Step = FormStep | "choose" | "connect";
 
 const FIRST = PUBLIC_NETWORKS[0] as PublicNetwork;
@@ -41,6 +43,12 @@ export function Onboarding({
   /** Where "Edit settings" goes back to from the connect step. */
   const [form, setForm] = useState<FormStep>(start?.step ?? "public");
   const [preset, setPreset] = useState<PublicNetwork>(FIRST);
+  const [bouncer, setBouncer] = useState<BouncerDetails>({
+    kind: "soju",
+    username: "",
+    network: "",
+    device: "",
+  });
   const [draft, setDraft] = useState<Draft>(
     () => start?.draft ?? presetDraft(FIRST, emptyDraft()),
   );
@@ -67,6 +75,12 @@ export function Onboarding({
   function chooseManual(next: "server" | "advanced") {
     setDraft((current) => ({ ...current, name: "", host: "" }));
     openForm(next);
+  }
+
+  function chooseBouncer(kind: BouncerKind) {
+    setBouncer({ kind, username: "", network: "", device: "" });
+    setDraft({ ...emptyDraft(), mechanism: "PLAIN", password: "" });
+    openForm("bouncer");
   }
 
   function choosePreset(network: PublicNetwork) {
@@ -126,6 +140,8 @@ export function Onboarding({
         {step === "choose" && (
           <Chooser
             onPublic={choosePublic}
+            onSoju={() => chooseBouncer("soju")}
+            onZnc={() => chooseBouncer("znc")}
             onServer={() => chooseManual("server")}
             onAdvanced={() => chooseManual("advanced")}
             onSkip={onDone}
@@ -138,6 +154,20 @@ export function Onboarding({
             preset={preset}
             onChange={change}
             onPreset={choosePreset}
+            onSubmit={submit}
+            onBack={back}
+            onAdvanced={() => openForm("advanced")}
+            busy={busy}
+            error={error}
+          />
+        )}
+
+        {step === "bouncer" && (
+          <BouncerForm
+            draft={draft}
+            details={bouncer}
+            onChange={change}
+            onDetails={setBouncer}
             onSubmit={submit}
             onBack={back}
             onAdvanced={() => openForm("advanced")}
@@ -178,11 +208,15 @@ export function Onboarding({
 
 function Chooser({
   onPublic,
+  onSoju,
+  onZnc,
   onServer,
   onAdvanced,
   onSkip,
 }: {
   onPublic: () => void;
+  onSoju: () => void;
+  onZnc: () => void;
   onServer: () => void;
   onAdvanced: () => void;
   onSkip: () => void;
@@ -203,6 +237,16 @@ function Chooser({
           title="Join a public network"
           blurb="Libera.Chat, OFTC, or Rizon. A nickname is all it needs."
           onClick={onPublic}
+        />
+        <Choice
+          title="Connect through Soju"
+          blurb="Use a network your Soju bouncer keeps online."
+          onClick={onSoju}
+        />
+        <Choice
+          title="Connect through ZNC"
+          blurb="Use a network configured in your ZNC account."
+          onClick={onZnc}
         />
         <Choice
           title="Connect to an IRC server"

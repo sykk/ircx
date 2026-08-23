@@ -4,6 +4,21 @@ import { COMMON_NICK_LIMIT, nicknameProblem } from "./nickname";
 export const TLS_PORT = 6697;
 export const PLAIN_PORT = 6667;
 
+export type BouncerKind = "soju" | "znc";
+
+export function bouncerAccount(
+  kind: BouncerKind,
+  username: string,
+  network: string,
+  device: string,
+): string {
+  const account = username.trim();
+  const selected = network.trim();
+  const client = device.trim();
+  if (kind === "soju") return `${account}/${selected}${client ? `@${client}` : ""}`;
+  return `${account}${client ? `@${client}` : ""}/${selected}`;
+}
+
 export interface PublicNetwork {
   name: string;
   host: string;

@@ -15,6 +15,12 @@ import { useAnnounce } from "@/hooks/useAnnounce";
  * is what storage and self-hosted boxes take; the third sends it in a field,
  * which is what the hosts that ask for no account take. */
 type Shape = "put" | "post" | "form";
+type Setup = "catbox" | "custom";
+
+const SETUPS: { value: Setup; label: string }[] = [
+  { value: "catbox", label: "Catbox — no account" },
+  { value: "custom", label: "Custom provider" },
+];
 
 const SHAPES: { value: Shape; label: string }[] = [
   { value: "put", label: "PUT — the address names the file" },
@@ -74,6 +80,15 @@ const EMPTY: Draft = {
   fields: "",
 };
 
+const CATBOX: Draft = {
+  ...EMPTY,
+  endpoint: "https://catbox.moe/user/api.php",
+  shape: "form",
+  authHeader: "",
+  fileField: "fileToUpload",
+  fields: "reqtype=fileupload",
+};
+
 /** `reqtype=fileupload, time=1h` as the host wants it, in the order it was
  * typed. A pair with no `=` is a name the user has not finished typing, not a
  * field with an empty value, so it waits rather than being sent. */
@@ -103,6 +118,7 @@ function showFields(fields: [string, string][]): string {
  */
 export function UploadsPage({ onDone }: { onDone: () => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [setup, setSetup] = useState<Setup>("custom");
   const [stored, setStored] = useState(false);
   /** What the secret in the keyring is for, and so which draft it answers. */
   const [saved, setSaved] = useState<Kind | null>(null);
@@ -131,6 +147,7 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
         if (!live) return;
         setStored(provider !== null);
         setSaved(provider === null ? null : savedFor(provider));
+        setSetup(provider !== null && isCatbox(provider) ? "catbox" : "custom");
         setDraft(provider === null ? EMPTY : fromProvider(provider));
       },
       (reason: unknown) => {
@@ -206,12 +223,21 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       await ipc.removeUploadProvider();
       setStored(false);
       setSaved(null);
+      setSetup("custom");
       setDraft(EMPTY);
       setSaid("Removed. ircx will send no files until a provider is set.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be removed."));
       setBusy(false);
     }
+  }
+
+  function chooseSetup(next: Setup) {
+    if (next === setup) return;
+    setSetup(next);
+    setDraft(next === "catbox" ? CATBOX : EMPTY);
+    setError(null);
+    setSaid(null);
   }
 
   return (
@@ -232,112 +258,129 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
         </div>
       ) : (
         <div className="flex max-w-[560px] flex-col gap-4">
-
-            <Group title="Where files go">
-              <TextField
-                label="Address"
-                value={draft.endpoint}
-                onChange={(endpoint) => setDraft({ ...draft, endpoint })}
-                placeholder="https://files.example.com/{name}"
-                hint="{name} is replaced with a generated file name. Leave it out if the provider names the file itself."
-              />
-              {/* A signature covers the method, so a signed upload is a PUT
-                  and offering the choice would offer a request nobody can make. */}
-              {draft.kind === "header" && (
-                <SelectField
-                  label="Method"
-                  value={draft.shape}
-                  options={SHAPES}
-                  onChange={(shape) => setDraft({ ...draft, shape })}
-                />
-              )}
-              {draft.kind === "header" && draft.shape === "form" && (
-                <>
-                  <TextField
-                    label="File field"
-                    value={draft.fileField}
-                    onChange={(fileField) => setDraft({ ...draft, fileField })}
-                    placeholder="fileToUpload"
-                    hint="The field the file goes in. `fileToUpload` for catbox and litterbox, `file` for the 0x0.st family."
-                  />
-                  <TextField
-                    optional
-                    label="Other fields"
-                    value={draft.fields}
-                    onChange={(fields) => setDraft({ ...draft, fields })}
-                    placeholder="reqtype=fileupload, time=1h"
-                    hint="Whatever else the host wants told, sent in the order you type them."
-                  />
-                </>
-              )}
-            </Group>
-
-            <Group title="Credential">
-              <SelectField
-                label="Kind"
-                value={draft.kind}
-                options={KINDS}
-                onChange={(kind) => setDraft({ ...draft, kind })}
-              />
-
-              {draft.kind === "header" ? (
-                <TextField
-                  optional
-                  label="Header"
-                  value={draft.authHeader}
-                  onChange={(authHeader) => setDraft({ ...draft, authHeader })}
-                  placeholder="Authorization"
-                  hint="Leave empty for a provider that needs no credential."
-                />
-              ) : (
-                <>
-                  <TextField
-                    label="Access key id"
-                    value={draft.accessKeyId}
-                    onChange={(accessKeyId) => setDraft({ ...draft, accessKeyId })}
-                    placeholder="AKIAIOSFODNN7EXAMPLE"
-                  />
-                  <TextField
-                    label="Region"
-                    value={draft.region}
-                    onChange={(region) => setDraft({ ...draft, region })}
-                    placeholder="us-east-1"
-                    hint="Part of the signature. A provider that ignores regions still needs the one it expects."
-                  />
-                </>
-              )}
-
-              <TextField
-                optional={needs(draft.kind, draft.authHeader) === null}
-                label={draft.kind === "s3" ? "Secret access key" : "Token"}
-                type="password"
-                value={draft.token}
-                onChange={(token) => setDraft({ ...draft, token })}
-                hint={secretHint(needs(draft.kind, draft.authHeader), saved)}
-              />
-            </Group>
-
-            {error !== null && (
-              <p role="alert" className="text-[12px] text-[var(--danger)]">
-                {error}
+          <Group title="Provider">
+            <SelectField
+              label="Setup"
+              value={setup}
+              options={SETUPS}
+              onChange={chooseSetup}
+            />
+            {setup === "catbox" && (
+              <p className="text-[11px] text-[var(--text-muted)]">
+                No account or token. Files are public, retain their metadata, and are intended to
+                stay available indefinitely. Anonymous uploads cannot be deleted from ircx.
               </p>
             )}
+          </Group>
 
-            {said !== null && (
-              <p className="text-[12px] text-[var(--text-muted)]">{said}</p>
+          {setup === "custom" && (
+            <>
+              <Group title="Where files go">
+                <TextField
+                  label="Address"
+                  value={draft.endpoint}
+                  onChange={(endpoint) => setDraft({ ...draft, endpoint })}
+                  placeholder="https://files.example.com/{name}"
+                  hint="{name} is replaced with a generated file name. Leave it out if the provider names the file itself."
+                />
+                {/* A signature covers the method, so a signed upload is a PUT
+                  and offering the choice would offer a request nobody can make. */}
+                {draft.kind === "header" && (
+                  <SelectField
+                    label="Method"
+                    value={draft.shape}
+                    options={SHAPES}
+                    onChange={(shape) => setDraft({ ...draft, shape })}
+                  />
+                )}
+                {draft.kind === "header" && draft.shape === "form" && (
+                  <>
+                    <TextField
+                      label="File field"
+                      value={draft.fileField}
+                      onChange={(fileField) => setDraft({ ...draft, fileField })}
+                      placeholder="fileToUpload"
+                      hint="The field the file goes in. `fileToUpload` for catbox and litterbox, `file` for the 0x0.st family."
+                    />
+                    <TextField
+                      optional
+                      label="Other fields"
+                      value={draft.fields}
+                      onChange={(fields) => setDraft({ ...draft, fields })}
+                      placeholder="reqtype=fileupload, time=1h"
+                      hint="Whatever else the host wants told, sent in the order you type them."
+                    />
+                  </>
+                )}
+              </Group>
+              <Group title="Credential">
+                <SelectField
+                  label="Kind"
+                  value={draft.kind}
+                  options={KINDS}
+                  onChange={(kind) => setDraft({ ...draft, kind })}
+                />
+
+                {draft.kind === "header" ? (
+                  <TextField
+                    optional
+                    label="Header"
+                    value={draft.authHeader}
+                    onChange={(authHeader) => setDraft({ ...draft, authHeader })}
+                    placeholder="Authorization"
+                    hint="Leave empty for a provider that needs no credential."
+                  />
+                ) : (
+                  <>
+                    <TextField
+                      label="Access key id"
+                      value={draft.accessKeyId}
+                      onChange={(accessKeyId) => setDraft({ ...draft, accessKeyId })}
+                      placeholder="AKIAIOSFODNN7EXAMPLE"
+                    />
+                    <TextField
+                      label="Region"
+                      value={draft.region}
+                      onChange={(region) => setDraft({ ...draft, region })}
+                      placeholder="us-east-1"
+                      hint="Part of the signature. A provider that ignores regions still needs the one it expects."
+                    />
+                  </>
+                )}
+
+                <TextField
+                  optional={needs(draft.kind, draft.authHeader) === null}
+                  label={draft.kind === "s3" ? "Secret access key" : "Token"}
+                  type="password"
+                  value={draft.token}
+                  onChange={(token) => setDraft({ ...draft, token })}
+                  hint={secretHint(needs(draft.kind, draft.authHeader), saved)}
+                />
+              </Group>
+            </>
+          )}
+
+          {error !== null && (
+            <p role="alert" className="text-[12px] text-[var(--danger)]">
+              {error}
+            </p>
+          )}
+
+          {said !== null && (
+            <p className="text-[12px] text-[var(--text-muted)]">{said}</p>
+          )}
+
+          <div className="flex items-center gap-2">
+            <PrimaryButton disabled={busy} onClick={() => void save()}>
+              Save
+            </PrimaryButton>
+            {stored && (
+              <span className="ml-auto">
+                <SecondaryButton disabled={busy} onClick={() => void remove()}>
+                  Remove provider
+                </SecondaryButton>
+              </span>
             )}
-
-            <div className="flex items-center gap-2">
-              <PrimaryButton disabled={busy} onClick={() => void save()}>
-                Save
-              </PrimaryButton>
-              {stored && (
-                <span className="ml-auto">
-                  <SecondaryButton disabled={busy} onClick={() => void remove()}>
-                    Remove provider
-                  </SecondaryButton>
-                </span>
-              )}
           </div>
         </div>
       )}
@@ -374,3 +417,12 @@ function fromProvider(provider: UploadProvider): Draft {
   };
 }
 
+function isCatbox(provider: UploadProvider): boolean {
+  return (
+    provider.endpoint === CATBOX.endpoint &&
+    provider.form?.fileField === CATBOX.fileField &&
+    showFields(provider.form?.fields ?? []) === CATBOX.fields &&
+    provider.authHeader === null &&
+    provider.s3 === null
+  );
+}

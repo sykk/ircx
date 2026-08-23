@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NetworkConfig } from "@/types";
 import {
   applyIdentity,
+  bouncerAccount,
   draftOf,
   draftProblems,
   emptyDraft,
@@ -15,6 +16,24 @@ import {
 } from "../config";
 
 const LIBERA = PUBLIC_NETWORKS[0] as (typeof PUBLIC_NETWORKS)[number];
+
+describe("bouncerAccount", () => {
+  it("writes Soju's network before the device", () => {
+    expect(bouncerAccount("soju", "sable", "libera", "laptop")).toBe(
+      "sable/libera@laptop",
+    );
+  });
+
+  it("writes ZNC's device before the network", () => {
+    expect(bouncerAccount("znc", "sable", "libera", "laptop")).toBe(
+      "sable@laptop/libera",
+    );
+  });
+
+  it("leaves out an empty device", () => {
+    expect(bouncerAccount("soju", " sable ", " libera ", " ")).toBe("sable/libera");
+  });
+});
 
 function liberaDraft(patch: Partial<Draft> = {}): Draft {
   return { ...presetDraft(LIBERA, emptyDraft()), nick: "sable", ...patch };

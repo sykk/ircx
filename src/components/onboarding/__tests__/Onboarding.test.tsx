@@ -50,9 +50,11 @@ beforeEach(() => {
 });
 
 describe("the first screen", () => {
-  it("offers the three ways in", () => {
+  it("offers direct, bouncer, and advanced paths", () => {
     mount();
     expect(screen.getByRole("button", { name: /Join a public network/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Connect through Soju/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Connect through ZNC/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect to an IRC server/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Advanced setup/ })).toBeTruthy();
   });
@@ -61,6 +63,58 @@ describe("the first screen", () => {
     mount();
     click("Skip for now");
     expect(onDone).toHaveBeenCalled();
+  });
+});
+
+describe.each([
+  ["Soju", "sable/libera@laptop"],
+  ["ZNC", "sable@laptop/libera"],
+] as const)("the %s path", (kind, account) => {
+  beforeEach(() => {
+    mount();
+    click(new RegExp(`Connect through ${kind}`));
+  });
+
+  it("asks in bouncer terms", () => {
+    expect(screen.getByLabelText("Bouncer address")).toBeTruthy();
+    expect(screen.getByLabelText("Bouncer username")).toBeTruthy();
+    expect(screen.getByLabelText("Network")).toBeTruthy();
+    expect(screen.getByLabelText("Device name (optional)")).toBeTruthy();
+    expect(screen.getByLabelText("Bouncer password")).toBeTruthy();
+  });
+
+  it("builds the bouncer account without exposing its syntax", async () => {
+    type("Bouncer address", "bouncer.example.org");
+    type("Nickname", "sable");
+    type("Bouncer username", "sable");
+    type("Network", "libera");
+    type("Device name (optional)", "laptop");
+    type("Bouncer password", "hunter2");
+
+    await connect();
+
+    expect(savedConfig()).toMatchObject({
+      name: "libera",
+      host: "bouncer.example.org",
+      port: 6697,
+      tls: true,
+      nick: "sable",
+      sasl: { mechanism: "PLAIN", account, password: "hunter2" },
+    });
+  });
+
+  it("requires the bouncer username and network", () => {
+    type("Bouncer address", "bouncer.example.org");
+    type("Nickname", "sable");
+    click("Connect");
+
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual(
+      expect.arrayContaining([
+        "Enter your bouncer username.",
+        "Enter the network saved in your bouncer.",
+      ]),
+    );
+    expect(saveNetwork).not.toHaveBeenCalled();
   });
 });
 

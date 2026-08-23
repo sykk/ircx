@@ -34,6 +34,46 @@ function open() {
 }
 
 describe("the uploads page", () => {
+  it("configures anonymous Catbox uploads without exposing custom fields", async () => {
+    open();
+    fireEvent.change(await screen.findByLabelText("Setup"), { target: { value: "catbox" } });
+
+    expect(screen.queryByLabelText("Address")).toBeNull();
+    expect(screen.queryByLabelText("Token (optional)")).toBeNull();
+    expect(screen.getByText(/Files are public/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(ipcMock.saveUploadProvider).toHaveBeenCalledWith({
+        endpoint: "https://catbox.moe/user/api.php",
+        method: "POST",
+        authHeader: null,
+        token: null,
+        s3: null,
+        form: {
+          fileField: "fileToUpload",
+          fields: [["reqtype", "fileupload"]],
+        },
+      }),
+    );
+  });
+
+  it("recognises a stored Catbox setup", async () => {
+    ipcMock.getUploadProvider.mockResolvedValue({
+      endpoint: "https://catbox.moe/user/api.php",
+      method: "POST",
+      authHeader: null,
+      token: null,
+      s3: null,
+      form: { fileField: "fileToUpload", fields: [["reqtype", "fileupload"]] },
+    });
+    open();
+
+    expect(await screen.findByLabelText("Setup")).toHaveProperty("value", "catbox");
+    expect(screen.queryByLabelText("Address")).toBeNull();
+  });
+
   it("saves what was typed", async () => {
     open();
     fireEvent.change(await screen.findByLabelText("Address"), {

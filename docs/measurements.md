@@ -1,8 +1,8 @@
 # Measurements
 
 Numbers this project has actually measured, with what each one covers. They
-exist because `ircclient.md` justifies the whole stack on fast startup, low
-memory and small installed size — claims worth holding to evidence.
+exist because `ircclient.md` requires evidence for claims about startup, memory,
+and installed size.
 
 **A number without its method is not evidence.** Every row says what it
 includes and excludes. Where a figure has not been re-measured since the code

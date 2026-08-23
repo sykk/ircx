@@ -114,7 +114,7 @@ src/                 React UI
 ```
 
 Architecture notes and contribution rules: [AGENTS.md](AGENTS.md).
-Product spec: [ircclient.md](ircclient.md).
+Product direction and scope: [ircclient.md](ircclient.md).
 
 ## License
 

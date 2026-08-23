@@ -1,5 +1,4 @@
-//! The permissions `ircclient.md` names, one section each, and the two that
-//! `docs/plugins.md` adds for the hooks that read on arrival.
+//! One section for each permission documented in `docs/plugins.md`.
 //!
 //! A permission is only real if the mechanism can refuse the capability when
 //! the grant is withheld, so every one of these grants it, withholds it, and

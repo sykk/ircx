@@ -2,7 +2,7 @@
 // adds to that. `docs/measurements.md` measures an empty profile and lists this
 // as not measured.
 //
-//   node .claude/skills/run-ircx/startup.mjs --messages 100000 --networks 3 --runs 3
+//   node scripts/run-ircx/startup.mjs --messages 100000 --networks 3 --runs 3
 //
 // It drives the real compositor rather than Xvfb, because the figures it has to
 // be comparable with were read off `WAYLAND_DEBUG` and a frame commit is not a
@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(SKILL_DIR, "..", "..", "..");
+const ROOT = join(SKILL_DIR, "..", "..");
 const BINARY = join(ROOT, "target", "release", "ircx");
 
 const flag = (name, fallback) => {

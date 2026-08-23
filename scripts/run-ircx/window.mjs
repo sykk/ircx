@@ -47,7 +47,7 @@ import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 
 const SKILL_DIR = fileURLToPath(new URL(".", import.meta.url));
-const ROOT = join(SKILL_DIR, "..", "..", "..");
+const ROOT = join(SKILL_DIR, "..", "..");
 /* The default, which is this worktree's own. `CARGO_TARGET_DIR` is still
  * honoured for anyone who has set one, but SKILL.md no longer tells callers to
  * point it at another checkout — a shared target directory hands this script

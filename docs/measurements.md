@@ -46,7 +46,7 @@ server. They are not startup measurements.
 
 ### With something in the profile
 
-**Measured 2026-08-05**, `.claude/skills/run-ircx/startup.mjs`. The table above
+**Measured 2026-08-05**, `scripts/run-ircx/startup.mjs`. The table above
 is an empty profile, which was listed here as the thing it excluded: a person's
 profile has an archive in it and networks that dial on launch.
 
@@ -90,7 +90,7 @@ just the same.
 **Covers:** `exec` of `target/release/ircx` to each mark, XDG profile seeded on
 disk, `npm run tauri build -- --no-bundle`, warm page cache, one machine, one
 compositor. The dialling rows answer to
-`.claude/skills/run-ircx/quickserver.mjs`, which completes registration
+`scripts/run-ircx/quickserver.mjs`, which completes registration
 immediately and deliberately: what a real server costs is the server's, and the
 figure above is what ircx does with it.
 
@@ -108,7 +108,7 @@ build -- --no-bundle`. Each build ran the four conditions above three times
 with:
 
 ```bash
-env GDK_BACKEND=wayland node .agents/skills/run-ircx/startup.mjs \
+env GDK_BACKEND=wayland node scripts/run-ircx/startup.mjs \
   --messages 100000 --networks 3 --runs 3
 ```
 
@@ -295,7 +295,7 @@ Read those as under the floor of this method rather than as free.
 | `cargo test --workspace --no-run`, empty target directory | 2026-08-09 | 84.3 s | 7.1 GB |
 
 Measured because a claim built on the opposite number was steering people into
-a real defect. `.claude/skills/run-ircx/SKILL.md` said a fresh worktree
+a real defect. The `run-ircx` instructions said a fresh worktree
 "rebuilds ~51G of Rust dependencies" and told the reader to point
 `CARGO_TARGET_DIR` at another checkout's `target/` instead. Two checkouts
 sharing one target directory is not safe: on 2026-08-09 `cargo test
@@ -378,10 +378,10 @@ measured rates — 11.2 KiB below and 13.1 KiB here — puts that window at roug
 arithmetic projections, not another `smaps_rollup` result.
 
 **Covers:** `npm run tauri build` — see below, it is not the same as
-`cargo build --release` — driven by `.claude/skills/run-ircx/window.mjs
---release` on `Xvfb`, connected to a local `ergo`, one channel, the flood paced
-by ergo's own fakelag at 6 messages a second and sampled 45 seconds after the
-last one arrived.
+`cargo build --release` — driven by
+`scripts/run-ircx/window.mjs --release` on `Xvfb`, connected to a local
+`ergo`, one channel, the flood paced by ergo's own fakelag at 6 messages a
+second and sampled 45 seconds after the last one arrived.
 
 **The absolute level is not comparable to the row above, and the difference is
 not explained.** 221.6 MiB empty against that row's 176.3 MiB is 45 MiB more for
@@ -394,7 +394,7 @@ one display, and that is the figure to quote.
 
 ### What a long session costs
 
-**Measured 2026-08-07**, `.claude/skills/run-ircx/soak.mjs`. Every figure above
+**Measured 2026-08-07**, `scripts/run-ircx/soak.mjs`. Every figure above
 is sampled 45 seconds after `exec`. This one runs for ninety minutes, which is
 what the *Not measured* list below used to ask for.
 
@@ -1201,7 +1201,7 @@ indexes, though the scan does not read those.
 
 ## The narrowest a settings page can be
 
-**Measured 2026-08-09**, `.claude/skills/run-ircx/driver.mjs --seeded` in
+**Measured 2026-08-09**, `scripts/run-ircx/driver.mjs --seeded` in
 headless Chrome at the app's own 1200x800: open settings beside `#ircx`, then
 move the viewport a few pixels at a time and read `clientWidth` and
 `scrollWidth` off the scrolling panel. Where `scrollWidth` is the larger, the

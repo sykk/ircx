@@ -60,7 +60,7 @@ const UNREAD_FIELDS: Record<string, string> = {
   batch:
     "The IRCv3 batch id. The timeline groups by time bucket rather than by batch, and the archive keeps it for anything that later wants to.",
   encryption:
-    "Always Plaintext this milestone. The field is the extension point, and CLAUDE.md says no encryption UI ships.",
+    "Always Plaintext this milestone. The field is the extension point, and AGENTS.md says no encryption UI ships.",
   timestampIsLocal:
     "Whether the time came from server-time or from receipt. Nothing draws the difference between the two.",
   user: "The ident out of the mask. A message is written under a nick; nothing shows the rest of it.",

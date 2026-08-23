@@ -2,7 +2,7 @@
 // figure in the Memory section of `docs/measurements.md` is sampled 45 seconds
 // after exec.
 //
-//   node .claude/skills/run-ircx/soak.mjs --minutes 90 --traffic 20 --quiet-after 60
+//   node scripts/run-ircx/soak.mjs --minutes 90 --traffic 20 --quiet-after 60
 //
 // Runs the assembled release app on an Xvfb through `window.mjs`, against
 // `quickserver.mjs` talking into one channel, and samples PSS for every process

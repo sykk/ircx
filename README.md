@@ -112,7 +112,7 @@ src-tauri/           Tauri commands and app wiring
 src/                 React UI
 ```
 
-Architecture notes and contribution rules: [CLAUDE.md](CLAUDE.md).
+Architecture notes and contribution rules: [AGENTS.md](AGENTS.md).
 Product spec: [ircclient.md](ircclient.md).
 
 ## License

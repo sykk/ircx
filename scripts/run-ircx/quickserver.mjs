@@ -3,7 +3,7 @@
 // most of the one connect figure `docs/measurements.md` has, which is why that
 // figure says so and why this exists.
 //
-//   node .claude/skills/run-ircx/quickserver.mjs [--port 6699]
+//   node scripts/run-ircx/quickserver.mjs [--port 6699]
 //
 // Prints `ok listening <port>` and then a line per client that registers.
 

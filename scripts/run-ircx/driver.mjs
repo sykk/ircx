@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Drives the ircx frontend in headless Chrome and answers on stdin.
 //
-// Zero dependencies on purpose: Node 22+ ships a WebSocket client, and Chrome
-// speaks the DevTools Protocol over one, so there is nothing to install and
-// nothing to keep in step with the project's package.json. `google-chrome` is
-// the only binary this needs.
+// Zero dependencies on purpose: the Node version pinned by the project ships a
+// WebSocket client, and Chrome speaks the DevTools Protocol over one, so there
+// is nothing to install and nothing to keep in step with the project's
+// package.json. `google-chrome` is the only binary this needs.
 //
 // It starts Vite itself (through vite.browser.config.mjs, which injects the
 // Tauri globals the app assumes) so a caller has one process to start and one
@@ -39,7 +39,7 @@ import { createInterface } from "node:readline";
 
 const SKILL_DIR = fileURLToPath(new URL(".", import.meta.url));
 const CONFIG = join(SKILL_DIR, "vite.browser.config.mjs");
-const ROOT = join(SKILL_DIR, "..", "..", "..");
+const ROOT = join(SKILL_DIR, "..", "..");
 
 const say = (line) => process.stdout.write(`${line}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -178,15 +178,14 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       const signing = draft.kind === "s3";
       if (signing && draft.accessKeyId.trim() === "") {
         setError("An access key id is needed to sign the request.");
-        setBusy(false);
         return;
       }
       const asForm = !signing && draft.shape === "form";
       if (asForm && draft.fileField.trim() === "") {
         setError("A form upload needs the name of the field the file goes in.");
-        setBusy(false);
         return;
       }
+      const wanted = needs(draft.kind, draft.authHeader);
       await ipc.saveUploadProvider({
         endpoint,
         // A signature covers the method, so a signed upload is a PUT and the
@@ -194,9 +193,9 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
         // the field names are part of the request.
         method: signing || draft.shape === "put" ? "PUT" : "POST",
         authHeader: signing ? null : draft.authHeader.trim() || null,
-        // Empty means the stored one stands, which is what lets the endpoint be
-        // corrected without retyping a secret nobody can see.
-        token: draft.token === "" ? null : draft.token,
+        // Empty clears a secret this provider cannot use. Null retains a
+        // write-only secret while its endpoint is edited.
+        token: wanted === null ? "" : draft.token === "" ? null : draft.token,
         s3: signing
           ? { region: draft.region.trim() || "us-east-1", accessKeyId: draft.accessKeyId.trim() }
           : null,
@@ -208,10 +207,11 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       /* The secret is written to the keyring by `save_network`'s counterpart
        * and never read back, so what the field can honestly say about it
        * changes here rather than on the next read. */
-      setSaved(needs(draft.kind, draft.token) === null ? saved : draft.kind);
+      setSaved(wanted === null ? null : draft.token === "" ? saved : draft.kind);
       setSaid("Saved.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be saved."));
+    } finally {
       setBusy(false);
     }
   }
@@ -228,6 +228,7 @@ export function UploadsPage({ onDone }: { onDone: () => void }) {
       setSaid("Removed. ircx will send no files until a provider is set.");
     } catch (reason) {
       setError(reasonOr(reason, "The provider could not be removed."));
+    } finally {
       setBusy(false);
     }
   }

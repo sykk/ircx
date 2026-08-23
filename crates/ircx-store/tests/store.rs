@@ -2069,6 +2069,21 @@ mod upload_provider {
         );
     }
 
+    #[test]
+    fn an_empty_token_clears_the_secret_for_a_provider_that_needs_none() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_upload_provider(&provider()).unwrap();
+        store
+            .save_upload_provider(&UploadProvider {
+                auth_header: None,
+                token: Some(String::new()),
+                ..provider()
+            })
+            .unwrap();
+
+        assert_eq!(store.upload_token().unwrap(), None);
+    }
+
     /// Leaving it behind would keep a credential for something the user said
     /// they no longer use.
     #[test]

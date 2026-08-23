@@ -252,7 +252,8 @@ pub struct UploadProvider {
     /// the provider needs no credential — a self-hosted box behind a VPN.
     pub auth_header: Option<String>,
     /// Write-only, as the SASL password is: `Some` when the user sets it,
-    /// always `None` when read back. Carries the secret access key when `s3`
+    /// always `None` when read back. An empty value clears the saved secret
+    /// when this provider needs none. Carries the secret access key when `s3`
     /// is set — it is the provider's one secret either way.
     pub token: Option<String>,
     /// Whether one is saved, which is the only thing about `token` that can be

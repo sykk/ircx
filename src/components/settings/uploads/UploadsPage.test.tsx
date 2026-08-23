@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStore } from "@/components/shell/fixtures";
+import { SettingsBusy } from "@/components/settings/SettingsPage";
 import type * as Ipc from "@/lib/ipc";
 import { UploadsPage } from "./UploadsPage";
 
@@ -30,7 +31,11 @@ beforeEach(() => {
 const done = vi.fn();
 
 function open() {
-  render(<UploadsPage onDone={done} />);
+  render(
+    <SettingsBusy>
+      <UploadsPage onDone={done} />
+    </SettingsBusy>,
+  );
 }
 
 describe("the uploads page", () => {
@@ -49,13 +54,18 @@ describe("the uploads page", () => {
         endpoint: "https://catbox.moe/user/api.php",
         method: "POST",
         authHeader: null,
-        token: null,
+        token: "",
         s3: null,
         form: {
           fileField: "fileToUpload",
           fields: [["reqtype", "fileupload"]],
         },
       }),
+    );
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
     );
   });
 
@@ -148,6 +158,11 @@ describe("the uploads page", () => {
        sentence has to be the one that matters: no provider means no files. */
     expect(await screen.findByText(/ircx will send no files/)).toBeTruthy();
     expect(done).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
   });
 
   /** An empty address is not "no provider": saving it would leave a provider

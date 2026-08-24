@@ -1,9 +1,9 @@
-use ircx_ipc::{ChatMessage, CommandOutcome, Delivery, MessageKind, Query};
+use ircx_ipc::{ChatMessage, CommandOutcome, Delivery, MessageKind, Query, SaslMechanism};
 use ircx_proto::{MessageBuilder, MAX_MESSAGE_BYTES};
 use uuid::Uuid;
 
 use crate::multiline;
-use crate::session::{build, Action, SessionState, SERVER_TARGET};
+use crate::session::{build, Action, SaslCredentials, SessionState, SERVER_TARGET};
 use crate::text;
 
 /// What `/help` prints. It lists `/connect` and `/disconnect` although this
@@ -125,6 +125,38 @@ impl SessionState {
     pub fn raw(&mut self, line: &str) -> Vec<Action> {
         self.cmd_raw(line);
         self.drain()
+    }
+
+    pub fn register_libera(
+        &mut self,
+        account: &str,
+        password: &str,
+        email: &str,
+    ) -> Result<Vec<Action>, String> {
+        if password.is_empty() || email.is_empty() {
+            return Err("Enter a password and email address for the Libera.Chat account".into());
+        }
+        if !self.registered {
+            return Err("Libera.Chat is not ready yet — wait until it is connected".into());
+        }
+        if !self.is_me(account) {
+            return Err(format!(
+                "Libera.Chat registers the nick currently in use ({}). Enter that nick or change it first.",
+                self.nick
+            ));
+        }
+
+        self.config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::Plain,
+            account: account.to_string(),
+            password: Some(password.to_string()),
+        });
+        self.libera_registration_secrets = Some((password.to_string(), email.to_string()));
+        self.send_command(
+            "PRIVMSG",
+            &["NickServ", &format!("REGISTER {password} {email}")],
+        );
+        Ok(self.drain())
     }
 
     pub fn quit(&mut self, reason: Option<&str>) -> Vec<Action> {

@@ -5,7 +5,8 @@ use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
     FileToUpload, HistoryRequest, IgnoredPerson, InstalledPlugin, Member, MutedConversation,
     NetworkConfig, NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query,
-    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile, WatchedPerson,
+    SaslConfig, SaslMechanism, SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
+    UploadedFile, WatchedPerson,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -69,6 +70,79 @@ pub async fn upload_file(app: State<'_, App>, path: String) -> Result<UploadedFi
 #[tauri::command]
 pub async fn save_network(app: State<'_, App>, config: NetworkConfig) -> Result<NetworkId, String> {
     app.save_network(config).await
+}
+
+#[tauri::command]
+pub async fn register_libera_account(
+    app: State<'_, App>,
+    network: NetworkId,
+    account: String,
+    password: String,
+    email: String,
+) -> Result<(), String> {
+    let mut config = app
+        .store()
+        .list_networks()
+        .map_err(describe)?
+        .into_iter()
+        .find(|config| config.id.as_ref() == Some(&network))
+        .ok_or_else(|| "That network is no longer configured — add it again".to_string())?;
+    validate_libera_registration(&config, &account, &password, &email)?;
+
+    app.ask(&network, |reply| SessionCommand::RegisterLibera {
+        account: account.clone(),
+        password: password.clone(),
+        email,
+        reply,
+    })
+    .await??;
+
+    config.sasl = Some(SaslConfig {
+        mechanism: SaslMechanism::Plain,
+        account,
+        password: Some(password),
+    });
+    app.save_network(config).await.map(|_| ()).map_err(|error| {
+        format!(
+            "Registration was sent, but the SASL password could not be saved: {error}. Save it in this network's settings before reconnecting."
+        )
+    })
+}
+
+fn validate_libera_registration(
+    config: &NetworkConfig,
+    account: &str,
+    password: &str,
+    email: &str,
+) -> Result<(), String> {
+    let host = config.host.trim_end_matches('.').to_ascii_lowercase();
+    if host != "libera.chat" && !host.ends_with(".libera.chat") {
+        return Err(format!(
+            "{} is not a Libera.Chat server — choose the Libera.Chat network",
+            config.host
+        ));
+    }
+    if !config.tls || !config.tls_verify {
+        return Err(
+            "Libera.Chat registration needs verified TLS — enable TLS and certificate verification first"
+                .into(),
+        );
+    }
+    if account.trim().is_empty() {
+        return Err("Enter the Libera.Chat nick to register".into());
+    }
+    if password.is_empty() {
+        return Err("Enter a password for the Libera.Chat account".into());
+    }
+    if password.chars().any(char::is_whitespace) {
+        return Err(
+            "The Libera.Chat password cannot contain spaces — choose another password".into(),
+        );
+    }
+    if !email.contains('@') || email.chars().any(char::is_whitespace) {
+        return Err("Enter a complete email address without spaces".into());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -684,11 +758,84 @@ mod tests {
     use std::io::{Error, ErrorKind};
 
     use ircx_ipc::{
-        ArchiveScope, ChatMessage, Delivery, EncryptionState, MessageKind, MessageSource, Sender,
+        ArchiveScope, ChatMessage, Delivery, EncryptionState, MessageKind, MessageSource,
+        NetworkConfig, Sender,
     };
     use ircx_store::Store;
 
-    use super::{gave_up, stopped, unwritable, write_export, StoreError};
+    use super::{
+        gave_up, stopped, unwritable, validate_libera_registration, write_export, StoreError,
+    };
+
+    fn libera() -> NetworkConfig {
+        NetworkConfig {
+            id: Some("libera".into()),
+            name: "Libera.Chat".into(),
+            host: "irc.libera.chat".into(),
+            port: 6697,
+            tls: true,
+            tls_verify: true,
+            socks5_proxy: None,
+            client_certificate: None,
+            nick: "sable".into(),
+            alt_nicks: Vec::new(),
+            username: "sable".into(),
+            realname: "sable".into(),
+            sasl: None,
+            connect_commands: Vec::new(),
+            autojoin: Vec::new(),
+            auto_connect: true,
+        }
+    }
+
+    #[test]
+    fn guided_registration_requires_verified_tls_to_libera() {
+        let mut config = libera();
+        assert!(validate_libera_registration(
+            &config,
+            "sable",
+            "correct-horse",
+            "private@example.com"
+        )
+        .is_ok());
+
+        config.tls_verify = false;
+        assert!(validate_libera_registration(
+            &config,
+            "sable",
+            "correct-horse",
+            "private@example.com"
+        )
+        .unwrap_err()
+        .contains("verified TLS"));
+
+        config = libera();
+        config.host = "irc.example.com".into();
+        assert!(validate_libera_registration(
+            &config,
+            "sable",
+            "correct-horse",
+            "private@example.com"
+        )
+        .unwrap_err()
+        .contains("not a Libera.Chat server"));
+    }
+
+    #[test]
+    fn guided_registration_rejects_values_nickserv_cannot_parse() {
+        let config = libera();
+
+        assert!(
+            validate_libera_registration(&config, "sable", "two words", "private@example.com")
+                .unwrap_err()
+                .contains("cannot contain spaces")
+        );
+        assert!(
+            validate_libera_registration(&config, "sable", "correct-horse", "not-an-email")
+                .unwrap_err()
+                .contains("complete email address")
+        );
+    }
 
     #[test]
     fn a_refused_folder_says_what_to_do_about_it() {

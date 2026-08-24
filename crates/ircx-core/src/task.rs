@@ -189,6 +189,12 @@ pub enum SessionCommand {
     Raw {
         line: String,
     },
+    RegisterLibera {
+        account: String,
+        password: String,
+        email: String,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     Members {
         channel: TargetName,
         reply: oneshot::Sender<Vec<Member>>,
@@ -710,6 +716,21 @@ async fn apply(
             active,
         } => session.react(&target, &message, &emoji, active),
         SessionCommand::Raw { line } => session.raw(&line),
+        SessionCommand::RegisterLibera {
+            account,
+            password,
+            email,
+            reply,
+        } => match session.register_libera(&account, &password, &email) {
+            Ok(actions) => {
+                let _ = reply.send(Ok(()));
+                actions
+            }
+            Err(error) => {
+                let _ = reply.send(Err(error));
+                Vec::new()
+            }
+        },
         SessionCommand::Members { channel, reply } => {
             let _ = reply.send(session.members(&channel));
             Vec::new()

@@ -27,6 +27,7 @@ import type {
   ThemeSource,
   UploadProvider,
   UploadedFile,
+  WatchedPerson,
 } from "@/types";
 import { SERVER_TARGET } from "@/types";
 
@@ -141,6 +142,9 @@ export const ipc = {
   ignoredPeople: () => invoke<IgnoredPerson[]>("ignored_people"),
   setIgnored: (network: string, nick: string, ignored: boolean) =>
     invoke<void>("set_ignored", { network, nick, ignored }),
+  watchedPeople: () => invoke<WatchedPerson[]>("watched_people"),
+  setWatched: (network: string, nick: string, watched: boolean) =>
+    invoke<void>("set_watched", { network, nick, watched }),
   exportArchive: (scope: ArchiveScope, path: string) =>
     invoke<number>("export_archive", { scope, path }),
   exportProfile: (path: string, contents: string) =>

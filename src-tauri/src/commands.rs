@@ -5,7 +5,7 @@ use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
     FileToUpload, HistoryRequest, IgnoredPerson, InstalledPlugin, Member, MutedConversation,
     NetworkConfig, NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query,
-    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile,
+    SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider, UploadedFile, WatchedPerson,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -533,6 +533,29 @@ pub async fn set_ignored(
     ignored: bool,
 ) -> Result<(), String> {
     app.set_ignored(&network, &nick, ignored).await
+}
+
+#[tauri::command]
+pub async fn watched_people(app: State<'_, App>) -> Result<Vec<WatchedPerson>, String> {
+    let rows = app.store().watched_people().map_err(describe)?;
+    Ok(rows
+        .into_iter()
+        .map(|(network, network_name, nick)| WatchedPerson {
+            network,
+            network_name,
+            nick,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn set_watched(
+    app: State<'_, App>,
+    network: NetworkId,
+    nick: String,
+    watched: bool,
+) -> Result<(), String> {
+    app.set_watched(&network, &nick, watched).await
 }
 
 /// Writes the archive to `path` as JSON Lines and answers with how many bytes

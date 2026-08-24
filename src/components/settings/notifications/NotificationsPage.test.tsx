@@ -15,6 +15,8 @@ const { ipcMock, allowedMock } = vi.hoisted(() => ({
     setMuted: vi.fn(),
     ignoredPeople: vi.fn(),
     setIgnored: vi.fn(),
+    watchedPeople: vi.fn(),
+    setWatched: vi.fn(),
   },
   allowedMock: vi.fn(),
 }));
@@ -41,6 +43,8 @@ beforeEach(() => {
   ipcMock.setMuted.mockResolvedValue(undefined);
   ipcMock.ignoredPeople.mockResolvedValue([]);
   ipcMock.setIgnored.mockResolvedValue(undefined);
+  ipcMock.watchedPeople.mockResolvedValue([]);
+  ipcMock.setWatched.mockResolvedValue(undefined);
   allowedMock.mockResolvedValue(true);
   localStorage.clear();
 });
@@ -173,6 +177,21 @@ describe("the notifications page", () => {
     await waitFor(() =>
       expect(ipcMock.setIgnored).toHaveBeenCalledWith("hackint", "spambot", false),
     );
+  });
+
+  it("adds and removes a saved nick watch on the scoped network", async () => {
+    ipcMock.watchedPeople.mockResolvedValue([
+      { network: "libera", networkName: "Libera.Chat", nick: "sable" },
+    ]);
+    open();
+    fireEvent.change(await screen.findByLabelText("Watch a nick on Libera.Chat"), {
+      target: { value: "willow" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    await waitFor(() => expect(ipcMock.setWatched).toHaveBeenCalledWith("libera", "willow", true));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Stop watching" }));
+    await waitFor(() => expect(ipcMock.setWatched).toHaveBeenCalledWith("libera", "sable", false));
   });
 
   it("says where an ignore is started when nobody is", async () => {

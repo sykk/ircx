@@ -19,7 +19,7 @@ import {
 } from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
 import type { SettingsScope } from "@/components/settings/scope";
-import type { IgnoredPerson, MutedConversation } from "@/types";
+import type { IgnoredPerson, MutedConversation, WatchedPerson } from "@/types";
 
 /**
  * What is allowed to interrupt the reader: the words that raise a conversation,
@@ -42,6 +42,8 @@ export function NotificationsPage({
   const [words, setWords] = useState<string[] | null>(null);
   const [muted, setMuted] = useState<MutedConversation[]>([]);
   const [ignored, setIgnored] = useState<IgnoredPerson[]>([]);
+  const [watched, setWatched] = useState<WatchedPerson[]>([]);
+  const [watchTyped, setWatchTyped] = useState("");
   const [notify, setNotify] = useState<Notifications>(storedNotifications);
   const [refused, setRefused] = useState(false);
   const [typed, setTyped] = useState("");
@@ -76,6 +78,32 @@ export function NotificationsPage({
   }, []);
 
   useEffect(readIgnored, [readIgnored]);
+
+  const readWatched = useCallback(() => {
+    void ipc.watchedPeople().then(
+      (held) => setWatched(held),
+      (reason: unknown) =>
+        setError(reasonOr(reason, "Who you are watching could not be read.")),
+    );
+  }, []);
+
+  useEffect(readWatched, [readWatched]);
+
+  const setWatch = useCallback(
+    async (network: string, nick: string, next: boolean) => {
+      report(true);
+      try {
+        await ipc.setWatched(network, nick, next);
+        setError(null);
+        readWatched();
+      } catch (reason) {
+        setError(reasonOr(reason, "That watch could not be changed."));
+      } finally {
+        report(false);
+      }
+    },
+    [readWatched, report],
+  );
 
   /* Only ever the undo: an ignore is started where the person is, which is the
      roster and the composer. This window has no list of who is on a network to
@@ -274,6 +302,63 @@ export function NotificationsPage({
             Your desktop refused notifications for ircx. Allow them in its settings and try again.
           </Note>
         )}
+      </Group>
+
+      <Group title="Watched nicks">
+        {here === null ? (
+          <Note>Open this from a network to add a nick. Saved watches can still be removed here.</Note>
+        ) : (
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const nick = watchTyped.trim();
+              if (nick === "") return;
+              setWatchTyped("");
+              void setWatch(here.network, nick, true);
+            }}
+          >
+            <div className="flex-1">
+              <TextField
+                label={`Watch a nick on ${here.networkName}`}
+                value={watchTyped}
+                onChange={setWatchTyped}
+                placeholder="nickname"
+              />
+            </div>
+            <PrimaryButton type="submit" disabled={watchTyped.trim() === ""}>
+              Watch
+            </PrimaryButton>
+          </form>
+        )}
+
+        {watched.length === 0 ? (
+          <Note>
+            Nobody is watched. You can also use <code>/watch nickname</code> and remove one with{" "}
+            <code>/watch -nickname</code>.
+          </Note>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {watched.map((row) => (
+              <li
+                key={`${row.network}\u0000${row.nick}`}
+                className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 hover:bg-[var(--surface-hover)]"
+              >
+                <span className="min-w-0 truncate text-[13px] text-[var(--text-primary)]">
+                  <span className="font-[family-name:var(--font-mono)]">{row.nick}</span>
+                  <span className="text-[var(--text-muted)]"> on {row.networkName}</span>
+                </span>
+                <SecondaryButton onClick={() => void setWatch(row.network, row.nick, false)}>
+                  Stop watching
+                </SecondaryButton>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Note>
+          Watches use the network&apos;s MONITOR support and do not open a direct-message tab.
+          Servers with a limit keep saved watches before open queries.
+        </Note>
       </Group>
 
       <Group title="Muted conversations">

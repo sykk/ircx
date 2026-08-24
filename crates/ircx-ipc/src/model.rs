@@ -315,6 +315,15 @@ pub struct IgnoredPerson {
     pub nick: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchedPerson {
+    pub network: NetworkId,
+    pub network_name: String,
+    pub nick: String,
+}
+
 /// One line of a `LIST` reply. Not a `Channel`: the user is not in it, so there
 /// is nothing to say about membership, modes or unread — only what the server
 /// offers to help them choose.

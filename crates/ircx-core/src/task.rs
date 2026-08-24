@@ -254,6 +254,9 @@ pub enum SessionCommand {
     IgnoredChanged {
         ignored: Vec<String>,
     },
+    WatchedChanged {
+        watched: Vec<String>,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -489,6 +492,10 @@ async fn drive(
             session.set_ignored(ignored);
         }
         Err(error) => warn!(%error, "could not read who is ignored on this network"),
+    }
+    match context.store.watched_nicks(&context.network) {
+        Ok(watched) => session.set_watched(watched),
+        Err(error) => warn!(%error, "could not read who is watched on this network"),
     }
     let remembered = match context.store.open_targets(&context.network) {
         Ok(targets) => targets,
@@ -756,6 +763,10 @@ async fn apply(
         }
         SessionCommand::MutedChanged { muted } => session.set_muted(muted),
         SessionCommand::IgnoredChanged { ignored } => session.set_ignored(ignored),
+        SessionCommand::WatchedChanged { watched } => {
+            session.set_watched(watched);
+            Vec::new()
+        }
         SessionCommand::Disconnect { reason } => session.quit(reason.as_deref()),
     }
 }
@@ -1002,6 +1013,11 @@ impl Context {
                     // will not survive a restart is a sentence about SQLite.
                     if let Err(error) = self.store.set_ignored(&self.network, &nick, ignored) {
                         warn!(%error, %nick, "could not write an ignore down");
+                    }
+                }
+                Action::Watch { nick, watched } => {
+                    if let Err(error) = self.store.set_watched_nick(&self.network, &nick, watched) {
+                        warn!(%error, %nick, "could not write a watched nick down");
                     }
                 }
                 Action::Close => control = Control::Stop,

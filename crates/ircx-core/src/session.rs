@@ -84,6 +84,10 @@ pub enum Action {
         nick: String,
         ignored: bool,
     },
+    Watch {
+        nick: String,
+        watched: bool,
+    },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
     Close,
@@ -295,13 +299,17 @@ pub struct SessionState {
     /// is, and folding on receipt would settle a nick against the wrong rule
     /// for the rest of the session.
     pub(crate) ignored: Vec<String>,
+    pub(crate) watched: Vec<String>,
     pub(crate) user: Option<String>,
     pub(crate) host: Option<String>,
     pub(crate) account: Option<String>,
     pub(crate) channels: HashMap<String, ChannelState>,
     pub(crate) queries: HashMap<String, QueryState>,
-    /// Folded nicks subscribed on this connection's server-side MONITOR list.
-    monitored: HashSet<String>,
+    /// Folded nick to the spelling sent to the server.
+    monitored: HashMap<String, String>,
+    /// Last status heard for a watched nick. An absent value is the initial
+    /// MONITOR reply, which must not announce everybody already online.
+    watch_status: HashMap<String, bool>,
     pub(crate) batches: HashMap<String, BatchState>,
     pub(crate) actions: Vec<Action>,
     pub(crate) registered: bool,
@@ -396,6 +404,7 @@ impl SessionState {
             highlight_words: Vec::new(),
             muted: Vec::new(),
             ignored: Vec::new(),
+            watched: Vec::new(),
             config,
             isupport: ISupport::default(),
             caps: Caps::default(),
@@ -404,7 +413,8 @@ impl SessionState {
             account: None,
             channels: HashMap::new(),
             queries: HashMap::new(),
-            monitored: HashSet::new(),
+            monitored: HashMap::new(),
+            watch_status: HashMap::new(),
             batches: HashMap::new(),
             actions: Vec::new(),
             registered: false,
@@ -1620,12 +1630,18 @@ impl SessionState {
             .collect();
         let monitored = std::mem::take(&mut self.monitored);
         self.monitored = monitored
-            .into_iter()
-            .filter_map(|old| {
-                self.queries
-                    .values()
-                    .find(|query| previous.fold(&query.nick) == old)
-                    .map(|query| self.fold(&query.nick))
+            .into_values()
+            .map(|nick| (self.fold(&nick), nick))
+            .collect();
+        let watch_status = std::mem::take(&mut self.watch_status);
+        self.watch_status = self
+            .watched
+            .iter()
+            .filter_map(|nick| {
+                watch_status
+                    .get(&previous.fold(nick))
+                    .copied()
+                    .map(|online| (self.fold(nick), online))
             })
             .collect();
         // `archived` and `gap_fills` key on the same folded names — `restore`
@@ -2867,12 +2883,21 @@ impl SessionState {
         for target in targets.split(',') {
             let nick = target.split_once('!').map_or(target, |(nick, _)| nick);
             let key = self.fold(nick);
-            let Some(query) = self.queries.get_mut(&key) else {
-                continue;
-            };
-            if query.online != online {
-                query.online = online;
-                self.emit_query(&key);
+            if let Some(query) = self.queries.get_mut(&key) {
+                if query.online != online {
+                    query.online = online;
+                    self.emit_query(&key);
+                }
+            }
+            if self.is_watched(nick) {
+                let before = self.watch_status.insert(key, online);
+                if before == Some(false) && online {
+                    self.notice(
+                        Severity::Info,
+                        format!("{nick} is online"),
+                        &format!("ircx-watch-online:{nick}"),
+                    );
+                }
             }
         }
     }
@@ -2886,29 +2911,99 @@ impl SessionState {
             return;
         }
 
-        let available = limit
-            .map(|limit| limit.saturating_sub(self.monitored.len() as u32) as usize)
-            .unwrap_or(usize::MAX);
+        let mut desired: Vec<(String, String)> = self
+            .watched
+            .iter()
+            .map(|nick| (self.fold(nick), nick.clone()))
+            .collect();
+        desired.sort_by_key(|entry| entry.1.to_lowercase());
+        desired.dedup_by(|a, b| a.0 == b.0);
+
         let mut queries: Vec<(String, String)> = self
             .queries
             .iter()
-            .filter(|(key, _)| !self.monitored.contains(*key))
             .map(|(key, query)| (key.clone(), query.nick.clone()))
             .collect();
-        queries.sort_by(|a, b| a.1.cmp(&b.1));
+        queries.sort_by_key(|entry| entry.1.to_lowercase());
+        for query in queries {
+            if !desired.iter().any(|(key, _)| key == &query.0) {
+                desired.push(query);
+            }
+        }
+        if let Some(limit) = limit {
+            desired.truncate(limit as usize);
+        }
 
-        for (key, nick) in queries.into_iter().take(available) {
+        let desired_keys: HashSet<String> = desired.iter().map(|(key, _)| key.clone()).collect();
+        let removed: Vec<(String, String)> = self
+            .monitored
+            .iter()
+            .filter(|(key, _)| !desired_keys.contains(*key))
+            .map(|(key, nick)| (key.clone(), nick.clone()))
+            .collect();
+        for (key, nick) in removed {
+            self.send_command("MONITOR", &["-", &nick]);
+            self.monitored.remove(&key);
+        }
+
+        for (key, nick) in desired {
+            if self.monitored.contains_key(&key) {
+                continue;
+            }
             if let Some(line) = build("MONITOR", &["+", &nick]) {
                 self.send_line(line);
-                self.monitored.insert(key);
+                self.monitored.insert(key, nick);
             }
         }
     }
 
     pub(crate) fn unmonitor(&mut self, key: &str, nick: &str) {
-        if self.monitored.remove(key) {
+        if !self.is_watched(nick) && self.monitored.remove(key).is_some() {
             self.send_command("MONITOR", &["-", nick]);
         }
+    }
+
+    pub fn set_watched(&mut self, watched: Vec<String>) {
+        self.watched = watched;
+        let held: HashSet<String> = self.watched.iter().map(|nick| self.fold(nick)).collect();
+        self.watch_status.retain(|key, _| held.contains(key));
+        self.sync_monitor();
+    }
+
+    pub(crate) fn is_watched(&self, nick: &str) -> bool {
+        let key = self.fold(nick);
+        self.watched.iter().any(|held| self.fold(held) == key)
+    }
+
+    pub(crate) fn watch(&mut self, nick: &str, watched: bool) {
+        if self.is_watched(nick) == watched {
+            return;
+        }
+        let stored = if watched {
+            self.watched.push(nick.to_string());
+            nick.to_string()
+        } else {
+            let key = self.fold(nick);
+            let stored = self
+                .watched
+                .iter()
+                .find(|held| self.fold(held) == key)
+                .cloned()
+                .unwrap_or_else(|| nick.to_string());
+            self.watched = self
+                .watched
+                .iter()
+                .filter(|held| self.fold(held) != key)
+                .cloned()
+                .collect();
+            self.watch_status.remove(&key);
+            stored
+        };
+        self.sync_monitor();
+        self.actions.push(Action::Watch {
+            nick: stored,
+            watched,
+        });
     }
 
     pub(crate) fn touch_query(&mut self, nick: &str, account: Option<String>) {

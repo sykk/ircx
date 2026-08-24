@@ -966,6 +966,7 @@ impl Store {
         // And an ignore, for the same reason: a nick means nothing without the
         // network it was said on.
         tx.execute("DELETE FROM ignored WHERE network = ?1", params![id])?;
+        tx.execute("DELETE FROM watched_nicks WHERE network = ?1", params![id])?;
         tx.commit()?;
         Ok(())
     }
@@ -1185,6 +1186,50 @@ impl Store {
             "SELECT i.network, COALESCE(n.name, i.network), i.nick
              FROM ignored i LEFT JOIN networks n ON n.id = i.network
              ORDER BY COALESCE(n.name, i.network), i.nick",
+        )?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn set_watched_nick(
+        &self,
+        network: &str,
+        nick: &str,
+        watched: bool,
+    ) -> Result<(), StoreError> {
+        let conn = self.writing();
+        if watched {
+            conn.execute(
+                "INSERT OR IGNORE INTO watched_nicks (network, nick) VALUES (?1, ?2)",
+                params![network, nick],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM watched_nicks WHERE network = ?1 AND nick = ?2 COLLATE NOCASE",
+                params![network, nick],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn watched_nicks(&self, network: &str) -> Result<Vec<String>, StoreError> {
+        let conn = self.reading();
+        let mut statement =
+            conn.prepare("SELECT nick FROM watched_nicks WHERE network = ?1 ORDER BY nick")?;
+        let nicks = statement
+            .query_map(params![network], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(nicks)
+    }
+
+    pub fn watched_people(&self) -> Result<Vec<(String, String, String)>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare(
+            "SELECT w.network, COALESCE(n.name, w.network), w.nick
+             FROM watched_nicks w LEFT JOIN networks n ON n.id = w.network
+             ORDER BY COALESCE(n.name, w.network), w.nick",
         )?;
         let rows = statement
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
@@ -1679,5 +1724,21 @@ mod tests {
             }
         }
         assert!(inspected > 0);
+    }
+
+    #[test]
+    fn watched_nicks_survive_reloads_and_remove_caselessly() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("archive.sqlite3");
+        Store::open_without_keyring(&path)
+            .unwrap()
+            .set_watched_nick("libera", "Sable", true)
+            .unwrap();
+        let store = Store::open_without_keyring(&path).unwrap();
+
+        assert_eq!(store.watched_nicks("libera").unwrap(), vec!["Sable"]);
+
+        store.set_watched_nick("libera", "sable", false).unwrap();
+        assert!(store.watched_nicks("libera").unwrap().is_empty());
     }
 }

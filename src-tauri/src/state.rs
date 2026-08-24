@@ -535,6 +535,21 @@ impl App {
         Ok(())
     }
 
+    pub async fn set_watched(
+        &self,
+        network: &NetworkId,
+        nick: &str,
+        watched: bool,
+    ) -> Result<(), String> {
+        self.store
+            .set_watched_nick(network, nick, watched)
+            .map_err(describe)?;
+        let held = self.store.watched_nicks(network).map_err(describe)?;
+        self.tell_if_connected(network, SessionCommand::WatchedChanged { watched: held })
+            .await;
+        Ok(())
+    }
+
     /// Tells every running network that this plugin's library entry changed, so
     /// a hook it dropped is asked again.
     ///

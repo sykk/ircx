@@ -122,7 +122,9 @@ function invokedCommands(): string[] {
 /** The command names the backend answers to. */
 function registeredCommands(): Set<string> {
   const wiring = readFileSync(resolve(process.cwd(), "src-tauri/src/lib.rs"), "utf8");
-  return new Set([...wiring.matchAll(/commands::(\w+)/g)].map((match) => match[1]!));
+  return new Set(
+    [...wiring.matchAll(/(?:commands|message_notification)::(\w+)/g)].map((match) => match[1]!),
+  );
 }
 
 /** The methods on the `ipc` object, which are the commands the window can run. */

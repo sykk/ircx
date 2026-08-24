@@ -87,6 +87,13 @@ export const ipc = {
   saveNetwork: (config: NetworkConfig) =>
     invoke<string>("save_network", { config }),
   removeNetwork: (network: string) => invoke<void>("remove_network", { network }),
+  showMessageNotification: (
+    title: string,
+    body: string,
+    network: string,
+    target: string,
+    messageId: string,
+  ) => invoke<void>("show_message_notification", { title, body, network, target, messageId }),
 
   getUploadProvider: () => invoke<UploadProvider | null>("get_upload_provider"),
   saveUploadProvider: (provider: UploadProvider) =>

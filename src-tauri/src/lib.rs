@@ -1,6 +1,7 @@
 mod announce;
 mod commands;
 mod events;
+mod message_notification;
 mod preview;
 mod sigv4;
 mod state;
@@ -216,6 +217,7 @@ pub fn run() {
             commands::set_watched,
             commands::export_archive,
             commands::export_profile,
+            message_notification::show_message_notification,
             commands::delete_archive,
             commands::announce,
             commands::certificate_fingerprint,

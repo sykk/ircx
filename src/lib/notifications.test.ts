@@ -12,12 +12,20 @@ import { targetKey } from "@/store/keys";
 import type { ChatMessage, IrcxEvent } from "@/types";
 import {
   DEFAULT_NOTIFICATIONS,
+  isQuietAt,
   sanitiseNotifications,
+  watchNotification,
   worthNotifying,
   type Notifications,
 } from "./notifications";
 
-const BOTH: Notifications = { highlights: true, directMessages: true };
+const BOTH: Notifications = {
+  highlights: true,
+  directMessages: true,
+  quietHours: null,
+  conversations: {},
+  watchPresence: false,
+};
 
 type Appended = Extract<IrcxEvent, { type: "messagesAppended" }>;
 
@@ -72,7 +80,7 @@ describe("what is worth a notification", () => {
   it("obeys each switch on its own", () => {
     const mention = makeMessage({ nick: "phrack", text: "sable: ping" });
     const dm = makeMessage({ nick: "buildbot", text: "deploy finished" });
-    const onlyDms: Notifications = { highlights: false, directMessages: true };
+    const onlyDms: Notifications = { ...BOTH, highlights: false };
 
     expect(worthNotifying(appended("#ircx", mention), mention, onlyDms, false)).toBeNull();
     expect(worthNotifying(appended("buildbot", dm), dm, onlyDms, false)).not.toBeNull();
@@ -149,19 +157,140 @@ describe("what is worth a notification", () => {
 
     expect(worthNotifying(appended("", message), message, BOTH, false)).toBeNull();
   });
+
+  it("lets one conversation raise every live message", () => {
+    const message = makeMessage({ nick: "phrack", text: "the build is green" });
+    const settings = {
+      ...BOTH,
+      highlights: false,
+      conversations: { [targetKey("libera", "#ircx")]: "all" as const },
+    };
+
+    expect(worthNotifying(appended("#ircx", message), message, settings, false)).toEqual({
+      title: "phrack in #ircx",
+      body: "the build is green",
+    });
+  });
+
+  it("can keep one conversation to highlights or mute it", () => {
+    const ordinary = makeMessage({ nick: "phrack", text: "the build is green" });
+    const mention = makeMessage({ nick: "phrack", text: "sable: the build is green" });
+    const key = targetKey("libera", "#ircx");
+
+    expect(
+      worthNotifying(
+        appended("#ircx", ordinary),
+        ordinary,
+        { ...BOTH, conversations: { [key]: "highlights" } },
+        false,
+      ),
+    ).toBeNull();
+    expect(
+      worthNotifying(
+        appended("#ircx", mention),
+        mention,
+        { ...BOTH, conversations: { [key]: "highlights" } },
+        false,
+      ),
+    ).not.toBeNull();
+    expect(
+      worthNotifying(
+        appended("#ircx", mention),
+        mention,
+        { ...BOTH, conversations: { [key]: "mute" } },
+        false,
+      ),
+    ).toBeNull();
+  });
+
+  it("suppresses desktop notifications during quiet hours only", () => {
+    const message = makeMessage({ nick: "phrack", text: "sable: ping" });
+    const settings = { ...BOTH, quietHours: { start: "22:00", end: "07:00" } };
+
+    expect(
+      worthNotifying(appended("#ircx", message), message, settings, false, new Date(2026, 0, 1, 23)),
+    ).toBeNull();
+    expect(useAppStore.getState().channels[targetKey("libera", "#ircx")]?.unread).toBe(0);
+  });
+});
+
+describe("quiet hours", () => {
+  const at = (hour: number, minute = 0) => new Date(2026, 0, 1, hour, minute);
+
+  it("handles a range that crosses midnight", () => {
+    const quiet = { start: "22:00", end: "07:00" };
+    expect(isQuietAt(quiet, at(21, 59))).toBe(false);
+    expect(isQuietAt(quiet, at(22))).toBe(true);
+    expect(isQuietAt(quiet, at(0))).toBe(true);
+    expect(isQuietAt(quiet, at(6, 59))).toBe(true);
+    expect(isQuietAt(quiet, at(7))).toBe(false);
+  });
+
+  it("handles a daytime range and treats equal endpoints as disabled", () => {
+    expect(isQuietAt({ start: "09:00", end: "17:00" }, at(9))).toBe(true);
+    expect(isQuietAt({ start: "09:00", end: "17:00" }, at(17))).toBe(false);
+    expect(isQuietAt({ start: "00:00", end: "00:00" }, at(12))).toBe(false);
+  });
+});
+
+describe("watched nick notifications", () => {
+  const event: Extract<IrcxEvent, { type: "notice" }> = {
+    type: "notice",
+    network: "libera",
+    severity: "info",
+    text: "sable is online",
+    detail: "ircx-watch-online:sable",
+  };
+
+  it("is opt-in and obeys quiet hours", () => {
+    expect(watchNotification(event, BOTH, new Date(2026, 0, 1, 12))).toBeNull();
+    expect(
+      watchNotification(
+        event,
+        { ...BOTH, watchPresence: true },
+        new Date(2026, 0, 1, 12),
+      ),
+    ).toEqual({ title: "sable is online", body: "libera" });
+    expect(
+      watchNotification(
+        event,
+        { ...BOTH, watchPresence: true, quietHours: { start: "22:00", end: "07:00" } },
+        new Date(2026, 0, 1, 23),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("the stored switches", () => {
   it("start off, because interrupting somebody is theirs to ask for", () => {
-    expect(DEFAULT_NOTIFICATIONS).toEqual({ highlights: false, directMessages: false });
+    expect(DEFAULT_NOTIFICATIONS).toEqual({
+      highlights: false,
+      directMessages: false,
+      quietHours: null,
+      conversations: {},
+      watchPresence: false,
+    });
   });
 
   it("keep the field that was written and fall back on the one that was not", () => {
     expect(sanitiseNotifications({ highlights: true, directMessages: "yes" })).toEqual({
       highlights: true,
       directMessages: false,
+      quietHours: null,
+      conversations: {},
+      watchPresence: false,
     });
     expect(sanitiseNotifications("nonsense")).toEqual(DEFAULT_NOTIFICATIONS);
     expect(sanitiseNotifications(null)).toEqual(DEFAULT_NOTIFICATIONS);
+  });
+
+  it("drops malformed quiet hours and conversation modes field by field", () => {
+    expect(
+      sanitiseNotifications({
+        quietHours: { start: "22:00", end: "31:00" },
+        conversations: { good: "all", bad: "sometimes" },
+        watchPresence: true,
+      }),
+    ).toMatchObject({ quietHours: null, conversations: { good: "all" }, watchPresence: true });
   });
 });

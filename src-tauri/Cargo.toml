@@ -16,11 +16,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Already in the tree under rustls; the file's name needs bytes nobody can guess.
 ring = "0.17"
+notify-rust = "4.18"
 ircx-ipc.workspace = true
 ircx-core.workspace = true
 ircx-net.workspace = true
 ircx-store.workspace = true
 base64 = "0.22"
+serde.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"

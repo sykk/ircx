@@ -525,6 +525,25 @@ describe("closing a conversation", () => {
     expect(screen.getByRole("menuitem", { name: "Close" })).toBeTruthy();
   });
 
+  it("closes the right-click menu on Escape", () => {
+    seedOne();
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "sable" }));
+
+    // Escape reaches the window, not the menu: a right-click never focused it.
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes the right-click menu on a click outside it", () => {
+    seedOne();
+    fireEvent.contextMenu(screen.getByRole("treeitem", { name: "sable" }));
+
+    fireEvent.pointerDown(screen.getByRole("treeitem", { name: "#ctf-ops" }));
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("pins and unpins a conversation from its menu", () => {
     seedStore(
       [makeNetwork("libera")],

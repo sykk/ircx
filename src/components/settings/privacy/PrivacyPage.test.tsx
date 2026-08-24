@@ -10,6 +10,13 @@ const summary = vi.fn();
 const setRetention = vi.fn();
 const deleteArchive = vi.fn();
 const exportArchive = vi.fn();
+const exportProfile = vi.fn();
+const listNetworkConfigs = vi.fn();
+const getUploadProvider = vi.fn();
+const listThemes = vi.fn();
+const listPlugins = vi.fn();
+const highlightWords = vi.fn();
+const mutedConversations = vi.fn();
 /** This sheet is one of the two that says something when a thing went right,
  * and the only way that reaches a screen reader is the side channel. */
 const announce = vi.fn();
@@ -21,6 +28,13 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
     setRetention: (...args: unknown[]) => setRetention(...args),
     deleteArchive: (...args: unknown[]) => deleteArchive(...args),
     exportArchive: (...args: unknown[]) => exportArchive(...args),
+    exportProfile: (...args: unknown[]) => exportProfile(...args),
+    listNetworkConfigs: () => listNetworkConfigs(),
+    getUploadProvider: () => getUploadProvider(),
+    listThemes: () => listThemes(),
+    listPlugins: () => listPlugins(),
+    highlightWords: () => highlightWords(),
+    mutedConversations: () => mutedConversations(),
     announce: (...args: unknown[]) => announce(...args),
   },
 }));
@@ -43,6 +57,13 @@ beforeEach(() => {
   setRetention.mockReset().mockResolvedValue(undefined);
   deleteArchive.mockReset().mockResolvedValue(undefined);
   exportArchive.mockReset().mockResolvedValue(120n);
+  exportProfile.mockReset().mockResolvedValue(240n);
+  listNetworkConfigs.mockReset().mockResolvedValue([]);
+  getUploadProvider.mockReset().mockResolvedValue(null);
+  listThemes.mockReset().mockResolvedValue([]);
+  listPlugins.mockReset().mockResolvedValue([]);
+  highlightWords.mockReset().mockResolvedValue([]);
+  mutedConversations.mockReset().mockResolvedValue([]);
   announce.mockReset().mockResolvedValue(undefined);
   save.mockReset().mockResolvedValue(null);
   resetStore();
@@ -217,6 +238,19 @@ describe("the privacy page", () => {
         "/tmp/libera.jsonl",
       ),
     );
+  });
+
+  it("writes a versioned profile through the save dialog", async () => {
+    save.mockResolvedValue("/tmp/ircx-profile.json");
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Export profile"));
+
+    await waitFor(() => expect(exportProfile).toHaveBeenCalled());
+    const [path, contents] = exportProfile.mock.calls[0] as [string, string];
+    expect(path).toBe("/tmp/ircx-profile.json");
+    expect(JSON.parse(contents)).toMatchObject({ format: "ircx-profile", version: 1 });
   });
 
   /** A file dialog nobody answers writes nothing. */

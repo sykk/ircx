@@ -213,6 +213,7 @@ pub fn run() {
             commands::ignored_people,
             commands::set_ignored,
             commands::export_archive,
+            commands::export_profile,
             commands::delete_archive,
             commands::announce,
             commands::certificate_fingerprint,

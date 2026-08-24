@@ -547,6 +547,16 @@ pub async fn export_archive(
     write_export(app.store(), &scope, &path)
 }
 
+/// Writes a profile the window has already rendered, and answers with its size
+/// for the same reason `export_archive` does. The JSON is built in the frontend,
+/// where most of what it describes is kept; only the write needs a process that
+/// can reach the path the save dialog gave back.
+#[tauri::command]
+pub async fn export_profile(path: String, contents: String) -> Result<u64, String> {
+    std::fs::write(&path, contents.as_bytes()).map_err(|error| unwritable(&path, &error))?;
+    Ok(contents.len() as u64)
+}
+
 /// The export without the Tauri state around it, so a test can aim it at a
 /// destination that refuses the write. The sentences below are chosen by
 /// `io::ErrorKind`, and a kind built by hand only ever proves the wording —

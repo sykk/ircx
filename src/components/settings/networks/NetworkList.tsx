@@ -7,11 +7,11 @@ import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useNetworks } from "@/store/selectors";
 import type { Network } from "@/types";
+import { canRegisterLibera, LiberaRegistrationForm } from "./LiberaRegistrationForm";
 
 /**
- * Every configured network, what each one is doing, and the four things that
- * can be done to it: add another, stop or start one, change its settings,
- * remove it.
+ * Every configured network, what each one is doing, and the actions available
+ * for it.
  *
  * Read out of the store rather than from `list_network_configs`, which is what
  * the form reads. The store's networks carry the connection state, and a page
@@ -22,8 +22,19 @@ export function NetworkList({ onDone }: { onDone: () => void }) {
   const networks = useNetworks();
   const openSetup = useAppStore((s) => s.openSetup);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [registering, setRegistering] = useState<Network | null>(null);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
+
+  if (registering !== null) {
+    return (
+      <LiberaRegistrationForm
+        network={registering}
+        onBack={() => setRegistering(null)}
+        onDone={onDone}
+      />
+    );
+  }
 
   /** Stops a network, or starts one that is stopped. A network that keeps
    * failing is retrying, so what somebody reaching for this wants is the loop
@@ -122,6 +133,14 @@ export function NetworkList({ onDone }: { onDone: () => void }) {
                     </>
                   ) : (
                     <>
+                      {canRegisterLibera(network) && (
+                        <SecondaryButton
+                          label={`Register an account on ${network.name}`}
+                          onClick={() => setRegistering(network)}
+                        >
+                          Register
+                        </SecondaryButton>
+                      )}
                       <SecondaryButton
                         label={
                           network.status.state === "disconnected"

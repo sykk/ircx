@@ -357,6 +357,89 @@ fn registered_holding(name: &str, newest: &str) -> Harness {
 }
 
 #[test]
+fn guided_libera_registration_stays_out_of_messages_and_raw_logs() {
+    let mut session = registered("");
+    let password = "correct-horse-battery-staple";
+    let email = "private@example.com";
+
+    let actions = session
+        .state
+        .register_libera("sykk", password, email)
+        .expect("the connected nick can be registered");
+
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Send { line, .. }
+                if line == &format!("PRIVMSG NickServ :REGISTER {password} {email}")
+        )
+    }));
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Emit(event)
+                if matches!(event.as_ref(), IrcxEvent::RawLine { outgoing: true, line, .. }
+                    if line == "PRIVMSG NickServ :REGISTER <credentials>")
+        )
+    }));
+    assert!(!actions.iter().any(|action| matches!(
+        action,
+        Action::Emit(event) if matches!(event.as_ref(), IrcxEvent::MessagesAppended { .. })
+    )));
+    assert!(!actions
+        .iter()
+        .any(|action| matches!(action, Action::Notify { .. })));
+    session.apply(actions);
+
+    let answer = session.state.on_line(&format!(
+        ":NickServ!NickServ@services. NOTICE sykk :Mail for {email} will never quote {password}"
+    ));
+    let visible = format!("{answer:?}");
+    assert!(!visible.contains(email), "{visible}");
+    assert!(!visible.contains(password), "{visible}");
+    assert!(visible.contains("<email>"), "{visible}");
+    assert!(visible.contains("<credentials>"), "{visible}");
+}
+
+#[test]
+fn guided_registration_sets_plain_sasl_for_the_next_connection() {
+    let mut session = registered("");
+    let actions = session
+        .state
+        .register_libera(
+            "sykk",
+            "correct-horse-battery-staple",
+            "private@example.com",
+        )
+        .unwrap();
+    session.apply(actions);
+    session.sent();
+
+    let actions = session.state.on_disconnected("network changed");
+    session.apply(actions);
+    session.connect_over_tls(tls_info());
+    session.feed(":irc.libera.chat CAP * LS :sasl=PLAIN");
+    session.feed(":irc.libera.chat CAP * ACK :sasl");
+
+    assert!(session
+        .sent()
+        .iter()
+        .any(|line| line == "AUTHENTICATE PLAIN"));
+}
+
+#[test]
+fn guided_registration_refuses_a_nick_other_than_the_connected_one() {
+    let mut session = registered("");
+
+    let error = session
+        .state
+        .register_libera("someone-else", "correct-horse", "private@example.com")
+        .unwrap_err();
+
+    assert!(error.contains("currently in use (sykk)"), "{error}");
+}
+
+#[test]
 fn registration_asks_for_the_intersection_and_authenticates_with_sasl() {
     let mut config = config();
     config.sasl = Some(SaslCredentials {

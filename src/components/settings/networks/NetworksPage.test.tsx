@@ -6,6 +6,9 @@ import { useAppStore } from "@/store";
 import type { NetworkConfig } from "@/types";
 import { NetworksPage } from "./NetworksPage";
 
+const registerLiberaAccount = vi.fn<
+  (id: string, account: string, password: string, email: string) => Promise<void>
+>();
 const listNetworkConfigs = vi.fn<() => Promise<NetworkConfig[]>>();
 const removeNetwork = vi.fn<(id: string) => Promise<void>>();
 const connectNetwork = vi.fn<(id: string) => Promise<void>>();
@@ -18,6 +21,8 @@ vi.mock("@/lib/ipc", () => ({
     connectNetwork: (id: string) => connectNetwork(id),
     disconnectNetwork: (id: string) => disconnectNetwork(id),
     removeNetwork: (id: string) => removeNetwork(id),
+    registerLiberaAccount: (id: string, account: string, password: string, email: string) =>
+      registerLiberaAccount(id, account, password, email),
   },
   onIrcxEvent: vi.fn(),
   reasonOr: (reason: unknown, fallback: string) =>
@@ -54,6 +59,7 @@ beforeEach(() => {
   connectNetwork.mockResolvedValue(undefined);
   disconnectNetwork.mockResolvedValue(undefined);
   removeNetwork.mockResolvedValue(undefined);
+  registerLiberaAccount.mockResolvedValue(undefined);
   seedStore([makeNetwork("libera", { name: "Libera.Chat", host: "irc.libera.chat" })]);
 });
 
@@ -152,6 +158,62 @@ describe("the list of networks", () => {
 
     expect(store().setup).toEqual({ network: null });
   });
+
+it("registers the connected Libera nick without using a conversation", async () => {
+    page();
+    fireEvent.click(screen.getByRole("button", { name: "Register an account on Libera.Chat" }));
+
+    expect(screen.getByRole("heading", { name: "Register a Libera.Chat account" })).toBeTruthy();
+    expect(screen.getByLabelText("Account / nick").getAttribute("value")).toBe("sable");
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-horse-battery-staple" },
+    });
+    fireEvent.change(screen.getByLabelText("Email address"), {
+      target: { value: "private@example.com" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Register account" }));
+    });
+
+    expect(registerLiberaAccount).toHaveBeenCalledWith(
+      "libera",
+      "sable",
+      "correct-horse-battery-staple",
+      "private@example.com",
+    );
+    expect(screen.getByText(/Check your email/)).toBeTruthy();
+    expect(screen.queryByLabelText("Password")).toBeNull();
+  });
+
+  it("does not offer registration on another network or an unconnected one", () => {
+    seedStore([
+      makeNetwork("oftc", { name: "OFTC", host: "irc.oftc.net" }),
+      makeNetwork("libera", {
+        name: "Libera.Chat",
+        host: "irc.libera.chat",
+        status: { state: "disconnected" },
+      }),
+    ]);
+
+    page();
+
+    expect(screen.queryByRole("button", { name: /Register an account/ })).toBeNull();
+  });
+
+  it("keeps the form open with the backend's actionable registration error", async () => {
+    registerLiberaAccount.mockRejectedValue("That nick is already registered. Choose another nick.");
+    page();
+    fireEvent.click(screen.getByRole("button", { name: "Register an account on Libera.Chat" }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Register account" }));
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain("already registered");
+    expect(screen.getByRole("heading", { name: "Register a Libera.Chat account" })).toBeTruthy();
+  });
+
 
   it("says so when nothing is configured", () => {
     seedStore([]);

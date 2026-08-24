@@ -46,6 +46,9 @@ historical results in Git and add a test when a check becomes repeatable.
 
 ## Networks and services
 
+- [ ] On a disposable Libera.Chat nick over verified TLS, complete guided
+  registration, follow the emailed verification command, reconnect, and
+  confirm SASL PLAIN signs into the new account.
 - [ ] Connect to Libera.Chat with SASL PLAIN and SCRAM-SHA-512. Repeat with a
   wrong password and confirm registration stops with an actionable error.
 - [ ] Connect two authenticated sessions to a server with read markers. Move

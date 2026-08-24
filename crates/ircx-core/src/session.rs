@@ -381,6 +381,10 @@ pub struct SessionState {
     /// round trip, so this holds enough for several conversations at once and
     /// nothing for a server that never answers.
     typing_labels: VecDeque<String>,
+    /// Values used only by the guided Libera registration. A service may echo
+    /// either one in its reply, so they are removed before the raw line is
+    /// emitted or parsed into a message.
+    pub(crate) libera_registration_secrets: Option<(String, String)>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
     ///
@@ -440,6 +444,7 @@ impl SessionState {
             gap_fills: HashMap::new(),
             page_backs: HashMap::new(),
             typing_labels: VecDeque::new(),
+            libera_registration_secrets: None,
             first_pages: HashSet::new(),
         }
     }
@@ -578,17 +583,26 @@ impl SessionState {
     }
 
     pub fn on_line(&mut self, line: &str) -> Vec<Action> {
+        let line = self.redact_libera_registration(line);
         self.emit(IrcxEvent::RawLine {
             network: self.config.network.clone(),
             outgoing: false,
-            line: line.to_string(),
+            line: line.clone(),
         });
-        match Message::parse(line) {
+        match Message::parse(&line) {
             Ok(message) => self.handle(&message),
             // A line we cannot parse is the server's problem, not the user's.
             Err(error) => debug!(%error, line, "dropped an unparseable line"),
         }
         self.drain()
+    }
+
+    fn redact_libera_registration(&self, line: &str) -> String {
+        let Some((password, email)) = &self.libera_registration_secrets else {
+            return line.to_string();
+        };
+        line.replace(email, "<email>")
+            .replace(password, "<credentials>")
     }
 
     /// Measures the round trip so the UI can show lag. A server that never

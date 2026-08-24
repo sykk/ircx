@@ -857,6 +857,28 @@ function ConversationMenu({
    * being hooks. */
   const menu = useHangingMenu(open, anchorToRow);
 
+  /* A right-click leaves focus where it was, so the menu's own key handler
+   * never sees Escape and the only way out was to pick something. Both routes
+   * out are the window's, as the pointer menu's are. */
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menu.current?.contains(event.target as Node)) onOpenChange(false);
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      onOpenChange(false);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("pointerdown", closeOutside, true);
+    window.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      window.removeEventListener("pointerdown", closeOutside, true);
+      window.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [open, onOpenChange, menu]);
+
   if (!open) return null;
 
   const close = () => {
@@ -870,15 +892,6 @@ function ConversationMenu({
       role="menu"
       aria-label={`${label} actions`}
       className="fixed z-[100] w-44 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          onOpenChange(false);
-        } else {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-      }}
     >
       <MenuItem
         onClick={() => {

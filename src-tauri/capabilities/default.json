@@ -16,6 +16,7 @@
     "notification:default",
     "dialog:allow-open",
     "dialog:allow-save",
+    "deep-link:default",
     "opener:allow-open-url",
     "opener:allow-default-urls",
     "core:webview:allow-set-webview-zoom",

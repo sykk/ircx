@@ -54,6 +54,13 @@ export type SplitDirection = "row" | "column";
 export type SidebarFilter = "unread" | "mentions" | "drafts" | null;
 export type SearchMode = "search" | "bookmarks" | "attention";
 
+export interface IrcLinkSetup {
+  host: string;
+  port: number;
+  tls: boolean;
+  target: string | null;
+}
+
 /**
  * How the panes divide the window. A tree rather than a list of panes with one
  * direction: splitting one pane must not rearrange the others, and only nesting
@@ -269,7 +276,7 @@ export interface AppState {
    * the palette each mean "configure this one", and `openSetup` opens settings
    * on Networks and says which one in the same write.
    */
-  setup: { network: string | null } | null;
+  setup: { network: string | null; link?: IrcLinkSetup } | null;
   /** Paths the composer's attach button picked, waiting for the confirmation a
    * drop gets. Here because the dialog that asks the question is mounted with
    * the app rather than inside the pane whose button was pressed; `DropToUpload`

@@ -224,6 +224,25 @@ it("registers the connected Libera nick without using a conversation", async () 
 });
 
 describe("the form", () => {
+  it("fills an advanced form from an IRC link", async () => {
+    store().openIrcSetup({
+      host: "irc.libera.chat",
+      port: 7000,
+      tls: true,
+      target: "#ircx",
+    });
+    page();
+    await settleForm();
+
+    expect(screen.getByRole("heading", { name: "Advanced setup" })).toBeTruthy();
+    expect(screen.getByLabelText("Network name").getAttribute("value")).toBe("Libera.Chat");
+    expect(screen.getByLabelText("Server address").getAttribute("value")).toBe(
+      "irc.libera.chat",
+    );
+    expect(screen.getByLabelText("Port").getAttribute("value")).toBe("7000");
+    expect(screen.getByLabelText(/Channels to join/).getAttribute("value")).toBe("#ircx");
+  });
+
   it("offers every setup path for a network that does not exist yet", async () => {
     open(null);
     await settleForm();

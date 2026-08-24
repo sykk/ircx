@@ -12,6 +12,7 @@ import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadHighlightWords } from "@/lib/highlights";
+import { openIrcLink, startIrcLinks } from "@/lib/ircLinks";
 import { startNotifications } from "@/lib/notifications";
 import { startNotificationRouting } from "@/lib/notificationRouting";
 import { loadPlugins } from "@/lib/plugins";
@@ -35,6 +36,7 @@ export function App() {
   useEffect(() => {
     const themes = startThemes();
     const bridge = startBridge();
+    const links = bridge.then(() => startIrcLinks(openIrcLink));
     let stopOpening = () => {};
     // The timeline tints a line against these; the Notifications page writes
     // them and re-reads them in the same call.
@@ -71,6 +73,7 @@ export function App() {
     return () => {
       stopOpening();
       void bridge.then((stop) => stop()).catch(() => {});
+      void links.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
       void notifications.then((stop) => stop());
       void notificationRoutes.then((stop) => stop());

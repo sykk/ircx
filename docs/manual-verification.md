@@ -59,6 +59,9 @@ historical results in Git and add a test when a check becomes repeatable.
 - [ ] Upload a small file through the Catbox preset and open the resulting URL.
 - [ ] Upload through a real S3-compatible account. Check the configured region,
   a private-object warning, and an anonymously readable object.
+- [ ] From another application, open `irc://` and `ircs://` links while ircx is
+  closed and while it is already running. A known network must open or join the
+  target channel; an unknown server must open a prefilled Advanced setup form.
 - [ ] On macOS, grant and refuse notification permission. On each supported
   desktop, confirm a direct-message notification names the conversation and is
   suppressed while the window is focused.

@@ -4,7 +4,7 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { insideTauri } from "@/lib/ipc";
+import { insideTauri, ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { isHighlight, type HighlightRule } from "@/store/selectors";
@@ -32,12 +32,42 @@ export interface Notifications {
   /** Any line in a query, which carries no keyword and needs none: somebody
    * opened a conversation with you and nobody else. */
   directMessages: boolean;
+  /** Local wall-clock range during which desktop notifications stay quiet. */
+  quietHours: QuietHours | null;
+  /** Per-conversation overrides, keyed the same way as the store. */
+  conversations: Record<string, ConversationAttention>;
+  /** A watched nick coming online. */
+  watchPresence: boolean;
 }
+
+export interface QuietHours {
+  start: string;
+  end: string;
+}
+
+export type ConversationAttention = "inherit" | "all" | "highlights" | "mute";
 
 export const DEFAULT_NOTIFICATIONS: Notifications = {
   highlights: false,
   directMessages: false,
+  quietHours: null,
+  conversations: {},
+  watchPresence: false,
 };
+
+const ATTENTION_MODES = new Set<ConversationAttention>([
+  "inherit",
+  "all",
+  "highlights",
+  "mute",
+]);
+
+function clockTime(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return false;
+  const hour = Number(value.slice(0, 2));
+  const minute = Number(value.slice(3, 5));
+  return hour < 24 && minute < 60;
+}
 
 /** localStorage is a text file the reader can edit, so this is untrusted input
  * rather than what was written. Each field falls back on its own. */
@@ -46,6 +76,30 @@ export function sanitiseNotifications(raw: unknown): Notifications {
     return DEFAULT_NOTIFICATIONS;
   }
   const held = raw as Record<string, unknown>;
+  const rawQuiet = held.quietHours;
+  const quietHours =
+    typeof rawQuiet === "object" &&
+    rawQuiet !== null &&
+    !Array.isArray(rawQuiet) &&
+    clockTime((rawQuiet as Record<string, unknown>).start) &&
+    clockTime((rawQuiet as Record<string, unknown>).end)
+      ? {
+          start: (rawQuiet as Record<string, unknown>).start as string,
+          end: (rawQuiet as Record<string, unknown>).end as string,
+        }
+      : null;
+  const conversations: Record<string, ConversationAttention> = {};
+  if (
+    typeof held.conversations === "object" &&
+    held.conversations !== null &&
+    !Array.isArray(held.conversations)
+  ) {
+    for (const [key, mode] of Object.entries(held.conversations)) {
+      if (typeof mode === "string" && ATTENTION_MODES.has(mode as ConversationAttention)) {
+        conversations[key] = mode as ConversationAttention;
+      }
+    }
+  }
   return {
     highlights:
       typeof held.highlights === "boolean"
@@ -55,6 +109,12 @@ export function sanitiseNotifications(raw: unknown): Notifications {
       typeof held.directMessages === "boolean"
         ? held.directMessages
         : DEFAULT_NOTIFICATIONS.directMessages,
+    quietHours,
+    conversations,
+    watchPresence:
+      typeof held.watchPresence === "boolean"
+        ? held.watchPresence
+        : DEFAULT_NOTIFICATIONS.watchPresence,
   };
 }
 
@@ -82,6 +142,27 @@ export function storeNotifications(next: Notifications): void {
   } catch {
     /* A window that cannot remember the setting still obeys it while it runs. */
   }
+}
+
+/** Start is inclusive and end is exclusive. Equal endpoints disable the range. */
+export function isQuietAt(quiet: QuietHours | null, now: Date): boolean {
+  if (quiet === null || quiet.start === quiet.end) return false;
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const startHour = Number(quiet.start.slice(0, 2));
+  const startMinute = Number(quiet.start.slice(3, 5));
+  const endHour = Number(quiet.end.slice(0, 2));
+  const endMinute = Number(quiet.end.slice(3, 5));
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  return start < end ? minute >= start && minute < end : minute >= start || minute < end;
+}
+
+export function attentionFor(
+  settings: Notifications,
+  network: string,
+  target: string,
+): ConversationAttention {
+  return settings.conversations[targetKey(network, target)] ?? "inherit";
 }
 
 /**
@@ -185,14 +266,31 @@ export function worthNotifying(
   message: ChatMessage,
   settings: Notifications,
   focused: boolean,
+  now = new Date(),
 ): { title: string; body: string } | null {
   if (message.sender.isSelf) return null;
   if (event.target === SERVER_TARGET || event.target === "") return null;
   // A backfill is not an interruption: it already happened, and the reader
   // asked to see it. The same rule a notification plugin gets.
   if (message.source !== "live") return null;
+  if (isQuietAt(settings.quietHours, now)) return null;
   if (muted(event.network, event.target)) return null;
   if (watching(event.network, event.target, focused)) return null;
+
+  const attention = attentionFor(settings, event.network, event.target);
+  if (attention === "mute") return null;
+  if (attention === "all") {
+    return isQuery(event.network, event.target)
+      ? { title: message.sender.nick, body: message.text }
+      : { title: `${message.sender.nick} in ${event.target}`, body: message.text };
+  }
+
+  const highlighted = isHighlight(message, ruleFor(event.network));
+  if (attention === "highlights") {
+    return highlighted
+      ? { title: `${message.sender.nick} in ${event.target}`, body: message.text }
+      : null;
+  }
 
   if (isQuery(event.network, event.target)) {
     if (!settings.directMessages) return null;
@@ -200,8 +298,23 @@ export function worthNotifying(
   }
 
   if (!settings.highlights) return null;
-  if (!isHighlight(message, ruleFor(event.network))) return null;
+  if (!highlighted) return null;
   return { title: `${message.sender.nick} in ${event.target}`, body: message.text };
+}
+
+const WATCH_ONLINE_PREFIX = "ircx-watch-online:";
+
+export function watchNotification(
+  event: Extract<IrcxEvent, { type: "notice" }>,
+  settings: Notifications,
+  now: Date,
+): { title: string; body: string } | null {
+  if (!settings.watchPresence || isQuietAt(settings.quietHours, now)) return null;
+  if (!event.detail?.startsWith(WATCH_ONLINE_PREFIX) || event.network === null) return null;
+  const nick = event.detail.slice(WATCH_ONLINE_PREFIX.length);
+  if (nick === "") return null;
+  const network = useAppStore.getState().networks[event.network]?.name ?? event.network;
+  return { title: `${nick} is online`, body: network };
 }
 
 /**
@@ -214,19 +327,32 @@ export function worthNotifying(
 export function notifyForEvents(events: readonly IrcxEvent[]): void {
   if (!insideTauri()) return;
   const settings = storedNotifications();
-  if (!settings.highlights && !settings.directMessages) return;
 
   for (const event of events) {
-    if (event.type !== "messagesAppended") continue;
-    for (const message of event.messages) {
-      const worth = worthNotifying(event, message, settings, windowFocused);
-      if (!worth) continue;
+    const presence = event.type === "notice" ? watchNotification(event, settings, new Date()) : null;
+    if (presence !== null) {
       try {
-        sendNotification(worth);
+        sendNotification(presence);
       } catch (reason) {
-        // One notification that could not be raised is not a reason to lose the
-        // rest of the batch, or the conversation it belongs to.
         console.warn("ircx could not raise a notification", reason);
+      }
+      continue;
+    }
+    if (event.type === "messagesAppended") {
+      for (const message of event.messages) {
+        const worth = worthNotifying(event, message, settings, windowFocused);
+        if (!worth) continue;
+        void ipc
+          .showMessageNotification(
+            worth.title,
+            worth.body,
+            event.network,
+            event.target,
+            message.id,
+          )
+          .catch((reason: unknown) => {
+            console.warn("ircx could not raise a notification", reason);
+          });
       }
     }
   }

@@ -19,7 +19,7 @@ interface TextFieldProps {
   hint?: ReactNode;
   error?: string | null;
   placeholder?: string;
-  type?: "text" | "password";
+  type?: "text" | "password" | "time";
   inputMode?: "text" | "numeric";
   autoFocus?: boolean;
   optional?: boolean;

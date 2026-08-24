@@ -223,6 +223,9 @@ describe("the notifications page", () => {
       expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}")).toEqual({
         highlights: true,
         directMessages: false,
+        quietHours: null,
+        conversations: {},
+        watchPresence: false,
       }),
     );
   });
@@ -253,6 +256,46 @@ describe("the notifications page", () => {
       expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").highlights).toBe(false),
     );
     expect(allowedMock).not.toHaveBeenCalled();
+  });
+
+  it("stores watched-presence notifications as an opt-in", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Notify me when watched nicks come online"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").watchPresence).toBe(
+        true,
+      ),
+    );
+  });
+
+  it("stores a conversation notification override without changing its mute", async () => {
+    open();
+    fireEvent.change(await screen.findByLabelText("Notifications for #ircx"), {
+      target: { value: "all" },
+    });
+
+    await waitFor(() =>
+      expect(
+        Object.values(
+          JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").conversations ?? {},
+        ),
+      ).toEqual(["all"]),
+    );
+    expect(ipcMock.setMuted).not.toHaveBeenCalled();
+  });
+
+  it("stores midnight-crossing quiet hours separately from unread settings", async () => {
+    open();
+    fireEvent.click(await screen.findByLabelText("Use quiet hours"));
+
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("ircx.notifications") ?? "{}").quietHours).toEqual({
+        start: "22:00",
+        end: "07:00",
+      }),
+    );
+    expect(ipcMock.setMuted).not.toHaveBeenCalled();
   });
 
   it("says why the list could not be read", async () => {

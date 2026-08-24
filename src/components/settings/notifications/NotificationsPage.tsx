@@ -6,6 +6,7 @@ import {
   Note,
   PrimaryButton,
   SecondaryButton,
+  SelectField,
   TextField,
 } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
@@ -13,11 +14,13 @@ import { useAnnounce } from "@/hooks/useAnnounce";
 import { loadHighlightWords } from "@/lib/highlights";
 import {
   allowedToNotify,
+  attentionFor,
   storeNotifications,
   storedNotifications,
   type Notifications,
 } from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
+import { targetKey } from "@/store/keys";
 import type { SettingsScope } from "@/components/settings/scope";
 import type { IgnoredPerson, MutedConversation, WatchedPerson } from "@/types";
 
@@ -132,9 +135,17 @@ export function NotificationsPage({
    * setting that reads as on and does nothing.
    */
   const choose = useCallback(async (next: Notifications) => {
+    const before = storedNotifications();
     const turningOn =
-      (next.highlights && !storedNotifications().highlights) ||
-      (next.directMessages && !storedNotifications().directMessages);
+      (next.highlights && !before.highlights) ||
+      (next.directMessages && !before.directMessages) ||
+      (next.watchPresence && !before.watchPresence) ||
+      Object.entries(next.conversations).some(
+        ([key, mode]) =>
+          (mode === "all" || mode === "highlights") &&
+          before.conversations[key] !== "all" &&
+          before.conversations[key] !== "highlights",
+      );
     if (turningOn && !(await allowedToNotify())) {
       setRefused(true);
       return;
@@ -292,10 +303,67 @@ export function NotificationsPage({
           checked={notify.directMessages}
           onChange={(directMessages) => void choose({ ...notify, directMessages })}
         />
+        <CheckField
+          label="Notify me when watched nicks come online"
+          hint="The first status after connecting is silent; a later return raises a notification."
+          checked={notify.watchPresence}
+          onChange={(watchPresence) => void choose({ ...notify, watchPresence })}
+        />
+        {here !== null && here.target !== null && (
+          <SelectField
+            label={`Notifications for ${here.target}`}
+            value={attentionFor(notify, here.network, here.target)}
+            options={[
+              { value: "inherit", label: "Use the defaults above" },
+              { value: "all", label: "Every live message" },
+              { value: "highlights", label: "Highlights only" },
+              { value: "mute", label: "None" },
+            ]}
+            onChange={(mode) => {
+              if (here.target === null) return;
+              const key = targetKey(here.network, here.target);
+              const conversations = { ...notify.conversations };
+              if (mode === "inherit") delete conversations[key];
+              else conversations[key] = mode;
+              void choose({ ...notify, conversations });
+            }}
+            hint="This changes desktop notifications only. Unread counts continue to record what arrived."
+          />
+        )}
+        <CheckField
+          label="Use quiet hours"
+          hint="Desktop notifications stay quiet during this local-time range. Unread counts still change."
+          checked={notify.quietHours !== null}
+          onChange={(enabled) =>
+            void choose({
+              ...notify,
+              quietHours: enabled ? { start: "22:00", end: "07:00" } : null,
+            })
+          }
+        />
+        {notify.quietHours !== null && (
+          <div className="grid grid-cols-2 gap-2">
+            <TextField
+              label="Quiet from"
+              type="time"
+              value={notify.quietHours.start}
+              onChange={(start) =>
+                void choose({ ...notify, quietHours: { ...notify.quietHours!, start } })
+              }
+            />
+            <TextField
+              label="Quiet until"
+              type="time"
+              value={notify.quietHours.end}
+              onChange={(end) =>
+                void choose({ ...notify, quietHours: { ...notify.quietHours!, end } })
+              }
+            />
+          </div>
+        )}
         <Note>
-          Nothing arrives for the conversation you are looking at. Clicking a notification does
-          not open it — the desktop does not tell ircx it was clicked — so it names the
-          conversation instead.
+          Nothing arrives for the conversation you are looking at. Clicking a message notification
+          opens its conversation and message.
         </Note>
         {refused && (
           <Note error>

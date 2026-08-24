@@ -89,6 +89,13 @@ export const ipc = {
   registerLiberaAccount: (network: string, account: string, password: string, email: string) =>
     invoke<void>("register_libera_account", { network, account, password, email }),
   removeNetwork: (network: string) => invoke<void>("remove_network", { network }),
+  showMessageNotification: (
+    title: string,
+    body: string,
+    network: string,
+    target: string,
+    messageId: string,
+  ) => invoke<void>("show_message_notification", { title, body, network, target, messageId }),
 
   getUploadProvider: () => invoke<UploadProvider | null>("get_upload_provider"),
   saveUploadProvider: (provider: UploadProvider) =>

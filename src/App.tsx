@@ -13,6 +13,7 @@ import { startBridge } from "@/lib/bridge";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadHighlightWords } from "@/lib/highlights";
 import { startNotifications } from "@/lib/notifications";
+import { startNotificationRouting } from "@/lib/notificationRouting";
 import { loadPlugins } from "@/lib/plugins";
 import { startThemes } from "@/lib/theme";
 import { useAppStore } from "@/store";
@@ -41,6 +42,7 @@ export function App() {
     // Follows whether the window has focus, which is what keeps a notification
     // from arriving for the line somebody just watched appear.
     const notifications = startNotifications();
+    const notificationRoutes = startNotificationRouting();
     void loadPlugins();
     bridge.then(
       () => {
@@ -71,6 +73,7 @@ export function App() {
       void bridge.then((stop) => stop()).catch(() => {});
       void themes.then((stop) => stop());
       void notifications.then((stop) => stop());
+      void notificationRoutes.then((stop) => stop());
     };
   }, []);
 

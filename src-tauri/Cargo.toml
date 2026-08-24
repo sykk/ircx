@@ -23,8 +23,10 @@ ircx-net.workspace = true
 ircx-store.workspace = true
 base64 = "0.22"
 serde.workspace = true
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-deep-link = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tokio.workspace = true
@@ -37,8 +39,10 @@ tracing-subscriber.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
 [dev-dependencies]
-serde_json.workspace = true
 tempfile = "3"
 # `start_paused`, so a test can let the round-trip deadline pass without
 # spending a minute of the suite on it.

@@ -34,6 +34,7 @@ import type {
   AppState,
   ChatView,
   ConsoleInput,
+  IrcLinkSetup,
   Layout,
   SearchMode,
   SplitDirection,
@@ -150,6 +151,7 @@ export interface AppActions {
   /** Opens settings on the Networks page, showing one network's form — or a
    * blank one for a null id. */
   openSetup: (network: string | null) => void;
+  openIrcSetup: (link: IrcLinkSetup) => void;
   /** Back to the list of networks, which is the form's way out. */
   closeSetup: () => void;
   /** Hands picked files to the upload confirmation, or clears them once it has
@@ -757,6 +759,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   closeSearch: () => set({ searchOpen: false }),
 
   openSetup: (network) => set({ setup: { network }, settings: "networks" }),
+  openIrcSetup: (link) => set({ setup: { network: null, link }, settings: "networks" }),
   closeSetup: () => set({ setup: null }),
 
   setUploadRequest: (paths) =>

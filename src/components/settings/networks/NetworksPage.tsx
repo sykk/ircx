@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { draftOf } from "@/components/onboarding/config";
+import { draftOf, emptyDraft, PUBLIC_NETWORKS } from "@/components/onboarding/config";
 import { Onboarding, type OnboardingStart } from "@/components/onboarding/Onboarding";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc } from "@/lib/ipc";
 import { useAppStore } from "@/store";
+import type { IrcLinkSetup } from "@/store/types";
 import type { NetworkConfig } from "@/types";
 import { NetworkList } from "./NetworkList";
 
@@ -59,14 +60,29 @@ export function NetworksPage({ onDone }: { onDone: () => void }) {
       ) : (
         // Keyed so opening a second network starts its form from scratch rather
         // than inheriting the last one's draft.
-        <Form key={setup.network ?? "new"} network={setup.network} onDone={closeSetup} />
+        <Form
+          key={setup.network ?? `${setup.link?.host ?? "new"}/${setup.link?.target ?? ""}`}
+          network={setup.network}
+          link={setup.link}
+          onDone={closeSetup}
+        />
       )}
     </div>
   );
 }
 
-function Form({ network, onDone }: { network: string | null; onDone: () => void }) {
-  const [start, setStart] = useState<OnboardingStart | null>(null);
+function Form({
+  network,
+  link,
+  onDone,
+}: {
+  network: string | null;
+  link: IrcLinkSetup | undefined;
+  onDone: () => void;
+}) {
+  const [start, setStart] = useState<OnboardingStart | null>(() =>
+    link === undefined ? null : startFromLink(link),
+  );
   const [error, setError] = useState<string | null>(null);
   const [identities, setIdentities] = useState<NetworkConfig[]>([]);
   useAnnounce(error);
@@ -107,7 +123,7 @@ function Form({ network, onDone }: { network: string | null; onDone: () => void 
       </p>
     );
   }
-  if (network === null) {
+  if (network === null && start === null) {
     return <Onboarding onDone={onDone} identities={identities} />;
   }
   if (start === null) {
@@ -116,4 +132,21 @@ function Form({ network, onDone }: { network: string | null; onDone: () => void 
   // `start` is what makes Back leave the flow rather than fall through to the
   // chooser, and leaving the flow here is returning to the list.
   return <Onboarding onDone={onDone} start={start} identities={identities} />;
+}
+
+function startFromLink(link: IrcLinkSetup): OnboardingStart {
+  const named = PUBLIC_NETWORKS.find(
+    (network) => network.host.toLowerCase() === link.host.toLowerCase(),
+  );
+  return {
+    step: "advanced",
+    draft: {
+      ...emptyDraft(),
+      name: named?.name ?? link.host,
+      host: link.host,
+      port: String(link.port),
+      tls: link.tls,
+      autojoin: link.target ?? "",
+    },
+  };
 }

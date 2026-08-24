@@ -41,6 +41,7 @@ export type { UploadMethod } from "./generated/UploadMethod";
 export type { S3Credentials } from "./generated/S3Credentials";
 export type { UploadProvider } from "./generated/UploadProvider";
 export type { UploadedFile } from "./generated/UploadedFile";
+export type { WatchedPerson } from "./generated/WatchedPerson";
 export type { PluginPermission } from "./generated/PluginPermission";
 export type { PluginPermissionInfo } from "./generated/PluginPermissionInfo";
 export type { Query } from "./generated/Query";

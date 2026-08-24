@@ -212,6 +212,8 @@ pub fn run() {
             commands::set_muted,
             commands::ignored_people,
             commands::set_ignored,
+            commands::watched_people,
+            commands::set_watched,
             commands::export_archive,
             commands::export_profile,
             commands::delete_archive,

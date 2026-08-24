@@ -30,6 +30,7 @@ const HELP: &str = "\
 /away [reason]            mark yourself away, or back
 /ignore [nick]            stop hearing from somebody, or list who is ignored
 /unignore <nick>          hear from them again
+/watch [nick|-nick]       follow a nickname, remove with -nick, or list
 /quit [reason]            disconnect
 /raw <line>               send a line to the server untouched
 /close [target]           close a conversation and forget it
@@ -259,6 +260,7 @@ impl SessionState {
             "away" => self.cmd_away(args),
             "ignore" => self.cmd_ignore(target, args),
             "unignore" => self.cmd_unignore(target, args),
+            "watch" => self.cmd_watch(target, args),
             "quit" => {
                 self.send_quit((!args.is_empty()).then_some(args));
                 CommandOutcome::Handled
@@ -588,6 +590,47 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    fn cmd_watch(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let Some(argument) = args.split_whitespace().next() else {
+            let mut nicks = self.watched.clone();
+            nicks.sort_by_key(|nick| nick.to_lowercase());
+            let text = match nicks.is_empty() {
+                true => "Nobody is watched on this network.".to_string(),
+                false => format!("Watched on this network: {}", nicks.join(", ")),
+            };
+            self.note(SERVER_TARGET, MessageKind::Client, text);
+            return CommandOutcome::Handled;
+        };
+        let (nick, watched) = match argument.strip_prefix('-') {
+            Some("") => {
+                return CommandOutcome::Rejected(
+                    "`/watch -<nick>` needs a nickname after the hyphen".into(),
+                );
+            }
+            Some(nick) => (nick, false),
+            None => (argument, true),
+        };
+        if self.fold(nick) == self.fold(&self.nick) {
+            return CommandOutcome::Rejected("You cannot watch yourself.".into());
+        }
+        if self.is_watched(nick) == watched {
+            return CommandOutcome::Rejected(match watched {
+                true => format!("{nick} is already watched."),
+                false => format!("{nick} is not watched."),
+            });
+        }
+        self.watch(nick, watched);
+        self.note(
+            target,
+            MessageKind::Client,
+            match watched {
+                true => format!("Watching {nick}."),
+                false => format!("No longer watching {nick}."),
+            },
+        );
+        CommandOutcome::Handled
+    }
+
     fn cmd_raw(&mut self, args: &str) -> CommandOutcome {
         if args.is_empty() {
             return CommandOutcome::Rejected("`/raw <line>` needs a line".into());
@@ -795,7 +838,7 @@ impl SessionState {
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
     "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "ignore", "unignore",
-    "quit", "raw", "quote", "close", "help",
+    "watch", "quit", "raw", "quote", "close", "help",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

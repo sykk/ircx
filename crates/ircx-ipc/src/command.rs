@@ -36,6 +36,8 @@
 //! set_muted(network, target, muted)           -> ()
 //! ignored_people()                            -> Vec<IgnoredPerson>
 //! set_ignored(network, nick, ignored)         -> ()
+//! watched_people()                            -> Vec<WatchedPerson>
+//! set_watched(network, nick, watched)         -> ()
 //! export_archive(scope, path)                 -> u64
 //! export_profile(path, contents)               -> u64
 //! delete_archive(scope)                       -> ()

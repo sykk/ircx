@@ -24,6 +24,7 @@ const MIGRATIONS: &[&str] = &[
     IGNORED,
     BOOKMARK_NOTES,
     SOCKS5_PROXY,
+    WATCHED_NICKS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -401,6 +402,14 @@ CREATE TABLE bookmarks (
 
 const BOOKMARK_NOTES: &str = r#"
 ALTER TABLE bookmarks ADD COLUMN note TEXT NOT NULL DEFAULT '';
+"#;
+
+const WATCHED_NICKS: &str = r#"
+CREATE TABLE watched_nicks (
+    network TEXT NOT NULL,
+    nick    TEXT NOT NULL,
+    PRIMARY KEY (network, nick)
+);
 "#;
 
 #[cfg(test)]

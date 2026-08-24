@@ -81,6 +81,7 @@ struct Harness {
     /// Stands in for the `ignored` table: who the session asked the host to
     /// write down, and whether it was an ignore or the end of one.
     ignore_writes: Vec<(String, bool)>,
+    watch_writes: Vec<(String, bool)>,
     closed: bool,
 }
 
@@ -96,6 +97,7 @@ impl Harness {
             sts_policies: Vec::new(),
             sts_upgrades: Vec::new(),
             ignore_writes: Vec::new(),
+            watch_writes: Vec::new(),
             closed: false,
         }
     }
@@ -128,6 +130,7 @@ impl Harness {
                 } => self.sts_policies.push((host, port, duration)),
                 Action::StsUpgrade { port } => self.sts_upgrades.push(port),
                 Action::Ignore { nick, ignored } => self.ignore_writes.push((nick, ignored)),
+                Action::Watch { nick, watched } => self.watch_writes.push((nick, watched)),
                 Action::Close => self.closed = true,
             }
         }
@@ -3568,6 +3571,104 @@ mod monitor {
         session.apply(actions);
 
         assert!(session.sent_starting("MONITOR").is_empty());
+    }
+
+    #[test]
+    fn watched_nicks_take_the_servers_limited_slots_before_queries() {
+        let mut session = Harness::new(config());
+        session
+            .state
+            .set_watched(vec!["willow".into(), "sable".into()]);
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Query("aster".into()),
+            newest: None,
+        }]);
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.example 001 sykk :Welcome");
+        session.feed(":irc.example 005 sykk MONITOR=2 CASEMAPPING=rfc1459 :are supported");
+
+        assert_eq!(
+            session.sent_starting("MONITOR"),
+            ["MONITOR + sable", "MONITOR + willow"]
+        );
+    }
+
+    #[test]
+    fn watched_nicks_use_the_servers_casemapping() {
+        let mut session = Harness::new(config());
+        session
+            .state
+            .set_watched(vec!["nick[".into(), "NICK{".into()]);
+        session.connect();
+        session.feed(":irc.example 001 sykk :Welcome");
+        session.feed(":irc.example 005 sykk MONITOR=100 CASEMAPPING=rfc1459 :are supported");
+
+        assert_eq!(session.sent_starting("MONITOR").len(), 1);
+    }
+
+    #[test]
+    fn removing_a_watch_persists_the_original_rfc1459_spelling() {
+        let mut session = with_queries("MONITOR=100", &[]);
+        session.state.set_watched(vec!["nick[".into()]);
+
+        session.submit("#ircx", "/watch -NICK{");
+
+        assert_eq!(session.watch_writes, vec![("nick[".into(), false)]);
+    }
+
+    #[test]
+    fn only_a_watched_nick_transition_to_online_emits_a_presence_notice() {
+        let mut session = Harness::new(config());
+        session.state.set_watched(vec!["sable".into()]);
+        session.connect();
+        session.feed(":irc.example 001 sykk :Welcome");
+        session.feed(":irc.example 005 sykk MONITOR=100 CASEMAPPING=rfc1459 :are supported");
+        session.events.clear();
+
+        session.feed(":irc.example 730 sykk :sable!s@host");
+        assert!(
+            session.notices().is_empty(),
+            "the initial status is not an arrival"
+        );
+
+        session.feed(":irc.example 731 sykk :sable");
+        session.feed(":irc.example 730 sykk :SABLE!s@host");
+
+        assert!(session.events.iter().any(|event| matches!(
+            event,
+            IrcxEvent::Notice { detail: Some(detail), .. }
+                if detail == "ircx-watch-online:SABLE"
+        )));
+        assert!(session
+            .events
+            .iter()
+            .all(|event| !matches!(event, IrcxEvent::QueryUpdated { .. })));
+    }
+
+    #[test]
+    fn the_watch_command_adds_and_removes_without_opening_a_query() {
+        let mut session = with_queries("MONITOR=100", &[]);
+        session.sent();
+
+        assert!(matches!(
+            session.submit("#ircx", "/watch Sable"),
+            CommandOutcome::Handled
+        ));
+        assert_eq!(session.watch_writes, vec![("Sable".into(), true)]);
+        assert_eq!(session.sent_starting("MONITOR"), ["MONITOR + Sable"]);
+        assert!(session
+            .events
+            .iter()
+            .all(|event| !matches!(event, IrcxEvent::QueryUpdated { .. })));
+
+        session.sent();
+        session.submit("#ircx", "/watch -sable");
+        assert_eq!(
+            session.watch_writes,
+            vec![("Sable".into(), true), ("Sable".into(), false)]
+        );
+        assert_eq!(session.sent_starting("MONITOR"), ["MONITOR - Sable"]);
     }
 }
 

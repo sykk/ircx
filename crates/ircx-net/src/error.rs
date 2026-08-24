@@ -17,6 +17,14 @@ pub enum NetError {
         source: std::io::Error,
     },
 
+    #[error("SOCKS5 proxy {proxy} could not connect to {host}:{port}: {reason}")]
+    Socks5 {
+        proxy: String,
+        host: String,
+        port: u16,
+        reason: String,
+    },
+
     #[error("TLS handshake with {host} failed: {source}")]
     Tls {
         host: String,

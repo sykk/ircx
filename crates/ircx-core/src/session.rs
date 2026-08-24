@@ -113,6 +113,7 @@ pub struct SessionConfig {
     pub port: u16,
     pub tls: bool,
     pub tls_verify: bool,
+    pub socks5_proxy: Option<String>,
     /// The PEM this network presents, if SASL EXTERNAL is to have anything to
     /// authenticate with.
     pub client_certificate: Option<String>,
@@ -140,6 +141,7 @@ impl SessionConfig {
             port: config.port,
             tls: config.tls,
             tls_verify: config.tls_verify,
+            socks5_proxy: config.socks5_proxy.clone(),
             client_certificate: config.client_certificate.clone(),
             nick: config.nick.clone(),
             alt_nicks: config.alt_nicks.clone(),

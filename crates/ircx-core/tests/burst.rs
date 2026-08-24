@@ -383,6 +383,7 @@ fn config(network: &str) -> SessionConfig {
         port: port(),
         tls: false,
         tls_verify: false,
+        socks5_proxy: None,
         client_certificate: None,
         nick: format!("ircx-{network}"),
         alt_nicks: Vec::new(),

@@ -27,6 +27,7 @@ async fn a_rejected_sasl_does_not_leave_us_connected() {
         port: 6697,
         tls: true,
         tls_verify: true,
+        socks5_proxy: None,
         client_certificate: None,
         nick: nick.clone(),
         alt_nicks: Vec::new(),

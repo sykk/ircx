@@ -23,6 +23,7 @@ const MIGRATIONS: &[&str] = &[
     BOOKMARKS,
     IGNORED,
     BOOKMARK_NOTES,
+    SOCKS5_PROXY,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -198,6 +199,10 @@ CREATE UNIQUE INDEX idx_reactions_one_each ON reactions (network, msgid, nick, e
 /// it are in the keyring rather than in this file for the same reason.
 const CLIENT_CERTIFICATE: &str = r#"
 ALTER TABLE networks ADD COLUMN client_certificate TEXT;
+"#;
+
+const SOCKS5_PROXY: &str = r#"
+ALTER TABLE networks ADD COLUMN socks5_proxy TEXT;
 "#;
 
 /// The timeline queries match `target` without case (`load_history` says why),
@@ -542,15 +547,16 @@ mod tests {
 
         migrate(&mut conn).unwrap();
 
-        let (nick, certificate): (String, Option<String>) = conn
+        let (nick, certificate, proxy): (String, Option<String>, Option<String>) = conn
             .query_row(
-                "SELECT nick, client_certificate FROM networks WHERE id = 'n1'",
+                "SELECT nick, client_certificate, socks5_proxy FROM networks WHERE id = 'n1'",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .unwrap();
         assert_eq!(nick, "sable");
         assert_eq!(certificate, None);
+        assert_eq!(proxy, None);
     }
 
     #[test]

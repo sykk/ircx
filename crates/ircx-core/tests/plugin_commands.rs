@@ -42,6 +42,7 @@ fn config() -> SessionConfig {
         port: 6697,
         tls: true,
         tls_verify: true,
+        socks5_proxy: None,
         client_certificate: None,
         nick: "sykk".into(),
         alt_nicks: Vec::new(),

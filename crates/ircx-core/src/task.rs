@@ -420,6 +420,7 @@ async fn run(
         config.tls,
         config.tls_verify,
     );
+    let socks5_proxy = config.socks5_proxy.clone();
     // Beside the tuple rather than in it: a fifth field read as `endpoint.4`
     // says nothing about what it is.
     let client_certificate = config.client_certificate.clone().map(PathBuf::from);
@@ -436,7 +437,15 @@ async fn run(
         page_backs: Mutex::default(),
     };
 
-    drive(endpoint, client_certificate, session, inbox, &context).await;
+    drive(
+        endpoint,
+        socks5_proxy,
+        client_certificate,
+        session,
+        inbox,
+        &context,
+    )
+    .await;
     // Every way out — a restore that could not be delivered, a connect that
     // was refused, the inbox closing — ends with the session's writes on
     // disk, not only the orderly stop.
@@ -447,6 +456,7 @@ async fn run(
 /// read, reconnect, until told to stop for good.
 async fn drive(
     mut endpoint: (String, u16, bool, bool),
+    socks5_proxy: Option<String>,
     client_certificate: Option<PathBuf>,
     mut session: SessionState,
     mut inbox: mpsc::Receiver<SessionCommand>,
@@ -520,6 +530,7 @@ async fn drive(
             port: endpoint.1,
             tls: endpoint.2,
             tls_verify: endpoint.3,
+            socks5_proxy: socks5_proxy.clone(),
             client_certificate: client_certificate.clone(),
             ..ConnectionConfig::default()
         })
@@ -1552,6 +1563,7 @@ mod tests {
             port: 6667,
             tls: false,
             tls_verify: false,
+            socks5_proxy: None,
             client_certificate: None,
             nick: "ircx".into(),
             alt_nicks: Vec::new(),

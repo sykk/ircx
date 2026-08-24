@@ -83,7 +83,14 @@ export function ServerForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (problems.host || problems.port || problems.nick || problems.clientCertificate) return;
+    if (
+      problems.host ||
+      problems.port ||
+      problems.socks5Proxy ||
+      problems.nick ||
+      problems.clientCertificate
+    )
+      return;
     onSubmit();
   }
 
@@ -181,6 +188,15 @@ export function ServerForm({
               onChange={(tlsVerify) => onChange({ tlsVerify })}
             />
           )}
+          <TextField
+            optional
+            label="SOCKS5 proxy"
+            value={draft.socks5Proxy}
+            onChange={(socks5Proxy) => onChange({ socks5Proxy })}
+            placeholder="127.0.0.1:1080"
+            hint="Host and port. The proxy resolves the IRC server's address."
+            error={shown("socks5Proxy", draft.socks5Proxy)}
+          />
         </>
       )}
 

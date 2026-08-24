@@ -261,6 +261,7 @@ describe("the advanced path", () => {
     // the value it holds survives being switched off.
     fireEvent.click(screen.getByLabelText(/Verify the server's certificate/));
     fireEvent.click(screen.getByLabelText("Connect over TLS"));
+    type(/^SOCKS5 proxy/, "proxy.example.com:1080");
     type("Nickname", "sable");
     type(/Alternate nicknames/, "sable_ sable__");
     type(/Username/, "sbl");
@@ -284,6 +285,7 @@ describe("the advanced path", () => {
       port: 6667,
       tls: false,
       tlsVerify: false,
+      socks5Proxy: "proxy.example.com:1080",
       clientCertificate: null,
       nick: "sable",
       altNicks: ["sable_", "sable__"],

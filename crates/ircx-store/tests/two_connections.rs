@@ -177,6 +177,7 @@ fn the_rest_of_what_the_reader_answers_is_current_too() {
             port: 6697,
             tls: true,
             tls_verify: true,
+            socks5_proxy: None,
             nick: "sykk".into(),
             alt_nicks: vec![],
             username: "sykk".into(),

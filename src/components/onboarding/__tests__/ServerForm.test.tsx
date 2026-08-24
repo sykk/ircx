@@ -47,6 +47,20 @@ beforeEach(() => {
   certificateFingerprint.mockResolvedValue(FINGERPRINT);
 });
 
+describe("SOCKS5 proxy", () => {
+  it("is available in advanced network settings", () => {
+    form();
+    expect(screen.getByLabelText(/^SOCKS5 proxy/)).toBeTruthy();
+  });
+
+  it("refuses an address without a port", () => {
+    form({ socks5Proxy: "proxy.example.com" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/Enter a SOCKS5 proxy as host:port/)).toBeTruthy();
+  });
+});
+
 describe("choosing SASL EXTERNAL", () => {
   /** #373 took it out because nothing could present a certificate. #401 built
    * one, so the label stops naming something the client cannot do. */

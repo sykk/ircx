@@ -74,6 +74,7 @@ pub struct NetworkConfig {
     pub connect_commands: Vec<String>,
     pub autojoin: Vec<String>,
     pub auto_connect: bool,
+    pub socks5_proxy: Option<String>,
 }
 
 /// The password lives in the OS keyring, keyed by network id; it never crosses

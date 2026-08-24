@@ -27,6 +27,7 @@ pub struct ConnectionConfig {
     /// opt-in for self-signed servers, never a fallback: `Default` sets it
     /// `true` and a failed handshake stays failed.
     pub tls_verify: bool,
+    pub socks5_proxy: Option<String>,
     /// A PEM file holding the certificate to present and the key that signs for
     /// it. What SASL EXTERNAL authenticates with, and read at connect time
     /// rather than held in memory, so replacing an expired one takes a
@@ -43,6 +44,7 @@ impl Default for ConnectionConfig {
             port: 6697,
             tls: true,
             tls_verify: true,
+            socks5_proxy: None,
             client_certificate: None,
             connect_timeout: Duration::from_secs(30),
         }
@@ -187,13 +189,16 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Socket for T {}
 async fn establish(
     config: ConnectionConfig,
 ) -> Result<(Box<dyn Socket>, Option<TlsInfo>), NetError> {
-    let tcp = TcpStream::connect((config.host.as_str(), config.port))
-        .await
-        .map_err(|source| NetError::Connect {
-            host: config.host.clone(),
-            port: config.port,
-            source,
-        })?;
+    let tcp = match config.socks5_proxy.as_deref() {
+        Some(proxy) => connect_socks5(proxy, &config.host, config.port).await?,
+        None => TcpStream::connect((config.host.as_str(), config.port))
+            .await
+            .map_err(|source| NetError::Connect {
+                host: config.host.clone(),
+                port: config.port,
+                source,
+            })?,
+    };
     let _ = tcp.set_nodelay(true);
 
     if !config.tls {
@@ -220,6 +225,143 @@ async fn establish(
 
     let info = tls::tls_info(stream.get_ref().1);
     Ok((Box::new(stream), Some(info)))
+}
+
+async fn connect_socks5(proxy: &str, host: &str, port: u16) -> Result<TcpStream, NetError> {
+    let (proxy_host, proxy_port) = proxy_endpoint(proxy).ok_or_else(|| NetError::Socks5 {
+        proxy: proxy.to_owned(),
+        host: host.to_owned(),
+        port,
+        reason: "the proxy address must be host:port".to_owned(),
+    })?;
+    let mut stream = TcpStream::connect((proxy_host.as_str(), proxy_port))
+        .await
+        .map_err(|source| NetError::Socks5 {
+            proxy: proxy.to_owned(),
+            host: host.to_owned(),
+            port,
+            reason: source.to_string(),
+        })?;
+
+    stream
+        .write_all(&[5, 1, 0])
+        .await
+        .map_err(|source| socks5_io(proxy, host, port, source))?;
+    let mut greeting = [0u8; 2];
+    stream
+        .read_exact(&mut greeting)
+        .await
+        .map_err(|source| socks5_io(proxy, host, port, source))?;
+    if greeting != [5, 0] {
+        return Err(NetError::Socks5 {
+            proxy: proxy.to_owned(),
+            host: host.to_owned(),
+            port,
+            reason: "the proxy does not allow connections without authentication".to_owned(),
+        });
+    }
+
+    let name = host.as_bytes();
+    let name_len = u8::try_from(name.len()).map_err(|_| NetError::Socks5 {
+        proxy: proxy.to_owned(),
+        host: host.to_owned(),
+        port,
+        reason: "the IRC server name is longer than SOCKS5 can carry".to_owned(),
+    })?;
+    let mut request = Vec::with_capacity(name.len() + 7);
+    request.extend_from_slice(&[5, 1, 0, 3, name_len]);
+    request.extend_from_slice(name);
+    request.extend_from_slice(&port.to_be_bytes());
+    stream
+        .write_all(&request)
+        .await
+        .map_err(|source| socks5_io(proxy, host, port, source))?;
+
+    let mut response = [0u8; 4];
+    stream
+        .read_exact(&mut response)
+        .await
+        .map_err(|source| socks5_io(proxy, host, port, source))?;
+    if response[0] != 5 || response[2] != 0 {
+        return Err(NetError::Socks5 {
+            proxy: proxy.to_owned(),
+            host: host.to_owned(),
+            port,
+            reason: "the proxy returned an invalid SOCKS5 response".to_owned(),
+        });
+    }
+    if response[1] != 0 {
+        return Err(NetError::Socks5 {
+            proxy: proxy.to_owned(),
+            host: host.to_owned(),
+            port,
+            reason: socks5_refusal(response[1]).to_owned(),
+        });
+    }
+
+    let address_len = match response[3] {
+        1 => 4,
+        3 => {
+            let mut length = [0u8; 1];
+            stream
+                .read_exact(&mut length)
+                .await
+                .map_err(|source| socks5_io(proxy, host, port, source))?;
+            usize::from(length[0])
+        }
+        4 => 16,
+        _ => {
+            return Err(NetError::Socks5 {
+                proxy: proxy.to_owned(),
+                host: host.to_owned(),
+                port,
+                reason: "the proxy returned an unknown address type".to_owned(),
+            });
+        }
+    };
+    let mut bound = vec![0u8; address_len + 2];
+    stream
+        .read_exact(&mut bound)
+        .await
+        .map_err(|source| socks5_io(proxy, host, port, source))?;
+    Ok(stream)
+}
+
+fn proxy_endpoint(endpoint: &str) -> Option<(String, u16)> {
+    let (host, port) = if let Some(bracketed) = endpoint.strip_prefix('[') {
+        let (host, port) = bracketed.split_once("]:")?;
+        (host, port)
+    } else {
+        endpoint.rsplit_once(':')?
+    };
+    let port = port.parse().ok().filter(|port: &u16| *port != 0)?;
+    if host.is_empty() || host.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some((host.to_owned(), port))
+}
+
+fn socks5_io(proxy: &str, host: &str, port: u16, source: std::io::Error) -> NetError {
+    NetError::Socks5 {
+        proxy: proxy.to_owned(),
+        host: host.to_owned(),
+        port,
+        reason: source.to_string(),
+    }
+}
+
+fn socks5_refusal(code: u8) -> &'static str {
+    match code {
+        1 => "the proxy reported a general failure",
+        2 => "the proxy's rules refused the connection",
+        3 => "the proxy could not reach the network",
+        4 => "the proxy could not reach the IRC server",
+        5 => "the IRC server refused the connection",
+        6 => "the proxy reported that the connection expired",
+        7 => "the proxy does not support TCP connections",
+        8 => "the proxy does not support that address type",
+        _ => "the proxy refused the connection",
+    }
 }
 
 async fn read_task(

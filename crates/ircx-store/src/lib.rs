@@ -24,7 +24,7 @@ use credentials::{CredentialStore, MemoryCredentials, OsKeyring};
 
 const NETWORK_COLUMNS: &str = "id, name, host, port, tls, tls_verify, nick, alt_nicks, username, \
      realname, sasl_mechanism, sasl_account, connect_commands, autojoin, auto_connect, \
-     client_certificate";
+     client_certificate, socks5_proxy";
 
 /// A network-wide retention rule is stored as a target override with no target.
 const DEFAULT_TARGET: &str = "";
@@ -890,7 +890,7 @@ impl Store {
         self.writing().execute(
             &format!(
                 "INSERT INTO networks ({NETWORK_COLUMNS})
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                  ON CONFLICT (id) DO UPDATE SET
                      name = excluded.name,
                      host = excluded.host,
@@ -906,7 +906,8 @@ impl Store {
                      connect_commands = excluded.connect_commands,
                      autojoin = excluded.autojoin,
                      auto_connect = excluded.auto_connect,
-                     client_certificate = excluded.client_certificate"
+                     client_certificate = excluded.client_certificate,
+                     socks5_proxy = excluded.socks5_proxy"
             ),
             params![
                 id,
@@ -925,6 +926,7 @@ impl Store {
                 to_json(&config.autojoin)?,
                 config.auto_connect,
                 config.client_certificate,
+                config.socks5_proxy,
             ],
         )?;
 
@@ -1530,6 +1532,7 @@ fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {
         autojoin: from_json_column(row, 13)?,
         auto_connect: row.get(14)?,
         client_certificate: row.get(15)?,
+        socks5_proxy: row.get(16)?,
     })
 }
 
@@ -1642,6 +1645,7 @@ mod tests {
                 port: 6697,
                 tls: true,
                 tls_verify: true,
+                socks5_proxy: None,
                 nick: "sykk".into(),
                 alt_nicks: vec!["sykk_".into()],
                 username: "sykk".into(),

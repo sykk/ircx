@@ -81,6 +81,7 @@ fn config(port: u16) -> SessionConfig {
         port,
         tls: false,
         tls_verify: false,
+        socks5_proxy: None,
         client_certificate: None,
         nick: "reader".into(),
         alt_nicks: Vec::new(),

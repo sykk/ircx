@@ -81,6 +81,7 @@ async fn walk(nick: &str, certificate: Option<PathBuf>) -> Walk {
         // The listener's certificate is the one `ergo mkcerts` made, which no
         // authority has heard of. What is under test is the other direction.
         tls_verify: false,
+        socks5_proxy: None,
         client_certificate: certificate.map(|path| path.display().to_string()),
         nick: nick.into(),
         alt_nicks: Vec::new(),

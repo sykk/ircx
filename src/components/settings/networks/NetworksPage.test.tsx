@@ -33,6 +33,7 @@ const LIBERA: NetworkConfig = {
   port: 6697,
   tls: true,
   tlsVerify: true,
+  socks5Proxy: null,
   clientCertificate: null,
   nick: "sable",
   altNicks: ["sable_"],

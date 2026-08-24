@@ -693,6 +693,7 @@ mod tests {
             autojoin: vec![],
             auto_connect: false,
             client_certificate: None,
+            socks5_proxy: None,
         }
     }
 

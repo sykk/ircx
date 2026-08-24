@@ -140,6 +140,7 @@ fn dialling(port: u16, certificate: Option<std::path::PathBuf>) -> ConnectionCon
         // The listener's own certificate is self-signed, which is the setting
         // this option exists for. What is under test is the other direction.
         tls_verify: false,
+        socks5_proxy: None,
         client_certificate: certificate,
         connect_timeout: Duration::from_secs(5),
     }

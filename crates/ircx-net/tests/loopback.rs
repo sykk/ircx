@@ -195,6 +195,72 @@ async fn connect_gives_up_after_the_timeout() {
     );
 }
 
+#[tokio::test]
+async fn a_socks5_proxy_resolves_the_server_name_and_carries_irc() {
+    let proxy = TcpListener::bind("127.0.0.1:0").await.expect("bind proxy");
+    let proxy_addr = proxy.local_addr().expect("proxy address");
+    let config = ConnectionConfig {
+        host: "irc.only.proxy.invalid".into(),
+        port: 6697,
+        tls: false,
+        socks5_proxy: Some(proxy_addr.to_string()),
+        connect_timeout: Duration::from_secs(5),
+        ..ConnectionConfig::default()
+    };
+
+    let client = tokio::spawn(Transport::connect(config));
+    let (mut socket, _) = proxy.accept().await.expect("accept proxy connection");
+
+    let mut greeting = [0u8; 3];
+    socket
+        .read_exact(&mut greeting)
+        .await
+        .expect("read greeting");
+    assert_eq!(greeting, [5, 1, 0]);
+    socket.write_all(&[5, 0]).await.expect("accept greeting");
+
+    let mut request = [0u8; 5];
+    socket.read_exact(&mut request).await.expect("read request");
+    assert_eq!(&request[..4], &[5, 1, 0, 3]);
+    let mut host = vec![0u8; usize::from(request[4])];
+    socket
+        .read_exact(&mut host)
+        .await
+        .expect("read server name");
+    let mut port = [0u8; 2];
+    socket
+        .read_exact(&mut port)
+        .await
+        .expect("read server port");
+    assert_eq!(host, b"irc.only.proxy.invalid");
+    assert_eq!(u16::from_be_bytes(port), 6697);
+
+    socket
+        .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 1])
+        .await
+        .expect("accept connection");
+    let (transport, mut events) = client.await.expect("join").expect("connect through proxy");
+    assert!(matches!(
+        events.recv().await,
+        Some(TransportEvent::Connected { tls_info: None })
+    ));
+
+    socket
+        .write_all(b":proxy 001 me :Welcome\r\n")
+        .await
+        .expect("send line");
+    assert_eq!(next_line(&mut events).await, ":proxy 001 me :Welcome");
+
+    transport
+        .sender()
+        .send("PING :proxy", 1)
+        .await
+        .expect("send");
+    let mut line = [0u8; 13];
+    socket.read_exact(&mut line).await.expect("read line");
+    assert_eq!(&line, b"PING :proxy\r\n");
+}
+
 #[tokio::test(start_paused = true)]
 async fn outbound_lines_are_paced_after_the_burst() {
     let (listener, config) = listener().await;

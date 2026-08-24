@@ -60,6 +60,7 @@ export interface Draft {
   port: string;
   tls: boolean;
   tlsVerify: boolean;
+  socks5Proxy: string;
   /** Path to the PEM this network presents, or "" for none. What SASL EXTERNAL
    * authenticates with. Carried through the draft with no field drawing it yet,
    * because a draft that dropped it would clear a saved certificate the first
@@ -87,6 +88,7 @@ export function emptyDraft(): Draft {
     port: String(TLS_PORT),
     tls: true,
     tlsVerify: true,
+    socks5Proxy: "",
     clientCertificate: "",
     nick: "",
     altNicks: "",
@@ -121,6 +123,7 @@ export function draftOf(config: NetworkConfig): Draft {
     port: String(config.port),
     tls: config.tls,
     tlsVerify: config.tlsVerify,
+    socks5Proxy: config.socks5Proxy ?? "",
     clientCertificate: config.clientCertificate ?? "",
     nick: config.nick,
     altNicks: config.altNicks.join(" "),
@@ -172,6 +175,7 @@ export function toConfig(draft: Draft): NetworkConfig {
   const nick = draft.nick.trim();
   const host = draft.host.trim();
   const account = draft.account.trim() || nick;
+  const socks5Proxy = draft.socks5Proxy.trim();
 
   return {
     id: draft.id,
@@ -180,6 +184,7 @@ export function toConfig(draft: Draft): NetworkConfig {
     port: parsePort(draft.port) ?? (draft.tls ? TLS_PORT : PLAIN_PORT),
     tls: draft.tls,
     tlsVerify: draft.tlsVerify,
+    socks5Proxy: socks5Proxy || null,
     clientCertificate: draft.clientCertificate.trim() || null,
     nick,
     altNicks: words(draft.altNicks),
@@ -207,6 +212,7 @@ export function nickLimitFor(host: string): number {
 export interface DraftProblems {
   host?: string;
   port?: string;
+  socks5Proxy?: string;
   nick?: string;
   clientCertificate?: string;
 }
@@ -228,6 +234,11 @@ export function draftProblems(draft: Draft): DraftProblems {
     problems.port = "A port is a whole number between 1 and 65535.";
   }
 
+  const proxy = draft.socks5Proxy.trim();
+  if (proxy !== "" && !validSocks5Endpoint(proxy)) {
+    problems.socks5Proxy = "Enter a SOCKS5 proxy as host:port, like 127.0.0.1:1080.";
+  }
+
   const nick = nicknameProblem(draft.nick.trim(), nickLimitFor(draft.host));
   if (nick) problems.nick = nick;
 
@@ -246,6 +257,13 @@ export function parsePort(text: string): number | null {
   const port = Number(text.trim());
   if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
   return port;
+}
+
+function validSocks5Endpoint(endpoint: string): boolean {
+  const bracketed = endpoint.match(/^\[([^\]\s]+)\]:(.+)$/);
+  const named = endpoint.match(/^([^:/\s]+):(.+)$/);
+  const match = bracketed ?? named;
+  return match !== null && parsePort(match[2] ?? "") !== null;
 }
 
 /** "linux, #rust" becomes ["#linux", "#rust"]: the sigil is IRC's business. */

@@ -69,6 +69,7 @@ fn network(name: &str) -> NetworkConfig {
         port: 6697,
         tls: true,
         tls_verify: true,
+        socks5_proxy: None,
         nick: "sykk".into(),
         alt_nicks: vec!["sykk_".into(), "sykk__".into()],
         username: "sykk".into(),
@@ -1108,6 +1109,7 @@ fn drafts_list_without_exposing_their_text() {
 fn networks_round_trip_without_the_password() {
     let store = Store::open_in_memory().unwrap();
     let mut config = network("Libera");
+    config.socks5_proxy = Some("proxy.example.com:1080".into());
     config.sasl = Some(SaslConfig {
         mechanism: SaslMechanism::Plain,
         account: "sykk".into(),
@@ -1125,6 +1127,7 @@ fn networks_round_trip_without_the_password() {
     assert_eq!(saved.port, config.port);
     assert_eq!(saved.tls, config.tls);
     assert_eq!(saved.tls_verify, config.tls_verify);
+    assert_eq!(saved.socks5_proxy, config.socks5_proxy);
     assert_eq!(saved.nick, config.nick);
     assert_eq!(saved.alt_nicks, config.alt_nicks);
     assert_eq!(saved.username, config.username);
@@ -2169,6 +2172,7 @@ mod upload_provider {
                 port: 6697,
                 tls: true,
                 tls_verify: true,
+                socks5_proxy: None,
                 nick: "sable".into(),
                 alt_nicks: vec![],
                 username: "sable".into(),
@@ -2391,6 +2395,7 @@ mod archive_controls {
                 port: 6697,
                 tls: true,
                 tls_verify: true,
+                socks5_proxy: None,
                 nick: "sable".into(),
                 alt_nicks: vec![],
                 username: "sable".into(),

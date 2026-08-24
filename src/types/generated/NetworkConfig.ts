@@ -20,4 +20,4 @@ clientCertificate: string | null, nick: string, altNicks: Array<string>, usernam
 /**
  * Sent verbatim after registration, one command per entry, no leading slash.
  */
-connectCommands: Array<string>, autojoin: Array<string>, autoConnect: boolean, };
+connectCommands: Array<string>, autojoin: Array<string>, autoConnect: boolean, socks5Proxy: string | null, };

@@ -200,6 +200,7 @@ describe("toConfig", () => {
       port: "6667",
       tls: false,
       tlsVerify: false,
+      socks5Proxy: "proxy.example.com:1080",
       clientCertificate: "",
       nick: " sable ",
       altNicks: "sable_",
@@ -220,6 +221,7 @@ describe("toConfig", () => {
       port: 6667,
       tls: false,
       tlsVerify: false,
+      socks5Proxy: "proxy.example.com:1080",
       clientCertificate: null,
       nick: "sable",
       altNicks: ["sable_"],
@@ -243,6 +245,7 @@ describe("toConfig", () => {
       port: 6697,
       tls: true,
       tlsVerify: true,
+      socks5Proxy: null,
       clientCertificate: "/home/sable/.irc/libera.pem",
       nick: "sable",
       altNicks: [],
@@ -257,6 +260,11 @@ describe("toConfig", () => {
     expect(toConfig(draftOf(saved)).clientCertificate).toBe("/home/sable/.irc/libera.pem");
     // And a network with none keeps none, rather than gaining an empty path.
     expect(toConfig(draftOf({ ...saved, clientCertificate: null })).clientCertificate).toBeNull();
+  });
+
+  it("carries a SOCKS5 proxy through the saved form", () => {
+    const saved = toConfig(liberaDraft({ socks5Proxy: "proxy.example.com:1080" }));
+    expect(toConfig(draftOf(saved)).socks5Proxy).toBe("proxy.example.com:1080");
   });
 });
 
@@ -312,6 +320,20 @@ describe("draftProblems", () => {
 
   it("rejects a port outside the range", () => {
     expect(draftProblems(liberaDraft({ port: "0" })).port).toContain("1 and 65535");
+  });
+
+  it("rejects a SOCKS5 proxy without a usable port", () => {
+    expect(draftProblems(liberaDraft({ socks5Proxy: "proxy.example.com" })).socks5Proxy).toContain(
+      "host:port",
+    );
+    expect(draftProblems(liberaDraft({ socks5Proxy: "proxy.example.com:70000" })).socks5Proxy)
+      .toContain("host:port");
+  });
+
+  it("accepts named and bracketed IPv6 SOCKS5 proxies", () => {
+    expect(draftProblems(liberaDraft({ socks5Proxy: "proxy.example.com:1080" })).socks5Proxy)
+      .toBeUndefined();
+    expect(draftProblems(liberaDraft({ socks5Proxy: "[::1]:1080" })).socks5Proxy).toBeUndefined();
   });
 
   it("holds a known network to its own nickname limit", () => {

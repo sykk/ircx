@@ -37,6 +37,7 @@
 //! ignored_people()                            -> Vec<IgnoredPerson>
 //! set_ignored(network, nick, ignored)         -> ()
 //! export_archive(scope, path)                 -> u64
+//! export_profile(path, contents)               -> u64
 //! delete_archive(scope)                       -> ()
 //! ```
 //!

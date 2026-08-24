@@ -6,6 +6,7 @@ import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
 import type { SettingsScope } from "@/components/settings/scope";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
+import { buildPortableProfile } from "@/lib/profileExport";
 
 /**
  * What a retention window may be set to.
@@ -148,6 +149,28 @@ export function PrivacyPage({
     setBusy(false);
   }
 
+  async function exportProfile() {
+    let path: string | null;
+    try {
+      path = await chooseSavePath("ircx-profile.json", [
+        { name: "JSON", extensions: ["json"] },
+      ]);
+    } catch (reason) {
+      failed(reason, "The save dialog could not be opened.");
+      return;
+    }
+    if (typeof path !== "string") return;
+    setBusy(true);
+    try {
+      const profile = await buildPortableProfile();
+      const bytes = await ipc.exportProfile(path, `${JSON.stringify(profile, null, 2)}\n`);
+      succeeded(`Profile written to ${path} — ${formatBytes(bytes)}.`);
+    } catch (reason) {
+      failed(reason, "The profile could not be written.");
+    }
+    setBusy(false);
+  }
+
   async function destroy() {
     if (pending === null) return;
     setBusy(true);
@@ -243,6 +266,23 @@ export function PrivacyPage({
                 disabled={busy}
               >
                 Export everything
+              </SecondaryButton>
+            </div>
+          </Group>
+
+          <Group title="Move your setup">
+            <p className="text-[12px] text-[var(--text-muted)]">
+              A versioned JSON profile with networks, autojoins, appearance, notifications,
+              upload settings, and a plugin inventory.
+            </p>
+            <p className="text-[12px] text-[var(--text-muted)]">
+              Passwords, upload credentials and form fields, certificate paths, connect commands,
+              history, drafts, custom theme files, plugin code, and plugin data stay on this
+              computer.
+            </p>
+            <div>
+              <SecondaryButton onClick={() => void exportProfile()} disabled={busy}>
+                Export profile
               </SecondaryButton>
             </div>
           </Group>

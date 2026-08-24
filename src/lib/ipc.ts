@@ -143,6 +143,8 @@ export const ipc = {
     invoke<void>("set_ignored", { network, nick, ignored }),
   exportArchive: (scope: ArchiveScope, path: string) =>
     invoke<number>("export_archive", { scope, path }),
+  exportProfile: (path: string, contents: string) =>
+    invoke<number>("export_profile", { path, contents }),
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
 
   loadHistory: (req: HistoryRequest) => invoke<ChatMessage[]>("load_history", { req }),

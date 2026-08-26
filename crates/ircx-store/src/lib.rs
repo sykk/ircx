@@ -1322,6 +1322,32 @@ impl Store {
         Ok(())
     }
 
+    /// Whether closing the window hides it rather than ending the session.
+    ///
+    /// No row means nobody has chosen, and the answer then is to hide: a client
+    /// left running is what a status icon is for. Whether there is an icon to
+    /// hide to is the shell's question, not this one's.
+    pub fn close_to_tray(&self) -> Result<bool, StoreError> {
+        let chosen: Option<i64> = self
+            .reading()
+            .query_row(
+                "SELECT close_to_tray FROM tray_settings WHERE only = 0",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(chosen != Some(0))
+    }
+
+    pub fn set_close_to_tray(&self, hide: bool) -> Result<(), StoreError> {
+        self.writing().execute(
+            "INSERT INTO tray_settings (only, close_to_tray) VALUES (0, ?1)
+             ON CONFLICT (only) DO UPDATE SET close_to_tray = excluded.close_to_tray",
+            params![hide as i64],
+        )?;
+        Ok(())
+    }
+
     /// `target` of `None` sets the network default. `days` of `None` keeps
     /// messages forever, and as a target override it outranks the default.
     pub fn set_retention(

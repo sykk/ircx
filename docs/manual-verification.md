@@ -25,6 +25,35 @@ historical results in Git and add a test when a check becomes repeatable.
 - [ ] Open the channel browser from a network action and from the command
   palette, then close it with Escape and confirm focus returns to its opener.
 
+## Status icon
+
+Nothing here is reachable from `Xvfb`: a status icon is a D-Bus registration
+against whatever the desktop is running, and the harness's display has no
+StatusNotifier host to register with. `Attention` in `src-tauri/src/tray.rs`
+covers what the icon says; these cover whether there is an icon to say it.
+
+- [ ] On a desktop with a status area, launch a release build and confirm an
+  icon appears, and that its menu offers Show and Quit. On Windows and macOS,
+  left-click must raise the window without opening the menu; on Linux it opens
+  the menu, `tray-icon` delivering no click event there at all.
+- [ ] Close the window with the title bar's button. The window must go, the
+  process must stay, and one notification must say where it went — once for the
+  run, not once per close.
+- [ ] Raise it again from the icon, and confirm the connection was never
+  dropped: a channel that was joined is still joined, with no rejoin in it.
+- [ ] Have somebody say your nickname in a channel while the window is hidden.
+  The icon must gain its mark, and lose it once the conversation is read. Both
+  states must be the same size — they were 32×32 and 64×64 once, and the panel
+  scaled them differently.
+- [ ] Quit from the icon's menu and confirm the process ends rather than
+  hiding.
+- [ ] Turn the setting off in Notifications, then close the window: the session
+  must end, the icon must go with it, and the choice must survive a restart.
+- [ ] On a desktop with no status area — GNOME without an extension is the one
+  to check — confirm no icon appears, that Notifications draws the toggle off
+  and inert with the reason beside it, and that closing the window still ends
+  the session.
+
 ## Accessibility
 
 - [ ] With Orca on Linux, trigger an unread-count announcement and a send-queue

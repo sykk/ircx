@@ -6,7 +6,7 @@ use ircx_ipc::{
     FileToUpload, HistoryRequest, IgnoredPerson, InstalledPlugin, Member, MutedConversation,
     NetworkConfig, NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query,
     SaslConfig, SaslMechanism, SearchHit, SearchRequest, TargetName, ThemeSource, Transfer,
-    TransferSettings, UploadProvider, UploadedFile, WatchedPerson,
+    TransferSettings, TraySettings, UploadProvider, UploadedFile, WatchedPerson,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -654,6 +654,29 @@ pub async fn set_transfer_settings(
     app.store()
         .save_transfer_settings(&settings)
         .map_err(describe)
+}
+
+/// What the close button does, and whether the desktop gave this client an
+/// icon for it to do it to.
+///
+/// `available` is asked of the tray itself rather than remembered, because it
+/// is a fact about this session: the same profile on a desktop with no
+/// StatusNotifier host gets no icon, and a page that promised one would be
+/// offering to hide the window somewhere nothing could bring it back from.
+#[tauri::command]
+pub async fn tray_settings(
+    handle: tauri::AppHandle,
+    app: State<'_, App>,
+) -> Result<TraySettings, String> {
+    Ok(TraySettings {
+        close_to_tray: app.close_to_tray(),
+        available: crate::tray::available(&handle),
+    })
+}
+
+#[tauri::command]
+pub async fn set_close_to_tray(app: State<'_, App>, hide: bool) -> Result<(), String> {
+    app.set_close_to_tray(hide)
 }
 
 /// Every network's transfers. What a window that has just been reloaded reads

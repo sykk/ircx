@@ -424,3 +424,19 @@ pub struct TransferSettings {
     /// too.
     pub passive: bool,
 }
+
+/// What the status icon does, and whether there is one to do it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct TraySettings {
+    /// Whether the close button hides the window instead of ending the
+    /// session. Meaningless without `available`: the two are read together,
+    /// and closing to a tray that is not there is a window nothing can bring
+    /// back.
+    pub close_to_tray: bool,
+    /// Whether the desktop gave this client a status icon. Answered fresh each
+    /// time rather than stored — it is a fact about the session, not a
+    /// preference — and never written back.
+    pub available: bool,
+}

@@ -27,8 +27,21 @@ export async function startBridge(): Promise<() => void> {
     } else held.push(...events);
   });
 
+  const stop = () => {
+    stopFollowingFocus();
+    unlisten();
+  };
+
   try {
     await loadSnapshot();
+  } catch (reason) {
+    // Undone before this is re-thrown. The subscription is already live by
+    // here, and a caller that never receives `stop` cannot take it down: a
+    // failed start used to leave a listener and a focus follower running for
+    // the rest of the launch, which also made trying again cost a second set
+    // of both.
+    stop();
+    throw reason;
   } finally {
     loaded = true;
     // The held events are what arrived while the snapshot was in flight, which
@@ -40,10 +53,7 @@ export async function startBridge(): Promise<() => void> {
     held.length = 0;
   }
 
-  return () => {
-    stopFollowingFocus();
-    unlisten();
-  };
+  return stop;
 }
 
 /**
@@ -130,7 +140,14 @@ function followFocus(): () => void {
 async function loadSnapshot(): Promise<void> {
   const [snapshot, bookmarks, transfers] = await Promise.all([
     ipc.getSnapshot(),
-    ipc.listBookmarks(null, null, 10_000),
+    // Answered with nothing rather than failing, for the reason the transfers
+    // below are: a conversation is not worth losing over the marks somebody
+    // put on it. `get_snapshot` is the exception and stays fatal — it is the
+    // networks, the channels and the queries, which is the client itself.
+    ipc.listBookmarks(null, null, 10_000).catch((reason: unknown) => {
+      console.warn("ircx could not read the bookmarks", reason);
+      return [];
+    }),
     // Not part of the snapshot: a transfer is a live connection rather than
     // state a conversation has, and it outlives a reload of this window while
     // the events describing it do not.

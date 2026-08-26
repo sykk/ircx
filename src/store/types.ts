@@ -190,6 +190,14 @@ export interface AppState {
   /** The last `LIST` a network answered, whole. Not `channels`: these are
    * places the user is not in, and knowing about one is not being in it. */
   channelList: Record<string, { channels: ChannelListing[]; truncated: boolean }>;
+  /** Why the window could not read its own data at startup, or `null` when it
+   * did — which is also the state while it is still trying.
+   *
+   * Held here rather than in `App` because more than one thing has to know:
+   * the shell draws the reason, and the sidebar has to stop saying "No
+   * networks configured", which during a failure is a claim it cannot
+   * support. */
+  startupFailure: string | null;
   /** Files moving between this client and one other person, by transfer id.
    *
    * Not per conversation, though every one belongs to a query: a transfer

@@ -193,3 +193,35 @@ describe("marking a conversation read", () => {
     expect(ipcMock.markRead).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The subscription is live before the snapshot is asked for, and a failure
+ * used to throw straight past the only thing that could take it down: the
+ * caller never receives `stop`, so a failed start left a listener and a focus
+ * follower running for the rest of the launch — and trying again cost a second
+ * set of both.
+ */
+it("takes its own subscription down when the snapshot fails", async () => {
+  const unlisten = vi.fn();
+  onIrcxEvent.mockResolvedValue(unlisten);
+  ipcMock.getSnapshot.mockRejectedValue("the archive is locked by another copy of ircx");
+
+  await expect(startBridge()).rejects.toBe("the archive is locked by another copy of ircx");
+  expect(unlisten).toHaveBeenCalledTimes(1);
+});
+
+/** A conversation is not worth losing over the marks somebody put on it. */
+it("still loads the conversations when the bookmarks cannot be read", async () => {
+  ipcMock.getSnapshot.mockResolvedValue({
+    networks: [{ id: "libera", name: "Libera.Chat" }],
+    channels: [],
+    queries: [],
+    drafts: [],
+  });
+  ipcMock.listBookmarks.mockRejectedValue("the archive is locked");
+
+  const stop = await startBridge();
+
+  expect(Object.keys(useAppStore.getState().networks)).toEqual(["libera"]);
+  stop();
+});

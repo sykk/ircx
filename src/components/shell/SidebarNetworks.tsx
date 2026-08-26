@@ -150,6 +150,8 @@ export function SidebarNetworks() {
     return out;
   }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks, pinnedTargets, filter]);
 
+  const startupFailed = useAppStore((s) => s.startupFailure !== null);
+
   /** The panels flattened into what the arrow keys walk. */
   const rows = useMemo<Row[]>(
     () =>
@@ -436,9 +438,14 @@ export function SidebarNetworks() {
       )}
 
       {rows.length === 0 ? (
-        <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">
-          No networks configured.
-        </p>
+        // Silent rather than empty-handed while the window is saying it could
+        // not read its own data: there may be a dozen networks configured, and
+        // this is the one thing on screen that would flatly deny it.
+        startupFailed ? null : (
+          <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">
+            No networks configured.
+          </p>
+        )
       ) : (
         <div
           className="min-h-0 flex-1 overflow-y-auto pb-2"

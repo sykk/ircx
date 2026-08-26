@@ -88,6 +88,8 @@ export interface AppActions {
   openConsole: (network: string, raw?: boolean) => void;
   prependHistory: (key: TargetKey, older: ChatMessage[], hasMore: boolean) => void;
   replaceHistory: (key: TargetKey, messages: ChatMessage[]) => void;
+  /** Why the window could not read its own data, or null once it could. */
+  setStartupFailure: (reason: string | null) => void;
   clearBuffer: (key: TargetKey) => void;
   setLoadingOlder: (key: TargetKey, loading: boolean) => void;
   /** Records the message the server has been asked for the page behind, so the
@@ -197,6 +199,7 @@ const initialState: AppState = {
   channels: {},
   queries: {},
   transfers: {},
+  startupFailure: null,
   members: {},
   timelines: {},
   typing: {},
@@ -653,6 +656,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       };
     }),
 
+  setStartupFailure: (reason) => set({ startupFailure: reason }),
   clearBuffer: (key) =>
     set((s) => ({
       timelines: {

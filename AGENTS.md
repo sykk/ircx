@@ -40,6 +40,44 @@ group falls back to the name above its run and an addressed one to the two nick
 colours; the gap between two blocks of one group comes back with it, there being
 nothing left to span it.
 
+Whether the mIRC codes a message arrives with are drawn is the reader's too, and
+`src/lib/ircFormat.ts` is where they are read. This client used to strip them,
+on the argument that mIRC's sixteen colours have nowhere to land: the warm hues
+mean security state, the nick palette is pinned inside 186-335deg, and a literal
+`#FF0000` is colour from outside the token system. That ruled out the palette
+rather than the codes. A colour code is an index, and here it resolves to an
+expression built from tokens the theme already defines — the extended palette's
+own structure gives the hue (`(code - 16) % 12`) and the shade
+(`Math.floor((code - 16) / 12)`), the twelve hues land on eight colour tokens
+with the gaps filled by mixing the two either side, and the greys run the ramp
+from `--surface-base` to `--text-primary`. Nothing in that file emits a literal
+colour, which is what keeps the contract `overrides.ts` enforces intact. The
+greys make the ramp one of prominence rather than of lightness, so mIRC's black
+comes out faint: on a dark theme the honest alternative is text the colour of
+the surface behind it, which is a refusal to render rather than a rendering.
+
+Markdown is parsed first, on the raw line, and `applyIrcFormat` walks the tree
+afterwards with one cursor — the codes mean nothing to `parseSpans` and reach it
+inside ordinary text spans. The state is a machine over the line rather than a
+tree, so a colour opened before a `**bold**` is still open after it, and that is
+why the walk threads a cursor instead of mapping. A fenced paste keeps its text
+and loses its codes: colouring it would be the client editing what somebody
+pasted. What still strips everywhere is what quotes a message rather than draws
+it — excerpts, search snippets, the presence digests and the system rows, a
+topic change among them, those being the client's own summary lines.
+
+The composer sends them as well as draws them, on the chords mIRC bound:
+Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+R and Ctrl+O, wrapping a selection when there is
+one because the codes come in pairs. They are handled in the composer rather
+than in `src/lib/keybindings.ts`, which dispatches actions at the app while
+these edit the text in the box the way Ctrl+A selects it. The colour picker
+takes Shift with it — Ctrl+K is the command palette, which the title bar
+advertises — and its swatches are drawn in the values this theme resolves them
+to, a swatch showing mIRC's own being a promise the timeline would not keep.
+A control code puts nothing on screen inside a textarea, so a draft carrying one
+is previewed above the box; that is the only thing in the composer that says a
+line is being formatted at all.
+
 The two faces and the window scale are the reader's too, in
 `src/lib/theme/typography.ts`. A face is chosen from a list rather than typed,
 because `src/lib/theme/overrides.ts` keeps `--font-ui` and `--font-mono` out of

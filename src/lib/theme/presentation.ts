@@ -53,6 +53,11 @@ export interface Presentation {
   measure: TimelineMeasure;
   nickColors: boolean;
   clockEmphasis: ClockEmphasis;
+  /** Draws the colour and emphasis codes a message arrived with, against the
+   * theme's own tokens. Off strips them, which is what this client did before
+   * the codes were drawn at all — and what a reader wants back the first time
+   * somebody paints a channel. */
+  ircFormatting: boolean;
 }
 
 export const DEFAULT_PRESENTATION: Presentation = {
@@ -67,6 +72,7 @@ export const DEFAULT_PRESENTATION: Presentation = {
   measure: "theme",
   nickColors: true,
   clockEmphasis: "normal",
+  ircFormatting: true,
 };
 
 /**
@@ -176,6 +182,10 @@ export function sanitisePresentation(raw: unknown): Presentation {
     clockEmphasis: CLOCK_EMPHASES.some((emphasis) => emphasis.id === held.clockEmphasis)
       ? (held.clockEmphasis as ClockEmphasis)
       : DEFAULT_PRESENTATION.clockEmphasis,
+    ircFormatting:
+      typeof held.ircFormatting === "boolean"
+        ? held.ircFormatting
+        : DEFAULT_PRESENTATION.ircFormatting,
   };
 }
 

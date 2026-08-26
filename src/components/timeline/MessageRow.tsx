@@ -1,14 +1,13 @@
 import { useState } from "react";
 import type { Annotation, ChatMessage } from "@/types";
 import { ipc } from "@/lib/ipc";
-import { stripIrcFormatting } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
 import { serverMsgid, useAppStore } from "@/store";
 import { isHighlight, type HighlightRule } from "@/store/selectors";
 import { AttachmentLine } from "./AttachmentLine";
 import { Clock } from "./Clock";
 import { bodyText } from "./groups";
-import { Markdown, Mentioned } from "./Markdown";
+import { IrcText, Markdown } from "./Markdown";
 import { Reactions, RowControls } from "./Reactions";
 import { ReplyQuote } from "./ReplyQuote";
 import { writesOwnNick, type FailureRun } from "./rows";
@@ -285,7 +284,7 @@ function Body({
         >
           * {message.sender.nick}{" "}
         </span>
-        <Mentioned text={stripIrcFormatting(message.text)} highlight={highlight} />
+        <IrcText text={message.text} highlight={highlight} />
       </span>
     );
   }

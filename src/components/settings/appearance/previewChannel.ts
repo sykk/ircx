@@ -26,6 +26,12 @@ import type { ChatMessage, MessageKind } from "@/types";
  *
  * A message left in no group keeps a neutral spine, which is the fourth state
  * and why the first two lines are not addressed to anybody.
+ *
+ * The second line carries mIRC codes, which is the only setting on the page
+ * whose effect is invisible until somebody sends one. It rides on a line that
+ * was already there rather than adding a ninth: a new message would have to
+ * belong to one of the groups above or open a fifth, and the script is chosen
+ * for exactly the four.
  */
 
 export const PREVIEW_NETWORK = "ircx";
@@ -64,7 +70,11 @@ interface Line {
 
 const SCRIPT: readonly Line[] = [
   { at: "10:22:14", nick: "alex", text: "shipped the new build" },
-  { at: "10:22:41", nick: "alex", text: "the /who and /list lag is gone" },
+  {
+    at: "10:22:41",
+    nick: "alex",
+    text: "the \x02/who\x02 and \x02/list\x02 lag is \x0309gone\x0f",
+  },
   { at: "10:23:08", nick: "mira", text: "looks clean" },
   { at: "10:24:02", nick: "sam", text: "mira: was that the cache change?" },
   { at: "10:24:37", nick: "mira", text: "sam: mostly — the rest was the parser" },

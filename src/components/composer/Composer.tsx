@@ -12,6 +12,7 @@ import type { KeyboardEvent } from "react";
 import type { ChatMessage, CommandOutcome } from "@/types";
 import { Icon } from "@/components/common/Icon";
 import { chooseFiles, ipc, reasonOr } from "@/lib/ipc";
+import { hasIrcFormatting, ircColour, ircCss, ircRuns } from "@/lib/ircFormat";
 import { nickColor } from "@/lib/nickColor";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { useAppStore } from "@/store";
@@ -28,6 +29,22 @@ const DRAFT_DEBOUNCE_MS = 400;
 /** The server-side indicator lasts several seconds; resending sooner is noise. */
 const TYPING_INTERVAL_MS = 3_000;
 const CHANNEL_PREFIX = /^[#&!+]/;
+
+/** Ctrl and a letter, as mIRC bound them. Strike and monospace are absent
+ * because mIRC never bound them either, and the letters left over are ones a
+ * text box or the window already answers for. */
+const FORMATTING_CHORDS: Record<string, string | undefined> = {
+  b: "\x02",
+  i: "\x1d",
+  u: "\x1f",
+  r: "\x16",
+  o: "\x0f",
+};
+
+/** The sixteen a colour picker offers. The extended palette is reachable by
+ * typing the digits after a code is in the line, and ninety-nine swatches is a
+ * screen of colour rather than a control. */
+const SWATCHES = Array.from({ length: 16 }, (_, code) => code);
 
 const EmojiPicker = lazy(() =>
   import("@/components/common/EmojiPicker").then(({ EmojiPicker }) => ({ default: EmojiPicker })),
@@ -91,6 +108,7 @@ function ComposerFor({
   const draftRef = useRef("");
   const typingSentAt = useRef(0);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [colourOpen, setColourOpen] = useState(false);
   const emojiAnchor = useRef<HTMLButtonElement>(null);
   /** Where the next picked emoji goes while the picker stays open. The textarea
    * loses focus on each click, so its selection cannot be trusted between picks. */
@@ -221,6 +239,25 @@ function ComposerFor({
       typingSentAt.current = now;
       void ipc.setTyping(network, target, true);
     }
+  };
+
+  /**
+   * A formatting code around the selection, or at the caret when there is none.
+   *
+   * Wrapping is what makes the toggles usable: the codes are a state machine
+   * over the line rather than tags, so bolding three words means the same code
+   * at each end of them, and a writer who has selected the words should not
+   * have to place both.
+   */
+  const insertCode = (code: string, close = code) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const from = el.selectionStart ?? value.length;
+    const to = el.selectionEnd ?? from;
+    const selected = value.slice(from, to);
+    const closing = selected === "" ? "" : close;
+    caretRef.current = from + code.length + selected.length + closing.length;
+    onChange(value.slice(0, from) + code + selected + closing + value.slice(to));
   };
 
   /** Picked files go to the confirmation a drop gets, which is mounted with the
@@ -382,11 +419,40 @@ function ComposerFor({
       setValue(line);
       return;
     }
+    /* The chords mIRC bound and every client since has kept, handled here
+       rather than in src/lib/keybindings.ts: they edit the text in the box the
+       way Ctrl+A selects it, and that table dispatches actions at the app.
+       Ctrl+K is the exception and is not ours — it opens the command palette,
+       which the title bar advertises — so the colour picker takes Shift with
+       it. */
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const code = e.shiftKey ? undefined : FORMATTING_CHORDS[e.key.toLowerCase()];
+      if (code !== undefined) {
+        e.preventDefault();
+        insertCode(code);
+        return;
+      }
+      if (e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setColourOpen((open) => !open);
+        return;
+      }
+    }
     if (e.key === "Escape") {
       completionRef.current = null;
       setError(null);
+      if (colourOpen) {
+        setColourOpen(false);
+        return;
+      }
       useAppStore.getState().setReplyTo(network, target, null);
     }
+  };
+
+  const pickColour = (code: number) => {
+    setColourOpen(false);
+    insertCode(`\x03${String(code).padStart(2, "0")}`, "\x03");
+    textareaRef.current?.focus();
   };
 
   const hints = matchCommands(value);
@@ -420,6 +486,10 @@ function ComposerFor({
       <div role="status" className="sr-only">
         {queueSaid}
       </div>
+
+      {hasIrcFormatting(value) && <FormattingPreview text={value} />}
+
+      {colourOpen && <ColourPicker onPick={pickColour} onClose={() => setColourOpen(false)} />}
 
       <div
         className="composer-field flex items-end gap-2 rounded-[var(--radius-md)] border px-3 py-2 transition-[box-shadow]"
@@ -484,6 +554,61 @@ function ComposerFor({
         </button>
       </div>
 
+    </div>
+  );
+}
+
+/**
+ * The line as the other end will draw it.
+ *
+ * A control code puts nothing on the screen inside a textarea, so a line being
+ * coloured looks exactly like a line that is not until it has already gone.
+ * This is the only thing in the composer that says otherwise, which is why it
+ * appears the moment a code does and not before.
+ */
+function FormattingPreview({ text }: { text: string }) {
+  return (
+    <div
+      aria-label="Formatting preview"
+      className="px-1 pb-1 text-[13px] leading-[1.5]"
+      style={{ color: "var(--text-secondary)" }}
+    >
+      {ircRuns(text).runs.map((run, i) => (
+        <span key={i} style={ircCss(run.style)}>
+          {run.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The sixteen colours, drawn in the values this theme resolves them to rather
+ * than in mIRC's own. A swatch showing the original would be a promise the
+ * timeline underneath it does not keep.
+ */
+function ColourPicker({ onPick, onClose }: { onPick: (code: number) => void; onClose: () => void }) {
+  return (
+    <div
+      role="group"
+      aria-label="Text colour"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose();
+      }}
+      className="mb-1 flex w-fit flex-wrap gap-1 rounded-[var(--radius-md)] border p-1.5"
+      style={{ background: "var(--surface-overlay)", borderColor: "var(--border-default)" }}
+    >
+      {SWATCHES.map((code) => (
+        <button
+          key={code}
+          type="button"
+          autoFocus={code === 0}
+          aria-label={`Colour ${code}`}
+          onClick={() => onPick(code)}
+          className="h-5 w-5 rounded-[var(--radius-sm)] border focus-visible:outline focus-visible:outline-[var(--focus-ring-width)] focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+          style={{ background: ircColour(code) ?? undefined, borderColor: "var(--border-subtle)" }}
+        />
+      ))}
     </div>
   );
 }

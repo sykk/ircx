@@ -107,6 +107,7 @@ describe("what the timeline draws", () => {
         measure: "wide",
         nickColors: false,
         clockEmphasis: "quiet",
+        ircFormatting: false,
       }),
     );
 
@@ -124,6 +125,7 @@ describe("what the timeline draws", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
   });
 
@@ -143,6 +145,7 @@ describe("what the timeline draws", () => {
         measure: "wide",
         nickColors: false,
         clockEmphasis: "quiet",
+        ircFormatting: false,
       },
     });
 
@@ -160,6 +163,7 @@ describe("what the timeline draws", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -173,6 +177,7 @@ describe("what the timeline draws", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
   });
 });

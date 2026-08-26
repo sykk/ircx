@@ -9,7 +9,7 @@ use ircx_core::{
 };
 use ircx_ipc::{
     AppSnapshot, ConnectionStatus, InstalledPlugin, IrcxEvent, Network, NetworkConfig, NetworkId,
-    PluginGrants, SaslStatus, Severity, TargetName,
+    PluginGrants, SaslStatus, Severity, TargetName, Transfer,
 };
 use ircx_store::{OpenTarget, Store, StoreError};
 use tokio::sync::{mpsc, oneshot};
@@ -625,6 +625,39 @@ impl App {
 
     fn sender(&self, network: &NetworkId) -> Option<mpsc::Sender<SessionCommand>> {
         self.guard().get(network).map(NetworkHandle::commands)
+    }
+
+    /// Every running network's transfers. Asked for rather than pushed: the
+    /// events carry each change while the window is up, and this is what a
+    /// window that has just been reloaded has missed.
+    ///
+    /// A network that does not answer is left out rather than failing the
+    /// call — the answer is a list, and a short list beats none.
+    pub async fn transfers(&self) -> Vec<Transfer> {
+        let senders: Vec<mpsc::Sender<SessionCommand>> =
+            self.guard().values().map(NetworkHandle::commands).collect();
+        let mut moving = Vec::new();
+        for sender in senders {
+            let (reply, answer) = oneshot::channel();
+            if sender
+                .send(SessionCommand::Transfers { reply })
+                .await
+                .is_err()
+            {
+                continue;
+            }
+            if let Ok(Ok(held)) = timeout(REPLY_TIMEOUT, answer).await {
+                moving.extend(held);
+            }
+        }
+        moving
+    }
+
+    /// The host and port a network's connection goes to, which is what the
+    /// address in an offer is worked out against.
+    pub fn endpoint(&self, network: &NetworkId) -> Result<(String, u16), String> {
+        let config = self.config(network)?;
+        Ok((config.host, config.port))
     }
 
     fn require(&self, network: &NetworkId) -> Result<mpsc::Sender<SessionCommand>, String> {

@@ -8,7 +8,13 @@ import {
   resetStore,
   seedStore,
 } from "@/components/shell/fixtures";
-import { SERVER_TARGET, type ChatMessage, type IrcxEvent, type Member } from "@/types";
+import {
+  SERVER_TARGET,
+  type ChatMessage,
+  type IrcxEvent,
+  type Member,
+  type Transfer,
+} from "@/types";
 import { TIMELINE_CAP, useAppStore } from "./index";
 import { targetKey } from "./keys";
 import { ratioOf } from "./layout";
@@ -2079,5 +2085,40 @@ describe("who is ignored", () => {
     applyEvent({ type: "ignoredChanged", network: "libera", nicks: ["otherbot"] });
 
     expect(useAppStore.getState().ignored.libera).toEqual(["otherbot"]);
+  });
+});
+
+describe("files moving", () => {
+  function transfer(over: Partial<Transfer> = {}): Transfer {
+    return {
+      id: "t1",
+      network: "libera",
+      peer: "sable",
+      direction: "incoming",
+      file: "holiday.png",
+      path: null,
+      size: 51_200n,
+      at: 0n,
+      state: "offered",
+      failure: null,
+      started: "2026-08-26T10:00:00Z",
+      message: "m1",
+      ...over,
+    };
+  }
+
+  /** Every update carries the whole transfer, progress included, so the last
+   * to arrive is the answer and nothing has to be merged into what is held. */
+  it("keeps the latest state of each one", () => {
+    const { applyEvent } = useAppStore.getState();
+    applyEvent({ type: "transferUpdated", transfer: transfer() });
+    applyEvent({ type: "transferUpdated", transfer: transfer({ state: "running", at: 2048n }) });
+    applyEvent({ type: "transferUpdated", transfer: transfer({ id: "t2", peer: "hex" }) });
+
+    const held = useAppStore.getState().transfers;
+    expect(Object.keys(held).sort()).toEqual(["t1", "t2"]);
+    expect(held.t1?.state).toBe("running");
+    expect(held.t1?.at).toBe(2048n);
+    expect(held.t2?.peer).toBe("hex");
   });
 });

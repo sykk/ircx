@@ -14,6 +14,7 @@ import type {
   Member,
   Network,
   Query,
+  Transfer,
 } from "@/types";
 import type { SectionId } from "@/components/settings/sections";
 import type { TargetKey } from "./keys";
@@ -189,6 +190,13 @@ export interface AppState {
   /** The last `LIST` a network answered, whole. Not `channels`: these are
    * places the user is not in, and knowing about one is not being in it. */
   channelList: Record<string, { channels: ChannelListing[]; truncated: boolean }>;
+  /** Files moving between this client and one other person, by transfer id.
+   *
+   * Not per conversation, though every one belongs to a query: a transfer
+   * outlives the scroll position of the row that announced it and outlives the
+   * conversation being closed, and the panel that lists them lists all of them
+   * at once. The row finds its own through `message`. */
+  transfers: Record<string, Transfer>;
 
   // View.
   views: Record<ViewId, ChatView>;

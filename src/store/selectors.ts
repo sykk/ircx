@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
-import type { Channel, ChatMessage, Member, Network, Query } from "@/types";
+import type { Channel, ChatMessage, Member, Network, Query, Transfer } from "@/types";
 import { targetKey, type TargetKey } from "./keys";
 import { EMPTY_TIMELINE, serverMsgid, useAppStore } from "./index";
 import type { ActiveTarget, AppState, ChatView, TimelineState, ViewId } from "./types";
@@ -337,6 +337,32 @@ export function isHighlight(
     return false;
   }
   return matchesHighlight(message.text, rule);
+}
+
+/**
+ * The transfer a system row announced, while it is still held.
+ *
+ * Looked up by the row rather than the row by the transfer, because the row is
+ * what is being drawn and a transfer that has been forgotten — or that belongs
+ * to a session started since the row was archived — simply is not found. A
+ * scan rather than an index: a client holds a hundred of these at the very
+ * most, and an index would have to be rebuilt on every progress event.
+ */
+export function useTransferFor(message: string): Transfer | undefined {
+  return useAppStore((s) => Object.values(s.transfers).find((t) => t.message === message));
+}
+
+/** Every transfer on one network, newest first. */
+export function useTransfers(network: string | null): Transfer[] {
+  return useAppStore(
+    useShallow((s) =>
+      network === null
+        ? []
+        : Object.values(s.transfers)
+            .filter((transfer) => transfer.network === network)
+            .sort((a, b) => (a.started < b.started ? 1 : -1)),
+    ),
+  );
 }
 
 export { targetKey };

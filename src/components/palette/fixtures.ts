@@ -98,6 +98,7 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     networkOrder,
     channels,
     queries,
+    transfers: {},
     members: {},
     inputHistory: {},
     drafts: {},

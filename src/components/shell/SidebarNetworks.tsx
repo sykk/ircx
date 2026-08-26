@@ -10,6 +10,7 @@ import {
 import clsx from "clsx";
 import { Badge } from "@/components/common/Badge";
 import { ipc } from "@/lib/ipc";
+import { sendFileTo } from "@/lib/transfers";
 import { Icon } from "@/components/common/Icon";
 import { useHangingMenu } from "@/components/common/hangingMenu";
 import { OverflowIcon } from "@/components/header/icons";
@@ -240,6 +241,18 @@ export function SidebarNetworks() {
     }
   }
 
+  /** Picks a file and offers it to the person this query is with. The offer is
+   * drawn as a row in that conversation, which is where it is then watched and
+   * stopped, so nothing about it is reported here. */
+  async function offerFile(network: string, nick: string) {
+    setMenuFor(null);
+    try {
+      await sendFileTo(network, nick);
+    } catch (reason) {
+      console.warn("ircx could not offer a file to", nick, reason);
+    }
+  }
+
   /** Drops the network from the sidebar and disconnects it when it is running. */
   async function removeNetwork(network: Network) {
     try {
@@ -376,6 +389,11 @@ export function SidebarNetworks() {
           onOpenChange={(open) => setMenuFor(open ? row.id : null)}
           onTogglePinned={() => togglePinnedTarget(row.id)}
           onClose={() => void closeConversation(conversation)}
+          onSendFile={
+            row.kind === "query"
+              ? () => void offerFile(row.query.network, row.query.nick)
+              : undefined
+          }
         />
       </div>
 
@@ -841,6 +859,7 @@ function ConversationMenu({
   onOpenChange,
   onTogglePinned,
   onClose,
+  onSendFile,
 }: {
   label: string;
   /** A channel is parted when it closes, which everyone in it sees. A query is
@@ -851,6 +870,10 @@ function ConversationMenu({
   onOpenChange: (open: boolean) => void;
   onTogglePinned: () => void;
   onClose: () => void;
+  /** Absent for a channel: a file is offered to one person, and a channel row
+   * names a room rather than somebody to offer it to. This is the only way in
+   * for a query, which draws no header of its own to put a control in. */
+  onSendFile?: (() => void) | undefined;
 }) {
   /* The row this was right-clicked on, which is the menu's own parent and the
    * full width of the sidebar. Called before the early return below, hooks
@@ -901,6 +924,16 @@ function ConversationMenu({
       >
         {pinned ? "Unpin" : "Pin"}
       </MenuItem>
+      {onSendFile && (
+        <MenuItem
+          onClick={() => {
+            onOpenChange(false);
+            onSendFile();
+          }}
+        >
+          Send a file…
+        </MenuItem>
+      )}
       <MenuItem onClick={close}>{leaves ? "Leave and close" : "Close"}</MenuItem>
     </div>
   );

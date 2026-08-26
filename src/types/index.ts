@@ -55,4 +55,8 @@ export type { SearchRequest } from "./generated/SearchRequest";
 export type { Sender } from "./generated/Sender";
 export type { Severity } from "./generated/Severity";
 export type { ThemeSource } from "./generated/ThemeSource";
+export type { Transfer } from "./generated/Transfer";
+export type { TransferDirection } from "./generated/TransferDirection";
+export type { TransferSettings } from "./generated/TransferSettings";
+export type { TransferState } from "./generated/TransferState";
 export type { Topic } from "./generated/Topic";

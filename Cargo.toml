@@ -20,7 +20,7 @@ ircx-plugin = { path = "crates/ircx-plugin" }
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = "1"

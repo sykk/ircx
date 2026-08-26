@@ -196,6 +196,7 @@ const initialState: AppState = {
   networkOrder: [],
   channels: {},
   queries: {},
+  transfers: {},
   members: {},
   timelines: {},
   typing: {},
@@ -1418,6 +1419,13 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       const key = targetKey(event.channel.network, event.channel.name);
       return { channels: { ...s.channels, [key]: event.channel } };
     }
+
+    /** Whole every time, including the progress ones, so the last to arrive is
+     * the answer and nothing has to be merged into what is held. */
+    case "transferUpdated":
+      return {
+        transfers: { ...s.transfers, [event.transfer.id]: event.transfer },
+      };
 
     case "readMarkerUpdated": {
       const key = targetKey(event.network, event.target);

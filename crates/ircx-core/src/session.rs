@@ -23,6 +23,7 @@ use crate::sasl;
 use crate::scram;
 use crate::sts;
 use crate::text;
+use crate::transfers::{TransferJob, TransferRecord};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 
@@ -87,6 +88,22 @@ pub enum Action {
     Watch {
         nick: String,
         watched: bool,
+    },
+    /// Open the connection this transfer needs and move the file. Everything
+    /// the task layer has to decide is settled in here; what it reports back
+    /// are the port it opened, how far it has got, and how it ended.
+    RunTransfer(Box<TransferJob>),
+    /// Stop a transfer's task wherever it got to. What is on disk stays there,
+    /// which is what a later resume is built on.
+    StopTransfer {
+        id: String,
+    },
+    /// A resume this client agreed to, for a job already waiting to send. It
+    /// arrives before the connection does, because the other side dials only
+    /// after reading the agreement.
+    ResumeTransferAt {
+        id: String,
+        from: u64,
     },
     /// Close the connection and stop retrying. Whatever explains it has
     /// already been emitted.
@@ -395,6 +412,17 @@ pub struct SessionState {
     /// one, and asks the server for what is behind the oldest of them: the
     /// most recent page, which is the one already on its way. #486.
     pub(crate) first_pages: HashSet<String>,
+    /// Files moving between this session and one other person, oldest first.
+    ///
+    /// A list rather than a map because a transfer is looked up three ways —
+    /// by its own id, by the port a handshake line names, and by the token a
+    /// passive offer carries — and a map keyed on one of them would be searched
+    /// for the other two anyway. There are never many.
+    pub(crate) transfers: Vec<TransferRecord>,
+    /// Names the next passive offer this client makes. Only has to be unique
+    /// among the offers outstanding with one person at one time; a counter is
+    /// what every client uses and what their parsers expect.
+    pub(crate) next_transfer_token: u64,
 }
 
 impl SessionState {
@@ -446,6 +474,8 @@ impl SessionState {
             typing_labels: VecDeque::new(),
             libera_registration_secrets: None,
             first_pages: HashSet::new(),
+            transfers: Vec::new(),
+            next_transfer_token: 0,
         }
     }
 
@@ -2051,6 +2081,29 @@ impl SessionState {
 
         if self.isupport.is_channel(&target) {
             target = self.canonical(&target);
+        }
+
+        // Before the delivery and echo handling below, which are about a line
+        // being drawn. A DCC handshake is answered rather than drawn, and the
+        // one part of it that is drawn draws itself, because the row has to be
+        // named by the transfer it announces.
+        //
+        // Our own handshake comes back on a server with `echo-message` and is
+        // dropped here rather than falling through: nothing this client sent
+        // needs answering, and the line below would otherwise put a row saying
+        // the reader had asked themselves for a CTCP into every conversation a
+        // file was ever offered in.
+        if let Some((request, args)) = text::ctcp(body) {
+            if request.eq_ignore_ascii_case("DCC") && command == "PRIVMSG" {
+                if sender.is_self {
+                    return;
+                }
+                self.touch_query(&target, sender.account.clone());
+                let target = self.canonical(&target);
+                self.mark_online(&target);
+                self.handle_dcc(message, &sender, &target, args);
+                return;
+            }
         }
 
         let (kind, text) = match text::ctcp(body) {

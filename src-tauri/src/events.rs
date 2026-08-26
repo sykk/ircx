@@ -56,6 +56,7 @@ enum Lane {
     Query(NetworkId, TargetName),
     Members(NetworkId, TargetName),
     Network(NetworkId),
+    Transfer(NetworkId, String),
 }
 
 #[derive(Default)]
@@ -131,6 +132,13 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         | IrcxEvent::MemberRemoved {
             network, channel, ..
         } => Some(Lane::Members(network.clone(), channel.clone())),
+        // Every update carries the whole transfer, and progress arrives several
+        // times a second on a fast one. A lane of its own so those fold into
+        // the last of them rather than becoming a render each.
+        IrcxEvent::TransferUpdated { transfer } => Some(Lane::Transfer(
+            transfer.network.clone(),
+            transfer.id.clone(),
+        )),
         IrcxEvent::NetworkUpdated { network } => Some(Lane::Network(network.id.clone())),
         IrcxEvent::NetworkRemoved { network }
         | IrcxEvent::ConnectionChanged { network, .. }
@@ -204,7 +212,8 @@ fn supersedes(held: &IrcxEvent, event: &IrcxEvent) -> bool {
         | (IrcxEvent::ConnectionChanged { .. }, IrcxEvent::ConnectionChanged { .. })
         | (IrcxEvent::SaslChanged { .. }, IrcxEvent::SaslChanged { .. })
         | (IrcxEvent::CapsChanged { .. }, IrcxEvent::CapsChanged { .. })
-        | (IrcxEvent::LagChanged { .. }, IrcxEvent::LagChanged { .. }) => true,
+        | (IrcxEvent::LagChanged { .. }, IrcxEvent::LagChanged { .. })
+        | (IrcxEvent::TransferUpdated { .. }, IrcxEvent::TransferUpdated { .. }) => true,
         _ => false,
     }
 }

@@ -36,6 +36,10 @@ const PATHS = {
   // Plugins, as the plug rather than the puzzle piece: a jigsaw tab loses its
   // notch at 15px and reads as a rounded square.
   plug: "M6.2 2.3v3M9.8 2.3v3M4.4 5.3h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.3v2.4",
+  // Transfers, as an arrow into a tray: a file arriving on this machine. Both
+  // directions happen and only one arrow is drawn, because what a reader is
+  // waiting on is almost always the one coming in.
+  tray: "M8 2.6v6.5M5.3 6.4 8 9.1l2.7-2.7M3.2 10.6v2.4h9.6v-2.4",
   // Networks, as the globe: the servers this client dials are somewhere else.
   // Equator and meridian both — a bare circle at 15px is a bare circle.
   globe:

@@ -29,8 +29,13 @@ The [README status](README.md#status) lists what the current build implements.
 The current milestone excludes custom message encryption, voice, built-in file
 hosting, threads, and cloud sync. `EncryptionState` remains `Plaintext`.
 
-Attachments are links and metadata rather than files transferred through IRC.
-Remote previews load only after an explicit user action. Plugin message
+Attachments are links and metadata: a file is uploaded to a provider and its
+address is what goes into the conversation. DCC is the other way of sending
+one — a direct connection between two clients, with no host in the middle —
+and it is implemented for sending, receiving and resuming. Every offer is
+accepted by hand; nothing arrives unasked, and no port is opened until
+somebody asks for one. Remote previews load only after an explicit user
+action. Plugin message
 renderers, link and attachment providers, and protocol adapters are documented
 constraints for possible future work, not implemented features or scheduled
 work.

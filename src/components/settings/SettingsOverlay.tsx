@@ -8,6 +8,7 @@ import { PluginsPage } from "./plugins/PluginsPage";
 import { NetworksPage } from "./networks/NetworksPage";
 import { NotificationsPage } from "./notifications/NotificationsPage";
 import { PrivacyPage } from "./privacy/PrivacyPage";
+import { TransfersPage } from "./transfers/TransfersPage";
 import { UploadsPage } from "./uploads/UploadsPage";
 import { useSettingsScope } from "./scope";
 import type { SectionId } from "./sections";
@@ -101,6 +102,7 @@ function Dialog({ section }: { section: SectionId }) {
           {section === "appearance" && <AppearancePage onDone={close} />}
           {section === "notifications" && <NotificationsPage here={scope} onDone={close} />}
           {section === "uploads" && <UploadsPage onDone={close} />}
+          {section === "transfers" && <TransfersPage onDone={close} />}
           {section === "privacy" && <PrivacyPage here={scope} onDone={close} />}
           {section === "plugins" && <PluginsPage onDone={close} />}
           {section === "diagnostics" && <DiagnosticsPage onDone={close} />}

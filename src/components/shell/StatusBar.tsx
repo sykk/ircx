@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Tooltip } from "@/components/common/Tooltip";
 import { pluginStatus } from "@/components/plugins";
+import { TransfersStatus } from "@/components/transfers/TransfersPanel";
 import { useAppStore } from "@/store";
 import type { ConnectionStatus, Network, SaslStatus } from "@/types";
 import { connectionColor, useDisplayedNetwork } from "./connection";
@@ -60,6 +61,7 @@ export function StatusBar() {
             <Sasl status={network.sasl} />
           </>
         )}
+        <TransfersStatus />
         <Plugins />
       </span>
     </footer>

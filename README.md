@@ -24,6 +24,7 @@ It includes:
   deletion, mute, and ignore controls
 - themes, S3-compatible uploads, and permissioned QuickJS plugins for commands,
   annotations, and notification rules
+- DCC file transfers, sending and receiving, with resume and passive offers
 
 This milestone does not include:
 

@@ -5,6 +5,7 @@
 //! ircx opens is in one crate, sharing one rustls configuration.
 
 mod backoff;
+pub mod dcc;
 mod error;
 mod framing;
 pub mod http;

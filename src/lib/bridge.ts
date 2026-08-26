@@ -134,7 +134,17 @@ async function loadSnapshot(): Promise<void> {
     // Not part of the snapshot: a transfer is a live connection rather than
     // state a conversation has, and it outlives a reload of this window while
     // the events describing it do not.
-    ipc.listTransfers(),
+    //
+    // Answered with nothing rather than failing, because this is the least of
+    // the three and the other two are the client itself. Awaited beside them it
+    // could empty the whole window — every network, channel and query gone —
+    // over a list that is usually empty. #645 shipped it that way and the
+    // harness, which has no handler for it, came up saying no networks were
+    // configured.
+    ipc.listTransfers().catch((reason: unknown) => {
+      console.warn("ircx could not list the transfers in flight", reason);
+      return [];
+    }),
   ]);
   const { applyEvent } = useAppStore.getState();
 

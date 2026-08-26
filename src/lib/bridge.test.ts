@@ -52,6 +52,28 @@ it("loads persisted draft identities without loading their text", async () => {
 });
 
 /**
+ * The transfer list is the least of the three reads that start the window, and
+ * awaiting it beside the other two meant a refusal emptied everything: no
+ * networks, no channels, no queries. #645 shipped it that way, and the seeded
+ * harness — which had no handler for it — came up saying no networks were
+ * configured, which reads as a broken client rather than a missing stub.
+ */
+it("still loads the conversations when the transfer list cannot be read", async () => {
+  ipcMock.getSnapshot.mockResolvedValue({
+    networks: [{ id: "libera", name: "Libera.Chat" }],
+    channels: [],
+    queries: [],
+    drafts: [],
+  });
+  ipcMock.listTransfers.mockRejectedValue("the session stopped responding");
+
+  const stop = await startBridge();
+
+  expect(Object.keys(useAppStore.getState().networks)).toEqual(["libera"]);
+  stop();
+});
+
+/**
  * #133: `mark_read` is the only thing that resets a conversation's unread count
  * and nothing called it, so a badge in the sidebar only ever grew.
  *

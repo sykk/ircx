@@ -64,6 +64,14 @@ export function useChannelForView(id: ViewId | null | undefined): Channel | unde
   });
 }
 
+export function useQueryForView(id: ViewId | null | undefined): Query | undefined {
+  return useAppStore((s) => {
+    const view = id ? s.views[id] : undefined;
+    if (!view || !view.network) return undefined;
+    return s.queries[targetKey(view.network, view.target)];
+  });
+}
+
 /** One network's protocol transcript, oldest first, as the store capped it. */
 export function useRawLog(network: string): string[] {
   return useAppStore((s) => s.rawLog[network] ?? EMPTY);

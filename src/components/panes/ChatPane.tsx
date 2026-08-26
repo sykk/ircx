@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Composer } from "@/components/composer/Composer";
 import { ContextPanel } from "@/components/drawer/ContextPanel";
 import { ChannelHeader } from "@/components/header/ChannelHeader";
+import { QueryHeader } from "@/components/header/QueryHeader";
 import { Timeline } from "@/components/timeline/Timeline";
 import { useAppStore } from "@/store";
 import { useView } from "@/store/selectors";
@@ -71,11 +72,15 @@ export function ChatPane({ view }: { view: ViewId | null }) {
         </div>
       ) : (
         <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)_auto]">
+          {/* Each draws nothing for the other's kind of conversation, so the
+              two are mutually exclusive without the pane having to know which
+              it is holding. */}
           <ChannelHeader
             view={view}
             catchUp={catchUp}
             onCatchUp={() => setCatchUpFor(catchUp ? null : conversation)}
           />
+          <QueryHeader view={view} />
           <div className="col-start-1 row-start-3 min-h-0 min-w-0">
             <Timeline view={view} catchUp={catchUp} />
           </div>

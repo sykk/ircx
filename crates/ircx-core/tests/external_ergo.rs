@@ -94,6 +94,9 @@ async fn walk(nick: &str, certificate: Option<PathBuf>) -> Walk {
         }),
         connect_commands: Vec::new(),
         autojoin: Vec::new(),
+        quit_message: None,
+        part_message: None,
+        away_message: None,
     };
 
     let store = Arc::new(Store::open_in_memory().expect("store"));

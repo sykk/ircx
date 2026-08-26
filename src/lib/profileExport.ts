@@ -29,6 +29,9 @@ function portableNetwork(config: NetworkConfig) {
         : { mechanism: config.sasl.mechanism, account: config.sasl.account },
     autojoin: config.autojoin,
     autoConnect: config.autoConnect,
+    quitMessage: config.quitMessage,
+    partMessage: config.partMessage,
+    awayMessage: config.awayMessage,
   };
 }
 

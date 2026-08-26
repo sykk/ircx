@@ -20,4 +20,18 @@ clientCertificate: string | null, nick: string, altNicks: Array<string>, usernam
 /**
  * Sent verbatim after registration, one command per entry, no leading slash.
  */
-connectCommands: Array<string>, autojoin: Array<string>, autoConnect: boolean, socks5Proxy: string | null, };
+connectCommands: Array<string>, autojoin: Array<string>, autoConnect: boolean, socks5Proxy: string | null, 
+/**
+ * What `/quit`, `/part` and `/away` say when the user gives no reason.
+ *
+ * Per network rather than per client because the other three fields that
+ * describe who is signing off — nick, username, realname — already are,
+ * and the reason you leave a work network is not the reason you leave a
+ * project one.
+ *
+ * `None` is silence for the first two: `QUIT` and `PART` carry no
+ * trailing parameter and the server writes whatever it writes. Away
+ * cannot be silent, because `AWAY` with nothing after it is how a client
+ * says it is back, so an unset one falls back to a plain `Away`.
+ */
+quitMessage: string | null, partMessage: string | null, awayMessage: string | null, };

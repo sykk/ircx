@@ -26,6 +26,7 @@ const MIGRATIONS: &[&str] = &[
     SOCKS5_PROXY,
     WATCHED_NICKS,
     TRANSFER_SETTINGS,
+    DEFAULT_MESSAGES,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -428,6 +429,15 @@ CREATE TABLE transfer_settings (
     address     TEXT,
     passive     INTEGER NOT NULL
 );
+"#;
+
+/// Null rather than defaulted to a string: `QUIT` and `PART` are allowed to
+/// carry no reason at all, and a column filled in for every network already
+/// saved would put words in the mouth of somebody who never typed any.
+const DEFAULT_MESSAGES: &str = r#"
+ALTER TABLE networks ADD COLUMN quit_message TEXT;
+ALTER TABLE networks ADD COLUMN part_message TEXT;
+ALTER TABLE networks ADD COLUMN away_message TEXT;
 "#;
 
 #[cfg(test)]

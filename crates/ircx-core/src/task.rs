@@ -1865,6 +1865,9 @@ mod tests {
             sasl: None,
             connect_commands: Vec::new(),
             autojoin: Vec::new(),
+            quit_message: None,
+            part_message: None,
+            away_message: None,
         }
     }
 

@@ -742,6 +742,9 @@ mod tests {
             auto_connect: false,
             client_certificate: None,
             socks5_proxy: None,
+            quit_message: None,
+            part_message: None,
+            away_message: None,
         }
     }
 

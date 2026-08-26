@@ -86,6 +86,10 @@ cannot drive and the conditions a loopback rig does not have.
   directions. The finished file must be byte-identical to the sender's.
 - [ ] With ircx behind NAT, turn on "Ask the other side to open the port" and
   complete a transfer in each direction with a client that is reachable.
+- [ ] On a network with real IPv6, complete a transfer in each direction with a
+  client that does IPv6 DCC. The loopback tests cover the path and the interop
+  probe cannot: HexChat has nowhere to put an IPv6 address in an offer and
+  sends `0`.
 - [ ] Forward a port range, set it on the Transfers page, and confirm an offer
   opens a port inside it.
 - [ ] Accept an offer over a link slow enough to watch: the progress and the

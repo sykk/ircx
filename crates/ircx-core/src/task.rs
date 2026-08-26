@@ -1606,8 +1606,8 @@ async fn connect_transfer(
 ) -> Result<tokio::net::TcpStream, TransferError> {
     match &job.endpoint {
         TransferEndpoint::Dial { address, port } => dcc::dial(*address, *port).await,
-        TransferEndpoint::Listen { ports } => {
-            let waiting = dcc::Waiting::open(*ports).await?;
+        TransferEndpoint::Listen { ports, advertised } => {
+            let waiting = dcc::Waiting::open(*ports, *advertised).await?;
             let port = waiting.port();
             // Before accepting, because the number is what the other side is
             // about to be told to connect to.

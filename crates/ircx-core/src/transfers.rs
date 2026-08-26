@@ -45,8 +45,14 @@ const REMEMBERED: usize = 100;
 pub enum TransferEndpoint {
     /// Open a port and wait. The number is reported back before anything is
     /// sent, because the number is part of what gets sent.
+    ///
+    /// `advertised` travels with the range because it decides which family the
+    /// port is opened in: it is the address the other side is about to be told
+    /// to connect to, and a listener in the other family is a port nobody can
+    /// reach.
     Listen {
         ports: Option<(u16, u16)>,
+        advertised: IpAddr,
     },
     Dial {
         address: IpAddr,
@@ -165,6 +171,22 @@ impl SessionState {
                 self.start_transfer(at, TransferEndpoint::Dial { address, port });
                 return;
             }
+        }
+
+        // An offer this client would have to dial has to name somewhere to dial.
+        // HexChat connected over IPv6 sends `0` here — it has no way to put an
+        // IPv6 address in an offer, so it puts none at all — and `0.0.0.0`
+        // dialled is not the sender, it is whatever answers on this machine.
+        // A passive offer is exempt: nothing dials it, the address is theirs to
+        // decorate, and the port is what says so.
+        if port != 0 && address.is_unspecified() {
+            let text = format!(
+                "{} offered {file} but named no address to fetch it from. Their client may not                  be able to offer files over this connection — ask them to send it another way.",
+                sender.nick
+            );
+            let note = self.chat_message(message, target, MessageKind::Server, text);
+            self.append(note);
+            return;
         }
 
         if port != 0 && port < LOWEST_PORT {
@@ -365,7 +387,13 @@ impl SessionState {
                 self.send_dcc(nick, &body);
                 self.emit_transfer(at);
             }
-            None => self.start_transfer(at, TransferEndpoint::Listen { ports }),
+            None => self.start_transfer(
+                at,
+                TransferEndpoint::Listen {
+                    ports,
+                    advertised: address,
+                },
+            ),
         }
         (Ok(offered), self.drain())
     }
@@ -427,8 +455,15 @@ impl SessionState {
     /// reachable.
     fn begin_receiving(&mut self, at: usize) {
         let endpoint = match self.transfers[at].token.is_some() {
-            true => TransferEndpoint::Listen {
-                ports: self.transfers[at].ports,
+            true => match self.transfers[at].advertise {
+                Some(advertised) => TransferEndpoint::Listen {
+                    ports: self.transfers[at].ports,
+                    advertised,
+                },
+                None => {
+                    self.fail_transfer(at, "There is no address to offer a port on".into());
+                    return;
+                }
             },
             false => match self.transfers[at].address {
                 Some(address) => TransferEndpoint::Dial {

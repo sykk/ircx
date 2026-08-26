@@ -6783,10 +6783,15 @@ mod file_transfers {
         session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 0 51200 4821"));
         let id = session.accept(0);
 
+        // The port is opened in the family of the address about to be offered
+        // on it, so that the two cannot name different things.
         assert!(
             matches!(
                 session.jobs[0].endpoint,
-                TransferEndpoint::Listen { ports: None }
+                TransferEndpoint::Listen {
+                    ports: None,
+                    advertised
+                } if advertised == ours()
             ),
             "{:?}",
             session.jobs[0].endpoint
@@ -6812,6 +6817,31 @@ mod file_transfers {
         let row = session.messages()[0];
         assert!(row.text.contains("port 22"), "{}", row.text);
         assert!(row.text.contains("1024"), "{}", row.text);
+    }
+
+    /// HexChat connected over IPv6 offers `0` for the address: it has no way
+    /// to put an IPv6 address in an offer, so it puts none. Dialled, `0.0.0.0`
+    /// is not the sender — it is whatever answers on this machine.
+    #[test]
+    fn an_offer_naming_no_address_is_refused_rather_than_dialled() {
+        let mut session = talking_to_sable();
+        session.offered("SEND holiday.png 0 52881 51200");
+
+        assert!(session.no_transfer(), "nothing to accept");
+        let row = session.messages()[0];
+        assert!(row.text.contains("named no address"), "{}", row.text);
+        assert!(session.jobs.is_empty());
+    }
+
+    /// Nothing dials a passive offer, so the address in one decorates rather
+    /// than directs: the port of zero is what says so, and the token is what
+    /// the answer is matched against.
+    #[test]
+    fn a_passive_offer_naming_no_address_is_still_answerable() {
+        let mut session = talking_to_sable();
+        session.offered("SEND holiday.png 0 0 51200 4821");
+
+        assert_eq!(session.transfer().state, TransferState::Offered);
     }
 
     #[test]

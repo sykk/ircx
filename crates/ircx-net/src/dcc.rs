@@ -12,13 +12,13 @@
 //! written stays on disk, which is what a resume is later built on.
 
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::net::{lookup_host, TcpListener, TcpStream, UdpSocket};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Instant};
 
@@ -105,20 +105,29 @@ impl Waiting {
     /// system choose — which works for a client that is directly reachable and
     /// not for one behind a router nobody has configured.
     ///
-    /// The socket binds to every IPv4 address rather than to one, because the
-    /// address the peer was told to use is not always an address this machine
-    /// holds: behind NAT it is the router's.
-    pub async fn open(ports: Option<(u16, u16)>) -> Result<Self, TransferError> {
+    /// `advertised` is the address the other side is about to be told to
+    /// connect to, and it decides the family this listens on. Binding one
+    /// family and naming an address in the other is a port nobody can reach:
+    /// it was IPv4 whatever the offer said, so an IPv6 client was sent to a
+    /// socket that did not exist.
+    ///
+    /// Within that family the socket binds every address rather than the one
+    /// named, because the address the peer was told to use is not always an
+    /// address this machine holds: behind NAT it is the router's.
+    pub async fn open(
+        ports: Option<(u16, u16)>,
+        advertised: IpAddr,
+    ) -> Result<Self, TransferError> {
+        let any = anywhere(advertised);
         let Some((first, last)) = ports else {
-            let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
+            let listener = TcpListener::bind(SocketAddr::new(any, 0))
                 .await
                 .map_err(|source| TransferError::Listen { source })?;
             return Ok(Self { listener });
         };
 
         for port in first..=last {
-            let address = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
-            if let Ok(listener) = TcpListener::bind(address).await {
+            if let Ok(listener) = TcpListener::bind(SocketAddr::new(any, port)).await {
                 return Ok(Self { listener });
             }
         }
@@ -157,6 +166,14 @@ pub fn partial(path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
+/// Every address of the same family, which is what a listener binds.
+fn anywhere(like: IpAddr) -> IpAddr {
+    match like {
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    }
+}
+
 /// The address this machine would reach `host` from, which is the best guess
 /// available for what to put in an offer.
 ///
@@ -164,12 +181,29 @@ pub fn partial(path: &Path) -> PathBuf {
 /// and the local address is what it picked. Behind NAT that is a private
 /// address and reaches nobody, which is what the address setting and passive
 /// offers are for.
+///
+/// The name is resolved first so the socket can be opened in the family the
+/// answer is in. A socket bound to `0.0.0.0` cannot be connected to an IPv6
+/// address at all — it fails with `Address family not supported by protocol` —
+/// so a client on an IPv6 network used to get no address here, and every offer
+/// it tried to make was refused before it reached the wire.
+///
+/// Each resolved address is tried in turn: a host with both an A and a AAAA
+/// record resolves to both, and which of them this machine can actually route
+/// to is the question being asked.
 pub async fn local_address(host: &str, port: u16) -> Option<IpAddr> {
-    let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
-        .await
-        .ok()?;
-    socket.connect((host, port)).await.ok()?;
-    socket.local_addr().ok().map(|address| address.ip())
+    for target in lookup_host((host, port)).await.ok()? {
+        let Ok(socket) = UdpSocket::bind(SocketAddr::new(anywhere(target.ip()), 0)).await else {
+            continue;
+        };
+        if socket.connect(target).await.is_err() {
+            continue;
+        }
+        if let Ok(local) = socket.local_addr() {
+            return Some(local.ip());
+        }
+    }
+    None
 }
 
 pub async fn dial(address: IpAddr, port: u16) -> Result<TcpStream, TransferError> {
@@ -404,7 +438,9 @@ mod tests {
                 .expect("the part already received");
         }
 
-        let waiting = Waiting::open(None).await.expect("a port");
+        let waiting = Waiting::open(None, Ipv4Addr::LOCALHOST.into())
+            .await
+            .expect("a port");
         let port = waiting.port();
         let sending = tokio::spawn(async move {
             let stream = waiting.accept().await.expect("a connection");
@@ -500,6 +536,93 @@ mod tests {
         assert!(
             !landed.exists(),
             "which has not taken the name the reader chose"
+        );
+        let _ = tokio::fs::remove_dir_all(&directory).await;
+    }
+
+    /// A socket bound to `0.0.0.0` cannot be connected to an IPv6 address at
+    /// all, so this used to answer nothing on an IPv6 network and every offer
+    /// was refused before it reached the wire.
+    #[tokio::test]
+    async fn finds_an_address_to_offer_from_over_either_family() {
+        // Nothing has to be listening: a connected UDP socket sends no packet,
+        // it only asks the routing table which way it would go.
+        let v6 = local_address("::1", 6667).await;
+        assert!(matches!(v6, Some(IpAddr::V6(_))), "{v6:?}");
+
+        let v4 = local_address("127.0.0.1", 6667).await;
+        assert!(matches!(v4, Some(IpAddr::V4(_))), "{v4:?}");
+    }
+
+    /// A client on an IPv6 network offering a file used to name an IPv6
+    /// address and open an IPv4 port, so the other side was sent to a socket
+    /// that did not exist. The family the offer names is the family the port
+    /// is opened in.
+    #[tokio::test]
+    async fn listens_in_the_family_the_offer_names() {
+        let waiting = Waiting::open(None, Ipv6Addr::LOCALHOST.into())
+            .await
+            .expect("a port");
+        let port = waiting.port();
+        let accepted = tokio::spawn(waiting.accept());
+
+        let reached = TcpStream::connect(SocketAddr::from((Ipv6Addr::LOCALHOST, port))).await;
+        assert!(reached.is_ok(), "an IPv6 client reaches it: {reached:?}");
+        assert!(accepted.await.expect("the listener").is_ok());
+
+        let waiting = Waiting::open(None, Ipv4Addr::LOCALHOST.into())
+            .await
+            .expect("a port");
+        let port = waiting.port();
+        let accepted = tokio::spawn(waiting.accept());
+        assert!(
+            TcpStream::connect(SocketAddr::from((Ipv4Addr::LOCALHOST, port)))
+                .await
+                .is_ok()
+        );
+        assert!(accepted.await.expect("the listener").is_ok());
+    }
+
+    /// The whole file, over IPv6, with the handshake this crate is told the
+    /// answer to. The rest of the suite runs on IPv4 and would not notice a
+    /// v6-shaped hole anywhere in the path.
+    #[tokio::test]
+    async fn moves_a_file_over_ipv6() {
+        let directory = std::env::temp_dir().join("ircx-dcc-v6");
+        let _ = tokio::fs::remove_dir_all(&directory).await;
+        tokio::fs::create_dir_all(&directory)
+            .await
+            .expect("a temporary directory");
+        let source = directory.join("source");
+        let landed = directory.join("landed");
+        let content: Vec<u8> = (0..120_000u32).map(|byte| byte as u8).collect();
+        tokio::fs::write(&source, &content)
+            .await
+            .expect("the file to send");
+
+        let waiting = Waiting::open(None, Ipv6Addr::LOCALHOST.into())
+            .await
+            .expect("a port");
+        let port = waiting.port();
+        let sending = tokio::spawn(async move {
+            let stream = waiting.accept().await.expect("a connection");
+            let (progress, _sink) = mpsc::channel(8);
+            send(stream, &source, 0, progress).await
+        });
+
+        let stream = dial(Ipv6Addr::LOCALHOST.into(), port)
+            .await
+            .expect("a connection");
+        let (progress, _sink) = mpsc::channel(8);
+        let received = receive(stream, &landed, 0, content.len() as u64, progress)
+            .await
+            .expect("the file");
+        sending.await.expect("the sender").expect("the file sent");
+
+        assert_eq!(received, content.len() as u64);
+        assert_eq!(
+            tokio::fs::read(&landed).await.expect("the received file"),
+            content
         );
         let _ = tokio::fs::remove_dir_all(&directory).await;
     }

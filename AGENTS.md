@@ -241,7 +241,14 @@ connection belongs to the sender and the disk does not.
 The two settings beside the download folder are one subject: DCC names an
 address and a port in a message, and a machine behind a router has neither to
 give. The address defaults to the one the IRC connection goes out from, found
-by connecting a UDP socket and reading back what the kernel chose; a passive
+by connecting a UDP socket and reading back what the kernel chose — resolving
+the server's name first, so the socket is opened in the family the answer is in
+and an IPv6 network gets an address rather than nothing. The port is opened in
+that same family, because a listener in the other one is a port nobody can
+reach. Not every client can say as much: HexChat connected over IPv6 offers `0`
+for the address, having nowhere to put one, and an offer this client would have
+to dial is refused when it names nowhere — `0.0.0.0` dialled is not the sender,
+it is whatever answers on this machine. a passive
 offer is the answer when that address reaches nobody, and it fails in turn when
 both ends are behind routers. A transfer belongs to the network it was arranged
 on and its task dies with that connection: what was on disk stays there, which

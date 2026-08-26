@@ -448,6 +448,62 @@ mod tests {
         assert_eq!(written, content);
     }
 
+    /// Cancelling is dropping the future, and what it leaves behind is what the
+    /// next resume is measured against. If an abandoned receive took its part
+    /// file with it there would be nothing to resume from, and the whole
+    /// arrangement would be a slower way of starting again.
+    ///
+    /// How much is there is deliberately not asserted. Writes are handed to the
+    /// blocking pool and the last of them may not have landed when the future
+    /// is dropped — which costs nothing, because a resume measures the file
+    /// rather than trusting the count: it starts again from whatever is really
+    /// on disk.
+    #[tokio::test]
+    async fn an_abandoned_receive_leaves_what_arrived() {
+        let directory = std::env::temp_dir().join("ircx-dcc-abandoned");
+        let _ = tokio::fs::remove_dir_all(&directory).await;
+        tokio::fs::create_dir_all(&directory)
+            .await
+            .expect("a temporary directory");
+        let landed = directory.join("landed");
+
+        let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+            .await
+            .expect("a port");
+        let port = listener.local_addr().expect("the port").port();
+        // A chunk and then nothing, without closing: what being in the middle
+        // of a transfer looks like from the other end.
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("a connection");
+            let _ = stream.write_all(&[7u8; 4096]).await;
+            std::future::pending::<()>().await;
+        });
+
+        let stream = dial(Ipv4Addr::LOCALHOST.into(), port)
+            .await
+            .expect("a connection");
+        let (progress, _sink) = mpsc::channel(8);
+        // Dropping the future is the cancel: `Elapsed` is the receive still
+        // running at the moment it was dropped.
+        let stopped = timeout(
+            Duration::from_millis(500),
+            receive(stream, &landed, 0, 100_000, progress),
+        )
+        .await;
+        assert!(stopped.is_err(), "the transfer had not finished on its own");
+
+        let held = tokio::fs::metadata(partial(&landed))
+            .await
+            .expect("the part file the abandoned transfer left")
+            .len();
+        assert!(held > 0, "and it holds what arrived");
+        assert!(
+            !landed.exists(),
+            "which has not taken the name the reader chose"
+        );
+        let _ = tokio::fs::remove_dir_all(&directory).await;
+    }
+
     /// A resume is agreed against a part file measured before the handshake. If
     /// that file has since shrunk, carrying on would leave a hole in the middle
     /// of the finished file and nothing would say so.

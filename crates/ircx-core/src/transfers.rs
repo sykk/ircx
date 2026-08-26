@@ -543,8 +543,16 @@ impl SessionState {
         self.drain()
     }
 
-    /// A job that ended, well or badly. A transfer the user already cancelled
-    /// keeps that state: the failure it reports is the cancelling.
+    /// A job that ended, well or badly.
+    ///
+    /// A whole file that arrived is `Done` whatever was decided about it in the
+    /// meantime, because the file is there under the name the reader chose and
+    /// calling that cancelled is a lie about what is on the disk. A cancel and
+    /// the last byte can cross — the two reach the session down different
+    /// senders — and the loser of that race is the cancel.
+    ///
+    /// A job that failed keeps a cancel instead: the cancelling is what the
+    /// failure is, and it is the more useful of the two things to say.
     pub fn transfer_finished(
         &mut self,
         id: &str,
@@ -560,7 +568,10 @@ impl SessionState {
         };
         self.transfers[at].running = false;
         self.transfers[at].transfer.at = at_bytes;
-        if !is_over(self.transfers[at].transfer.state) {
+        if failure.is_none() {
+            self.transfers[at].transfer.state = TransferState::Done;
+            self.transfers[at].transfer.failure = None;
+        } else if !is_over(self.transfers[at].transfer.state) {
             match failure {
                 Some(reason) => {
                     self.transfers[at].transfer.state = TransferState::Failed;

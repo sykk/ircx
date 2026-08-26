@@ -6968,8 +6968,25 @@ mod file_transfers {
         assert_eq!(session.transfer().at, 4096);
     }
 
-    /// A job that ends after the user already stopped it does not undo the
-    /// stopping: what it reports is how far the cancelled transfer got.
+    /// A cancel and the last byte can cross, because the two reach the session
+    /// down different senders. The file is on disk under the name the reader
+    /// chose, so saying it was cancelled is a lie about what is there.
+    #[test]
+    fn a_whole_file_that_arrived_is_done_even_if_a_cancel_crossed_it() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.accept(0);
+        let actions = session.state.cancel_transfer(&id);
+        session.apply(actions);
+
+        let actions = session.state.transfer_finished(&id, 51_200, None);
+        session.apply(actions);
+        assert_eq!(session.transfer().state, TransferState::Done);
+        assert_eq!(session.transfer().at, 51_200);
+    }
+
+    /// A job that failed keeps the cancel instead: the cancelling is what the
+    /// failure is, and it is the more useful of the two things to say.
     #[test]
     fn a_job_that_ends_after_a_cancel_keeps_the_cancel() {
         let mut session = talking_to_sable();

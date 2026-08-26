@@ -250,6 +250,16 @@ been restarted is not party to a transfer it was party to before, so
 `Transfer.message` names the row that announced it and finds nothing after a
 relaunch, which is correct.
 
+The protocol has no specification, so ircx agreeing with itself proves nothing
+about it. `crates/ircx-core/tests/hexchat_dcc.rs` drives the real stack against
+HexChat — an offer each way, a resume each way — and `scripts/dcc-interop.sh`
+stands up the server, the display and the client it needs. It is ignored by
+default like the other live probes. Two things in that rig are worth knowing
+before changing it: HexChat has to be throttled, because on loopback a few
+hundred kilobytes arrive faster than anything can be watched happening, and
+ergo's IP cloaking has to be off, because HexChat resolves its own hostname to
+decide what address to put in an offer and a cloak resolves to nothing.
+
 Every pane on a channel draws its own member list inside it. A split carries a
 ratio and its divider moves by pointer or arrow key. The layout tree survives a
 restart, written down as the conversations its panes hold; one whose

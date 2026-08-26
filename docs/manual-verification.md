@@ -74,22 +74,22 @@ historical results in Git and add a test when a check becomes repeatable.
 
 ## File transfers
 
-Everything below needs a second client, because the whole subject is what two
-implementations agree on. The loopback tests cover ircx against ircx; these
-cover ircx against what people actually run.
+What two implementations agree on is the whole subject, and the rest of the
+suite is ircx against ircx. HexChat is covered by a probe rather than by hand —
+see the interop section below — so what is left here is the clients that probe
+cannot drive and the conditions a loopback rig does not have.
 
-- [ ] Receive a file from mIRC, HexChat, or irssi. Confirm the name it lands
-  under, and that a name already taken in the download folder is numbered
-  rather than overwritten.
-- [ ] Interrupt that transfer partway, accept the same file again, and confirm
-  the `DCC RESUME` round trip happens and the finished file is byte-identical
-  to the sender's.
-- [ ] Send a file to each of those clients and let them resume one interrupted
-  partway.
+- [ ] Receive a file from mIRC and from irssi, and send one to each. Confirm
+  the name it lands under, and that a name already taken in the download folder
+  is numbered rather than overwritten.
+- [ ] Let each of them resume a transfer interrupted partway, in both
+  directions. The finished file must be byte-identical to the sender's.
 - [ ] With ircx behind NAT, turn on "Ask the other side to open the port" and
   complete a transfer in each direction with a client that is reachable.
-- [ ] Forward a port range, set it on the Transfers page, and confirm an active
-  offer opens a port inside it.
+- [ ] Forward a port range, set it on the Transfers page, and confirm an offer
+  opens a port inside it.
+- [ ] Accept an offer over a link slow enough to watch: the progress and the
+  percentage must move, and Cancel must stop it and leave the part file.
 - [ ] Decline an offer and confirm the sender's client stops waiting rather
   than timing out.
 
@@ -109,6 +109,11 @@ a network connection. Their source files contain the required setup.
 ```sh
 cargo test -p ircx-core --test libera -- --ignored --nocapture
 cargo test -p ircx-core --test ergo -- --ignored --nocapture
+
+# DCC against HexChat, which is a different implementation of a protocol that
+# has no specification. Stands up its own server, display and client:
+scripts/dcc-interop.sh test
+scripts/dcc-interop.sh down
 cargo test -p ircx-core --test scram_ergo -- --ignored --nocapture
 cargo test -p ircx-core --test external_ergo -- --ignored --nocapture
 cargo test -p ircx-core --test gap_walk -- --ignored --nocapture

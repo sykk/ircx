@@ -145,6 +145,11 @@ pub struct SessionConfig {
     pub sasl: Option<SaslCredentials>,
     pub connect_commands: Vec<String>,
     pub autojoin: Vec<String>,
+    /// What is said on the way out when nothing else is. `dispatch.rs` reads
+    /// all three.
+    pub quit_message: Option<String>,
+    pub part_message: Option<String>,
+    pub away_message: Option<String>,
 }
 
 impl SessionConfig {
@@ -175,6 +180,9 @@ impl SessionConfig {
             }),
             connect_commands: config.connect_commands.clone(),
             autojoin: config.autojoin.clone(),
+            quit_message: config.quit_message.clone(),
+            part_message: config.part_message.clone(),
+            away_message: config.away_message.clone(),
         }
     }
 }

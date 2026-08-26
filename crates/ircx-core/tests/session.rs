@@ -44,6 +44,9 @@ fn config() -> SessionConfig {
         sasl: None,
         connect_commands: Vec::new(),
         autojoin: Vec::new(),
+        quit_message: None,
+        part_message: None,
+        away_message: None,
     }
 }
 
@@ -335,7 +338,12 @@ impl Harness {
 
 /// Registration up to `001`, with the capabilities the caller names ACKed.
 fn registered(caps: &str) -> Harness {
-    let mut session = Harness::new(config());
+    registered_with(config(), caps)
+}
+
+/// The same, for a network whose settings the test cares about.
+fn registered_with(config: SessionConfig, caps: &str) -> Harness {
+    let mut session = Harness::new(config);
     session.connect();
     session.feed(&format!(":irc.libera.chat CAP * LS :{caps}"));
     if !caps.is_empty() {
@@ -1227,6 +1235,102 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
             "PING token",
         ]
     );
+}
+
+/// What is said on the way out when the reader says nothing.
+///
+/// `QUIT` and `PART` are allowed to carry no reason, so a network with no
+/// default sends none — this client used to sign everybody off with its own
+/// name. `AWAY` is not: a bare one is how a client says it is back, so the
+/// unconfigured case falls back to a word rather than to silence.
+mod default_messages {
+    use super::*;
+
+    fn configured() -> SessionConfig {
+        SessionConfig {
+            quit_message: Some("later".into()),
+            part_message: Some("off to lunch".into()),
+            away_message: Some("in a meeting".into()),
+            ..config()
+        }
+    }
+
+    fn joined(config: SessionConfig) -> Harness {
+        let mut session = registered_with(config, "");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+        session
+    }
+
+    #[test]
+    fn a_network_with_none_sends_no_reason_at_all() {
+        let mut session = joined(config());
+
+        session.submit("#ircx", "/part");
+        session.submit("#ircx", "/away");
+        session.submit("#ircx", "/quit");
+
+        assert_eq!(session.sent(), vec!["PART #ircx", "AWAY Away", "QUIT"]);
+    }
+
+    #[test]
+    fn a_network_with_defaults_fills_them_in() {
+        let mut session = joined(configured());
+
+        session.submit("#ircx", "/part");
+        session.submit("#ircx", "/away");
+        session.submit("#ircx", "/quit");
+
+        assert_eq!(
+            session.sent(),
+            vec![
+                "PART #ircx :off to lunch",
+                "AWAY :in a meeting",
+                "QUIT later",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reason_the_reader_typed_beats_the_default() {
+        let mut session = joined(configured());
+
+        session.submit("#ircx", "/part back soon");
+        session.submit("#ircx", "/away at the dentist");
+        session.submit("#ircx", "/quit see you");
+
+        assert_eq!(
+            session.sent(),
+            vec![
+                "PART #ircx :back soon",
+                "AWAY :at the dentist",
+                "QUIT :see you",
+            ]
+        );
+    }
+
+    /// Closing a channel is leaving it, so the people in it read the same line
+    /// they would have read after `/part`.
+    #[test]
+    fn closing_a_channel_parts_with_the_default() {
+        let mut session = joined(configured());
+
+        let actions = session.state.close_target("#ircx");
+        session.apply(actions);
+
+        assert_eq!(session.sent(), vec!["PART #ircx :off to lunch"]);
+    }
+
+    /// The bare `/away` used to mean this. It cannot mean both, and the half
+    /// worth the shorter name is the one a stored reason is for.
+    #[test]
+    fn back_is_the_only_thing_that_clears_away() {
+        let mut session = joined(configured());
+
+        session.submit("#ircx", "/back");
+
+        assert_eq!(session.sent(), vec!["AWAY"]);
+    }
 }
 
 #[test]

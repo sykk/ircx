@@ -25,6 +25,8 @@ import type {
   SearchHit,
   SearchRequest,
   ThemeSource,
+  Transfer,
+  TransferSettings,
   UploadProvider,
   UploadedFile,
   WatchedPerson,
@@ -200,6 +202,28 @@ export const ipc = {
     invoke<string | null>("get_draft", { network, target }),
   setDraft: (network: string, target: string, text: string) =>
     invoke<void>("set_draft", { network, target, text }),
+
+  /** Where received files land and what this client can say about reaching
+   * it. Never absent: what the store does not hold, the backend fills in from
+   * the operating system's own answer. */
+  transferSettings: () => invoke<TransferSettings>("transfer_settings"),
+  setTransferSettings: (settings: TransferSettings) =>
+    invoke<void>("set_transfer_settings", { settings }),
+  /** Every network's transfers. Read once by a window that has just started;
+   * every change after that arrives as an event. */
+  listTransfers: () => invoke<Transfer[]>("list_transfers"),
+  /** Offers a file to one person. Answers with the transfer, which is waiting
+   * for them — nothing has been read off the disk yet. */
+  offerFile: (network: string, target: string, path: string) =>
+    invoke<Transfer>("offer_file", { network, target, path }),
+  /** Takes an offer. `path` is a name chosen in a save dialog; without one the
+   * file lands in the download folder under the name it was offered as. */
+  acceptTransfer: (network: string, id: string, path: string | null) =>
+    invoke<void>("accept_transfer", { network, id, path }),
+  declineTransfer: (network: string, id: string) =>
+    invoke<void>("decline_transfer", { network, id }),
+  cancelTransfer: (network: string, id: string) =>
+    invoke<void>("cancel_transfer", { network, id }),
 
   listThemes: () => invoke<ThemeSource[]>("list_themes"),
   /** Copies a theme folder in and answers with the id it landed under. The

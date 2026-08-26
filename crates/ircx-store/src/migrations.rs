@@ -25,6 +25,7 @@ const MIGRATIONS: &[&str] = &[
     BOOKMARK_NOTES,
     SOCKS5_PROXY,
     WATCHED_NICKS,
+    TRANSFER_SETTINGS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -409,6 +410,23 @@ CREATE TABLE watched_nicks (
     network TEXT NOT NULL,
     nick    TEXT NOT NULL,
     PRIMARY KEY (network, nick)
+);
+"#;
+
+/// Where a file received over DCC lands, and what this client is able to tell
+/// the other side about reaching it.
+///
+/// One row, because none of it is per network: the ports are this machine's and
+/// the directory is the user's. An absent row is the defaults, which is why
+/// nothing is written until a page changes something.
+const TRANSFER_SETTINGS: &str = r#"
+CREATE TABLE transfer_settings (
+    only        INTEGER PRIMARY KEY CHECK (only = 0),
+    directory   TEXT NOT NULL,
+    first_port  INTEGER,
+    last_port   INTEGER,
+    address     TEXT,
+    passive     INTEGER NOT NULL
 );
 "#;
 

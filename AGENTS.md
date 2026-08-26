@@ -209,6 +209,47 @@ settings window lists them beside the mutes, which is where the difference
 between the two is worth stating and where an ignore made on a network nobody is
 connected to can still be undone.
 
+A file can also travel between two clients with no host in the middle, which
+is DCC, and it is split across three layers on the line where the decisions
+stop and the sockets start. `crates/ircx-core/src/dcc.rs` is the wire format
+and nothing else: it has no specification and several dialects, so the numeric
+fields are read from the right, where how many there are is known, rather than
+from the left where an unquoted file name has already eaten an unknown number
+of them. `crates/ircx-core/src/transfers.rs` is every decision — which transfer
+a handshake line names, whether an offer may be answered, where a resume
+starts — made against session state and emitting `Action`s, so the whole
+protocol is drivable by a script in a test the way the rest of the session is.
+`crates/ircx-net/src/dcc.rs` moves the bytes and is told the answer.
+
+The handshake breaks the rule stated over `handle_incoming_ctcp`, that a
+question is a `PRIVMSG` and an answer is a `NOTICE`: `RESUME`, `ACCEPT` and the
+answer to a passive offer are all `PRIVMSG`s, because DCC has no such division.
+What stops two clients trading lines forever is state instead — every reply is
+against a transfer already held and moves it on, so a line with nothing behind
+it is dropped rather than answered.
+
+Nothing is automatic. An offer is a row and a transfer in `Offered`, and no
+socket opens until somebody accepts it; an offer naming a port below 1024 is
+refused outright, because that is a service rather than a person. What arrives
+is written to a `.part` file and takes the name the reader chose only once all
+of it is there, which is also **what makes resume possible at all**: a partial
+file under the final name cannot be told from an unrelated file somebody
+already had, and a name already taken by a finished file is numbered rather
+than appended to. The offered size is a limit rather than a hint — the
+connection belongs to the sender and the disk does not.
+
+The two settings beside the download folder are one subject: DCC names an
+address and a port in a message, and a machine behind a router has neither to
+give. The address defaults to the one the IRC connection goes out from, found
+by connecting a UDP socket and reading back what the kernel chose; a passive
+offer is the answer when that address reaches nobody, and it fails in turn when
+both ends are behind routers. A transfer belongs to the network it was arranged
+on and its task dies with that connection: what was on disk stays there, which
+is what the next resume is built on. Nothing is archived — a client that has
+been restarted is not party to a transfer it was party to before, so
+`Transfer.message` names the row that announced it and finds nothing after a
+relaunch, which is correct.
+
 Every pane on a channel draws its own member list inside it. A split carries a
 ratio and its divider moves by pointer or arrow key. The layout tree survives a
 restart, written down as the conversations its panes hold; one whose

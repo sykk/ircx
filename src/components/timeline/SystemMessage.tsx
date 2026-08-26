@@ -2,6 +2,8 @@ import { useState } from "react";
 import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
+import { TransferControls } from "@/components/transfers/TransferControls";
+import { useTransferFor } from "@/store/selectors";
 import { Clock } from "./Clock";
 import { Block } from "./MessageBlock";
 import {
@@ -254,7 +256,17 @@ const LAID_OUT = "font-[family-name:var(--font-mono)] whitespace-pre-wrap";
  */
 const FACE: Partial<Record<MessageKind, string>> = { client: LAID_OUT, server: LAID_OUT };
 
+/**
+ * A system line, and the controls for the transfer it announced where it
+ * announced one.
+ *
+ * The row is where an offer is answered because the row is where the reader
+ * already is: a panel they have to find first is a decision they have to be
+ * told to go and make. What is drawn here and in that panel is the same
+ * component, so the two cannot disagree about one file.
+ */
 function SystemLine({ message }: { message: ChatMessage }) {
+  const transfer = useTransferFor(message.id);
   return (
     <div
       data-msgid={message.id}
@@ -265,6 +277,7 @@ function SystemLine({ message }: { message: ChatMessage }) {
       }}
     >
       {systemText(message)}
+      {transfer !== undefined && <TransferControls transfer={transfer} />}
     </div>
   );
 }

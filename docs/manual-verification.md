@@ -72,6 +72,27 @@ historical results in Git and add a test when a check becomes repeatable.
   desktop, confirm a direct-message notification names the conversation and is
   suppressed while the window is focused.
 
+## File transfers
+
+Everything below needs a second client, because the whole subject is what two
+implementations agree on. The loopback tests cover ircx against ircx; these
+cover ircx against what people actually run.
+
+- [ ] Receive a file from mIRC, HexChat, or irssi. Confirm the name it lands
+  under, and that a name already taken in the download folder is numbered
+  rather than overwritten.
+- [ ] Interrupt that transfer partway, accept the same file again, and confirm
+  the `DCC RESUME` round trip happens and the finished file is byte-identical
+  to the sender's.
+- [ ] Send a file to each of those clients and let them resume one interrupted
+  partway.
+- [ ] With ircx behind NAT, turn on "Ask the other side to open the port" and
+  complete a transfer in each direction with a client that is reachable.
+- [ ] Forward a port range, set it on the Transfers page, and confirm an active
+  offer opens a port inside it.
+- [ ] Decline an offer and confirm the sender's client stops waiting rather
+  than timing out.
+
 ## Credentials
 
 - [ ] Save a network password and upload credential, reboot, and confirm both

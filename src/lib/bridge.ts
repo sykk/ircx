@@ -128,15 +128,20 @@ function followFocus(): () => void {
 /** The snapshot is the same state the events describe, so it goes in as
  * events: networks first, then the targets that hang off them. */
 async function loadSnapshot(): Promise<void> {
-  const [snapshot, bookmarks] = await Promise.all([
+  const [snapshot, bookmarks, transfers] = await Promise.all([
     ipc.getSnapshot(),
     ipc.listBookmarks(null, null, 10_000),
+    // Not part of the snapshot: a transfer is a live connection rather than
+    // state a conversation has, and it outlives a reload of this window while
+    // the events describing it do not.
+    ipc.listTransfers(),
   ]);
   const { applyEvent } = useAppStore.getState();
 
   for (const network of snapshot.networks) applyEvent({ type: "networkUpdated", network });
   for (const channel of snapshot.channels) applyEvent({ type: "channelUpdated", channel });
   for (const query of snapshot.queries) applyEvent({ type: "queryUpdated", query });
+  for (const transfer of transfers) applyEvent({ type: "transferUpdated", transfer });
   for (const draft of snapshot.drafts) {
     useAppStore.getState().setDraftPresence(draft.network, draft.target, true);
   }

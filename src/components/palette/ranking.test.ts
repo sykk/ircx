@@ -44,6 +44,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     networkOrder: ["libera"],
     channels: Object.fromEntries(channels.map((c) => [targetKey("libera", c), channel(c)])),
     queries: Object.fromEntries(queries.map((q) => [targetKey("libera", q), query(q)])),
+    transfers: {},
     members: {},
     timelines: {},
     typing: {},

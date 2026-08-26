@@ -3,6 +3,7 @@ import { ContextMenu, type ContextMenuState } from "@/components/common/ContextM
 import { IconButton } from "@/components/common/IconButton";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc } from "@/lib/ipc";
+import { sendFileTo } from "@/lib/transfers";
 import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork, useView } from "@/store/selectors";
@@ -131,6 +132,14 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
           setActionError(typeof reason === "string" ? reason : "The query could not be opened.");
         }
       };
+      const sendFile = async () => {
+        setActionError(null);
+        try {
+          await sendFileTo(channel.network, member.nick);
+        } catch (reason) {
+          setActionError(typeof reason === "string" ? reason : "The file could not be offered.");
+        }
+      };
 
       setMenu({
         x,
@@ -143,6 +152,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
           },
           { kind: "separator" },
           { kind: "action", label: "Message", onClick: () => void message() },
+          { kind: "action", label: "Send a file…", onClick: () => void sendFile() },
           { kind: "action", label: "Whois", onClick: () => void run(`/whois ${member.nick}`) },
           {
             kind: "action",

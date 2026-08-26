@@ -14,7 +14,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ircx_ipc::{
     ChatMessage, HistoryRequest, NetworkConfig, NetworkId, S3Credentials, SaslConfig, SearchHit,
-    SearchRequest, TargetName, UploadProvider,
+    SearchRequest, TargetName, TransferSettings, UploadProvider,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::de::DeserializeOwned;
@@ -1268,6 +1268,57 @@ impl Store {
             )?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    /// `None` where nothing has been changed, which is the ordinary case: the
+    /// defaults include a download directory only the application layer can
+    /// name, so an unwritten row is left for it to fill in rather than being
+    /// invented here.
+    pub fn transfer_settings(&self) -> Result<Option<TransferSettings>, StoreError> {
+        let conn = self.reading();
+        let settings = conn
+            .query_row(
+                "SELECT directory, first_port, last_port, address, passive
+                 FROM transfer_settings WHERE only = 0",
+                [],
+                |row| {
+                    let first: Option<u16> = row.get(1)?;
+                    let last: Option<u16> = row.get(2)?;
+                    Ok(TransferSettings {
+                        directory: row.get(0)?,
+                        ports: first.zip(last),
+                        address: row.get(3)?,
+                        passive: row.get::<_, i64>(4)? != 0,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(settings)
+    }
+
+    pub fn save_transfer_settings(&self, settings: &TransferSettings) -> Result<(), StoreError> {
+        let (first, last) = match settings.ports {
+            Some((first, last)) => (Some(first), Some(last)),
+            None => (None, None),
+        };
+        self.writing().execute(
+            "INSERT INTO transfer_settings (only, directory, first_port, last_port, address, passive)
+             VALUES (0, ?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (only) DO UPDATE SET
+                 directory = excluded.directory,
+                 first_port = excluded.first_port,
+                 last_port = excluded.last_port,
+                 address = excluded.address,
+                 passive = excluded.passive",
+            params![
+                settings.directory,
+                first,
+                last,
+                settings.address,
+                settings.passive as i64
+            ],
+        )?;
         Ok(())
     }
 

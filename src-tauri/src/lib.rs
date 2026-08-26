@@ -6,6 +6,7 @@ mod preview;
 mod sigv4;
 mod state;
 mod themes;
+mod transfers;
 mod upload;
 
 use std::sync::Arc;
@@ -229,6 +230,13 @@ pub fn run() {
             commands::set_ignored,
             commands::watched_people,
             commands::set_watched,
+            commands::transfer_settings,
+            commands::set_transfer_settings,
+            commands::list_transfers,
+            commands::offer_file,
+            commands::accept_transfer,
+            commands::decline_transfer,
+            commands::cancel_transfer,
             commands::export_archive,
             commands::export_profile,
             message_notification::show_message_notification,

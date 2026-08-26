@@ -8,6 +8,7 @@ import type { Network } from "./Network";
 import type { Query } from "./Query";
 import type { SaslStatus } from "./SaslStatus";
 import type { Severity } from "./Severity";
+import type { Transfer } from "./Transfer";
 
 /**
  * One channel for every backend push, so the frontend reducer stays a single
@@ -46,4 +47,4 @@ message: string,
  * Which rule raised it, so a reader can tell why a conversation went
  * loud without a word of it naming them.
  */
-plugin: string, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };
+plugin: string, } | { "type": "transferUpdated", transfer: Transfer, } | { "type": "lagChanged", network: string, lagMs: number, } | { "type": "rawLine", network: string, outgoing: boolean, line: string, } | { "type": "notice", network: string | null, severity: Severity, text: string, detail: string | null, };

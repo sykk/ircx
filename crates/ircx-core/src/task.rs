@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -6,12 +7,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ircx_ipc::HistoryRequest;
 use ircx_ipc::{
     Channel, ChatMessage, CommandOutcome, ConnectionStatus, IrcxEvent, Member, Network, NetworkId,
-    PageBackOutcome, Query, Severity, TargetName,
+    PageBackOutcome, Query, Severity, TargetName, Transfer,
 };
+use ircx_net::dcc::{self, TransferError};
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
 use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, NotifyRequest, PluginRuntime};
 use ircx_store::{Store, StsPolicy};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
 use tracing::warn;
@@ -19,6 +21,7 @@ use tracing::warn;
 use crate::archive::Archive;
 use crate::plugins::{self, PluginCall, CONTEXT_MESSAGES, HOOK_STRIKES};
 use crate::session::{Action, PageBack, Restored, SessionConfig, SessionState};
+use crate::transfers::{TransferEndpoint, TransferJob};
 
 const COMMAND_QUEUE: usize = 64;
 
@@ -263,6 +266,55 @@ pub enum SessionCommand {
     WatchedChanged {
         watched: Vec<String>,
     },
+    /// Offer a file to somebody. `address` is what the offer names and `ports`
+    /// is the range this client may open — both are settings, and neither is
+    /// anything the session could work out on its own.
+    OfferFile {
+        nick: String,
+        path: PathBuf,
+        /// The name the file travels under, which is not the path.
+        file: String,
+        size: u64,
+        ports: Option<(u16, u16)>,
+        address: IpAddr,
+        passive: bool,
+        reply: oneshot::Sender<Result<Transfer, String>>,
+    },
+    /// Take an offer. `path` is where the file lands and `resume_from` is how
+    /// much of it is already there, both settled by the layer that can look at
+    /// a disk.
+    AcceptTransfer {
+        id: String,
+        path: PathBuf,
+        resume_from: u64,
+        ports: Option<(u16, u16)>,
+        address: IpAddr,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    DeclineTransfer {
+        id: String,
+    },
+    CancelTransfer {
+        id: String,
+    },
+    Transfers {
+        reply: oneshot::Sender<Vec<Transfer>>,
+    },
+    /// A job opened a port. What is sent about it is the session's to decide.
+    TransferListening {
+        id: String,
+        port: u16,
+    },
+    TransferProgress {
+        id: String,
+        at: u64,
+    },
+    TransferFinished {
+        id: String,
+        at: u64,
+        /// `None` where the whole file moved.
+        failure: Option<String>,
+    },
     Disconnect {
         reason: Option<String>,
     },
@@ -444,6 +496,7 @@ async fn run(
         strikes: Arc::default(),
         own_inbox,
         page_backs: Mutex::default(),
+        transfers: Mutex::default(),
     };
 
     drive(
@@ -455,6 +508,13 @@ async fn run(
         &context,
     )
     .await;
+    // A transfer belongs to the network it was arranged on: the connection
+    // that ended is the one that would have to carry anything more said about
+    // it, and a task left running would go on writing to a file with nothing
+    // able to report on it or stop it.
+    for (_, running) in context.running_transfers().drain() {
+        running.task.abort();
+    }
     // Every way out — a restore that could not be delivered, a connect that
     // was refused, the inbox closing — ends with the session's writes on
     // disk, not only the orderly stop.
@@ -716,6 +776,46 @@ async fn apply(
             active,
         } => session.react(&target, &message, &emoji, active),
         SessionCommand::Raw { line } => session.raw(&line),
+        SessionCommand::OfferFile {
+            nick,
+            path,
+            file,
+            size,
+            ports,
+            address,
+            passive,
+            reply,
+        } => {
+            let (offered, actions) =
+                session.offer_file(&nick, path, file, size, ports, address, passive);
+            let _ = reply.send(offered);
+            actions
+        }
+        SessionCommand::AcceptTransfer {
+            id,
+            path,
+            resume_from,
+            ports,
+            address,
+            reply,
+        } => {
+            let (accepted, actions) =
+                session.accept_transfer(&id, path, resume_from, ports, address);
+            let _ = reply.send(accepted);
+            actions
+        }
+        SessionCommand::DeclineTransfer { id } => session.decline_transfer(&id),
+        SessionCommand::CancelTransfer { id } => session.cancel_transfer(&id),
+        SessionCommand::Transfers { reply } => {
+            let _ = reply.send(session.transfers());
+            Vec::new()
+        }
+        SessionCommand::TransferListening { id, port } => session.transfer_listening(&id, port),
+        SessionCommand::TransferProgress { id, at } => session.transfer_progress(&id, at),
+        SessionCommand::TransferFinished { id, at, failure } => {
+            context.forget_transfer(&id);
+            session.transfer_finished(&id, at, failure)
+        }
         SessionCommand::RegisterLibera {
             account,
             password,
@@ -819,6 +919,17 @@ struct Context {
     /// oneshot is the Tauri layer's half of the call and `SessionState` is a
     /// state machine with no channels in it.
     page_backs: Mutex<HashMap<String, oneshot::Sender<PageBackOutcome>>>,
+    /// The file transfers with a task behind them. Held here because a job is a
+    /// socket and a `JoinHandle`, and `SessionState` holds neither.
+    transfers: Mutex<HashMap<String, RunningTransfer>>,
+}
+
+struct RunningTransfer {
+    task: JoinHandle<()>,
+    /// Where a send starts. Written when a resume is agreed, which for a file
+    /// this client offered happens after the job is already waiting for the
+    /// connection and before that connection arrives.
+    from: watch::Sender<u64>,
 }
 
 /// How late a hook may run and still be worth running. A note about a message
@@ -868,6 +979,32 @@ impl Waiting {
 }
 
 impl Context {
+    fn running_transfers(&self) -> std::sync::MutexGuard<'_, HashMap<String, RunningTransfer>> {
+        self.transfers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn forget_transfer(&self, id: &str) {
+        self.running_transfers().remove(id);
+    }
+
+    /// Puts a transfer on its own task. Everything it reports comes back as a
+    /// command, so the session hears about a port or a failure the same way it
+    /// hears about a line from the server.
+    fn start_transfer(&self, job: TransferJob) {
+        let id = job.id.clone();
+        let (from, resumed) = watch::channel(job.from);
+        let inbox = self.own_inbox.clone();
+        let task = tokio::spawn(run_transfer(job, inbox, resumed));
+        if let Some(replaced) = self
+            .running_transfers()
+            .insert(id, RunningTransfer { task, from })
+        {
+            replaced.task.abort();
+        }
+    }
+
     fn waiting_readers(
         &self,
     ) -> std::sync::MutexGuard<'_, HashMap<String, oneshot::Sender<PageBackOutcome>>> {
@@ -1039,6 +1176,17 @@ impl Context {
                 Action::Watch { nick, watched } => {
                     if let Err(error) = self.store.set_watched_nick(&self.network, &nick, watched) {
                         warn!(%error, %nick, "could not write a watched nick down");
+                    }
+                }
+                Action::RunTransfer(job) => self.start_transfer(*job),
+                Action::StopTransfer { id } => {
+                    if let Some(running) = self.running_transfers().remove(&id) {
+                        running.task.abort();
+                    }
+                }
+                Action::ResumeTransferAt { id, from } => {
+                    if let Some(running) = self.running_transfers().get(&id) {
+                        let _ = running.from.send(from);
                     }
                 }
                 Action::Close => control = Control::Stop,
@@ -1410,6 +1558,113 @@ impl Context {
     }
 }
 
+/// One transfer, from opening the connection to the last byte.
+///
+/// Everything it learns goes back to the session as a command — the port it
+/// opened, how far it has got, how it ended — so the session hears about a
+/// transfer the way it hears about anything else. Nothing is decided here.
+async fn run_transfer(
+    job: TransferJob,
+    inbox: mpsc::WeakSender<SessionCommand>,
+    resumed: watch::Receiver<u64>,
+) {
+    let (progress, updates) = mpsc::channel(4);
+    let forwarding = tokio::spawn(forward_progress(job.id.clone(), inbox.clone(), updates));
+
+    let stream = match connect_transfer(&job, &inbox).await {
+        Ok(stream) => stream,
+        Err(error) => {
+            forwarding.abort();
+            report_transfer(&inbox, &job.id, job.from, Some(error.to_string())).await;
+            return;
+        }
+    };
+
+    let moved = match job.incoming {
+        true => dcc::receive(stream, &job.path, job.from, job.size, progress).await,
+        false => {
+            // Read here rather than when the job was made: a resume agreed
+            // after the port opened is still agreed before anybody dials it.
+            let from = *resumed.borrow();
+            dcc::send(stream, &job.path, from, progress).await
+        }
+    };
+    let _ = forwarding.await;
+
+    match moved {
+        Ok(at) => report_transfer(&inbox, &job.id, at, None).await,
+        Err(error) => {
+            let at = reached(&error, job.from);
+            report_transfer(&inbox, &job.id, at, Some(error.to_string())).await;
+        }
+    }
+}
+
+async fn connect_transfer(
+    job: &TransferJob,
+    inbox: &mpsc::WeakSender<SessionCommand>,
+) -> Result<tokio::net::TcpStream, TransferError> {
+    match &job.endpoint {
+        TransferEndpoint::Dial { address, port } => dcc::dial(*address, *port).await,
+        TransferEndpoint::Listen { ports } => {
+            let waiting = dcc::Waiting::open(*ports).await?;
+            let port = waiting.port();
+            // Before accepting, because the number is what the other side is
+            // about to be told to connect to.
+            if let Some(inbox) = inbox.upgrade() {
+                let listening = SessionCommand::TransferListening {
+                    id: job.id.clone(),
+                    port,
+                };
+                let _ = inbox.send(listening).await;
+            }
+            waiting.accept().await
+        }
+    }
+}
+
+/// How far a failed transfer got, which only the two failures that happen
+/// mid-file know. Everything else failed before a byte moved.
+fn reached(error: &TransferError, from: u64) -> u64 {
+    match error {
+        TransferError::Interrupted { at, .. } | TransferError::Short { at, .. } => *at,
+        _ => from,
+    }
+}
+
+async fn forward_progress(
+    id: String,
+    inbox: mpsc::WeakSender<SessionCommand>,
+    mut updates: mpsc::Receiver<u64>,
+) {
+    while let Some(at) = updates.recv().await {
+        let Some(inbox) = inbox.upgrade() else {
+            return;
+        };
+        let moved = SessionCommand::TransferProgress { id: id.clone(), at };
+        if inbox.send(moved).await.is_err() {
+            return;
+        }
+    }
+}
+
+async fn report_transfer(
+    inbox: &mpsc::WeakSender<SessionCommand>,
+    id: &str,
+    at: u64,
+    failure: Option<String>,
+) {
+    let Some(inbox) = inbox.upgrade() else {
+        return;
+    };
+    let finished = SessionCommand::TransferFinished {
+        id: id.to_owned(),
+        at,
+        failure,
+    };
+    let _ = inbox.send(finished).await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1589,6 +1844,7 @@ mod tests {
             own_inbox: inbox.downgrade(),
             waiting: Arc::new(Waiting::default()),
             page_backs: Mutex::default(),
+            transfers: Mutex::default(),
         }
     }
 

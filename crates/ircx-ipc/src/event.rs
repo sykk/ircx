@@ -3,6 +3,7 @@ use ts_rs::TS;
 
 use crate::model::{
     Channel, ChannelListing, ChatMessage, ConnectionStatus, Member, Network, Query, SaslStatus,
+    Transfer,
 };
 use crate::{NetworkId, TargetName};
 
@@ -178,6 +179,14 @@ pub enum IrcxEvent {
         /// Which rule raised it, so a reader can tell why a conversation went
         /// loud without a word of it naming them.
         plugin: String,
+    },
+    /// A file transfer that started, moved, or stopped. Sent whole rather than
+    /// as a delta: a progress event carries the state as well, so a batch that
+    /// folds two of them together loses nothing.
+    ///
+    /// Boxed for the reason `MessageUpdated` is.
+    TransferUpdated {
+        transfer: Box<Transfer>,
     },
     LagChanged {
         network: NetworkId,

@@ -1,12 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ircx_core::SessionCommand;
 use ircx_ipc::{
     AppSnapshot, ArchiveScope, ArchiveSummary, Attachment, ChatMessage, CommandOutcome,
     FileToUpload, HistoryRequest, IgnoredPerson, InstalledPlugin, Member, MutedConversation,
     NetworkConfig, NetworkId, PageBackOutcome, PluginGrants, PluginPermissionInfo, Query,
-    SaslConfig, SaslMechanism, SearchHit, SearchRequest, TargetName, ThemeSource, UploadProvider,
-    UploadedFile, WatchedPerson,
+    SaslConfig, SaslMechanism, SearchHit, SearchRequest, TargetName, ThemeSource, Transfer,
+    TransferSettings, UploadProvider, UploadedFile, WatchedPerson,
 };
 use ircx_store::{in_words, Store, StoreError};
 use tauri::State;
@@ -630,6 +630,126 @@ pub async fn set_watched(
     watched: bool,
 ) -> Result<(), String> {
     app.set_watched(&network, &nick, watched).await
+}
+
+/// Where received files land and what this client can say about reaching it.
+/// Absent from the store until a page changes something, because the default
+/// download directory is the operating system's answer rather than a value.
+#[tauri::command]
+pub async fn transfer_settings(
+    handle: tauri::AppHandle,
+    app: State<'_, App>,
+) -> Result<TransferSettings, String> {
+    crate::transfers::settings(&handle, app.store())
+}
+
+#[tauri::command]
+pub async fn set_transfer_settings(
+    app: State<'_, App>,
+    settings: TransferSettings,
+) -> Result<(), String> {
+    if let Some(why) = crate::transfers::refuse_save(&settings) {
+        return Err(why);
+    }
+    app.store()
+        .save_transfer_settings(&settings)
+        .map_err(describe)
+}
+
+/// Every network's transfers. What a window that has just been reloaded reads
+/// to catch up; everything after that arrives as events.
+#[tauri::command]
+pub async fn list_transfers(app: State<'_, App>) -> Result<Vec<Transfer>, String> {
+    Ok(app.transfers().await)
+}
+
+/// Offers a file to one person. Answers with the transfer, which is waiting
+/// for them to accept — nothing has been read off the disk yet.
+#[tauri::command]
+pub async fn offer_file(
+    handle: tauri::AppHandle,
+    app: State<'_, App>,
+    network: NetworkId,
+    target: TargetName,
+    path: String,
+) -> Result<Transfer, String> {
+    let path = PathBuf::from(path);
+    let (file, size) = crate::transfers::describe_file(&path).await?;
+    let settings = crate::transfers::settings(&handle, app.store())?;
+    let (host, port) = app.endpoint(&network)?;
+    let address = crate::transfers::advertised(&settings, &host, port).await?;
+
+    app.ask(&network, |reply| SessionCommand::OfferFile {
+        nick: target,
+        path,
+        file,
+        size,
+        ports: settings.ports,
+        address,
+        passive: settings.passive,
+        reply,
+    })
+    .await?
+}
+
+/// Takes an offer. `path` is a name the user chose in a save dialog; without
+/// one the file lands in the download directory under the name it was offered
+/// as, numbered if that name is taken.
+#[tauri::command]
+pub async fn accept_transfer(
+    handle: tauri::AppHandle,
+    app: State<'_, App>,
+    network: NetworkId,
+    id: String,
+    path: Option<String>,
+) -> Result<(), String> {
+    let offered = app
+        .transfers()
+        .await
+        .into_iter()
+        .find(|transfer| transfer.id == id)
+        .ok_or("That transfer is no longer waiting to be accepted")?;
+
+    let settings = crate::transfers::settings(&handle, app.store())?;
+    let (landing, resume_from) = match path {
+        Some(path) => crate::transfers::chosen(&path, offered.size).await,
+        None => {
+            crate::transfers::landing(Path::new(&settings.directory), &offered.file, offered.size)
+                .await?
+        }
+    };
+    let (host, port) = app.endpoint(&network)?;
+    let address = crate::transfers::advertised(&settings, &host, port).await?;
+
+    app.ask(&network, |reply| SessionCommand::AcceptTransfer {
+        id,
+        path: landing,
+        resume_from,
+        ports: settings.ports,
+        address,
+        reply,
+    })
+    .await?
+}
+
+#[tauri::command]
+pub async fn decline_transfer(
+    app: State<'_, App>,
+    network: NetworkId,
+    id: String,
+) -> Result<(), String> {
+    app.tell(&network, SessionCommand::DeclineTransfer { id })
+        .await
+}
+
+#[tauri::command]
+pub async fn cancel_transfer(
+    app: State<'_, App>,
+    network: NetworkId,
+    id: String,
+) -> Result<(), String> {
+    app.tell(&network, SessionCommand::CancelTransfer { id })
+        .await
 }
 
 /// Writes the archive to `path` as JSON Lines and answers with how many bytes

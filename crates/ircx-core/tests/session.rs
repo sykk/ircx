@@ -4,7 +4,9 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use ircx_core::{Action, PageBack, Restored, SaslCredentials, SessionConfig, SessionState};
+use ircx_core::{
+    Action, PageBack, Restored, SaslCredentials, SessionConfig, SessionState, TransferJob,
+};
 use ircx_ipc::{
     ChatMessage, CommandOutcome, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
     MessageSource, SaslMechanism, SaslStatus, Severity,
@@ -82,6 +84,11 @@ struct Harness {
     /// write down, and whether it was an ignore or the end of one.
     ignore_writes: Vec<(String, bool)>,
     watch_writes: Vec<(String, bool)>,
+    /// The file transfers the session handed to the task layer, and the two
+    /// things it says about one afterwards.
+    jobs: Vec<TransferJob>,
+    stopped: Vec<String>,
+    resumed_at: Vec<(String, u64)>,
     closed: bool,
 }
 
@@ -98,6 +105,9 @@ impl Harness {
             sts_upgrades: Vec::new(),
             ignore_writes: Vec::new(),
             watch_writes: Vec::new(),
+            jobs: Vec::new(),
+            stopped: Vec::new(),
+            resumed_at: Vec::new(),
             closed: false,
         }
     }
@@ -131,6 +141,9 @@ impl Harness {
                 Action::StsUpgrade { port } => self.sts_upgrades.push(port),
                 Action::Ignore { nick, ignored } => self.ignore_writes.push((nick, ignored)),
                 Action::Watch { nick, watched } => self.watch_writes.push((nick, watched)),
+                Action::RunTransfer(job) => self.jobs.push(*job),
+                Action::StopTransfer { id } => self.stopped.push(id),
+                Action::ResumeTransferAt { id, from } => self.resumed_at.push((id, from)),
                 Action::Close => self.closed = true,
             }
         }
@@ -6570,5 +6583,501 @@ mod ignoring_somebody {
             .map(|message| message.text.as_str())
             .collect();
         assert_eq!(text, vec!["after"], "only what came after it");
+    }
+}
+
+/// Files moving between this client and one other person.
+///
+/// The whole handshake is scripted here rather than run over a socket: what
+/// these assert on is the lines that go out, the jobs the session hands to the
+/// task layer, and the transfer the window is told about — which is everything
+/// `SessionState` decides, and all of it before a byte moves.
+mod file_transfers {
+    use super::*;
+    use ircx_core::TransferEndpoint;
+    use ircx_ipc::{Transfer, TransferDirection, TransferState};
+    use std::net::IpAddr;
+    use std::path::PathBuf;
+
+    /// 192.168.1.1, which is 3232235777 packed the way an offer packs it.
+    const THEIR_ADDRESS: &str = "3232235777";
+    const OUR_ADDRESS: &str = "10.0.0.7";
+
+    fn ours() -> IpAddr {
+        OUR_ADDRESS.parse().expect("an address")
+    }
+
+    impl Harness {
+        fn transfer(&self) -> &Transfer {
+            self.events
+                .iter()
+                .rev()
+                .find_map(|event| match event {
+                    IrcxEvent::TransferUpdated { transfer } => Some(transfer.as_ref()),
+                    _ => None,
+                })
+                .expect("the window was told about a transfer")
+        }
+
+        fn no_transfer(&self) -> bool {
+            !self
+                .events
+                .iter()
+                .any(|event| matches!(event, IrcxEvent::TransferUpdated { .. }))
+        }
+
+        fn offered(&mut self, body: &str) {
+            self.feed(&format!(
+                ":sable!~s@example.net PRIVMSG sykk :\u{1}DCC {body}\u{1}"
+            ));
+        }
+
+        fn accept(&mut self, resume_from: u64) -> String {
+            let id = self.transfer().id.clone();
+            let (accepted, actions) = self.state.accept_transfer(
+                &id,
+                PathBuf::from("/tmp/holiday.png"),
+                resume_from,
+                None,
+                ours(),
+            );
+            accepted.expect("the offer was accepted");
+            self.apply(actions);
+            id
+        }
+
+        fn offer_file(&mut self, passive: bool) -> String {
+            let (offered, actions) = self.state.offer_file(
+                "sable",
+                PathBuf::from("/tmp/holiday.png"),
+                "holiday.png".into(),
+                51_200,
+                None,
+                ours(),
+                passive,
+            );
+            let id = offered.expect("the file was offered").id;
+            self.apply(actions);
+            id
+        }
+
+        fn listening(&mut self, id: &str, port: u16) {
+            let actions = self.state.transfer_listening(id, port);
+            self.apply(actions);
+        }
+    }
+
+    fn talking_to_sable() -> Harness {
+        let mut session = registered(LIBERA_CAPS);
+        session.feed(":sable!~s@example.net PRIVMSG sykk :hello");
+        session.sent();
+        session.events.clear();
+        session
+    }
+
+    #[test]
+    fn an_offer_becomes_a_transfer_and_the_row_that_announces_it() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+
+        let transfer = session.transfer();
+        assert_eq!(transfer.state, TransferState::Offered);
+        assert_eq!(transfer.direction, TransferDirection::Incoming);
+        assert_eq!(transfer.file, "holiday.png");
+        assert_eq!(transfer.size, 51_200);
+        assert_eq!(transfer.peer, "sable");
+
+        let row = session
+            .messages()
+            .into_iter()
+            .find(|message| message.text.contains("holiday.png"))
+            .expect("a row announcing the offer");
+        assert_eq!(row.kind, MessageKind::Server);
+        assert_eq!(row.target, "sable");
+        assert!(row.text.contains("50 KB"), "{}", row.text);
+        assert_eq!(
+            transfer.message.as_deref(),
+            Some(row.id.as_str()),
+            "the transfer names the row, so the conversation can carry its controls"
+        );
+        assert!(session.sent().is_empty(), "nothing is answered until it is");
+    }
+
+    #[test]
+    fn accepting_an_offer_dials_the_address_it_named() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.accept(0);
+
+        assert_eq!(session.jobs.len(), 1);
+        let job = &session.jobs[0];
+        assert_eq!(job.id, id);
+        assert_eq!(job.path, PathBuf::from("/tmp/holiday.png"));
+        assert!(job.incoming);
+        assert_eq!(job.from, 0);
+        assert_eq!(job.size, 51_200);
+        assert!(
+            matches!(
+                job.endpoint,
+                TransferEndpoint::Dial { port: 6669, address } if address.to_string() == "192.168.1.1"
+            ),
+            "{:?}",
+            job.endpoint
+        );
+        assert_eq!(session.transfer().state, TransferState::Connecting);
+    }
+
+    /// The round trip is the whole of a resume: nothing is read from the socket
+    /// until the sender has agreed to skip what is already on disk.
+    #[test]
+    fn a_partly_received_file_is_resumed_by_agreement() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        session.accept(2048);
+
+        assert_eq!(
+            session.sent(),
+            vec!["PRIVMSG sable :\u{1}DCC RESUME holiday.png 6669 2048\u{1}"]
+        );
+        assert!(
+            session.jobs.is_empty(),
+            "nothing connects until the sender agrees"
+        );
+        assert_eq!(session.transfer().at, 2048);
+
+        session.offered("ACCEPT holiday.png 6669 2048");
+        assert_eq!(session.jobs.len(), 1);
+        assert_eq!(session.jobs[0].from, 2048);
+    }
+
+    /// A sender may agree to less than was asked for, and what arrives then
+    /// starts where they said rather than where this client hoped.
+    #[test]
+    fn a_resume_starts_where_the_sender_agreed_to() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        session.accept(2048);
+        session.offered("ACCEPT holiday.png 6669 1024");
+
+        assert_eq!(session.jobs[0].from, 1024);
+        assert_eq!(session.transfer().at, 1024);
+    }
+
+    /// An `ACCEPT` for a transfer nobody asked to resume is somebody else's
+    /// handshake, or a stray line. Either way it starts nothing.
+    #[test]
+    fn an_agreement_to_a_resume_nobody_asked_for_is_dropped() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        session.offered("ACCEPT holiday.png 6669 2048");
+
+        assert!(session.jobs.is_empty());
+        assert_eq!(session.transfer().state, TransferState::Offered);
+    }
+
+    /// A passive offer leaves this client the one that has to be reachable, so
+    /// accepting means opening a port and answering with it.
+    #[test]
+    fn a_passive_offer_is_answered_with_a_port_of_this_client_s_own() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 0 51200 4821"));
+        let id = session.accept(0);
+
+        assert!(
+            matches!(
+                session.jobs[0].endpoint,
+                TransferEndpoint::Listen { ports: None }
+            ),
+            "{:?}",
+            session.jobs[0].endpoint
+        );
+        assert!(session.sent().is_empty(), "there is no port to name yet");
+
+        session.listening(&id, 40_001);
+        assert_eq!(
+            session.sent(),
+            vec![format!(
+                "PRIVMSG sable :\u{1}DCC SEND holiday.png 167772167 40001 51200 4821\u{1}"
+            )],
+            "the answer carries their token and this client's port"
+        );
+    }
+
+    #[test]
+    fn an_offer_naming_a_service_port_is_refused_rather_than_drawn_as_one() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 22 51200"));
+
+        assert!(session.no_transfer(), "nothing to accept");
+        let row = session.messages()[0];
+        assert!(row.text.contains("port 22"), "{}", row.text);
+        assert!(row.text.contains("1024"), "{}", row.text);
+    }
+
+    #[test]
+    fn offering_a_file_opens_a_port_and_announces_it() {
+        let mut session = talking_to_sable();
+        let id = session.offer_file(false);
+
+        assert_eq!(session.transfer().direction, TransferDirection::Outgoing);
+        assert!(
+            matches!(session.jobs[0].endpoint, TransferEndpoint::Listen { .. }),
+            "{:?}",
+            session.jobs[0].endpoint
+        );
+        assert!(!session.jobs[0].incoming);
+        assert!(session.sent().is_empty(), "there is no port to name yet");
+
+        let row = session
+            .messages()
+            .into_iter()
+            .find(|message| message.text.starts_with("Offering"))
+            .expect("a row in the conversation with them");
+        assert_eq!(row.target, "sable");
+        assert_eq!(
+            session.transfer().message.as_deref(),
+            Some(row.id.as_str()),
+            "so the offer can be watched and stopped where it was made"
+        );
+
+        session.listening(&id, 40_001);
+        assert_eq!(
+            session.sent(),
+            vec![format!(
+                "PRIVMSG sable :\u{1}DCC SEND holiday.png 167772167 40001 51200\u{1}"
+            )]
+        );
+    }
+
+    /// The agreement goes out before the other side dials, so the job waiting
+    /// for that connection can still be told where to start.
+    #[test]
+    fn a_resume_of_a_file_being_sent_is_agreed_and_reaches_the_job() {
+        let mut session = talking_to_sable();
+        let id = session.offer_file(false);
+        session.listening(&id, 40_001);
+        session.sent();
+
+        session.offered("RESUME holiday.png 40001 2048");
+        assert_eq!(
+            session.sent(),
+            vec!["PRIVMSG sable :\u{1}DCC ACCEPT holiday.png 40001 2048\u{1}"]
+        );
+        assert_eq!(session.resumed_at, vec![(id, 2048)]);
+    }
+
+    /// A position past the end of the file is not one, and answering with what
+    /// this client will actually do beats agreeing to what it cannot.
+    #[test]
+    fn a_resume_past_the_end_is_answered_with_the_end() {
+        let mut session = talking_to_sable();
+        let id = session.offer_file(false);
+        session.listening(&id, 40_001);
+        session.sent();
+
+        session.offered("RESUME holiday.png 40001 999999");
+        assert_eq!(
+            session.sent(),
+            vec!["PRIVMSG sable :\u{1}DCC ACCEPT holiday.png 40001 51200\u{1}"]
+        );
+    }
+
+    /// A passive offer names no port of this client's, so nothing is opened
+    /// until the other side answers with one of theirs.
+    #[test]
+    fn a_passive_offer_waits_for_the_answer_that_names_a_port() {
+        let mut session = talking_to_sable();
+        session.offer_file(true);
+
+        assert_eq!(
+            session.sent(),
+            vec![format!(
+                "PRIVMSG sable :\u{1}DCC SEND holiday.png 167772167 0 51200 1\u{1}"
+            )]
+        );
+        assert!(
+            session.jobs.is_empty(),
+            "nothing to listen on and nowhere to dial"
+        );
+
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 40002 51200 1"));
+        assert_eq!(session.jobs.len(), 1);
+        assert!(
+            matches!(
+                session.jobs[0].endpoint,
+                TransferEndpoint::Dial { port: 40_002, .. }
+            ),
+            "{:?}",
+            session.jobs[0].endpoint
+        );
+        assert!(!session.jobs[0].incoming);
+        assert_eq!(session.transfer().state, TransferState::Connecting);
+    }
+
+    /// An answer carrying a token nothing is waiting on is a new offer, not an
+    /// answer — and the client on the other side is the one sending.
+    #[test]
+    fn an_answer_naming_no_offer_of_ours_is_read_as_a_new_offer() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 0 51200 9999"));
+
+        assert_eq!(session.transfer().direction, TransferDirection::Incoming);
+        assert_eq!(session.transfer().state, TransferState::Offered);
+    }
+
+    #[test]
+    fn declining_tells_the_other_side_rather_than_leaving_them_waiting() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.transfer().id.clone();
+        let actions = session.state.decline_transfer(&id);
+        session.apply(actions);
+
+        assert_eq!(
+            session.sent(),
+            vec!["PRIVMSG sable :\u{1}DCC REJECT SEND holiday.png\u{1}"]
+        );
+        assert_eq!(session.transfer().state, TransferState::Declined);
+        assert!(session.jobs.is_empty());
+    }
+
+    #[test]
+    fn a_rejection_ends_the_file_this_client_was_offering() {
+        let mut session = talking_to_sable();
+        let id = session.offer_file(false);
+        session.listening(&id, 40_001);
+
+        session.offered("REJECT SEND holiday.png");
+        assert_eq!(session.transfer().state, TransferState::Declined);
+        assert_eq!(session.stopped, vec![id]);
+    }
+
+    #[test]
+    fn cancelling_stops_the_job_and_leaves_what_arrived() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.accept(0);
+        let actions = session.state.transfer_progress(&id, 4096);
+        session.apply(actions);
+        assert_eq!(session.transfer().state, TransferState::Running);
+
+        let actions = session.state.cancel_transfer(&id);
+        session.apply(actions);
+        assert_eq!(session.stopped, vec![id]);
+        assert_eq!(session.transfer().state, TransferState::Cancelled);
+        assert_eq!(session.transfer().at, 4096);
+    }
+
+    /// A job that ends after the user already stopped it does not undo the
+    /// stopping: what it reports is how far the cancelled transfer got.
+    #[test]
+    fn a_job_that_ends_after_a_cancel_keeps_the_cancel() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.accept(0);
+        let actions = session.state.cancel_transfer(&id);
+        session.apply(actions);
+
+        let actions =
+            session
+                .state
+                .transfer_finished(&id, 4096, Some("the connection closed".into()));
+        session.apply(actions);
+        assert_eq!(session.transfer().state, TransferState::Cancelled);
+        assert_eq!(session.transfer().failure, None);
+    }
+
+    #[test]
+    fn a_transfer_that_finishes_is_done_and_one_that_fails_says_why() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        let id = session.accept(0);
+        let actions = session.state.transfer_finished(&id, 51_200, None);
+        session.apply(actions);
+        assert_eq!(session.transfer().state, TransferState::Done);
+        assert_eq!(session.transfer().at, 51_200);
+
+        session.offered(&format!("SEND other.png {THEIR_ADDRESS} 6670 10"));
+        let id = session.accept(0);
+        let actions = session.state.transfer_finished(
+            &id,
+            4,
+            Some("the connection closed after 4 bytes".into()),
+        );
+        session.apply(actions);
+        assert_eq!(session.transfer().state, TransferState::Failed);
+        assert_eq!(
+            session.transfer().failure.as_deref(),
+            Some("the connection closed after 4 bytes")
+        );
+    }
+
+    /// An ignore takes effect at the door, and a file is as much a thing
+    /// somebody is saying as a sentence is.
+    #[test]
+    fn somebody_ignored_cannot_offer_a_file() {
+        let mut session = talking_to_sable();
+        session.submit("sable", "/ignore sable");
+        session.sent();
+        session.events.clear();
+
+        session.offered(&format!("SEND holiday.png {THEIR_ADDRESS} 6669 51200"));
+        assert!(session.no_transfer());
+        assert!(session.messages().is_empty());
+    }
+
+    #[test]
+    fn a_file_is_offered_to_a_person_rather_than_to_a_channel() {
+        let mut session = talking_to_sable();
+        let (offered, actions) = session.state.offer_file(
+            "#ircx",
+            PathBuf::from("/tmp/holiday.png"),
+            "holiday.png".into(),
+            51_200,
+            None,
+            ours(),
+            false,
+        );
+        assert!(offered.is_err());
+        assert!(actions.is_empty());
+    }
+
+    /// A server with `echo-message` sends this client's own handshake back.
+    /// Answering it would be answering itself, and drawing it puts a row about
+    /// a CTCP the reader never asked for into every conversation a file was
+    /// offered in.
+    #[test]
+    fn this_client_s_own_handshake_coming_back_is_neither_drawn_nor_answered() {
+        let mut session = talking_to_sable();
+        let id = session.offer_file(false);
+        session.listening(&id, 40_001);
+        session.sent();
+        session.events.clear();
+
+        session.feed(
+            ":sykk!~sykk@example.net PRIVMSG sable              :\u{1}DCC SEND holiday.png 167772167 40001 51200\u{1}",
+        );
+
+        assert!(session.messages().is_empty());
+        assert!(session.sent().is_empty());
+        assert_eq!(
+            session.state.transfers().len(),
+            1,
+            "and opens no second one"
+        );
+    }
+
+    /// A verb ircx does not implement is still somebody trying to reach the
+    /// user, and a client that says nothing about it looks like one that is not
+    /// running.
+    #[test]
+    fn a_dcc_verb_this_client_does_not_implement_is_said_rather_than_dropped() {
+        let mut session = talking_to_sable();
+        session.offered(&format!("CHAT chat {THEIR_ADDRESS} 6669"));
+
+        assert!(session.no_transfer());
+        let row = session.messages()[0];
+        assert!(row.text.contains("cannot read"), "{}", row.text);
+        assert!(session.sent().is_empty(), "and is not answered");
     }
 }

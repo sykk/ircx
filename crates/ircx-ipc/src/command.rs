@@ -22,6 +22,13 @@
 //! mark_read(network, target)                  -> ()
 //! set_typing(network, target, active)         -> ()
 //! load_preview(url)                           -> Attachment
+//! offer_file(network, target, path)           -> Transfer
+//! accept_transfer(network, id, path)          -> ()
+//! decline_transfer(network, id)               -> ()
+//! cancel_transfer(network, id)                -> ()
+//! list_transfers()                            -> Vec<Transfer>
+//! transfer_settings()                         -> TransferSettings
+//! set_transfer_settings(settings)             -> ()
 //! get_draft(network, target)                  -> Option<String>
 //! set_draft(network, target, text)            -> ()
 //! list_themes()                               -> Vec<ThemeSource>

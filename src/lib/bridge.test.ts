@@ -9,6 +9,7 @@ const { insideTauri, ipcMock, onIrcxEvent, windowMock } = vi.hoisted(() => ({
     listMembers: vi.fn(),
     markRead: vi.fn(),
     listBookmarks: vi.fn(),
+    listTransfers: vi.fn(),
   },
   onIrcxEvent: vi.fn(),
   windowMock: {
@@ -30,6 +31,7 @@ beforeEach(() => {
   ipcMock.listMembers.mockResolvedValue([]);
   ipcMock.markRead.mockResolvedValue(undefined);
   ipcMock.listBookmarks.mockResolvedValue([]);
+  ipcMock.listTransfers.mockResolvedValue([]);
   onIrcxEvent.mockResolvedValue(() => {});
   windowMock.isFocused.mockResolvedValue(true);
   windowMock.onFocusChanged.mockResolvedValue(() => {});

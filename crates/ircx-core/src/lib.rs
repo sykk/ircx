@@ -15,6 +15,7 @@ mod archive;
 mod caps;
 mod casemap;
 mod client;
+pub mod dcc;
 mod dispatch;
 mod history;
 mod isupport;
@@ -29,6 +30,7 @@ mod session;
 mod sts;
 mod task;
 mod text;
+mod transfers;
 
 pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;
@@ -44,6 +46,7 @@ pub use session::{
 pub use task::{
     spawn_network, spawn_network_with_plugins, ArchiveWrites, NetworkHandle, SessionCommand,
 };
+pub use transfers::{TransferEndpoint, TransferJob};
 
 /// The plugin system, re-exported so the application installs and grants
 /// through the same types the session enforces against.

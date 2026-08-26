@@ -336,3 +336,91 @@ pub struct ChannelListing {
     pub users: u32,
     pub topic: String,
 }
+
+/// One file moving between this client and one other person, or waiting to.
+///
+/// Not archived and not restored: a transfer is a live connection, and a client
+/// that has been restarted is not party to one it was party to before.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Transfer {
+    pub id: String,
+    pub network: NetworkId,
+    /// The nick on the other side, cased as they gave it.
+    pub peer: String,
+    pub direction: TransferDirection,
+    /// The name the file travelled under, which for an incoming transfer is
+    /// the sender's and is not necessarily the name it landed under.
+    pub file: String,
+    /// Where the file is on this machine. `None` for an offer nobody has
+    /// accepted, because the directory is chosen at that moment.
+    pub path: Option<String>,
+    /// What the offer claimed, or the file's own length when sending. Zero from
+    /// a sender that did not say, which makes a progress bar impossible and is
+    /// the reason the number is drawn as well.
+    pub size: u64,
+    /// Bytes at this end, counting a part received before a resume.
+    pub at: u64,
+    pub state: TransferState,
+    /// Why it ended badly, written for the user. `None` in every other state.
+    pub failure: Option<String>,
+    /// RFC 3339 UTC, when the offer was made or arrived.
+    pub started: String,
+    /// The row that announced this transfer, by message id, so the conversation
+    /// can carry the controls rather than only a sentence about them. `None`
+    /// for an offer this client made, which is announced by the transfer alone,
+    /// and for one whose row was written before a restart — the transfer is
+    /// gone by then too, so nothing is left pointing at nothing.
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum TransferDirection {
+    Incoming,
+    Outgoing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum TransferState {
+    /// Offered and undecided: an incoming file nobody has accepted, or an
+    /// outgoing one nobody has connected for.
+    Offered,
+    /// Accepted, with the handshake or the connection still in flight. A resume
+    /// spends its round trip here.
+    Connecting,
+    Running,
+    Done,
+    /// The other side said no, or this end did.
+    Declined,
+    Cancelled,
+    Failed,
+}
+
+/// What a transfer needs to know beyond the file itself.
+///
+/// Every field but the directory is about being reachable, which is the whole
+/// difficulty of DCC: the protocol names an address and a port in a message,
+/// and a client behind a router has neither to give.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferSettings {
+    /// Where accepted files land.
+    pub directory: String,
+    /// The ports this client opens, first and last. `None` lets the operating
+    /// system choose, which works only for a machine already reachable.
+    pub ports: Option<(u16, u16)>,
+    /// The address to put in an offer, for a client that knows its public one.
+    /// `None` advertises the address the IRC connection goes out from, which
+    /// behind NAT is a private address and reaches nobody.
+    pub address: Option<String>,
+    /// Whether an offer asks the other side to open the port instead. It is the
+    /// answer for a client behind NAT, and it fails where they are behind one
+    /// too.
+    pub passive: bool,
+}

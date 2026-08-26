@@ -305,6 +305,10 @@ export interface AppState {
    * backend holds them. The badge is counted there and the tint is decided
    * here, and this is the copy the second half of that reads. */
   highlightWords: string[];
+  /** The names whose lines never raise the reader, as the backend holds them.
+   * Beside the words above and read by the same two halves: the badge is
+   * counted in Rust, the tint and the desktop notification are decided here. */
+  hushedNicks: string[];
   /** Every installed plugin, with what it asked for and what it was allowed.
    * Read once at startup, and kept current by the sheet that changes it — the
    * status bar reads the same list with no sheet open. */

@@ -619,6 +619,61 @@ fn a_word_the_reader_added_makes_the_channel_as_loud_as_a_mention() {
     assert_eq!(highlights(&arrived), Some(1));
 }
 
+/// A hushed sender's line is never loud, whatever it says.
+///
+/// The unread count still moves, which is the whole difference between this
+/// and an ignore: the line arrived and is unread, it just does not shout.
+#[test]
+fn a_hushed_sender_leaves_the_badge_quiet_and_the_unread_count_moving() {
+    let mut session = session();
+    session.set_highlight_words(vec!["deploy".into()]);
+    session.set_hushed_nicks(vec!["buildbot".into()]);
+
+    let arrived = session.on_line(&format!(
+        ":buildbot!b@h PRIVMSG {CHANNEL} :deploy failed on main"
+    ));
+
+    assert_eq!(
+        highlights(&arrived),
+        Some(0),
+        "the badge went loud for a hushed sender"
+    );
+    assert_eq!(
+        unread(&arrived),
+        Some(1),
+        "the line was not counted as unread"
+    );
+}
+
+/// Folded, because nobody types a service's name the way it registered — and
+/// whole, because `buildbot_` is somebody else wearing the name.
+#[test]
+fn hushing_is_caseless_and_names_a_whole_nick() {
+    let mut session = session();
+    session.set_hushed_nicks(vec!["BuildBot".into()]);
+
+    let folded = session.on_line(&format!(":buildbot!b@h PRIVMSG {CHANNEL} :sykk: look"));
+    assert_eq!(highlights(&folded), Some(0));
+
+    let other = session.on_line(&format!(":buildbot_!b@h PRIVMSG {CHANNEL} :sykk: look"));
+    assert_eq!(
+        highlights(&other),
+        Some(1),
+        "a longer name was hushed by the shorter one"
+    );
+}
+
+/// Somebody else saying the same thing is untouched.
+#[test]
+fn hushing_one_sender_leaves_the_others_loud() {
+    let mut session = session();
+    session.set_hushed_nicks(vec!["buildbot".into()]);
+
+    let arrived = session.on_line(&format!(":sable!s@h PRIVMSG {CHANNEL} :sykk: look at this"));
+
+    assert_eq!(highlights(&arrived), Some(1));
+}
+
 /// The same invariant a mention has, widened by the words: a rule is never
 /// asked about a message the host already raised, because it could not lower it
 /// and the answer would change nothing.

@@ -17,6 +17,8 @@ const { ipcMock, allowedMock } = vi.hoisted(() => ({
     setIgnored: vi.fn(),
     watchedPeople: vi.fn(),
     setWatched: vi.fn(),
+    hushedNicks: vi.fn(),
+    setHushedNicks: vi.fn(),
   },
   allowedMock: vi.fn(),
 }));
@@ -45,6 +47,8 @@ beforeEach(() => {
   ipcMock.setIgnored.mockResolvedValue(undefined);
   ipcMock.watchedPeople.mockResolvedValue([]);
   ipcMock.setWatched.mockResolvedValue(undefined);
+  ipcMock.hushedNicks.mockResolvedValue([]);
+  ipcMock.setHushedNicks.mockResolvedValue(undefined);
   allowedMock.mockResolvedValue(true);
   localStorage.clear();
 });
@@ -66,7 +70,7 @@ describe("the notifications page", () => {
   it("writes a word the moment it is added", async () => {
     open();
     await type("deploy");
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add word" }));
 
     await waitFor(() => expect(ipcMock.setHighlightWords).toHaveBeenCalledWith(["deploy"]));
     expect(await screen.findByRole("button", { name: "Remove deploy" })).toBeTruthy();
@@ -78,7 +82,7 @@ describe("the notifications page", () => {
     open();
     await type("deploy");
     ipcMock.highlightWords.mockResolvedValue(["deploy"]);
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add word" }));
 
     await waitFor(() => expect(useAppStore.getState().highlightWords).toEqual(["deploy"]));
   });
@@ -87,7 +91,7 @@ describe("the notifications page", () => {
     ipcMock.highlightWords.mockResolvedValue(["deploy"]);
     open();
     await type("release");
-    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add word" }));
 
     await waitFor(() =>
       expect(ipcMock.setHighlightWords).toHaveBeenCalledWith(["deploy", "release"]),
@@ -110,7 +114,7 @@ describe("the notifications page", () => {
     await type("Deploy");
 
     expect(await screen.findByText("Deploy is already on the list.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Add word" }).hasAttribute("disabled")).toBe(true);
   });
 
   /** The word appears as it is typed and the write follows. A refused write has
@@ -120,7 +124,7 @@ describe("the notifications page", () => {
     ipcMock.setHighlightWords.mockRejectedValue("The archive is read-only.");
     open();
     await type("deploy");
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add word" }));
 
     expect(await screen.findByText("The archive is read-only.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove deploy" })).toBeNull();
@@ -303,5 +307,56 @@ describe("the notifications page", () => {
     open();
 
     expect(await screen.findByText("The archive could not be opened.")).toBeTruthy();
+  });
+});
+
+/** The inverse of the words above it, and the same list widget. */
+describe("people who never raise a conversation", () => {
+  const field = () => screen.getByLabelText(/^Add a nickname/);
+
+  it("adds a name and writes it down", async () => {
+    open();
+    await waitFor(() => expect(field()).toBeTruthy());
+
+    fireEvent.change(field(), { target: { value: "NickServ" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add nickname" }));
+
+    await waitFor(() => expect(ipcMock.setHushedNicks).toHaveBeenCalledWith(["NickServ"]));
+  });
+
+  it("removes one", async () => {
+    ipcMock.hushedNicks.mockResolvedValue(["NickServ", "ChanServ"]);
+    open();
+    await waitFor(() => expect(screen.getByText("ChanServ")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove ChanServ" }));
+
+    await waitFor(() => expect(ipcMock.setHushedNicks).toHaveBeenCalledWith(["NickServ"]));
+  });
+
+  /* Caselessly, because the match is: offering to add nickserv to a list
+   * already holding NickServ offers a name that would change nothing. */
+  it("refuses a name already on the list, whatever its case", async () => {
+    ipcMock.hushedNicks.mockResolvedValue(["NickServ"]);
+    open();
+    await waitFor(() => expect(screen.getByText("NickServ")).toBeTruthy());
+
+    fireEvent.change(field(), { target: { value: "nickserv" } });
+
+    expect(screen.getByText("nickserv is already on the list.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Add nickname" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("puts the list back when the write is refused", async () => {
+    ipcMock.hushedNicks.mockResolvedValue(["NickServ"]);
+    ipcMock.setHushedNicks.mockRejectedValue(new Error("the archive is read-only"));
+    open();
+    await waitFor(() => expect(screen.getByText("NickServ")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove NickServ" }));
+
+    await waitFor(() => expect(screen.getByText("NickServ")).toBeTruthy());
   });
 });

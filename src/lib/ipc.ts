@@ -147,6 +147,8 @@ export const ipc = {
     invoke<void>("set_retention", { network, target, days }),
   highlightWords: () => invoke<string[]>("highlight_words"),
   setHighlightWords: (words: string[]) => invoke<void>("set_highlight_words", { words }),
+  hushedNicks: () => invoke<string[]>("hushed_nicks"),
+  setHushedNicks: (nicks: string[]) => invoke<void>("set_hushed_nicks", { nicks }),
   mutedConversations: () => invoke<MutedConversation[]>("muted_conversations"),
   setMuted: (network: string, target: string | null, muted: boolean) =>
     invoke<void>("set_muted", { network, target, muted }),

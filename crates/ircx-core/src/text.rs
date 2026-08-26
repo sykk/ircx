@@ -137,6 +137,21 @@ pub fn raises(text: &str, nick: &str, words: &[String]) -> bool {
     mentions(text, nick) || words.iter().any(|word| mentions(text, word))
 }
 
+/// Whether this sender is one whose lines never raise the reader.
+///
+/// A whole-name comparison rather than [`mentions`]: the reader named somebody,
+/// and `NickServ` is not `NickServ_`. Case folded without the network's
+/// CASEMAPPING, because `src/store/selectors.ts` answers this same question for
+/// the tint and the notification and has no casemapping to fold with — the two
+/// disagreeing about who is hushed would be worse than treating `bot[m]` and
+/// `bot{m}` as two names, which the reader can write both of.
+///
+/// Free rather than a method, so `fixtures/highlight.json` can hold both
+/// languages to it the way it holds them to `raises`.
+pub fn hushes(sender: &str, hushed: &[String]) -> bool {
+    hushed.iter().any(|name| name.eq_ignore_ascii_case(sender))
+}
+
 fn scheme_start(text: &str, scheme_end: usize) -> Option<usize> {
     let start = text[..scheme_end]
         .char_indices()
@@ -200,6 +215,41 @@ mod tests {
 
     fn urls(text: &str) -> Vec<String> {
         attachments(text).into_iter().map(|a| a.url).collect()
+    }
+
+    /// The second rule that file holds, and `isHushed` in
+    /// `src/store/selectors.ts` is held to the same cases.
+    #[test]
+    fn the_shared_hushed_cases_hold() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../fixtures/highlight.json"))
+                .expect("fixtures/highlight.json does not parse");
+        let cases = fixture["hushedCases"]
+            .as_array()
+            .expect("fixtures/highlight.json has no hushed cases");
+        assert!(!cases.is_empty(), "the fixture asserts nothing");
+
+        for case in cases {
+            let sender = case["sender"].as_str().expect("a case with no sender");
+            let hushed: Vec<String> = case["hushed"]
+                .as_array()
+                .expect("a case with no list")
+                .iter()
+                .map(|name| {
+                    name.as_str()
+                        .expect("a name that is not a string")
+                        .to_owned()
+                })
+                .collect();
+            let expected = case["hushes"].as_bool().expect("a case with no answer");
+
+            assert_eq!(
+                hushes(sender, &hushed),
+                expected,
+                "{}\n  sender: {sender:?}\n  hushed: {hushed:?}",
+                case["why"].as_str().unwrap_or("(no reason given)"),
+            );
+        }
     }
 
     /// Every case in `fixtures/highlight.json`, which `raises` in

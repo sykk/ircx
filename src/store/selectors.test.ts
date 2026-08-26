@@ -8,6 +8,7 @@ import {
   useNetworks,
   useQueriesFor,
   isHighlight,
+  isHushed,
   selectConversationNames,
   selectQueued,
   matchesHighlight,
@@ -314,7 +315,43 @@ describe("splitting", () => {
 
 /** The rule as a nick and nothing beside it, which is what these cases are
  * about. */
-const rule = (nick: string): HighlightRule => ({ nick, words: [] });
+const rule = (nick: string): HighlightRule => ({ nick, words: [], hushed: [] });
+
+describe("a hushed sender", () => {
+  const line = (nick: string, text: string) => makeMessage({ nick, text });
+  const rule: HighlightRule = { nick: "syk", words: ["deploy"], hushed: ["ci-bot"] };
+
+  it("does not make a line loud by naming the reader", () => {
+    expect(isHighlight(line("ci-bot", "syk: the build failed"), rule)).toBe(false);
+  });
+
+  it("does not make one loud with a word either", () => {
+    expect(isHighlight(line("ci-bot", "the deploy finished"), rule)).toBe(false);
+  });
+
+  it("leaves everybody else alone", () => {
+    expect(isHighlight(line("sable", "syk: the build failed"), rule)).toBe(true);
+  });
+
+  /* Hushing decides loudness and nothing else — the words are still in the
+   * message, so the row draws and the unread count still moves. */
+  it("keeps the line, which is what separates it from an ignore", () => {
+    expect(line("ci-bot", "syk: the build failed").text).toBe("syk: the build failed");
+  });
+});
+
+describe("the shared hushed cases", () => {
+  /** The second rule `fixtures/highlight.json` holds both languages to. A
+   * sender the reader hushed never raises them, and the two implementations of
+   * that must not drift apart any more than the two of `raises` may. */
+  const fixture = JSON.parse(readFileSync("fixtures/highlight.json", "utf8")) as {
+    hushedCases: { why: string; sender: string; hushed: string[]; hushes: boolean }[];
+  };
+
+  it.each(fixture.hushedCases)("$why", ({ sender, hushed, hushes }) => {
+    expect(isHushed(sender, { nick: "syk", words: [], hushed })).toBe(hushes);
+  });
+});
 
 describe("the shared highlight cases", () => {
   /** The same file `crates/ircx-core/src/text.rs` reads, and the reason both
@@ -326,7 +363,7 @@ describe("the shared highlight cases", () => {
   const fixture = JSON.parse(readFileSync("fixtures/highlight.json", "utf8")) as { cases: { why: string; text: string; nick: string; words: string[]; raises: boolean }[] };
 
   it.each(fixture.cases)("$why", ({ text, nick, words, raises }) => {
-    expect(matchesHighlight(text, { nick, words })).toBe(raises);
+    expect(matchesHighlight(text, { nick, words, hushed: [] })).toBe(raises);
   });
 });
 
@@ -391,14 +428,14 @@ describe("splitOnHighlight", () => {
   });
 
   it("marks a word the reader added, not only their nick", () => {
-    expect(marked(splitOnHighlight("the deploy went out", { nick: "sable", words: ["deploy"] })))
+    expect(marked(splitOnHighlight("the deploy went out", { nick: "sable", words: ["deploy"], hushed: [] })))
       .toEqual(["deploy"]);
   });
 
   /** Longest first in the alternation, so the line is not marked twice over. */
   it("marks the longer of two words that share a prefix", () => {
     expect(
-      marked(splitOnHighlight("the deployment stalled", { nick: "sable", words: ["deploy", "deployment"] })),
+      marked(splitOnHighlight("the deployment stalled", { nick: "sable", words: ["deploy", "deployment"], hushed: [] })),
     ).toEqual(["deployment"]);
   });
 });

@@ -236,7 +236,15 @@ function ruleFor(network: string): HighlightRule {
   return {
     nick: state.networks[network]?.currentNick ?? null,
     words: state.highlightWords,
+    hushed: state.hushedNicks,
   };
+}
+
+/** Whether this sender is one the reader hushed. Folded the way
+ * `isHighlight` folds it, both reading the one list the backend holds. */
+function hushed(nick: string): boolean {
+  const folded = nick.toLowerCase();
+  return useAppStore.getState().hushedNicks.some((held) => held.toLowerCase() === folded);
 }
 
 /** Whether the conversation, or the network it is on, was muted. Read off the
@@ -269,6 +277,13 @@ export function worthNotifying(
   now = new Date(),
 ): { title: string; body: string } | null {
   if (message.sender.isSelf) return null;
+  // Beside `isSelf` because it is the same kind of question — who spoke, not
+  // what they said — and above the per-conversation setting on purpose: a name
+  // on this list never interrupts, and a conversation set to every live message
+  // is a statement about the conversation rather than about them. This is the
+  // half that stops a service notice from raising a direct message, which the
+  // highlight rule alone never reached.
+  if (hushed(message.sender.nick)) return null;
   if (event.target === SERVER_TARGET || event.target === "") return null;
   // A backfill is not an interruption: it already happened, and the reader
   // asked to see it. The same rule a notification plugin gets.

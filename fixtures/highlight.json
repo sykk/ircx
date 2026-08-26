@@ -12,7 +12,56 @@
     "line with nothing marked in it from being two different opinions again.",
     "",
     "A term is matched on nickname boundaries: the characters either side must be",
-    "outside \\w and RFC 2812's []\\^{}|-. `raises` is true when any term matches."
+    "outside \\w and RFC 2812's []\\^{}|-. `raises` is true when any term matches.",
+    "",
+    "`hushedCases` is the second rule the same two files share: a sender the",
+    "reader hushed never raises them, whatever the line says. A separate array",
+    "because it asks who spoke rather than what was said — `hushes` in text.rs",
+    "and `isHushed` in selectors.ts are what it holds to."
+  ],
+  "hushedCases": [
+    {
+      "why": "The plain case: a name on the list is hushed",
+      "sender": "NickServ",
+      "hushed": ["NickServ"],
+      "hushes": true
+    },
+    {
+      "why": "Case folded, because nobody types a service's name the way it registered",
+      "sender": "nickserv",
+      "hushed": ["NickServ"],
+      "hushes": true
+    },
+    {
+      "why": "A whole name, not a prefix: NickServ_ is somebody else wearing the name",
+      "sender": "NickServ_",
+      "hushed": ["NickServ"],
+      "hushes": false
+    },
+    {
+      "why": "And not a substring of one either",
+      "sender": "NotNickServ",
+      "hushed": ["NickServ"],
+      "hushes": false
+    },
+    {
+      "why": "Any of them, not only the first",
+      "sender": "ChanServ",
+      "hushed": ["NickServ", "ChanServ"],
+      "hushes": true
+    },
+    {
+      "why": "An empty list hushes nobody, which is what a fresh client holds",
+      "sender": "NickServ",
+      "hushed": [],
+      "hushes": false
+    },
+    {
+      "why": "Not folded by RFC 1459: both languages must agree, and one has no CASEMAPPING to fold with",
+      "sender": "bot[m]",
+      "hushed": ["bot{m}"],
+      "hushes": false
+    }
   ],
   "cases": [
     {

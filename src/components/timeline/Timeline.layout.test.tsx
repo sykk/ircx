@@ -522,7 +522,7 @@ describe("a parked pane without regrouping", () => {
     const rows = buildRows(
       messages,
       null,
-      { nick: "sable", words: [] },
+      { nick: "sable", words: [], hushed: [] },
       assignGroups(messages, []),
       new Set<string>(),
     );

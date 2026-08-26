@@ -474,10 +474,12 @@ export function presenceInvolving(
   messages: readonly ChatMessage[],
   ownNick: string | null,
 ): number {
-  // The nick alone, not the words beside it. This asks whether a join or a
-  // part was about the reader, and a word they added is about what people are
-  // talking about rather than who came and went.
-  return messages.filter((m) => m.sender.isSelf || isHighlight(m, { nick: ownNick, words: [] }))
+  // The nick alone, not the words beside it, and nobody hushed. This asks
+  // whether a join or a part was about the reader: a word they added is about
+  // what people are talking about rather than who came and went, and a name
+  // that never interrupts them still came and went.
+  return messages
+    .filter((m) => m.sender.isSelf || isHighlight(m, { nick: ownNick, words: [], hushed: [] }))
     .length;
 }
 

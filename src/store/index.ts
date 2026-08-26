@@ -166,6 +166,7 @@ export interface AppActions {
    * here rather than fetched where they are used: the timeline asks the
    * question once per message, and the answer is one round trip per launch. */
   setHighlightWords: (words: string[]) => void;
+  setHushedNicks: (nicks: string[]) => void;
   setPlugins: (plugins: InstalledPlugin[]) => void;
   /** Records that the library could not be read at all. */
   setPluginsUnavailable: (reason: string) => void;
@@ -232,6 +233,7 @@ const initialState: AppState = {
   uploadRequest: null,
   channelsOpen: null,
   highlightWords: [],
+  hushedNicks: [],
   plugins: [],
   pluginsUnavailable: null,
   collapsedNetworks: {},
@@ -776,6 +778,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return { channelsOpen: network, channelList };
     }),
   setHighlightWords: (highlightWords) => set({ highlightWords }),
+  setHushedNicks: (hushedNicks) => set({ hushedNicks }),
   setPlugins: (plugins) => set({ plugins, pluginsUnavailable: null }),
   setPluginsUnavailable: (reason) => set({ plugins: [], pluginsUnavailable: reason }),
   upsertPlugin: (plugin) =>

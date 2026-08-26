@@ -3231,3 +3231,25 @@ fn removing_a_network_takes_its_ignores() {
 
     assert!(store.ignored_nicks(&id).unwrap().is_empty());
 }
+
+/// Stored and read back in the order they were written, as the words beside
+/// them are, and one spelling per name however it was cased.
+#[test]
+fn hushed_nicks_round_trip_in_the_order_they_were_written() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(store.hushed_nicks().unwrap().is_empty());
+
+    store
+        .set_hushed_nicks(&["NickServ".into(), "ChanServ".into()])
+        .unwrap();
+    assert_eq!(store.hushed_nicks().unwrap(), ["NickServ", "ChanServ"]);
+
+    // The caseless key: the spelling typed first is the one kept.
+    store
+        .set_hushed_nicks(&["NickServ".into(), "nickserv".into()])
+        .unwrap();
+    assert_eq!(store.hushed_nicks().unwrap(), ["NickServ"]);
+
+    store.set_hushed_nicks(&[]).unwrap();
+    assert!(store.hushed_nicks().unwrap().is_empty());
+}

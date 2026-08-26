@@ -18,3 +18,21 @@ export async function loadHighlightWords(): Promise<void> {
     console.warn("ircx could not read the words that raise a conversation", reason);
   }
 }
+
+/**
+ * Reads whose lines never raise the reader into the store.
+ *
+ * Beside the words above and read for the same two halves of one decision: the
+ * badge is counted in Rust, and this copy is what decides the tint and the
+ * desktop notification a query would otherwise raise.
+ */
+export async function loadHushedNicks(): Promise<void> {
+  try {
+    useAppStore.getState().setHushedNicks(await ipc.hushedNicks());
+  } catch (reason) {
+    // Hushing nobody is louder than the reader asked for rather than quieter,
+    // which is the direction the words fail in too: a list that cannot be read
+    // never hides a line somebody wanted.
+    console.warn("ircx could not read whose lines never raise a conversation", reason);
+  }
+}

@@ -224,6 +224,8 @@ pub fn run() {
             commands::set_retention,
             commands::highlight_words,
             commands::set_highlight_words,
+            commands::hushed_nicks,
+            commands::set_hushed_nicks,
             commands::muted_conversations,
             commands::set_muted,
             commands::ignored_people,

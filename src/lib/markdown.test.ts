@@ -7,6 +7,7 @@ function text(spans: Span[]): string {
       switch (span.type) {
         case "text":
         case "code":
+        case "irc":
           return span.text;
         case "link":
           return span.url;

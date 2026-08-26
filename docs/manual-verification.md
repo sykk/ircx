@@ -43,6 +43,12 @@ historical results in Git and add a test when a check becomes repeatable.
   reader scrolls.
 - [ ] Leave one split pane at the live edge and another in history. A page or
   live arrival in either pane must not move the other pane's reader.
+- [ ] In a WebKitGTK release build, read a line carrying mIRC colour codes from
+  each of the six rows of the extended palette. Every row must resolve to a
+  visible colour: `src/lib/ircFormat.ts` builds them with nested `color-mix(in
+  oklab, …)`, jsdom computes neither, and an engine that does not support it
+  drops the declaration and draws the line in the ordinary text colour with
+  nothing to say it did. Verified on WebKitGTK 2.52.5, 2026-08-26.
 
 ## Networks and services
 

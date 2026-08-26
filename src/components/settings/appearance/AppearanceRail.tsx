@@ -179,6 +179,13 @@ export function AppearanceRail({
                 checked={presentation.nickColors}
                 onChange={(nickColors) => selectPresentation({ nickColors })}
               />
+
+              <CheckField
+                label="IRC colours and emphasis"
+                hint="Draws the colour and bold codes other clients send, in this theme's colours rather than mIRC's. Off prints the text without them."
+                checked={presentation.ircFormatting}
+                onChange={(ircFormatting) => selectPresentation({ ircFormatting })}
+              />
             </Group>
           </>
         )}

@@ -4,6 +4,7 @@
  * HTML, because message text arrives from the network and never reaches
  * innerHTML.
  */
+import type { IrcStyle } from "./ircFormat";
 
 export type Span =
   | { type: "text"; text: string }
@@ -16,7 +17,13 @@ export type Span =
    * from the destination: that is how a reader is made to click something they
    * did not intend, and in a message from a stranger the destination is the
    * only thing they can check. */
-  | { type: "link"; url: string };
+  | { type: "link"; url: string }
+  /** A run carrying mIRC formatting state. `parseMarkdown` never produces one:
+   * the codes are ordinary characters to it, and `applyIrcFormat` in
+   * src/lib/ircFormat.ts is what turns them into this afterwards. It lives in
+   * this union because it is a span the timeline draws, and the timeline draws
+   * one tree. */
+  | { type: "irc"; style: IrcStyle; text: string };
 
 export type Block =
   | { type: "paragraph"; spans: Span[] }

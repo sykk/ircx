@@ -1,10 +1,11 @@
 import { Fragment, useState } from "react";
-import { stripIrcFormatting } from "@/lib/ircFormat";
+import { applyIrcFormat, ircCss, ircRuns, isPlain, stripIrcFormatting } from "@/lib/ircFormat";
 import { LeavesTheClient, leavingLabel } from "@/components/common/LeavesTheClient";
 import { openExternal } from "@/lib/ipc";
 import { parseMarkdown, type Block, type Span } from "@/lib/markdown";
 import { NO_HIGHLIGHT, splitOnHighlight, type HighlightRule } from "@/store/selectors";
 import { describeUrl } from "@/lib/url";
+import { useAppStore } from "@/store";
 
 /**
  * The same message flattened to one line of text, for excerpts that quote a
@@ -29,7 +30,7 @@ function blockText(block: Block): string {
 function spansText(spans: Span[]): string {
   return spans
     .map((span) => {
-      if (span.type === "text" || span.type === "code") return span.text;
+      if (span.type === "text" || span.type === "code" || span.type === "irc") return span.text;
       // A link is written out in full, so its text is its destination.
       if (span.type === "link") return span.url;
       return spansText(span.spans);
@@ -48,9 +49,18 @@ interface MarkdownProps {
 }
 
 export function Markdown({ text, urls = [], highlight = null }: MarkdownProps) {
+  const formatting = useAppStore((s) => s.presentation.ircFormatting);
+  /* Markdown is parsed on the raw line when the codes are being drawn and on
+     the stripped one when they are not, which is the one place the two settings
+     can disagree about the text: a URL a colour code runs through is only whole
+     once the code is gone. */
+  const blocks = formatting
+    ? applyIrcFormat(parseMarkdown(text, urls))
+    : parseMarkdown(stripIrcFormatting(text), urls);
+
   return (
     <>
-      {parseMarkdown(stripIrcFormatting(text), urls).map((block, i) => (
+      {blocks.map((block, i) => (
         <BlockView key={i} block={block} highlight={highlight} separated={i > 0} />
       ))}
     </>
@@ -216,6 +226,32 @@ function Spans({ spans, highlight }: { spans: Span[]; highlight: HighlightRule |
 }
 
 /**
+ * A line drawn with its formatting codes but not as Markdown, for an action.
+ *
+ * `/me` has never carried Markdown here and this does not give it any. What it
+ * gives it is the emphasis somebody typed at the other end, which is the same
+ * emphasis their client showed them when they typed it.
+ */
+export function IrcText({ text, highlight }: { text: string; highlight: HighlightRule | null }) {
+  const formatting = useAppStore((s) => s.presentation.ircFormatting);
+  if (!formatting) return <Mentioned text={stripIrcFormatting(text)} highlight={highlight} />;
+
+  return (
+    <>
+      {ircRuns(text).runs.map((run, i) =>
+        isPlain(run.style) ? (
+          <Mentioned key={i} text={run.text} highlight={highlight} />
+        ) : (
+          <span key={i} style={ircCss(run.style)}>
+            <Mentioned text={run.text} highlight={highlight} />
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
+/**
  * The reader's own nick where it appears in what somebody wrote.
  *
  * Prose only. A nick inside a paste or a `code` span is a string somebody
@@ -286,6 +322,15 @@ function renderSpan(span: Span, highlight: HighlightRule | null) {
       );
     case "spoiler":
       return <Spoiler spans={span.spans} highlight={highlight} />;
+    case "irc":
+      /* Inline rather than a block, and with no padding round a background: a
+         run is a stretch of a sentence, and boxing it would break the line's
+         leading wherever somebody coloured three words of it. */
+      return (
+        <span style={ircCss(span.style)}>
+          <Mentioned text={span.text} highlight={highlight} />
+        </span>
+      );
   }
 }
 

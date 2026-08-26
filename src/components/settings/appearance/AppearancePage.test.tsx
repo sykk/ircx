@@ -377,6 +377,7 @@ describe("AppearancePage", () => {
         measure: "theme",
         nickColors: true,
         clockEmphasis: "normal",
+        ircFormatting: true,
       });
     });
 
@@ -545,6 +546,7 @@ describe("AppearancePage", () => {
         measure: "theme",
         nickColors: true,
         clockEmphasis: "normal",
+        ircFormatting: true,
       });
       expect(token("--font-ui")).toBe(token("--font-mono"));
     });

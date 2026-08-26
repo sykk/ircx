@@ -34,6 +34,7 @@ export interface Preset {
     | "measure"
     | "nickColors"
     | "clockEmphasis"
+    | "ircFormatting"
   >;
   /** The faces only. A preset does not touch the window scale: that is an
    * accessibility setting somebody chose for their eyes, and no look is worth

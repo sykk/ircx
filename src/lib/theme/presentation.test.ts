@@ -23,6 +23,7 @@ describe("sanitisePresentation", () => {
         measure: "wide",
         nickColors: false,
         clockEmphasis: "quiet",
+        ircFormatting: false,
       }),
     ).toEqual({
       spine: false,
@@ -36,6 +37,7 @@ describe("sanitisePresentation", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
   });
 
@@ -53,6 +55,7 @@ describe("sanitisePresentation", () => {
         measure: "wide",
         nickColors: false,
         clockEmphasis: "quiet",
+        ircFormatting: false,
       }),
     ).toEqual({
       spine: false,
@@ -66,6 +69,7 @@ describe("sanitisePresentation", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
   });
 
@@ -96,6 +100,7 @@ describe("storedPresentation", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
     expect(storedPresentation()).toEqual({
       spine: false,
@@ -109,6 +114,7 @@ describe("storedPresentation", () => {
       measure: "wide",
       nickColors: false,
       clockEmphasis: "quiet",
+      ircFormatting: false,
     });
   });
 

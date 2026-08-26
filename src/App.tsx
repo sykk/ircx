@@ -5,11 +5,13 @@ import { PaneTree } from "@/components/panes/PaneTree";
 import { ChannelList } from "@/components/channels";
 import { DropToUpload } from "@/components/uploads/DropToUpload";
 import { AppShell } from "@/components/shell/AppShell";
+import { StartupFailure } from "@/components/shell/StartupFailure";
 import { WindowFrame } from "@/components/shell/WindowFrame";
 import { AppContextMenu } from "@/components/common/AppContextMenu";
 import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
+import { reasonOr } from "@/lib/ipc";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadHighlightWords } from "@/lib/highlights";
 import { openIrcLink, startIrcLinks } from "@/lib/ircLinks";
@@ -21,7 +23,8 @@ import { useAppStore } from "@/store";
 
 /** Onboarding is decided once, when the snapshot lands: saving the first
  * network puts it in the store, and that must not pull the flow out from under
- * the connection it just started. */
+ * the connection it just started.
+ */
 type Startup = "loading" | "onboarding" | "ready";
 
 const SettingsOverlay = lazy(() =>
@@ -31,7 +34,15 @@ const SettingsOverlay = lazy(() =>
 export function App() {
   useAppHotkeys();
   const [startup, setStartup] = useState<Startup>("loading");
+  /** Bumped by Try again, which re-runs the effect below — and its cleanup
+   * first, so nothing it started is left behind by the attempt that failed. */
+  const [attempt, setAttempt] = useState(0);
   const settingsOpen = useAppStore((state) => state.settings !== null);
+  /** Why the window could not read its own data, or null. In the store rather
+   * than here because the sidebar has to know too: while this is set it must
+   * not say there are no networks configured. */
+  const failure = useAppStore((state) => state.startupFailure);
+  const setStartupFailure = useAppStore((state) => state.setStartupFailure);
 
   useEffect(() => {
     const themes = startThemes();
@@ -67,6 +78,9 @@ export function App() {
       },
       (reason: unknown) => {
         console.error("ircx could not reach its backend", reason);
+        useAppStore
+          .getState()
+          .setStartupFailure(reasonOr(reason, "The reason was not one ircx could read."));
         setStartup("ready");
       },
     );
@@ -78,14 +92,25 @@ export function App() {
       void notifications.then((stop) => stop());
       void notificationRoutes.then((stop) => stop());
     };
-  }, []);
+  }, [attempt]);
 
   const finish = useCallback(() => setStartup("ready"), []);
+  const retry = useCallback(() => {
+    setStartupFailure(null);
+    setStartup("loading");
+    setAttempt((n) => n + 1);
+  }, [setStartupFailure]);
 
   return (
     <>
       <AppShell>
-        {startup === "onboarding" ? <Onboarding onDone={finish} /> : <PaneTree />}
+        {failure !== null ? (
+          <StartupFailure reason={failure} onRetry={retry} />
+        ) : startup === "onboarding" ? (
+          <Onboarding onDone={finish} />
+        ) : (
+          <PaneTree />
+        )}
       </AppShell>
 
       {/* Before the palette and the search, which are reachable by chord while

@@ -714,4 +714,24 @@ describe("whether the other person is there", () => {
     seedQuery(true);
     expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
   });
+
+  /** While the window is saying it could not read its own data, the sidebar is
+   * the one thing on screen that would flatly deny it — there may be a dozen
+   * networks configured and no way to know. */
+  it("says there are no networks when it knows there are none", () => {
+    useAppStore.setState({ networks: {}, networkOrder: [], startupFailure: null });
+    render(<SidebarNetworks />);
+    expect(screen.getByText("No networks configured.")).toBeTruthy();
+  });
+
+  it("says nothing at all when the startup failed", () => {
+    useAppStore.setState({
+      networks: {},
+      networkOrder: [],
+      startupFailure: "The archive is locked by another copy of ircx.",
+    });
+    render(<SidebarNetworks />);
+    expect(screen.queryByText("No networks configured.")).toBeNull();
+  });
+
 });

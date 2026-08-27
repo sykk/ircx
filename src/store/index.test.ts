@@ -1709,7 +1709,7 @@ describe("deleting a network", () => {
     useAppStore.setState({
       members: {
         [targetKey("oftc", "#linux")]: [
-          { nick: "root", account: null, prefixes: [], away: null },
+          { nick: "root", account: null, prefixes: [], away: null, realname: null },
         ],
       },
       timelines: {
@@ -1762,7 +1762,7 @@ describe("a batch of roster changes", () => {
   const store = () => useAppStore.getState();
 
   function member(nick: string): Member {
-    return { nick, account: null, prefixes: [], away: null };
+    return { nick, account: null, prefixes: [], away: null, realname: null };
   }
 
   function seed() {

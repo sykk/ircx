@@ -17,6 +17,7 @@
 //! close_target(network, target)               -> ()
 //! submit_input(network, target, input, reply_to) -> CommandOutcome
 //! list_members(network, channel)              -> Vec<Member>
+//! look_up_member(network, nick)              -> ()
 //! load_history(req: HistoryRequest)           -> Vec<ChatMessage>
 //! search_history(req: SearchRequest)          -> Vec<SearchHit>
 //! mark_read(network, target)                  -> ()

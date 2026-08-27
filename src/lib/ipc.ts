@@ -200,6 +200,12 @@ export const ipc = {
       ? invoke<void>("set_typing", { network, target, active })
       : Promise.resolve(),
 
+  /** Asked when an inspector opens on somebody whose real name is not known.
+   * Silent like `setTyping`: the answer comes back as a `MemberUpdated` and
+   * draws no whois in the server tab. */
+  lookUpMember: (network: string, nick: string) =>
+    invoke<void>("look_up_member", { network, nick }),
+
   loadPreview: (url: string) => invoke<Attachment>("load_preview", { url }),
   getDraft: (network: string, target: string) =>
     invoke<string | null>("get_draft", { network, target }),

@@ -10,18 +10,25 @@ import { CTF_OPS_MEMBERS, member } from "./fixtures";
 const CHANNEL = "#ctf-ops";
 
 const setIgnored = vi.fn();
+const lookUpMember = vi.fn();
 
 vi.mock("@/lib/ipc", async (importOriginal) => {
   const original = await importOriginal<typeof Ipc>();
   return {
     ...original,
-    ipc: { ...original.ipc, setIgnored: (...args: unknown[]) => setIgnored(...args) },
+    ipc: {
+      ...original.ipc,
+      setIgnored: (...args: unknown[]) => setIgnored(...args),
+      lookUpMember: (...args: unknown[]) => lookUpMember(...args),
+    },
   };
 });
 
 beforeEach(() => {
   setIgnored.mockReset();
   setIgnored.mockResolvedValue(undefined);
+  lookUpMember.mockReset();
+  lookUpMember.mockResolvedValue(undefined);
   useAppStore.setState({
     ignored: {},
     members: {
@@ -58,6 +65,28 @@ describe("UserInspector", () => {
     inspect(wren);
     expect(screen.getByText("wren", { selector: "dd" })).toBeTruthy();
     expect(screen.getByText("away — sleep")).toBeTruthy();
+  });
+
+  it("shows the real name when one is known", () => {
+    inspect(member("rae", { realname: "Rae, of somewhere" }));
+    expect(screen.getByText("Rae, of somewhere")).toBeTruthy();
+  });
+
+  /** Blank rather than absent, and "not known" rather than nothing: most of a
+   * roster has no real name on it until somebody asks. */
+  it("says the real name is not known rather than that there is none", () => {
+    inspect(member("rae"));
+    expect(screen.getByText("not known")).toBeTruthy();
+  });
+
+  it("asks the server about somebody whose real name is not known", async () => {
+    inspect(member("rae"));
+    await waitFor(() => expect(lookUpMember).toHaveBeenCalledWith("libera", "rae"));
+  });
+
+  it("asks nothing about somebody whose real name it already has", () => {
+    inspect(member("rae", { realname: "Rae, of somewhere" }));
+    expect(lookUpMember).not.toHaveBeenCalled();
   });
 
   it("says so when the nick is not identified to services", () => {

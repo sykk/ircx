@@ -210,6 +210,7 @@ pub fn run() {
             commands::set_bookmark_note,
             commands::mark_read,
             commands::set_typing,
+            commands::look_up_member,
             commands::load_preview,
             commands::get_draft,
             commands::set_draft,

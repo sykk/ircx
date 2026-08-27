@@ -355,6 +355,20 @@ pub async fn set_typing(
     Ok(())
 }
 
+/// What the inspector asks when it is opened on somebody whose real name is not
+/// known. Silent like `set_typing`: the answer arrives as a `MemberUpdated`,
+/// and a reader who is looking at a panel did not ask to read a whois.
+#[tauri::command]
+pub async fn look_up_member(
+    app: State<'_, App>,
+    network: NetworkId,
+    nick: String,
+) -> Result<(), String> {
+    app.tell_if_connected(&network, SessionCommand::LookUp { nick })
+        .await;
+    Ok(())
+}
+
 /// The only fetch ircx makes for a URL somebody else posted, and only because
 /// the user asked for the preview by name.
 #[tauri::command]

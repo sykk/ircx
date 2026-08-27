@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ipc } from "@/lib/ipc";
 import { nickColor } from "@/lib/nickColor";
 import { useAppStore } from "@/store";
@@ -35,6 +35,15 @@ export function UserInspector({
       setFailed(typeof reason === "string" ? reason : "That could not be changed.");
     }
   }, [network, member.nick, isIgnored]);
+
+  // The one thing that fills a real name in for somebody who was already here
+  // when the reader arrived: nothing else asks, and `extended-join` only speaks
+  // for people who arrived afterwards. Failures are silent — a panel that could
+  // not ask shows the blank it already had.
+  useEffect(() => {
+    if (member.realname !== null) return;
+    void ipc.lookUpMember(network, member.nick).catch(() => {});
+  }, [network, member.nick, member.realname]);
 
   const shared = useMemo(() => {
     const channels: string[] = [];
@@ -74,6 +83,10 @@ export function UserInspector({
       </div>
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-3 pb-3">
+        <dt className="text-[var(--text-muted)]">Real name</dt>
+        <dd className="selectable truncate text-[var(--text-primary)]">
+          {member.realname ?? <span className="text-[var(--text-muted)]">not known</span>}
+        </dd>
         <dt className="text-[var(--text-muted)]">Account</dt>
         <dd className="selectable truncate text-[var(--text-primary)]">
           {member.account ?? (

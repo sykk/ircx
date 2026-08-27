@@ -198,6 +198,7 @@ pub(crate) struct MemberState {
     pub(crate) account: Option<String>,
     pub(crate) prefixes: Vec<String>,
     pub(crate) away: Option<String>,
+    pub(crate) realname: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -348,6 +349,9 @@ pub struct SessionState {
     pub(crate) queries: HashMap<String, QueryState>,
     /// Folded nick to the spelling sent to the server.
     monitored: HashMap<String, String>,
+    /// Nicks a whois is outstanding for that nobody typed: the inspector asks
+    /// for one when it is opened on somebody whose real name is not known.
+    quiet_whois: HashSet<String>,
     /// Last status heard for a watched nick. An absent value is the initial
     /// MONITOR reply, which must not announce everybody already online.
     watch_status: HashMap<String, bool>,
@@ -471,6 +475,7 @@ impl SessionState {
             channels: HashMap::new(),
             queries: HashMap::new(),
             monitored: HashMap::new(),
+            quiet_whois: HashSet::new(),
             watch_status: HashMap::new(),
             batches: HashMap::new(),
             actions: Vec::new(),
@@ -856,6 +861,56 @@ impl SessionState {
         {
             self.read_markers.insert(key, timestamp);
             self.send_command("MARKREAD", &[&target, &parameter]);
+        }
+        self.drain()
+    }
+
+    /// Applies a fact about a person to every roster they are in, and emits
+    /// where it changed something. A member is held per channel, so a fact
+    /// about the person is a fact in all of them.
+    fn update_member(&mut self, nick: &str, mut change: impl FnMut(&mut MemberState) -> bool) {
+        let folded = self.fold(nick);
+        let keys: Vec<String> = self
+            .channels
+            .iter()
+            .filter(|(_, channel)| channel.members.contains_key(&folded))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in keys {
+            let changed = self
+                .channels
+                .get_mut(&key)
+                .and_then(|channel| channel.members.get_mut(&folded))
+                .is_some_and(&mut change);
+            if changed {
+                self.emit_member(&key, &folded);
+            }
+        }
+    }
+
+    fn set_realname(&mut self, nick: &str, realname: String) {
+        self.update_member(nick, |member| {
+            match member.realname.as_deref() == Some(realname.as_str()) {
+                true => false,
+                false => {
+                    member.realname = Some(realname.clone());
+                    true
+                }
+            }
+        });
+    }
+
+    /// Asks the server about somebody without drawing the answer.
+    ///
+    /// The inspector calls this when it is opened on a member whose real name
+    /// is not known — the one thing that fills it in for the people who were
+    /// already in the channel when the reader arrived. It is a request the
+    /// reader caused by looking, which is the same bargain the preview fetch
+    /// makes; nothing asks on behalf of a roster nobody is reading.
+    pub fn look_up(&mut self, nick: &str) -> Vec<Action> {
+        let folded = self.fold(nick);
+        if self.registered && self.quiet_whois.insert(folded) {
+            self.send_command("WHOIS", &[nick]);
         }
         self.drain()
     }
@@ -1315,6 +1370,12 @@ impl SessionState {
         // wants it. Borrowed, not cloned: a /list is tens of thousands of
         // numerics through here.
         let params = message.params.get(1..).unwrap_or_default();
+
+        // A whois nobody typed answers a panel rather than the server tab.
+        // What is wanted out of it is taken before this returns.
+        if self.quiet_whois(code, params) {
+            return;
+        }
 
         match code {
             RPL_WELCOME => self.on_welcome(message),
@@ -1777,6 +1838,7 @@ impl SessionState {
                     account: None,
                     prefixes,
                     away: None,
+                    realname: None,
                 }
             })
             .collect();
@@ -1845,6 +1907,54 @@ impl SessionState {
         self.append(note);
     }
 
+    /// Whether this numeric belongs to a whois the reader did not type, and so
+    /// is to be read rather than drawn.
+    ///
+    /// Every whois numeric names the person it is about in its first parameter,
+    /// which is what identifies the block without listing the numerics a server
+    /// might answer with — `671` and `378` and whatever else it has. `318` ends
+    /// it. A server that answers a whois without one leaves the nick in the set
+    /// and goes on swallowing numerics about that person; nothing else gets in
+    /// there, because only a reader opening an inspector puts a name in it.
+    fn quiet_whois(&mut self, code: u16, params: &[String]) -> bool {
+        let Some(who) = params.first() else {
+            return false;
+        };
+        let folded = self.fold(who);
+        if !self.quiet_whois.contains(&folded) {
+            return false;
+        }
+        match code {
+            RPL_WHOISUSER => {
+                if let Some(realname) = params.get(4).filter(|real| !real.trim().is_empty()) {
+                    let realname = realname.clone();
+                    self.set_realname(who, realname);
+                }
+            }
+            // Swallowed with the rest of the block, so the panel would go on
+            // saying "not identified" about somebody the server has just named.
+            RPL_WHOISACCOUNT => {
+                if let Some(account) = params.get(1).filter(|account| !account.is_empty()) {
+                    let account = account.clone();
+                    self.update_member(who, |member| {
+                        match member.account.as_deref() == Some(account.as_str()) {
+                            true => false,
+                            false => {
+                                member.account = Some(account.clone());
+                                true
+                            }
+                        }
+                    });
+                }
+            }
+            RPL_ENDOFWHOIS => {
+                self.quiet_whois.remove(&folded);
+            }
+            _ => {}
+        }
+        true
+    }
+
     /// A WHOIS reply, in a sentence rather than in the order it arrived.
     ///
     /// Every one of these puts its data before the server's trailing text, so
@@ -1867,6 +1977,10 @@ impl SessionState {
                 let user = params.get(1).map(String::as_str).unwrap_or("");
                 let host = params.get(2).map(String::as_str).unwrap_or("");
                 let real = params.get(4).map(String::as_str).unwrap_or("");
+                if !real.trim().is_empty() {
+                    let (who, real) = (who.clone(), real.to_string());
+                    self.set_realname(&who, real);
+                }
                 // Servers overwhelmingly set the realname to the nick, and
                 // saying it twice in one line is noise.
                 match real.is_empty() || real.eq_ignore_ascii_case(who) {
@@ -2395,6 +2509,10 @@ impl SessionState {
             .filter(|account| *account != "*" && !account.is_empty())
             .map(str::to_string)
             .or(sender.account.clone());
+        let realname = message
+            .param(2)
+            .filter(|realname| !realname.trim().is_empty())
+            .map(str::to_string);
 
         if sender.is_self {
             self.user = sender.user.clone().or(self.user.clone());
@@ -2414,6 +2532,7 @@ impl SessionState {
                 account,
                 prefixes: Vec::new(),
                 away: None,
+                realname,
             };
             let folded = self.fold(&nick);
             self.channel_entry(&key, &name)
@@ -2651,15 +2770,17 @@ impl SessionState {
         }
     }
 
-    /// Only your own. `Member` carries no real name and the inspector draws
-    /// none, so somebody else's has nowhere to land — and there is no half of
-    /// the capability to negotiate: a client that can send `SETNAME` is sent
-    /// them.
+    /// Somebody else's goes on their roster entry and draws no row: a name
+    /// changing is not a thing that happened in the conversation. Your own is
+    /// the sentence below, because you typed a command and it is the only
+    /// answer you get.
     fn handle_setname(&mut self, message: &Message) {
         let Some(realname) = message.param(0).map(str::to_string) else {
             return;
         };
-        if !self.sender_of(message).is_self {
+        let sender = self.sender_of(message);
+        if !sender.is_self {
+            self.set_realname(&sender.nick, realname);
             return;
         }
         // Both, because they reach different distances: `config` is what
@@ -3273,6 +3394,7 @@ impl SessionState {
                 account: member.account.clone(),
                 prefixes: member.prefixes.clone(),
                 away: member.away.clone(),
+                realname: member.realname.clone(),
             })
             .collect()
     }
@@ -3318,6 +3440,7 @@ impl SessionState {
             account: member.account.clone(),
             prefixes: member.prefixes.clone(),
             away: member.away.clone(),
+            realname: member.realname.clone(),
         };
         self.emit(IrcxEvent::MemberUpdated {
             network: self.config.network.clone(),

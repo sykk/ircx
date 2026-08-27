@@ -258,6 +258,8 @@ export const SEED = `
     set_muted: () => null,
     highlight_words: () => [],
     set_highlight_words: () => null,
+    hushed_nicks: () => [],
+    set_hushed_nicks: () => null,
 
     list_themes: () => [],
     list_plugins: () => [{

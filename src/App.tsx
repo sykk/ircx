@@ -13,7 +13,7 @@ import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
 import { reasonOr } from "@/lib/ipc";
 import { openFirstConversation } from "@/lib/firstPane";
-import { loadHighlightWords } from "@/lib/highlights";
+import { loadHighlightWords, loadHushedNicks } from "@/lib/highlights";
 import { openIrcLink, startIrcLinks } from "@/lib/ircLinks";
 import { startNotifications } from "@/lib/notifications";
 import { startNotificationRouting } from "@/lib/notificationRouting";
@@ -52,6 +52,7 @@ export function App() {
     // The timeline tints a line against these; the Notifications page writes
     // them and re-reads them in the same call.
     void loadHighlightWords();
+    void loadHushedNicks();
     // Follows whether the window has focus, which is what keeps a notification
     // from arriving for the line somebody just watched appear.
     const notifications = startNotifications();

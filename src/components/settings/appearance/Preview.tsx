@@ -33,7 +33,7 @@ import {
  * and a preview does not have one.
  */
 /** The nick the sample is written against, with no words beside it. */
-const PREVIEW_HIGHLIGHT: HighlightRule = { nick: PREVIEW_OWN_NICK, words: [] };
+const PREVIEW_HIGHLIGHT: HighlightRule = { nick: PREVIEW_OWN_NICK, words: [], hushed: [] };
 
 export function Preview() {
   const measure = useAppStore((s) => s.presentation.measure);

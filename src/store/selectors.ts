@@ -227,12 +227,20 @@ export interface HighlightRule {
    * yet because you have no name to be addressed by. */
   nick: string | null;
   words: readonly string[];
+  /** Names whose lines are never loud, whatever they say. Part of the rule
+   * rather than a second argument for the reason the words are: a caller
+   * handed one without the other would tint a row the badge does not, which is
+   * the divergence this type exists to make unrepresentable.
+   *
+   * It gates the sender rather than the text, so it lives in `isHighlight` and
+   * `termsOf` never sees it. */
+  hushed: readonly string[];
 }
 
 /** The rule with nothing in it. A conversation drawn against this has no loud
  * lines, which is what the settings preview and a session mid-registration
  * both want. */
-export const NO_HIGHLIGHT: HighlightRule = { nick: null, words: [] };
+export const NO_HIGHLIGHT: HighlightRule = { nick: null, words: [], hushed: [] };
 
 function termsOf(rule: HighlightRule): string[] {
   const terms = rule.words.filter((word) => word !== "");
@@ -335,12 +343,27 @@ export function splitOnHighlight(text: string, rule: HighlightRule): TextRun[] {
  * The reader's words are gated the same way the nick is. Somebody who has left
  * is not talking to the channel, whichever of the two the line matched.
  */
+/** Whether this sender's lines are allowed to be loud.
+ *
+ * Plain `toLowerCase`, matching `is_hushed` in `crates/ircx-core/src/session.rs`
+ * — this side has no CASEMAPPING to fold with, and two rules disagreeing about
+ * who is hushed would be worse than treating `bot[m]` and `bot{m}` as two
+ * names.
+ *
+ * Exported for `fixtures/highlight.json`, which holds this and `hushes` in
+ * `crates/ircx-core/src/text.rs` to the same cases. */
+export function isHushed(nick: string, rule: HighlightRule): boolean {
+  const folded = nick.toLowerCase();
+  return rule.hushed.some((hushed) => hushed.toLowerCase() === folded);
+}
+
 export function isHighlight(
   message: ChatMessage,
   rule: HighlightRule,
   present?: ReadonlySet<string>,
 ): boolean {
   if (message.sender.isSelf) return false;
+  if (isHushed(message.sender.nick, rule)) return false;
   if (present && present.size > 0 && !present.has(message.sender.nick.toLowerCase())) {
     return false;
   }

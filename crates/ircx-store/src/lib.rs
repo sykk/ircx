@@ -1278,6 +1278,33 @@ impl Store {
         Ok(())
     }
 
+    /// The names whose lines never interrupt the reader, in the order they were
+    /// last written — `highlight_words` says why the order is that one.
+    pub fn hushed_nicks(&self) -> Result<Vec<String>, StoreError> {
+        let conn = self.reading();
+        let mut statement = conn.prepare("SELECT nick FROM hushed_nick ORDER BY rowid")?;
+        let nicks = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(nicks)
+    }
+
+    /// Replaces the list wholesale, as `set_highlight_words` does and for the
+    /// same reason: a name has no identity beyond itself.
+    pub fn set_hushed_nicks(&self, nicks: &[String]) -> Result<(), StoreError> {
+        let mut conn = self.writing();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM hushed_nick", [])?;
+        for nick in nicks {
+            tx.execute(
+                "INSERT OR IGNORE INTO hushed_nick (nick) VALUES (?1)",
+                params![nick],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// `None` where nothing has been changed, which is the ordinary case: the
     /// defaults include a download directory only the application layer can
     /// name, so an unwritten row is left for it to fill in rather than being

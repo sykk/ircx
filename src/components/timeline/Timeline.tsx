@@ -100,12 +100,13 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
   const active = useAppStore((s) => s.activeViewId === view);
   const ownNick = useAppStore((s) => s.networks[network]?.currentNick ?? null);
   const highlightWords = useAppStore((s) => s.highlightWords);
+  const hushedNicks = useAppStore((s) => s.hushedNicks);
   const measure = useAppStore((s) => s.presentation.measure);
-  // One object, so everything below decides loudness from the same pair rather
-  // than half of it.
+  // One object, so everything below decides loudness from the same rule rather
+  // than part of it.
   const highlight = useMemo<HighlightRule>(
-    () => ({ nick: ownNick, words: highlightWords }),
-    [ownNick, highlightWords],
+    () => ({ nick: ownNick, words: highlightWords, hushed: hushedNicks }),
+    [ownNick, highlightWords, hushedNicks],
   );
   const canTag = useAppStore(
     (s) => s.networks[network]?.capsEnabled.includes("message-tags") ?? false,

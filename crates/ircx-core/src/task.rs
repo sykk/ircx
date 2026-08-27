@@ -252,6 +252,11 @@ pub enum SessionCommand {
     HighlightWordsChanged {
         words: Vec<String>,
     },
+    /// The reader changed whose lines never raise them. Carried for the reason
+    /// the words above are.
+    HushedNicksChanged {
+        nicks: Vec<String>,
+    },
     /// The reader muted or unmuted something on this network. The whole list,
     /// because a session holds the answer rather than asking per message, and
     /// replacing it is one message where a diff would be two kinds.
@@ -538,6 +543,13 @@ async fn drive(
     match context.store.highlight_words() {
         Ok(words) => session.set_highlight_words(words),
         Err(error) => warn!(%error, "could not read the words that raise a conversation"),
+    }
+    // A list that cannot be read hushes nobody, which is louder than the reader
+    // asked for rather than quieter — the same direction the words above fail
+    // in, and the one that never hides a line somebody wanted.
+    match context.store.hushed_nicks() {
+        Ok(nicks) => session.set_hushed_nicks(nicks),
+        Err(error) => warn!(%error, "could not read whose lines never raise a conversation"),
     }
     // Before the first message rather than after it. A mute that cannot be read
     // leaves the conversation loud, which is the state it was in before anybody
@@ -880,6 +892,10 @@ async fn apply(
         }
         SessionCommand::HighlightWordsChanged { words } => {
             session.set_highlight_words(words);
+            Vec::new()
+        }
+        SessionCommand::HushedNicksChanged { nicks } => {
+            session.set_hushed_nicks(nicks);
             Vec::new()
         }
         SessionCommand::MutedChanged { muted } => session.set_muted(muted),

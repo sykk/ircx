@@ -636,7 +636,12 @@ impl SessionState {
             return None;
         }
 
-        let highlight = text::raises(&message.text, &self.nick, &self.highlight_words);
+        // A hushed sender's line is never loud, whatever it says. Asked here
+        // rather than inside `raises` because the question is about who spoke
+        // rather than about the text, and `raises` is the rule
+        // `fixtures/highlight.json` holds both languages to.
+        let highlight = !self.is_hushed(&message.sender.nick)
+            && text::raises(&message.text, &self.nick, &self.highlight_words);
         // Muted suppresses the badge going loud and nothing else. The answer
         // returned below is the rule's, not the badge's: it is what keeps a
         // notification rule from being asked about a message the host already

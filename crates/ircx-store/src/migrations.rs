@@ -28,6 +28,7 @@ const MIGRATIONS: &[&str] = &[
     TRANSFER_SETTINGS,
     DEFAULT_MESSAGES,
     TRAY_SETTINGS,
+    HUSHED_NICKS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -386,6 +387,24 @@ CREATE TABLE ignored (
     network TEXT NOT NULL,
     nick    TEXT NOT NULL,
     PRIMARY KEY (network, nick)
+);
+"#;
+
+/// The names whose lines never interrupt the reader.
+///
+/// The inverse of `highlight_word` above and stored the same way, because it
+/// answers the same question backwards: a word says "tell me when anybody says
+/// this", and a name here says "never tell me about this one". Per client
+/// rather than per network for that table's reason — nobody means `NickServ`
+/// about one network and not another — which is also what separates it from
+/// `ignored`, whose key carries a network because a nuisance is a person on a
+/// server rather than a name everywhere.
+///
+/// `NOCASE`, again like `highlight_word`: a nick is compared without case, and
+/// the spelling that comes back is the one that was typed.
+const HUSHED_NICKS: &str = r#"
+CREATE TABLE hushed_nick (
+    nick TEXT PRIMARY KEY COLLATE NOCASE
 );
 "#;
 

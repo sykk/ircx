@@ -308,6 +308,17 @@ pub struct SessionState {
     /// word added mid-conversation counts from the next line rather than from
     /// the next launch.
     pub(crate) highlight_words: Vec<String>,
+    /// Whose lines never raise one, whatever they say. The inverse of the words
+    /// above and read the same way, so a name added mid-conversation takes
+    /// effect on the next line.
+    ///
+    /// Compared without case and without the network's casemapping: the
+    /// frontend answers this question too, for the notification a query would
+    /// otherwise raise, and it has no CASEMAPPING to fold with. Two rules that
+    /// disagreed about who is hushed would be worse than one that treats
+    /// `sykk[m]` and `sykk{m}` as two names — which the reader can write both
+    /// of, and which no service nick has ever needed.
+    pub(crate) hushed_nicks: Vec<String>,
     /// Conversations that may not interrupt the reader, as the store holds
     /// them: an empty string among them is the whole network.
     ///
@@ -442,6 +453,7 @@ impl SessionState {
         Self {
             nick: config.nick.clone(),
             highlight_words: Vec::new(),
+            hushed_nicks: Vec::new(),
             muted: Vec::new(),
             ignored: Vec::new(),
             watched: Vec::new(),
@@ -663,6 +675,16 @@ impl SessionState {
     /// interrupted you at a time when it did not.
     pub fn set_highlight_words(&mut self, words: Vec<String>) {
         self.highlight_words = words;
+    }
+
+    pub fn set_hushed_nicks(&mut self, nicks: Vec<String>) {
+        self.hushed_nicks = nicks;
+    }
+
+    /// Whether this sender's lines are allowed to interrupt. `text::hushes` is
+    /// the rule, and says why it folds the way it does.
+    pub(crate) fn is_hushed(&self, nick: &str) -> bool {
+        crate::text::hushes(nick, &self.hushed_nicks)
     }
 
     /// A rule thought something in this conversation worth interrupting the

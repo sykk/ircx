@@ -559,6 +559,18 @@ pub async fn set_highlight_words(app: State<'_, App>, words: Vec<String>) -> Res
     app.set_highlight_words(words).await
 }
 
+/// The names whose lines never raise the reader — the inverse of the words
+/// above, and stored beside them.
+#[tauri::command]
+pub async fn hushed_nicks(app: State<'_, App>) -> Result<Vec<String>, String> {
+    app.store().hushed_nicks().map_err(describe)
+}
+
+#[tauri::command]
+pub async fn set_hushed_nicks(app: State<'_, App>, nicks: Vec<String>) -> Result<(), String> {
+    app.set_hushed_nicks(nicks).await
+}
+
 /// Everything the reader has muted, with the network named.
 #[tauri::command]
 pub async fn muted_conversations(app: State<'_, App>) -> Result<Vec<MutedConversation>, String> {

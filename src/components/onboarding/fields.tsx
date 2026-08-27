@@ -211,11 +211,17 @@ export function Note({
 
 export function PrimaryButton({
   children,
+  label,
   disabled,
   type = "submit",
   onClick,
 }: {
   children: ReactNode;
+  /** For a button whose text repeats on one page, so each is still named by
+   * what it acts on — `SecondaryButton` carries one for the same reason. Two
+   * buttons both called Add leave a screen reader with no way to tell which
+   * list it is adding to. Must contain the visible text. */
+  label?: string;
   disabled?: boolean;
   type?: "submit" | "button";
   onClick?: () => void;
@@ -223,6 +229,7 @@ export function PrimaryButton({
   return (
     <button
       type={type}
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
       className="h-8 rounded-[var(--radius-sm)] bg-[var(--accent)] px-3 text-[12px] font-medium text-[var(--text-inverse)] hover:bg-[var(--accent-hover)] disabled:opacity-[var(--disabled-opacity)]"

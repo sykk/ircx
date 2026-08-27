@@ -60,6 +60,7 @@ function Search() {
     members: s.members,
     timelines: s.timelines,
     highlightWords: s.highlightWords,
+    hushedNicks: s.hushedNicks,
   })));
   const attention = useMemo(() => attentionHits(attentionState).slice(0, HIT_LIMIT), [attentionState]);
 
@@ -403,7 +404,13 @@ function Search() {
 
 type AttentionState = Pick<
   AppState,
-  "networks" | "channels" | "queries" | "members" | "timelines" | "highlightWords"
+  | "networks"
+  | "channels"
+  | "queries"
+  | "members"
+  | "timelines"
+  | "highlightWords"
+  | "hushedNicks"
 >;
 
 export function attentionHits(state: AttentionState): SearchHit[] {
@@ -435,7 +442,7 @@ export function attentionHits(state: AttentionState): SearchHit[] {
       );
       const wanted = counts && (query !== undefined || (message.raisedBy?.length ?? 0) > 0 || isHighlight(
         message,
-        { nick: network.currentNick, words: state.highlightWords },
+        { nick: network.currentNick, words: state.highlightWords, hushed: state.hushedNicks },
         present,
       ));
       if (wanted) hits.push({ message, snippet: message.text, note: null });

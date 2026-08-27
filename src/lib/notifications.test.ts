@@ -77,6 +77,54 @@ describe("what is worth a notification", () => {
     });
   });
 
+  /* The half a highlight rule alone never reached. A service notices you, a
+   * query opens, and that query notifies on `directMessages` rather than on
+   * anything the text said — so hushing has to be asked before the split. */
+  describe("a hushed sender", () => {
+    beforeEach(() => {
+      useAppStore.getState().setHushedNicks(["buildbot", "NickServ"]);
+    });
+
+    it("raises nothing in a query, which no keyword gated", () => {
+      const message = makeMessage({ nick: "buildbot", text: "deploy finished" });
+
+      expect(worthNotifying(appended("buildbot", message), message, BOTH, false)).toBeNull();
+    });
+
+    it("raises nothing by naming the reader in a channel", () => {
+      const message = makeMessage({ nick: "buildbot", text: "sable: have a look" });
+
+      expect(worthNotifying(appended("#ircx", message), message, BOTH, false)).toBeNull();
+    });
+
+    it("is folded, because nobody types a service's name the way it registered", () => {
+      const message = makeMessage({ nick: "nickserv", text: "sable: you are identified" });
+
+      expect(worthNotifying(appended("#ircx", message), message, BOTH, false)).toBeNull();
+    });
+
+    /* Above the per-conversation setting on purpose: the list is a statement
+     * about a person, and "every live message" is one about a conversation. */
+    it("stays quiet even where the conversation asked for every message", () => {
+      const message = makeMessage({ nick: "buildbot", text: "deploy finished" });
+      const every: Notifications = {
+        ...BOTH,
+        conversations: { [targetKey("libera", "buildbot")]: "all" },
+      };
+
+      expect(worthNotifying(appended("buildbot", message), message, every, false)).toBeNull();
+    });
+
+    it("leaves everybody else alone", () => {
+      const message = makeMessage({ nick: "phrack", text: "sable: have a look" });
+
+      expect(worthNotifying(appended("#ircx", message), message, BOTH, false)).toEqual({
+        title: "phrack in #ircx",
+        body: "sable: have a look",
+      });
+    });
+  });
+
   it("obeys each switch on its own", () => {
     const mention = makeMessage({ nick: "phrack", text: "sable: ping" });
     const dm = makeMessage({ nick: "buildbot", text: "deploy finished" });

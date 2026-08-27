@@ -315,7 +315,7 @@ describe("buildRows unread divider", () => {
         at(60_000 * 90, { id: "e", nick: "nyx", text: "sableton is elsewhere" }),
       ],
       "b",
-      { nick: "sable", words: [] },
+      { nick: "sable", words: [], hushed: [] },
     );
 
     const divider = rows.find((r) => r.kind === "unread");

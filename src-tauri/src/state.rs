@@ -516,6 +516,34 @@ impl App {
         Ok(())
     }
 
+    /// Writes whose lines never raise the reader and hands every session the
+    /// new list.
+    ///
+    /// All of them rather than one, like the words and unlike a mute: a name
+    /// here is not about a network, so every session holds the same list.
+    pub async fn set_hushed_nicks(&self, nicks: Vec<String>) -> Result<(), String> {
+        let nicks: Vec<String> = nicks
+            .into_iter()
+            .map(|nick| nick.trim().to_owned())
+            .filter(|nick| !nick.is_empty())
+            .collect();
+        self.store.set_hushed_nicks(&nicks).map_err(describe)?;
+
+        // Collected before the awaits, because `guard` is a std lock.
+        let senders: Vec<_> = self.guard().values().map(NetworkHandle::commands).collect();
+        for sender in senders {
+            let changed = SessionCommand::HushedNicksChanged {
+                nicks: nicks.clone(),
+            };
+            match timeout(REPLY_TIMEOUT, sender.send(changed)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => warn!("a network stopped before it could be told who is hushed"),
+                Err(_) => warn!("a network was too busy to be told who is hushed"),
+            }
+        }
+        Ok(())
+    }
+
     /// Writes a mute and hands the network its new list.
     ///
     /// One network rather than all of them, unlike the words: a mute names a

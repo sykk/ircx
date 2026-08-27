@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@/components/common/Icon";
 import {
   CheckField,
@@ -11,7 +11,7 @@ import {
 } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { useAnnounce } from "@/hooks/useAnnounce";
-import { loadHighlightWords } from "@/lib/highlights";
+import { loadHighlightWords, loadHushedNicks } from "@/lib/highlights";
 import {
   allowedToNotify,
   attentionFor,
@@ -43,6 +43,8 @@ export function NotificationsPage({
   onDone: () => void;
 }) {
   const [words, setWords] = useState<string[] | null>(null);
+  const [hushed, setHushed] = useState<string[]>([]);
+  const [hushTyped, setHushTyped] = useState("");
   const [muted, setMuted] = useState<MutedConversation[]>([]);
   const [ignored, setIgnored] = useState<IgnoredPerson[]>([]);
   const [watched, setWatched] = useState<WatchedPerson[]>([]);
@@ -60,6 +62,17 @@ export function NotificationsPage({
       (held) => setWords(held),
       (reason: unknown) =>
         setError(reasonOr(reason, "The words that raise a conversation could not be read.")),
+    );
+  }, []);
+
+  /* Separate from the words above rather than awaited with them: this list
+   * empty is a page that hushes nobody, which is the state the client is in
+   * anyway, while the words being null is a page with nothing to draw. */
+  useEffect(() => {
+    void ipc.hushedNicks().then(
+      (held) => setHushed(held),
+      (reason: unknown) =>
+        setError(reasonOr(reason, "The people who never raise one could not be read.")),
     );
   }, []);
 
@@ -213,6 +226,25 @@ export function NotificationsPage({
     [report],
   );
 
+  /** The hushed list's own `commit`, which the words' comment explains. */
+  const commitHushed = useCallback(
+    async (next: string[], before: string[]) => {
+      setHushed(next);
+      report(true);
+      try {
+        await ipc.setHushedNicks(next);
+        await loadHushedNicks();
+        setError(null);
+      } catch (reason) {
+        setHushed(before);
+        setError(reasonOr(reason, "That could not be saved."));
+      } finally {
+        report(false);
+      }
+    },
+    [report],
+  );
+
   if (words === null) {
     return (
       <SettingsPage title="Notifications" blurb={blurb} onDone={onDone}>
@@ -240,64 +272,61 @@ export function NotificationsPage({
     );
   }
 
+  function addHushed() {
+    const nick = hushTyped.trim();
+    if (nick === "") return;
+    setHushTyped("");
+    void commitHushed([...hushed, nick], hushed);
+  }
+
+  function removeHushed(at: number) {
+    void commitHushed(
+      hushed.filter((_, index) => index !== at),
+      hushed,
+    );
+  }
+
   return (
     <SettingsPage title="Notifications" blurb={blurb} onDone={onDone}>
-      <Group title="Words that raise a conversation">
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            add();
-          }}
-        >
-          <div className="flex-1">
-            <TextField
-              label="Add a word"
-              value={typed}
-              onChange={setTyped}
-              placeholder="deploy"
-              error={duplicate ? `${word} is already on the list.` : null}
-            />
-          </div>
-          <PrimaryButton type="submit" disabled={word === "" || duplicate}>
-            Add
-          </PrimaryButton>
-        </form>
+      <TypedList
+        title="Words that raise a conversation"
+        label="Add a word"
+        addLabel="Add word"
+        placeholder="deploy"
+        items={listed}
+        typed={typed}
+        onTyped={setTyped}
+        onAdd={add}
+        onRemove={remove}
+        empty="Nothing yet. Your nickname raises a conversation on its own, and always will."
+        note={
+          <>
+            A word is matched the way your nickname is: whole, and whatever the case. Adding
+            deploy finds &ldquo;Deploy failed&rdquo; and leaves &ldquo;redeployed&rdquo; alone.
+          </>
+        }
+      />
 
-        {listed.length === 0 ? (
-          <Note>
-            Nothing yet. Your nickname raises a conversation on its own, and always will.
-          </Note>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {listed.map((held, at) => (
-              <li
-                key={held}
-                className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 hover:bg-[var(--surface-hover)]"
-              >
-                <span className="truncate font-[family-name:var(--font-mono)] text-[13px] text-[var(--text-primary)]">
-                  {held}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Remove ${held}`}
-                  onClick={() => remove(at)}
-                  className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                >
-                  <Icon name="close" size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <TypedList
+        title="People who never raise one"
+        label="Add a nickname"
+        addLabel="Add nickname"
+        placeholder="NickServ"
+        items={hushed}
+        typed={hushTyped}
+        onTyped={setHushTyped}
+        onAdd={addHushed}
+        onRemove={removeHushed}
+        empty="Nothing yet. Anybody may raise a conversation by naming you."
+        note={
+          <>
+            Nothing they say raises you, and no message of theirs raises a notification. You still
+            see every line: this is not ignoring them, which drops what they say entirely.
+          </>
+        }
+      />
 
-        <Note>
-          A word is matched the way your nickname is: whole, and whatever the case. Adding deploy
-          finds &ldquo;Deploy failed&rdquo; and leaves &ldquo;redeployed&rdquo; alone.
-        </Note>
-
-        {error !== null && <Note error>{error}</Note>}
-      </Group>
+      {error !== null && <Note error>{error}</Note>}
 
       <Group title="What interrupts you">
         <CheckField
@@ -574,3 +603,99 @@ function isMuted(muted: MutedConversation[], network: string, target: string | n
 }
 
 const blurb = "What is worth interrupting you for, beside your own nickname.";
+
+/**
+ * A list of names the reader types, added to and taken from.
+ *
+ * Two of these sit at the top of this page and they were the same fifty lines
+ * twice: the words that raise a conversation, and the people who never raise
+ * one. What differs between them is only what they are called and what the
+ * notes say, which is what these props are.
+ *
+ * The duplicate check is caseless because both matches are: offering to add
+ * `Deploy` to a list already holding `deploy` offers a word that would change
+ * nothing, and the same is true of a nickname.
+ */
+function TypedList({
+  title,
+  label,
+  placeholder,
+  items,
+  typed,
+  onTyped,
+  onAdd,
+  onRemove,
+  empty,
+  note,
+  addLabel,
+}: {
+  title: string;
+  label: string;
+  /** What this list's Add button is called, the page having two of them.
+   * Distinct from `label` above, so that asking for the field by its label
+   * does not also find the button beside it. */
+  addLabel: string;
+  placeholder: string;
+  items: string[];
+  typed: string;
+  onTyped: (value: string) => void;
+  onAdd: () => void;
+  onRemove: (at: number) => void;
+  empty: string;
+  note: ReactNode;
+}) {
+  const entry = typed.trim();
+  const duplicate = items.some((held) => held.toLowerCase() === entry.toLowerCase());
+
+  return (
+    <Group title={title}>
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (entry !== "" && !duplicate) onAdd();
+        }}
+      >
+        <div className="flex-1">
+          <TextField
+            label={label}
+            value={typed}
+            onChange={onTyped}
+            placeholder={placeholder}
+            error={duplicate ? `${entry} is already on the list.` : null}
+          />
+        </div>
+        <PrimaryButton type="submit" label={addLabel} disabled={entry === "" || duplicate}>
+          Add
+        </PrimaryButton>
+      </form>
+
+      {items.length === 0 ? (
+        <Note>{empty}</Note>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {items.map((held, at) => (
+            <li
+              key={held}
+              className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 hover:bg-[var(--surface-hover)]"
+            >
+              <span className="truncate font-[family-name:var(--font-mono)] text-[13px] text-[var(--text-primary)]">
+                {held}
+              </span>
+              <button
+                type="button"
+                aria-label={`Remove ${held}`}
+                onClick={() => onRemove(at)}
+                className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Note>{note}</Note>
+    </Group>
+  );
+}

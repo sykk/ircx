@@ -104,14 +104,30 @@ if (SASL_ACCOUNT) need("secret-tool");
  * compressed, so the first screenshot is what says which you have. */
 const BUILD_RELEASE = "run: npm run tauri build -- --no-bundle";
 
-if (!existsSync(BINARY)) {
-  /* Built rather than demanded, for the debug binary — it is a minute. A
-   * release build is `lto = true` and several. */
-  if (RELEASE) throw new Error(`no release binary at ${BINARY} — ${BUILD_RELEASE}`);
+if (RELEASE) {
+  if (!existsSync(BINARY)) throw new Error(`no release binary at ${BINARY} — ${BUILD_RELEASE}`);
+} else {
+  /* Built rather than demanded — it is a minute the first time and nothing
+   * after it. Built on every run rather than only when the file is missing,
+   * because a binary left by an earlier run is not necessarily this one: the
+   * feature list below changed once, and a walk that skipped the build kept
+   * launching the old binary and failing the way it failed before.
+   *
+   * `walk` drops the single-instance plugin. Without it a machine already
+   * running ircx makes every launch hand off to that one and exit 0, so no
+   * window ever maps here and the run dies on a timeout with nothing on
+   * stderr to say why. */
   say("ok building the app, which takes a while the first time");
   const built = spawnSync(
     "cargo",
-    ["build", "--manifest-path", join(ROOT, "src-tauri", "Cargo.toml"), "--no-default-features"],
+    [
+      "build",
+      "--manifest-path",
+      join(ROOT, "src-tauri", "Cargo.toml"),
+      "--no-default-features",
+      "--features",
+      "walk",
+    ],
     { stdio: ["ignore", "ignore", "inherit"] },
   );
   if (built.status !== 0) throw new Error("cargo build failed");

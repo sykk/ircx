@@ -735,4 +735,49 @@ mod tests {
         );
         let _ = tokio::fs::remove_file(partial(&landed)).await;
     }
+    /// A forwarded port range is a promise made to a router, so an offer that
+    /// names a port outside it names one nothing outside can reach. The first
+    /// port of the range is already in use here, which is the ordinary case:
+    /// the range is somebody's guess at what is spare, and the listener has to
+    /// walk past what is not rather than give up on the first refusal.
+    #[tokio::test]
+    async fn opens_a_port_inside_the_range_it_was_given() {
+        let occupied = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
+            .await
+            .expect("a port to occupy");
+        let first = occupied.local_addr().expect("the port").port();
+        let last = first + 8;
+
+        let waiting = Waiting::open(Some((first, last)), Ipv4Addr::LOCALHOST.into())
+            .await
+            .expect("a port inside the range");
+        let port = waiting.port();
+
+        assert!(
+            (first..=last).contains(&port),
+            "{port} is outside the {first}-{last} that was forwarded"
+        );
+        assert_ne!(port, first, "and is not the one already in use");
+    }
+
+    /// Falling back to a port the operating system chose would be worse than
+    /// failing: the transfer would open, the offer would name a port the router
+    /// forwards nowhere, and the other side would sit on a connection that
+    /// never arrives until it timed out.
+    #[tokio::test]
+    async fn refuses_a_range_with_nothing_free_in_it() {
+        let occupied = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
+            .await
+            .expect("a port to occupy");
+        let only = occupied.local_addr().expect("the port").port();
+
+        let refused = Waiting::open(Some((only, only)), Ipv4Addr::LOCALHOST.into())
+            .await
+            .err();
+
+        assert!(
+            matches!(refused, Some(TransferError::NoFreePort { first, last }) if first == only && last == only),
+            "{refused:?}"
+        );
+    }
 }

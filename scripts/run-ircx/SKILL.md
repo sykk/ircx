@@ -332,6 +332,15 @@ already one directory per worktree — see Gotchas for what sharing one costs.
   `pkill -f target/debug/ircx` appears in the `bash -c` wrapper's own command
   line, so it kills the shell before the app. Kill by exact name (`pkill -x
   ircx`) or by the pid you started.
+- **A second ircx on the machine used to make every launch a timeout.** The
+  single-instance plugin hands a launch off to the ircx already running and
+  exits 0, so nothing maps on `Xvfb` and the run dies on `timed out waiting for
+  the app to create its profile` with nothing on stderr underneath it — the app
+  did what it was built to do. `window.mjs` builds with the `walk` feature,
+  which drops the plugin, and builds on every run because a binary an earlier
+  run left may not carry it. Launching the app by hand, build the same way:
+  `cargo build --manifest-path src-tauri/Cargo.toml --no-default-features
+  --features walk`.
 - **Two checkouts must not share one target directory.** This entry used to say
   the opposite — that a fresh worktree rebuilds ~51G, so point
   `CARGO_TARGET_DIR` at another checkout's `target/`. Both halves were wrong.

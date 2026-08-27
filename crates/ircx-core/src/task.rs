@@ -181,6 +181,12 @@ pub enum SessionCommand {
         target: TargetName,
         active: bool,
     },
+    /// Ask the server about somebody, for a panel rather than for the server
+    /// tab. Sent when an inspector opens on a member whose real name is not
+    /// known; the answer goes to the roster and draws nothing.
+    LookUp {
+        nick: String,
+    },
     /// `message` is the server `msgid` being reacted to; `active` is false to
     /// take the reaction back.
     React {
@@ -781,6 +787,7 @@ async fn apply(
         SessionCommand::CloseTarget { target } => session.close_target(&target),
         SessionCommand::MarkRead { target } => session.mark_read(&target),
         SessionCommand::SetTyping { target, active } => session.set_typing(&target, active),
+        SessionCommand::LookUp { nick } => session.look_up(&nick),
         SessionCommand::React {
             target,
             message,

@@ -4,4 +4,11 @@ export type Member = { nick: string, account: string | null,
 /**
  * Highest first. Only complete when `multi-prefix` is negotiated.
  */
-prefixes: Array<string>, away: string | null, };
+prefixes: Array<string>, away: string | null, 
+/**
+ * What somebody calls themselves. `None` is not knowing rather than not
+ * having one: it arrives with an `extended-join`, in a `SETNAME`, or in
+ * the `WHOIS` the inspector asks for, and nothing asks on behalf of
+ * everybody already in the channel.
+ */
+realname: string | null, };

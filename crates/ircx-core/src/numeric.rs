@@ -28,6 +28,8 @@ pub const RPL_WHOISUSER: u16 = 311;
 pub const RPL_WHOISSERVER: u16 = 312;
 pub const RPL_WHOISIDLE: u16 = 317;
 pub const RPL_WHOISCHANNELS: u16 = 319;
+/// The end of a whois block, whatever the server put in it.
+pub const RPL_ENDOFWHOIS: u16 = 318;
 pub const RPL_WHOISACCOUNT: u16 = 330;
 /// A channel and a unix timestamp, with no words at all.
 pub const RPL_CREATIONTIME: u16 = 329;

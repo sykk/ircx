@@ -206,6 +206,20 @@ impl Harness {
         self.apply(actions);
     }
 
+    fn look_up(&mut self, nick: &str) {
+        let actions = self.state.look_up(nick);
+        self.apply(actions);
+    }
+
+    /// What the member list says about one person, which is where a real name
+    /// is drawn from.
+    fn member(&self, channel: &str, nick: &str) -> Option<Member> {
+        self.state
+            .members(channel)
+            .into_iter()
+            .find(|member| member.nick == nick)
+    }
+
     fn react(&mut self, target: &str, message: &str, emoji: &str, active: bool) {
         let actions = self.state.react(target, message, emoji, active);
         self.apply(actions);
@@ -961,11 +975,11 @@ fn the_echo_of_a_setname_is_registered_with_again_and_written_down() {
     );
 }
 
-/// `Member` carries no real name and the inspector draws none, so there is
-/// nowhere for somebody else's to go. Receiving them is not optional: the
-/// capability is one, and asking for it is what makes `SETNAME` sendable.
+/// Somebody else's goes to their roster entry, which the test below this one
+/// covers. What it must not reach is the network's own config: that is the
+/// name this client registers with.
 #[test]
-fn somebody_elses_setname_is_not_drawn() {
+fn somebody_elses_setname_is_not_written_down_as_yours() {
     let mut session = registered("setname");
     session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
     session.feed(":rae!~rae@example.net JOIN #ircx");
@@ -973,8 +987,142 @@ fn somebody_elses_setname_is_not_drawn() {
 
     session.feed(":rae!~rae@example.net SETNAME :Rae, elsewhere");
 
-    assert!(session.messages().is_empty());
     assert!(session.realname_writes.is_empty());
+    assert!(session.messages().is_empty());
+}
+
+/// `extended-join` puts the real name in the third parameter, beside the
+/// account in the second.
+#[test]
+fn a_real_name_arrives_with_an_extended_join() {
+    let mut session = registered("extended-join");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":rae!~rae@example.net JOIN #ircx raeaccount :Rae, of somewhere");
+
+    let member = session
+        .member("#ircx", "rae")
+        .expect("rae is in the channel");
+    assert_eq!(member.realname.as_deref(), Some("Rae, of somewhere"));
+    assert_eq!(member.account.as_deref(), Some("raeaccount"));
+}
+
+/// A plain `JOIN` carries neither, and must not be read as though it did.
+#[test]
+fn a_join_without_the_capability_leaves_the_real_name_unknown() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":rae!~rae@example.net JOIN #ircx");
+
+    let member = session
+        .member("#ircx", "rae")
+        .expect("rae is in the channel");
+    assert_eq!(member.realname, None);
+}
+
+/// Somebody else renaming themselves is a fact about them rather than something
+/// that happened in the conversation.
+#[test]
+fn somebody_elses_setname_moves_their_real_name_and_draws_nothing() {
+    let mut session = registered("extended-join setname");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":rae!~rae@example.net JOIN #ircx * :Rae, of somewhere");
+    session.events.clear();
+
+    session.feed(":rae!~rae@example.net SETNAME :Rae, of somewhere else");
+
+    assert_eq!(
+        session.member("#ircx", "rae").and_then(|m| m.realname),
+        Some("Rae, of somewhere else".to_string())
+    );
+    assert!(session.messages().is_empty(), "no row is drawn for it");
+}
+
+/// The inspector's question. One `WHOIS` goes out, the answer lands on the
+/// member, and none of the block reaches the server tab.
+#[test]
+fn a_looked_up_whois_fills_the_member_and_draws_no_row() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sykk rae");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+    session.sent();
+    session.events.clear();
+
+    session.look_up("rae");
+    assert_eq!(session.sent(), vec!["WHOIS rae"]);
+
+    session.feed(":irc.libera.chat 311 sykk rae ~rae example.net * :Rae, of somewhere");
+    session.feed(":irc.libera.chat 330 sykk rae raeaccount :is logged in as");
+    session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
+
+    let member = session
+        .member("#ircx", "rae")
+        .expect("rae is in the channel");
+    assert_eq!(member.realname.as_deref(), Some("Rae, of somewhere"));
+    assert_eq!(
+        member.account.as_deref(),
+        Some("raeaccount"),
+        "the account is in the same block and would be swallowed with it"
+    );
+    assert!(session.messages().is_empty(), "the block is not drawn");
+}
+
+/// `318` ends the block. Without that the next thing the server said about
+/// them would be swallowed too.
+#[test]
+fn the_end_of_a_whois_stops_the_swallowing() {
+    let mut session = registered("");
+    session.look_up("rae");
+    session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
+    session.sent();
+    session.events.clear();
+
+    session.feed(":irc.libera.chat 311 sykk rae ~rae example.net * :Rae, of somewhere");
+
+    let said: Vec<&str> = session.messages().iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(
+        said,
+        vec!["rae is ~rae@example.net, calling themselves Rae, of somewhere"]
+    );
+}
+
+/// A whois the reader typed keeps what it says rather than only saying it: the
+/// sentence was the only thing #661 found being done with a real name.
+#[test]
+fn a_typed_whois_keeps_the_real_name_it_narrates() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sykk rae");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+    session.events.clear();
+
+    session.feed(":irc.libera.chat 311 sykk rae ~rae example.net * :Rae, of somewhere");
+
+    assert_eq!(
+        session.member("#ircx", "rae").and_then(|m| m.realname),
+        Some("Rae, of somewhere".to_string())
+    );
+    assert_eq!(session.messages().len(), 1, "and still draws its sentence");
+}
+
+/// The inspector mounts twice under StrictMode and asks twice. The second one
+/// is not a second question for the server.
+#[test]
+fn a_second_look_up_while_one_is_outstanding_asks_once() {
+    let mut session = registered("");
+    session.look_up("rae");
+    session.sent();
+
+    session.look_up("rae");
+    assert!(session.sent().is_empty());
+
+    session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
+    session.look_up("rae");
+    assert_eq!(
+        session.sent(),
+        vec!["WHOIS rae"],
+        "answered, so askable again"
+    );
 }
 
 #[test]

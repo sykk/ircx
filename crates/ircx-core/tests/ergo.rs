@@ -120,6 +120,7 @@ async fn against_ergo() {
     a_topic_typed_here_comes_back_changed(&mut report, &mut live).await;
     a_topic_refused_says_why(&mut report, &mut live).await;
     a_setname_is_taken_and_shows_in_a_whois(&mut report, &mut live).await;
+    a_look_up_fills_a_member_and_draws_nothing(&mut report, &mut live).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
@@ -415,6 +416,48 @@ async fn a_setname_is_taken_and_shows_in_a_whois(report: &mut Report, live: &mut
             &format!("the server still reports {}", message.text),
         ),
         None => report.fail("setname in whois", "the whois said no real name at all"),
+    }
+}
+
+/// The inspector's question, which is a `WHOIS` nobody typed. #661.
+///
+/// What needs a real server is the suppression: it holds every numeric naming
+/// the person until `318`, on the strength of every whois numeric putting them
+/// first, and a server answering with one that does not would leak a line into
+/// the server tab. Ergo sends six of them.
+async fn a_look_up_fills_a_member_and_draws_nothing(report: &mut Report, live: &mut Live) {
+    live.send(SessionCommand::LookUp {
+        nick: OTHER_NICK.into(),
+    })
+    .await;
+
+    let found = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::MemberUpdated { member, .. } if member.nick == OTHER_NICK => {
+                member.realname.clone()
+            }
+            _ => None,
+        })
+        .await;
+    match found {
+        Some(realname) => report.pass("look up", &realname),
+        None => {
+            report.fail("look up", "no real name came back on the member");
+            return;
+        }
+    }
+
+    // By now `311` has been through, so a drawn one would be in hand. Named,
+    // because the step above this one types a `/whois` whose sentence is drawn
+    // and is supposed to be.
+    match live.seen_message(|message| {
+        message.text.contains("calling themselves") && message.text.contains(OTHER_NICK)
+    }) {
+        Some(message) => report.fail("look up drew nothing", &message.text),
+        None => report.pass(
+            "look up drew nothing",
+            "the block stayed out of the server tab",
+        ),
     }
 }
 

@@ -269,6 +269,11 @@ pub struct Member {
     /// Highest first. Only complete when `multi-prefix` is negotiated.
     pub prefixes: Vec<String>,
     pub away: Option<String>,
+    /// What somebody calls themselves. `None` is not knowing rather than not
+    /// having one: it arrives with an `extended-join`, in a `SETNAME`, or in
+    /// the `WHOIS` the inspector asks for, and nothing asks on behalf of
+    /// everybody already in the channel.
+    pub realname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

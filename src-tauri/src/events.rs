@@ -386,6 +386,7 @@ mod tests {
                 account: None,
                 prefixes: vec![],
                 away: None,
+                realname: None,
             },
         }
     }

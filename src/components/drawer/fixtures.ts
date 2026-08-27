@@ -4,7 +4,7 @@ import type { Channel, Member, Network } from "@/types";
  * a component; tests are the only consumer. */
 
 export function member(nick: string, extra: Partial<Member> = {}): Member {
-  return { nick, account: null, prefixes: [], away: null, ...extra };
+  return { nick, account: null, prefixes: [], away: null, realname: null, ...extra };
 }
 
 /** The member list from `docs/mockup.png`, plus the two cases the mockup cannot
@@ -52,6 +52,7 @@ export function crowd(count: number): Member[] {
       account: next() % 100 < 60 ? nick : null,
       prefixes,
       away: next() % 100 < 8 ? pick(AWAY_REASONS) : null,
+      realname: null,
     });
   }
   return members;

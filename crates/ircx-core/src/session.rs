@@ -89,6 +89,11 @@ pub enum Action {
         nick: String,
         watched: bool,
     },
+    /// The real name the server accepted. The session registers with it again
+    /// on its own; this is durability, so the next launch does too.
+    Realname {
+        text: String,
+    },
     /// Open the connection this transfer needs and move the file. Everything
     /// the task layer has to decide is settled in here; what it reports back
     /// are the port it opened, how far it has got, and how it ended.
@@ -887,6 +892,7 @@ impl SessionState {
                     "QUIT" => self.handle_quit(message),
                     "KICK" => self.handle_kick(message),
                     "NICK" => self.handle_nick(message),
+                    "SETNAME" => self.handle_setname(message),
                     "MODE" => self.handle_mode(message),
                     "TOPIC" => self.handle_topic(message),
                     "INVITE" => self.handle_invite(message),
@@ -2643,6 +2649,31 @@ impl SessionState {
                 network: self.snapshot(),
             });
         }
+    }
+
+    /// Only your own. `Member` carries no real name and the inspector draws
+    /// none, so somebody else's has nowhere to land — and there is no half of
+    /// the capability to negotiate: a client that can send `SETNAME` is sent
+    /// them.
+    fn handle_setname(&mut self, message: &Message) {
+        let Some(realname) = message.param(0).map(str::to_string) else {
+            return;
+        };
+        if !self.sender_of(message).is_self {
+            return;
+        }
+        // Both, because they reach different distances: `config` is what
+        // registers again on a reconnect inside this run, and the store is what
+        // the next launch reads.
+        self.config.realname = realname.clone();
+        self.actions.push(Action::Realname {
+            text: realname.clone(),
+        });
+        self.note(
+            SERVER_TARGET,
+            MessageKind::Client,
+            format!("Your real name is now {realname}."),
+        );
     }
 
     fn handle_mode(&mut self, message: &Message) {

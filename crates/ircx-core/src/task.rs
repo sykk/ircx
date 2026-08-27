@@ -1194,6 +1194,11 @@ impl Context {
                         warn!(%error, %nick, "could not write a watched nick down");
                     }
                 }
+                Action::Realname { text } => {
+                    if let Err(error) = self.store.set_network_realname(&self.network, &text) {
+                        warn!(%error, "could not write the real name down");
+                    }
+                }
                 Action::RunTransfer(job) => self.start_transfer(*job),
                 Action::StopTransfer { id } => {
                     if let Some(running) = self.running_transfers().remove(&id) {

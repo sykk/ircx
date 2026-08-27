@@ -42,6 +42,7 @@ export const COMMANDS: SlashCommand[] = [
   { name: "react", args: "<msgid> <value>", summary: "React to a message" },
   { name: "unreact", args: "<msgid> <value>", summary: "Take a reaction back" },
   { name: "nick", args: "<nick>", summary: "Change your nickname" },
+  { name: "setname", args: "<text>", summary: "Change the real name a whois shows" },
   { name: "topic", args: "[topic]", summary: "Show or set the channel topic" },
   { name: "mode", args: "<target> <modes>", summary: "Change channel or user modes" },
   { name: "kick", args: "<nick> [reason]", summary: "Remove someone from the channel" },

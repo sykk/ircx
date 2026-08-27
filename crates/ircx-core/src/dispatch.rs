@@ -28,6 +28,7 @@ const HELP: &str = "\
 /react <msgid> <value>    react to a message
 /unreact <msgid> <value>  take that reaction back
 /nick <nick>              change your nickname
+/setname <text>           change the real name a whois shows
 /topic [text]             read or set the topic
 /mode [target] <modes>    read or set modes
 /kick <nick> [reason]     remove someone from the channel
@@ -304,6 +305,7 @@ impl SessionState {
             "me" => self.cmd_me(target, args, reply_to),
             "query" => self.cmd_query(args),
             "nick" => self.one_argument("NICK", args, "/nick <nickname>"),
+            "setname" => self.cmd_setname(args),
             "topic" => self.cmd_topic(target, args),
             "mode" => self.cmd_mode(target, args),
             "kick" => self.cmd_kick(target, args),
@@ -509,6 +511,23 @@ impl SessionState {
                 self.append(message);
             }
         }
+        CommandOutcome::Handled
+    }
+
+    /// Refused rather than sent where the capability is off: a `SETNAME` the
+    /// server has no command for comes back as an unknown-command numeric that
+    /// names it and explains nothing about the name.
+    fn cmd_setname(&mut self, args: &str) -> CommandOutcome {
+        if args.is_empty() {
+            return CommandOutcome::Rejected("`/setname <text>` needs a name".into());
+        }
+        if !self.caps.is_enabled("setname") {
+            return CommandOutcome::Rejected(format!(
+                "{} does not offer setname. Change the real name in this network's settings and reconnect.",
+                self.network_name()
+            ));
+        }
+        self.send_command("SETNAME", &[args]);
         CommandOutcome::Handled
     }
 

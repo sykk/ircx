@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 
 use ircx_core::{
     spawn_network_with_plugins, Grants, NetworkHandle, Permission, PluginLimits, PluginRuntime,
-    SessionCommand, SessionConfig,
+    SessionCommand, SessionConfig, SERVER_TARGET,
 };
 use ircx_ipc::{ChatMessage, ConnectionStatus, Delivery, IrcxEvent, MessageKind, MessageSource};
 use ircx_store::Store;
@@ -115,6 +115,7 @@ async fn against_ergo() {
     topic_on_join(&mut report, &mut live, &mut other).await;
     a_topic_typed_here_comes_back_changed(&mut report, &mut live).await;
     a_topic_refused_says_why(&mut report, &mut live).await;
+    a_setname_is_taken_and_shows_in_a_whois(&mut report, &mut live).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
@@ -350,6 +351,50 @@ async fn a_topic_refused_says_why(report: &mut Report, live: &mut Live) {
             "topic refused",
             "the server refused with 482 and nothing was said",
         ),
+    }
+}
+
+/// Libera's solanum offers no `setname`, so this is the only server here that
+/// can be asked. The echo is the client's own confirmation; the `WHOIS` after
+/// it reads the name back off the server rather than off anything this session
+/// is holding, which is the half that says the change took.
+async fn a_setname_is_taken_and_shows_in_a_whois(report: &mut Report, live: &mut Live) {
+    const NAME: &str = "ircx verification run, renamed";
+    live.submit(SERVER_TARGET, &format!("/setname {NAME}"))
+        .await;
+
+    match live
+        .said(PATIENCE, |message| {
+            message.text.starts_with("Your real name is now")
+        })
+        .await
+    {
+        Some(message) if message.text.contains(NAME) => report.pass("setname", &message.text),
+        Some(message) => {
+            report.fail("setname", &format!("came back as {}", message.text));
+            return;
+        }
+        None => {
+            report.fail("setname", "the server never echoed the SETNAME");
+            return;
+        }
+    }
+
+    live.submit(SERVER_TARGET, "/whois ircx-drive").await;
+    match live
+        .said(PATIENCE, |message| {
+            message.text.contains("calling themselves")
+        })
+        .await
+    {
+        Some(message) if message.text.contains(NAME) => {
+            report.pass("setname in whois", &message.text)
+        }
+        Some(message) => report.fail(
+            "setname in whois",
+            &format!("the server still reports {}", message.text),
+        ),
+        None => report.fail("setname in whois", "the whois said no real name at all"),
     }
 }
 

@@ -860,6 +860,17 @@ impl Store {
         Ok(())
     }
 
+    /// What `/setname` changed, so the next launch registers with it. The rest
+    /// of the row is left alone: this is the only field the server can change
+    /// under a config nobody edited.
+    pub fn set_network_realname(&self, network: &str, realname: &str) -> Result<(), StoreError> {
+        self.writing().execute(
+            "UPDATE networks SET realname = ?2 WHERE id = ?1",
+            params![network, realname],
+        )?;
+        Ok(())
+    }
+
     /// The SASL password goes to the keyring and never to SQLite. A config
     /// saved without one leaves any stored password alone; dropping SASL
     /// entirely deletes it.
@@ -1792,6 +1803,44 @@ pub(crate) fn from_json_column<T: DeserializeOwned>(
 mod tests {
     use super::*;
     use ircx_ipc::{SaslConfig, SaslMechanism};
+
+    /// `/setname` writes back to a row nobody edited, so the rest of it has to
+    /// survive the write.
+    #[test]
+    fn setting_the_realname_leaves_the_rest_of_the_network_alone() {
+        let store = Store::open_in_memory().unwrap();
+        let id = store
+            .save_network(&NetworkConfig {
+                id: None,
+                name: "Libera".into(),
+                host: "irc.libera.chat".into(),
+                port: 6697,
+                tls: true,
+                tls_verify: true,
+                socks5_proxy: None,
+                nick: "sykk".into(),
+                alt_nicks: vec!["sykk_".into()],
+                username: "sykk".into(),
+                realname: "sykk".into(),
+                sasl: None,
+                connect_commands: vec![],
+                autojoin: vec!["#ircx".into()],
+                auto_connect: true,
+                client_certificate: None,
+                quit_message: None,
+                part_message: None,
+                away_message: None,
+            })
+            .unwrap();
+
+        store.set_network_realname(&id, "Sykk, of ircx").unwrap();
+
+        let saved = store.list_networks().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].realname, "Sykk, of ircx");
+        assert_eq!(saved[0].nick, "sykk");
+        assert_eq!(saved[0].autojoin, vec!["#ircx".to_string()]);
+    }
 
     #[test]
     fn a_password_never_lands_in_sqlite() {

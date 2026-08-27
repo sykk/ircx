@@ -24,6 +24,11 @@ historical results in Git and add a test when a check becomes repeatable.
   Hide and restore the list in a narrow split pane.
 - [ ] Open the channel browser from a network action and from the command
   palette, then close it with Escape and confirm focus returns to its opener.
+- [ ] Click "Show in folder" on a finished transfer and "Open themes folder" on
+  the Appearance page. Both reach `opener:allow-open-path`, whose scope is
+  checked in the Rust side and mocked away in every frontend test, so a path the
+  capability refuses looks exactly like one it allows until a file manager
+  opens.
 
 ## Status icon
 

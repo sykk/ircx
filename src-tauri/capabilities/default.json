@@ -20,6 +20,9 @@
     "opener:allow-open-url",
     "opener:allow-default-urls",
     "core:webview:allow-set-webview-zoom",
-    "opener:allow-open-path"
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }, { "path": "$APPDATA/themes" }]
+    }
   ]
 }

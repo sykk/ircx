@@ -66,6 +66,9 @@ fn config(port: u16) -> SessionConfig {
         sasl: None,
         connect_commands: Vec::new(),
         autojoin: vec![CHANNEL.into()],
+        quit_message: None,
+        part_message: None,
+        away_message: None,
     }
 }
 

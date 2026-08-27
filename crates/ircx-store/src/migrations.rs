@@ -26,6 +26,8 @@ const MIGRATIONS: &[&str] = &[
     SOCKS5_PROXY,
     WATCHED_NICKS,
     TRANSFER_SETTINGS,
+    DEFAULT_MESSAGES,
+    TRAY_SETTINGS,
     HUSHED_NICKS,
 ];
 
@@ -446,6 +448,26 @@ CREATE TABLE transfer_settings (
     last_port   INTEGER,
     address     TEXT,
     passive     INTEGER NOT NULL
+);
+"#;
+
+/// Null rather than defaulted to a string: `QUIT` and `PART` are allowed to
+/// carry no reason at all, and a column filled in for every network already
+/// saved would put words in the mouth of somebody who never typed any.
+const DEFAULT_MESSAGES: &str = r#"
+ALTER TABLE networks ADD COLUMN quit_message TEXT;
+ALTER TABLE networks ADD COLUMN part_message TEXT;
+ALTER TABLE networks ADD COLUMN away_message TEXT;
+"#;
+
+/// One row, like the transfer settings above and for the same reason: none of
+/// it is per network. An absent row is the default, which is to hide — a client
+/// left running is the point of a status icon, and the alternative default
+/// drops the connection every time somebody closes a window.
+const TRAY_SETTINGS: &str = r#"
+CREATE TABLE tray_settings (
+    only          INTEGER PRIMARY KEY CHECK (only = 0),
+    close_to_tray INTEGER NOT NULL
 );
 "#;
 

@@ -187,6 +187,9 @@ fn the_rest_of_what_the_reader_answers_is_current_too() {
             autojoin: vec![],
             auto_connect: false,
             client_certificate: None,
+            quit_message: None,
+            part_message: None,
+            away_message: None,
         })
         .expect("the network saves");
     assert_eq!(

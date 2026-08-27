@@ -79,6 +79,9 @@ fn network(name: &str) -> NetworkConfig {
         autojoin: vec!["#ircx".into()],
         auto_connect: true,
         client_certificate: None,
+        quit_message: None,
+        part_message: None,
+        away_message: None,
     }
 }
 
@@ -1110,6 +1113,9 @@ fn networks_round_trip_without_the_password() {
     let store = Store::open_in_memory().unwrap();
     let mut config = network("Libera");
     config.socks5_proxy = Some("proxy.example.com:1080".into());
+    config.quit_message = Some("later".into());
+    config.part_message = Some("off to lunch".into());
+    config.away_message = Some("in a meeting".into());
     config.sasl = Some(SaslConfig {
         mechanism: SaslMechanism::Plain,
         account: "sykk".into(),
@@ -1136,6 +1142,9 @@ fn networks_round_trip_without_the_password() {
     assert_eq!(saved.autojoin, config.autojoin);
     assert_eq!(saved.auto_connect, config.auto_connect);
     assert_eq!(saved.client_certificate, config.client_certificate);
+    assert_eq!(saved.quit_message, config.quit_message);
+    assert_eq!(saved.part_message, config.part_message);
+    assert_eq!(saved.away_message, config.away_message);
 
     let sasl = saved.sasl.as_ref().unwrap();
     assert_eq!(sasl.mechanism, SaslMechanism::Plain);
@@ -2186,6 +2195,9 @@ mod upload_provider {
                 autojoin: vec![],
                 auto_connect: false,
                 client_certificate: None,
+                quit_message: None,
+                part_message: None,
+                away_message: None,
             })
             .unwrap();
         store.save_upload_provider(&provider()).unwrap();
@@ -2405,6 +2417,9 @@ mod archive_controls {
                 autojoin: vec![],
                 auto_connect: true,
                 client_certificate: None,
+                quit_message: None,
+                part_message: None,
+                away_message: None,
             })
             .unwrap();
 
@@ -3252,4 +3267,18 @@ fn hushed_nicks_round_trip_in_the_order_they_were_written() {
 
     store.set_hushed_nicks(&[]).unwrap();
     assert!(store.hushed_nicks().unwrap().is_empty());
+}
+
+/// Nobody has chosen yet on a database that has just been made, and the answer
+/// then is to hide: a client that keeps running is what a status icon is for.
+#[test]
+fn closing_to_the_tray_is_the_answer_until_somebody_says_otherwise() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(store.close_to_tray().unwrap());
+
+    store.set_close_to_tray(false).unwrap();
+    assert!(!store.close_to_tray().unwrap());
+
+    store.set_close_to_tray(true).unwrap();
+    assert!(store.close_to_tray().unwrap());
 }

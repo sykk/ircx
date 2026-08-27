@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -57,6 +58,11 @@ pub struct App {
     /// been dropped: Tauri runs commands concurrently, so a guard living
     /// across a send would let one blocked network stall every other command.
     networks: Mutex<HashMap<NetworkId, NetworkHandle>>,
+    /// Whether the close button hides the window rather than ending the
+    /// session. Held here as well as in the archive because the window's close
+    /// handler runs on the main thread and has no way to await a read: it has
+    /// to answer before the window goes.
+    close_to_tray: AtomicBool,
 }
 
 impl App {
@@ -65,13 +71,30 @@ impl App {
         events: mpsc::Sender<IrcxEvent>,
         plugins: Option<Arc<PluginRuntime>>,
     ) -> Self {
+        // An unreadable preference is not a reason to refuse to start, and the
+        // default it falls back to is the recoverable one either way: a window
+        // that hid can be shown again from the icon it hid to.
+        let close_to_tray = AtomicBool::new(store.close_to_tray().unwrap_or(true));
         Self {
             store,
             pruned: Mutex::new(0),
             events,
             plugins,
             networks: Mutex::new(HashMap::new()),
+            close_to_tray,
         }
+    }
+
+    /// What the close button does, as the window's own handler asks it.
+    pub fn close_to_tray(&self) -> bool {
+        self.close_to_tray.load(Ordering::Relaxed)
+    }
+
+    /// Writes the choice down and moves the copy the close handler reads.
+    pub fn set_close_to_tray(&self, hide: bool) -> Result<(), String> {
+        self.store.set_close_to_tray(hide).map_err(describe)?;
+        self.close_to_tray.store(hide, Ordering::Relaxed);
+        Ok(())
     }
 
     pub fn store(&self) -> &Store {
@@ -770,6 +793,9 @@ mod tests {
             auto_connect: false,
             client_certificate: None,
             socks5_proxy: None,
+            quit_message: None,
+            part_message: None,
+            away_message: None,
         }
     }
 

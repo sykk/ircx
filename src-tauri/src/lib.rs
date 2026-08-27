@@ -7,6 +7,7 @@ mod sigv4;
 mod state;
 mod themes;
 mod transfers;
+mod tray;
 mod upload;
 
 use std::sync::Arc;
@@ -166,7 +167,7 @@ pub fn run() {
         .init();
 
     let builder = tauri::Builder::default();
-    #[cfg(desktop)]
+    #[cfg(all(desktop, not(feature = "walk")))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
@@ -234,6 +235,8 @@ pub fn run() {
             commands::set_watched,
             commands::transfer_settings,
             commands::set_transfer_settings,
+            commands::tray_settings,
+            commands::set_close_to_tray,
             commands::list_transfers,
             commands::offer_file,
             commands::accept_transfer,
@@ -266,6 +269,10 @@ pub fn run() {
             themes::watch(app.handle().clone());
             app.manage(App::new(store, events, open_plugins(app.handle())));
 
+            // Before the close handler, which asks whether one was built.
+            tray::build(app.handle());
+            watch_the_close_button(app.handle());
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move { handle.state::<App>().start().await });
             Ok(())
@@ -283,6 +290,60 @@ pub fn run() {
             }
         }
     });
+}
+
+/// Makes the close button mean "put ircx away" rather than "end the session".
+///
+/// The whole point of leaving an IRC client running is being there when
+/// somebody says your name, and a close button that drops every connection is
+/// the one gesture most likely to be made by accident. It only holds the window
+/// where there is a status icon to hold it in — `tray::available` is asked on
+/// every close rather than once, because the answer is what stops a hidden
+/// window from being an unreachable one.
+///
+/// Said out loud the first time it happens in a run. A window that vanishes
+/// with no explanation is indistinguishable from a client that crashed, and the
+/// reader most likely to need telling is the one who has just started it.
+fn watch_the_close_button(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let handle = app.clone();
+    let told = std::sync::atomic::AtomicBool::new(false);
+
+    window.on_window_event(move |event| {
+        let tauri::WindowEvent::CloseRequested { api, .. } = event else {
+            return;
+        };
+        let Some(app) = handle.try_state::<App>() else {
+            return;
+        };
+        if !app.close_to_tray() || !tray::available(&handle) {
+            return;
+        }
+        api.prevent_close();
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.hide();
+        }
+        if !told.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            say_where_it_went(&handle);
+        }
+    });
+}
+
+/// One notification, the first time a close hides the window in a run.
+fn say_where_it_went(app: &tauri::AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+
+    if let Err(error) = app
+        .notification()
+        .builder()
+        .title("ircx is still running")
+        .body("Your connections are up. Open it again from the status icon.")
+        .show()
+    {
+        warn!(%error, "could not say that the window went to the status icon");
+    }
 }
 
 fn open_store(app: &tauri::AppHandle) -> Result<Store, Box<dyn std::error::Error>> {

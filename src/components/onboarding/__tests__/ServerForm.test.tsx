@@ -47,6 +47,33 @@ beforeEach(() => {
   certificateFingerprint.mockResolvedValue(FINGERPRINT);
 });
 
+describe("default messages", () => {
+  it("are on the advanced form and nowhere else", () => {
+    form();
+    for (const label of [/^Quit message/, /^Part message/, /^Away message/]) {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    }
+  });
+
+  it("reach the draft as typed", () => {
+    const onChange = form();
+    fireEvent.change(screen.getByLabelText(/^Quit message/), {
+      target: { value: "later" },
+    });
+    expect(onChange).toHaveBeenCalledWith({ quitMessage: "later" });
+  });
+
+  /* An empty quit or part box means no reason at all, so a placeholder naming
+   * one would be a promise the wire does not keep. Away is the exception: a
+   * bare AWAY is how a client says it is back, so it always carries a word. */
+  it("promise a fallback only where there is one", () => {
+    form();
+    expect(screen.getByLabelText(/^Quit message/).getAttribute("placeholder")).toBeNull();
+    expect(screen.getByLabelText(/^Part message/).getAttribute("placeholder")).toBeNull();
+    expect(screen.getByLabelText(/^Away message/).getAttribute("placeholder")).toBe("Away");
+  });
+});
+
 describe("SOCKS5 proxy", () => {
   it("is available in advanced network settings", () => {
     form();

@@ -24,7 +24,7 @@ use credentials::{CredentialStore, MemoryCredentials, OsKeyring};
 
 const NETWORK_COLUMNS: &str = "id, name, host, port, tls, tls_verify, nick, alt_nicks, username, \
      realname, sasl_mechanism, sasl_account, connect_commands, autojoin, auto_connect, \
-     client_certificate, socks5_proxy";
+     client_certificate, socks5_proxy, quit_message, part_message, away_message";
 
 /// A network-wide retention rule is stored as a target override with no target.
 const DEFAULT_TARGET: &str = "";
@@ -890,7 +890,8 @@ impl Store {
         self.writing().execute(
             &format!(
                 "INSERT INTO networks ({NETWORK_COLUMNS})
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                         ?17, ?18, ?19, ?20)
                  ON CONFLICT (id) DO UPDATE SET
                      name = excluded.name,
                      host = excluded.host,
@@ -907,7 +908,10 @@ impl Store {
                      autojoin = excluded.autojoin,
                      auto_connect = excluded.auto_connect,
                      client_certificate = excluded.client_certificate,
-                     socks5_proxy = excluded.socks5_proxy"
+                     socks5_proxy = excluded.socks5_proxy,
+                     quit_message = excluded.quit_message,
+                     part_message = excluded.part_message,
+                     away_message = excluded.away_message"
             ),
             params![
                 id,
@@ -927,6 +931,9 @@ impl Store {
                 config.auto_connect,
                 config.client_certificate,
                 config.socks5_proxy,
+                config.quit_message,
+                config.part_message,
+                config.away_message,
             ],
         )?;
 
@@ -1349,6 +1356,32 @@ impl Store {
         Ok(())
     }
 
+    /// Whether closing the window hides it rather than ending the session.
+    ///
+    /// No row means nobody has chosen, and the answer then is to hide: a client
+    /// left running is what a status icon is for. Whether there is an icon to
+    /// hide to is the shell's question, not this one's.
+    pub fn close_to_tray(&self) -> Result<bool, StoreError> {
+        let chosen: Option<i64> = self
+            .reading()
+            .query_row(
+                "SELECT close_to_tray FROM tray_settings WHERE only = 0",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(chosen != Some(0))
+    }
+
+    pub fn set_close_to_tray(&self, hide: bool) -> Result<(), StoreError> {
+        self.writing().execute(
+            "INSERT INTO tray_settings (only, close_to_tray) VALUES (0, ?1)
+             ON CONFLICT (only) DO UPDATE SET close_to_tray = excluded.close_to_tray",
+            params![hide as i64],
+        )?;
+        Ok(())
+    }
+
     /// `target` of `None` sets the network default. `days` of `None` keeps
     /// messages forever, and as a target override it outranks the default.
     pub fn set_retention(
@@ -1656,6 +1689,9 @@ fn network_from_row(row: &Row) -> Result<NetworkConfig, StoreError> {
         auto_connect: row.get(14)?,
         client_certificate: row.get(15)?,
         socks5_proxy: row.get(16)?,
+        quit_message: row.get(17)?,
+        part_message: row.get(18)?,
+        away_message: row.get(19)?,
     })
 }
 
@@ -1782,6 +1818,9 @@ mod tests {
                 autojoin: vec!["#ircx".into()],
                 auto_connect: true,
                 client_certificate: None,
+                quit_message: None,
+                part_message: None,
+                away_message: None,
             })
             .unwrap();
 

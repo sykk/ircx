@@ -22,7 +22,7 @@ import {
 import { ipc, reasonOr } from "@/lib/ipc";
 import { targetKey } from "@/store/keys";
 import type { SettingsScope } from "@/components/settings/scope";
-import type { IgnoredPerson, MutedConversation, WatchedPerson } from "@/types";
+import type { IgnoredPerson, MutedConversation, TraySettings, WatchedPerson } from "@/types";
 
 /**
  * What is allowed to interrupt the reader: the words that raise a conversation,
@@ -52,6 +52,7 @@ export function NotificationsPage({
   const [notify, setNotify] = useState<Notifications>(storedNotifications);
   const [refused, setRefused] = useState(false);
   const [typed, setTyped] = useState("");
+  const [tray, setTray] = useState<TraySettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   useAnnounce(error);
   const report = useReportBusy();
@@ -72,6 +73,14 @@ export function NotificationsPage({
       (held) => setHushed(held),
       (reason: unknown) =>
         setError(reasonOr(reason, "The people who never raise one could not be read.")),
+    );
+  }, []);
+
+  useEffect(() => {
+    void ipc.traySettings().then(
+      (held) => setTray(held),
+      (reason: unknown) =>
+        setError(reasonOr(reason, "What the close button does could not be read.")),
     );
   }, []);
 
@@ -400,6 +409,33 @@ export function NotificationsPage({
           </Note>
         )}
       </Group>
+
+      {/* Here rather than anywhere else because it is the same subject: none of
+          the settings above arrive at all once the window is gone, and the
+          status icon is what keeps the client there to raise them. */}
+      {tray !== null && (
+        <Group title="When you close the window">
+          <CheckField
+            label="Keep ircx running in the status icon"
+            hint="Your connections stay up and notifications keep arriving. Quit from the icon's menu."
+            checked={tray.closeToTray && tray.available}
+            disabled={!tray.available}
+            onChange={(hide) => {
+              setTray({ ...tray, closeToTray: hide });
+              void ipc.setCloseToTray(hide).catch((reason: unknown) => {
+                setTray(tray);
+                setError(reasonOr(reason, "That could not be written down."));
+              });
+            }}
+          />
+          {!tray.available && (
+            <Note>
+              This desktop gave ircx no status icon, so closing the window ends the session. A
+              window hidden to an icon that is not there is one nothing could bring back.
+            </Note>
+          )}
+        </Group>
+      )}
 
       <Group title="Watched nicks">
         {here === null ? (

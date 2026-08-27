@@ -78,6 +78,12 @@ export interface Draft {
   connectCommands: string;
   autojoin: string;
   autoConnect: boolean;
+  /** What `/quit`, `/part` and `/away` say when nothing else is given. Empty
+   * is a real answer for the first two — `QUIT` and `PART` may carry no reason
+   * — and `toConfig` sends it as null. */
+  quitMessage: string;
+  partMessage: string;
+  awayMessage: string;
 }
 
 export function emptyDraft(): Draft {
@@ -100,6 +106,9 @@ export function emptyDraft(): Draft {
     connectCommands: "",
     autojoin: "",
     autoConnect: true,
+    quitMessage: "",
+    partMessage: "",
+    awayMessage: "",
   };
 }
 
@@ -135,6 +144,9 @@ export function draftOf(config: NetworkConfig): Draft {
     connectCommands: config.connectCommands.join("\n"),
     autojoin: config.autojoin.join(" "),
     autoConnect: config.autoConnect,
+    quitMessage: config.quitMessage ?? "",
+    partMessage: config.partMessage ?? "",
+    awayMessage: config.awayMessage ?? "",
   };
 }
 
@@ -151,6 +163,9 @@ export function applyIdentity(draft: Draft, source: NetworkConfig): Draft {
     password: needsPassword(mechanism) ? "" : null,
     clientCertificate: mechanism === "EXTERNAL" ? (source.clientCertificate ?? "") : "",
     connectCommands: source.connectCommands.join("\n"),
+    quitMessage: source.quitMessage ?? "",
+    partMessage: source.partMessage ?? "",
+    awayMessage: source.awayMessage ?? "",
   };
 }
 
@@ -201,6 +216,9 @@ export function toConfig(draft: Draft): NetworkConfig {
     connectCommands: lines(draft.connectCommands),
     autojoin: parseChannels(draft.autojoin),
     autoConnect: draft.autoConnect,
+    quitMessage: draft.quitMessage.trim() || null,
+    partMessage: draft.partMessage.trim() || null,
+    awayMessage: draft.awayMessage.trim() || null,
   };
 }
 

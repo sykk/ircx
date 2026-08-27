@@ -27,6 +27,7 @@ import type {
   ThemeSource,
   Transfer,
   TransferSettings,
+  TraySettings,
   UploadProvider,
   UploadedFile,
   WatchedPerson,
@@ -211,6 +212,10 @@ export const ipc = {
   transferSettings: () => invoke<TransferSettings>("transfer_settings"),
   setTransferSettings: (settings: TransferSettings) =>
     invoke<void>("set_transfer_settings", { settings }),
+  /** `available` is answered fresh each call: whether the desktop gave this
+   * client a status icon is a fact about the session, not a stored choice. */
+  traySettings: () => invoke<TraySettings>("tray_settings"),
+  setCloseToTray: (hide: boolean) => invoke<void>("set_close_to_tray", { hide }),
   /** Every network's transfers. Read once by a window that has just started;
    * every change after that arrives as an event. */
   listTransfers: () => invoke<Transfer[]>("list_transfers"),

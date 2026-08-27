@@ -59,4 +59,5 @@ export type { Transfer } from "./generated/Transfer";
 export type { TransferDirection } from "./generated/TransferDirection";
 export type { TransferSettings } from "./generated/TransferSettings";
 export type { TransferState } from "./generated/TransferState";
+export type { TraySettings } from "./generated/TraySettings";
 export type { Topic } from "./generated/Topic";

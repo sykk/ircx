@@ -17,6 +17,8 @@ const { ipcMock, allowedMock } = vi.hoisted(() => ({
     setIgnored: vi.fn(),
     watchedPeople: vi.fn(),
     setWatched: vi.fn(),
+    traySettings: vi.fn(),
+    setCloseToTray: vi.fn(),
   },
   allowedMock: vi.fn(),
 }));
@@ -45,6 +47,8 @@ beforeEach(() => {
   ipcMock.setIgnored.mockResolvedValue(undefined);
   ipcMock.watchedPeople.mockResolvedValue([]);
   ipcMock.setWatched.mockResolvedValue(undefined);
+  ipcMock.traySettings.mockResolvedValue({ closeToTray: true, available: true });
+  ipcMock.setCloseToTray.mockResolvedValue(undefined);
   allowedMock.mockResolvedValue(true);
   localStorage.clear();
 });
@@ -303,5 +307,44 @@ describe("the notifications page", () => {
     open();
 
     expect(await screen.findByText("The archive could not be opened.")).toBeTruthy();
+  });
+});
+
+/// The page is where these live because the settings above it are the ones
+/// that stop arriving when the window is gone.
+describe("what the close button does", () => {
+  const toggle = () => screen.getByLabelText(/^Keep ircx running in the status icon/);
+
+  it("says the window is kept, and writes the change down", async () => {
+    open();
+    await waitFor(() => expect(toggle()).toBeTruthy());
+    expect((toggle() as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(toggle());
+
+    await waitFor(() => expect(ipcMock.setCloseToTray).toHaveBeenCalledWith(false));
+    expect((toggle() as HTMLInputElement).checked).toBe(false);
+  });
+
+  /* A window hidden to an icon that is not there is one nothing can bring
+   * back, so the toggle reads off and refuses whatever was stored. */
+  it("is off and inert on a desktop that gave ircx no icon", async () => {
+    ipcMock.traySettings.mockResolvedValue({ closeToTray: true, available: false });
+    open();
+
+    await waitFor(() => expect(toggle()).toBeTruthy());
+    expect((toggle() as HTMLInputElement).checked).toBe(false);
+    expect((toggle() as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/gave ircx no status icon/)).toBeTruthy();
+  });
+
+  it("puts the switch back when the write is refused", async () => {
+    ipcMock.setCloseToTray.mockRejectedValue(new Error("the archive is read-only"));
+    open();
+    await waitFor(() => expect(toggle()).toBeTruthy());
+
+    fireEvent.click(toggle());
+
+    await waitFor(() => expect((toggle() as HTMLInputElement).checked).toBe(true));
   });
 });

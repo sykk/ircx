@@ -153,21 +153,27 @@ export function CheckField({
   hint,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   hint?: ReactNode;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /** Drawn and inert, rather than left out: a setting that vanishes is one the
+   * reader goes looking for, and the hint beside it is where the reason it
+   * cannot be turned on is written. */
+  disabled?: boolean;
 }) {
   const id = useId();
   const noteId = `${id}-note`;
 
   return (
-    <div className="flex gap-2">
+    <div className={clsx("flex gap-2", disabled && "opacity-[var(--disabled-opacity)]")}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         aria-describedby={hint ? noteId : undefined}
         onChange={(event) => onChange(event.target.checked)}
         className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--accent)]"

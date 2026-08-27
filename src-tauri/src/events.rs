@@ -7,6 +7,8 @@ use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::warn;
 
+use crate::tray::{self, Attention};
+
 /// How long the pump keeps collecting before it hands a batch to the webview.
 /// Anything longer is visible as input lag on a message the user just sent;
 /// anything shorter stops a history backfill from folding into one event.
@@ -18,6 +20,7 @@ const WINDOW: Duration = Duration::from_millis(8);
 pub fn pump(app: AppHandle, mut inbox: mpsc::Receiver<IrcxEvent>) {
     tauri::async_runtime::spawn(async move {
         let mut batch = Batch::default();
+        let mut attention = Attention::default();
 
         while let Some(first) = inbox.recv().await {
             batch.push(first);
@@ -38,6 +41,18 @@ pub fn pump(app: AppHandle, mut inbox: mpsc::Receiver<IrcxEvent>) {
             // a store write and a render each — #119.
             let ready = batch.take();
             if !ready.is_empty() {
+                // Off the batch rather than off every event: the counts move
+                // several times a second on a busy network, and only the
+                // crossings of zero are worth an image swap. Reading the merged
+                // batch also means a conversation that filled and emptied
+                // inside one window never marks the icon at all.
+                let mut crossed = false;
+                for event in &ready {
+                    crossed |= attention.apply(event);
+                }
+                if crossed {
+                    tray::mark(&app, attention.wanted());
+                }
                 if let Err(error) = app.emit(EVENT_CHANNEL, &ready) {
                     warn!(%error, "could not deliver events to the window");
                 }

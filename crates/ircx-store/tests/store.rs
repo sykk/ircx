@@ -3246,3 +3246,17 @@ fn removing_a_network_takes_its_ignores() {
 
     assert!(store.ignored_nicks(&id).unwrap().is_empty());
 }
+
+/// Nobody has chosen yet on a database that has just been made, and the answer
+/// then is to hide: a client that keeps running is what a status icon is for.
+#[test]
+fn closing_to_the_tray_is_the_answer_until_somebody_says_otherwise() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(store.close_to_tray().unwrap());
+
+    store.set_close_to_tray(false).unwrap();
+    assert!(!store.close_to_tray().unwrap());
+
+    store.set_close_to_tray(true).unwrap();
+    assert!(store.close_to_tray().unwrap());
+}

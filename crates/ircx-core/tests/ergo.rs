@@ -34,7 +34,9 @@ use ircx_core::{
     spawn_network_with_plugins, Grants, NetworkHandle, Permission, PluginLimits, PluginRuntime,
     SessionCommand, SessionConfig,
 };
-use ircx_ipc::{ChatMessage, ConnectionStatus, Delivery, IrcxEvent, MessageKind, MessageSource};
+use ircx_ipc::{
+    ChatMessage, ConnectionStatus, Delivery, IrcxEvent, MessageKind, MessageSource, Topic,
+};
 use ircx_store::Store;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -42,6 +44,8 @@ use tokio::time::timeout;
 const HOST: &str = "127.0.0.1";
 const PORT: u16 = 6667;
 const CHANNEL: &str = "#ircx-drive";
+/// The second client's nick, which `333` names as having set the topic.
+const OTHER_NICK: &str = "ircx-other";
 /// A channel this client opens itself, so it holds `+o` there.
 const OWN_CHANNEL: &str = "#ircx-topic";
 const TOPIC: &str = "read the FAQ before asking";
@@ -79,7 +83,7 @@ async fn against_ergo() {
             return;
         }
     };
-    let mut other = Live::start(config("ergo-2", "ircx-other"), other_store, None);
+    let mut other = Live::start(config("ergo-2", OTHER_NICK), other_store, None);
 
     // A third, under the nick `deploys` looks for. A rule decides on who said
     // it as much as on what was said, so the run needs a build bot to be one.
@@ -215,8 +219,10 @@ async fn registered(report: &mut Report, live: &mut Live) -> bool {
     }
 }
 
-/// #153. The topic a channel already has arrives as `332` and `333`, which had
-/// nothing to draw them until this.
+/// #153. The topic a channel already has arrives as `332` and `333`, and goes
+/// to the header rather than into the conversation: `257e420` took the entry
+/// lines out. Both steps here asked for those lines until #659, and had been
+/// failing for as long as nobody ran the probe.
 ///
 /// The other client sets it, because it joined first and so holds the channel
 /// operator that `+t` requires. That is also the case worth testing: somebody
@@ -239,24 +245,38 @@ async fn topic_on_join(report: &mut Report, live: &mut Live, other: &mut Live) {
         return;
     }
 
-    let said = live
-        .said(PATIENCE, |message| {
-            message.kind == MessageKind::Topic && message.text.contains(TOPIC)
-        })
-        .await;
-    match said {
-        Some(message) => report.pass("topic on join", &message.text),
-        None => report.fail("topic on join", "no topic message after joining"),
+    match live
+        .topic_of(CHANNEL, PATIENCE, |topic| topic.text == TOPIC)
+        .await
+    {
+        Some(topic) => report.pass("topic on join", &topic.text),
+        None => {
+            report.fail("topic on join", "the channel came back holding no topic");
+            return;
+        }
     }
 
-    let who = live
-        .said(Duration::from_secs(5), |message| {
-            message.kind == MessageKind::Topic && message.text.starts_with("Set by")
+    // The mask is the whole of what a real server is being asked here: ergo
+    // sends `nick!user@host` in `333` where Libera sends a bare nick, which is
+    // the defect this step found on its first run.
+    match live
+        .topic_of(CHANNEL, Duration::from_secs(5), |topic| {
+            topic.set_by.is_some()
         })
-        .await;
-    match who {
-        Some(message) => report.pass("topic attribution", &message.text),
-        None => report.fail("topic attribution", "no `Set by` line followed it"),
+        .await
+    {
+        Some(topic) if topic.set_by.as_deref() == Some(OTHER_NICK) => report.pass(
+            "topic attribution",
+            &format!(
+                "set by {OTHER_NICK} at {}",
+                topic.set_at.as_deref().unwrap_or("no time at all")
+            ),
+        ),
+        Some(topic) => report.fail(
+            "topic attribution",
+            &format!("333 came back naming {:?}", topic.set_by),
+        ),
+        None => report.fail("topic attribution", "333 named nobody"),
     }
 }
 
@@ -265,10 +285,10 @@ async fn topic_on_join(report: &mut Report, live: &mut Live, other: &mut Live) {
 ///
 /// It is a different code path from the one above, which is why setting the
 /// topic as a precondition did not cover it. Joining a channel that has one
-/// reads `332` and lands in `on_topic`; changing it reads the server's own
-/// `TOPIC` line back and lands in `handle_topic`, which names who did it. The
-/// two produce different sentences, so the assertion is on the wording as well
-/// as on the text — matching only the topic would pass on either.
+/// reads `332` and puts it in the header; changing it reads the server's own
+/// `TOPIC` line back and lands in `handle_topic`, which draws a row naming who
+/// did it. The assertion is on the wording as well as on the text, because a
+/// row is the whole of the difference.
 async fn a_topic_typed_here_comes_back_changed(report: &mut Report, live: &mut Live) {
     const CHANGED: &str = "mind the bots";
     // A channel this client opens, because ergo gives the first arrival `+o` and
@@ -896,6 +916,26 @@ impl Live {
         self.wait(limit, |event| match event {
             IrcxEvent::MessagesAppended { messages, .. } => {
                 messages.iter().find(|message| pick(message)).cloned()
+            }
+            _ => None,
+        })
+        .await
+    }
+
+    /// The topic as the window holds it, which is on the channel rather than in
+    /// the conversation, so `said` cannot see it.
+    async fn topic_of(
+        &mut self,
+        channel: &str,
+        limit: Duration,
+        mut pick: impl FnMut(&Topic) -> bool,
+    ) -> Option<Topic> {
+        self.wait(limit, |event| match event {
+            IrcxEvent::ChannelUpdated { channel: seen } if seen.name == channel => {
+                match seen.topic.as_ref() {
+                    Some(topic) if pick(topic) => Some(topic.clone()),
+                    _ => None,
+                }
             }
             _ => None,
         })

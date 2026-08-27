@@ -87,6 +87,20 @@ pub struct NetworkConfig {
     pub autojoin: Vec<String>,
     pub auto_connect: bool,
     pub socks5_proxy: Option<String>,
+    /// What `/quit`, `/part` and `/away` say when the user gives no reason.
+    ///
+    /// Per network rather than per client because the other three fields that
+    /// describe who is signing off — nick, username, realname — already are,
+    /// and the reason you leave a work network is not the reason you leave a
+    /// project one.
+    ///
+    /// `None` is silence for the first two: `QUIT` and `PART` carry no
+    /// trailing parameter and the server writes whatever it writes. Away
+    /// cannot be silent, because `AWAY` with nothing after it is how a client
+    /// says it is back, so an unset one falls back to a plain `Away`.
+    pub quit_message: Option<String>,
+    pub part_message: Option<String>,
+    pub away_message: Option<String>,
 }
 
 /// The password lives in the OS keyring, keyed by network id; it never crosses

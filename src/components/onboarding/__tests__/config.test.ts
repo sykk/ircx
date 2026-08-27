@@ -212,6 +212,9 @@ describe("toConfig", () => {
       connectCommands: "mode sable +i",
       autojoin: "#linux",
       autoConnect: false,
+      quitMessage: "",
+      partMessage: "",
+      awayMessage: "",
     });
 
     expect(config).toEqual<NetworkConfig>({
@@ -231,6 +234,9 @@ describe("toConfig", () => {
       connectCommands: ["mode sable +i"],
       autojoin: ["#linux"],
       autoConnect: false,
+      quitMessage: null,
+      partMessage: null,
+      awayMessage: null,
     });
   });
 
@@ -255,6 +261,9 @@ describe("toConfig", () => {
       connectCommands: [],
       autojoin: [],
       autoConnect: true,
+      quitMessage: null,
+      partMessage: null,
+      awayMessage: null,
     };
 
     expect(toConfig(draftOf(saved)).clientCertificate).toBe("/home/sable/.irc/libera.pem");
@@ -265,6 +274,32 @@ describe("toConfig", () => {
   it("carries a SOCKS5 proxy through the saved form", () => {
     const saved = toConfig(liberaDraft({ socks5Proxy: "proxy.example.com:1080" }));
     expect(toConfig(draftOf(saved)).socks5Proxy).toBe("proxy.example.com:1080");
+  });
+
+  /* An empty box is not a blank message: the backend reads null as "send no
+   * reason", which is a QUIT or PART with nothing after it. A saved empty
+   * string would be a reason that happens to be empty, and the two look the
+   * same in the form and different on the wire. */
+  it("sends an unfilled default message as nothing rather than as an empty one", () => {
+    const config = toConfig(liberaDraft({ quitMessage: "  ", partMessage: "" }));
+    expect(config.quitMessage).toBeNull();
+    expect(config.partMessage).toBeNull();
+  });
+
+  it("carries the default messages through the saved form", () => {
+    const saved = toConfig(
+      liberaDraft({
+        quitMessage: "  later  ",
+        partMessage: "off to lunch",
+        awayMessage: "in a meeting",
+      }),
+    );
+
+    expect(toConfig(draftOf(saved))).toMatchObject({
+      quitMessage: "later",
+      partMessage: "off to lunch",
+      awayMessage: "in a meeting",
+    });
   });
 });
 

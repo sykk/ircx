@@ -48,6 +48,9 @@ const LIBERA: NetworkConfig = {
   connectCommands: [],
   autojoin: ["#ctf-ops"],
   autoConnect: true,
+  quitMessage: null,
+  partMessage: null,
+  awayMessage: null,
 };
 
 const store = () => useAppStore.getState();

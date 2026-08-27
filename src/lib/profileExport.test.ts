@@ -74,6 +74,9 @@ describe("portable profile export", () => {
         autojoin: ["#ircx"],
         autoConnect: true,
         socks5Proxy: "proxy.example.com:1080",
+        quitMessage: null,
+        partMessage: null,
+        awayMessage: null,
       },
     ]);
     getUploadProvider.mockResolvedValue({

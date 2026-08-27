@@ -928,6 +928,9 @@ mod tests {
             connect_commands: Vec::new(),
             autojoin: Vec::new(),
             auto_connect: true,
+            quit_message: None,
+            part_message: None,
+            away_message: None,
         }
     }
 

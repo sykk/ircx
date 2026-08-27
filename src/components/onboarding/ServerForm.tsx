@@ -146,7 +146,7 @@ export function ServerForm({
             );
             if (identity) onIdentity(identity);
           }}
-          hint="Copies names, SASL settings, client certificate, and connect commands. Passwords stay with their network."
+          hint="Copies names, SASL settings, client certificate, connect commands, and default messages. Passwords stay with their network."
         />
       )}
 
@@ -293,6 +293,35 @@ export function ServerForm({
               label="Connect to this network when ircx starts"
               checked={draft.autoConnect}
               onChange={(autoConnect) => onChange({ autoConnect })}
+            />
+          </Group>
+
+          {/* No placeholder on the first two, because an empty box is not a
+              stand-in for "Leaving" here — it is a QUIT or PART with no reason
+              on it at all. The away field has one, because AWAY with nothing
+              after it is how a client says it is back. */}
+          <Group title="Default messages">
+            <TextField
+              optional
+              label="Quit message"
+              value={draft.quitMessage}
+              onChange={(quitMessage) => onChange({ quitMessage })}
+              hint="What /quit and Disconnect say when you give no reason. Empty sends none."
+            />
+            <TextField
+              optional
+              label="Part message"
+              value={draft.partMessage}
+              onChange={(partMessage) => onChange({ partMessage })}
+              hint="The same for /part, and for closing a channel you are still in."
+            />
+            <TextField
+              optional
+              label="Away message"
+              value={draft.awayMessage}
+              onChange={(awayMessage) => onChange({ awayMessage })}
+              placeholder="Away"
+              hint="What a bare /away says. /back is what clears it."
             />
           </Group>
         </>

@@ -48,6 +48,9 @@ function network(patch: Partial<NetworkConfig> = {}): NetworkConfig {
     connectCommands: [],
     autojoin: [],
     autoConnect: true,
+    quitMessage: null,
+    partMessage: null,
+    awayMessage: null,
     ...patch,
   };
 }

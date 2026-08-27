@@ -295,6 +295,9 @@ describe("the advanced path", () => {
       connectCommands: ["mode sable +i"],
       autojoin: ["#linux"],
       autoConnect: false,
+      quitMessage: null,
+      partMessage: null,
+      awayMessage: null,
     });
   });
 

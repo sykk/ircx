@@ -6,6 +6,13 @@ use crate::multiline;
 use crate::session::{build, Action, SaslCredentials, SessionState, SERVER_TARGET};
 use crate::text;
 
+/// What a bare `/away` says on a network that has no default of its own.
+///
+/// A reason is not optional the way `PART`'s and `QUIT`'s are: `AWAY` with an
+/// empty trailing parameter is how several servers read "back", so there is
+/// nothing to send that means away and says nothing.
+const DEFAULT_AWAY: &str = "Away";
+
 /// What `/help` prints. It lists `/connect` and `/disconnect` although this
 /// table answers to neither: they act on the connection rather than travelling
 /// over it, so the window performs them, and a reader asking what ircx knows
@@ -27,7 +34,8 @@ const HELP: &str = "\
 /list [pattern]           find channels, filtered by the server
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
-/away [reason]            mark yourself away, or back
+/away [reason]            mark yourself away
+/back                     come back
 /ignore [nick]            stop hearing from somebody, or list who is ignored
 /unignore <nick>          hear from them again
 /watch [nick|-nick]       follow a nickname, remove with -nick, or list
@@ -78,15 +86,25 @@ impl SessionState {
         }
     }
 
+    /// The network's own default stands in for a reason nobody typed, and no
+    /// reason at all is what is sent when it has none either. `PART` and `QUIT`
+    /// are both allowed to carry nothing, and a client that supplies its own
+    /// name there — which this one did — signs everybody off with an
+    /// advertisement they did not write.
     fn send_part(&mut self, channel: &str, reason: Option<&str>) {
-        match reason {
+        let default = self.config.part_message.clone();
+        match reason.or(default.as_deref()) {
             Some(reason) => self.send_command("PART", &[channel, reason]),
             None => self.send_command("PART", &[channel]),
         }
     }
 
     fn send_quit(&mut self, reason: Option<&str>) {
-        self.send_command("QUIT", &[reason.unwrap_or("ircx")]);
+        let default = self.config.quit_message.clone();
+        match reason.or(default.as_deref()) {
+            Some(reason) => self.send_command("QUIT", &[reason]),
+            None => self.send_command("QUIT", &[]),
+        }
         self.actions.push(Action::Close);
     }
 
@@ -103,7 +121,10 @@ impl SessionState {
         self.unread_at.remove(&key);
         if let Some(channel) = self.channels.remove(&key) {
             if channel.joined {
-                self.send_command("PART", &[&channel.name]);
+                // Through `send_part`, because leaving is leaving: the channel
+                // sees the same line whether the reader typed `/part` or closed
+                // the conversation.
+                self.send_part(&channel.name, None);
             }
             self.actions.push(Action::Forget(channel.name.clone()));
             self.emit(ircx_ipc::IrcxEvent::ChannelRemoved {
@@ -290,6 +311,7 @@ impl SessionState {
             "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
             "away" => self.cmd_away(args),
+            "back" => self.cmd_back(),
             "ignore" => self.cmd_ignore(target, args),
             "unignore" => self.cmd_unignore(target, args),
             "watch" => self.cmd_watch(target, args),
@@ -559,11 +581,29 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// `/away` marks you away and `/back` is the only thing that clears it.
+    ///
+    /// Bare `/away` used to mean "back", which is how irssi and weechat read
+    /// it and is one command rather than two. It cannot stay that way and also
+    /// have a default reason: a client says it is back by sending `AWAY` with
+    /// nothing after it, so the bare form has to be one or the other. It is
+    /// the away half, because that is the one somebody types twenty times a
+    /// day and the one a stored reason is for.
     fn cmd_away(&mut self, args: &str) -> CommandOutcome {
-        match args.is_empty() {
-            true => self.send_command("AWAY", &[]),
-            false => self.send_command("AWAY", &[args]),
-        }
+        let reason = match args.is_empty() {
+            false => args.to_string(),
+            true => self
+                .config
+                .away_message
+                .clone()
+                .unwrap_or_else(|| DEFAULT_AWAY.to_string()),
+        };
+        self.send_command("AWAY", &[&reason]);
+        CommandOutcome::Handled
+    }
+
+    fn cmd_back(&mut self) -> CommandOutcome {
+        self.send_command("AWAY", &[]);
         CommandOutcome::Handled
     }
 
@@ -870,7 +910,7 @@ impl SessionState {
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
     "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "ignore", "unignore",
-    "watch", "quit", "raw", "quote", "close", "help",
+    "watch", "quit", "raw", "quote", "close", "help", "back",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

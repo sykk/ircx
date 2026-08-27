@@ -87,6 +87,7 @@ struct Harness {
     /// write down, and whether it was an ignore or the end of one.
     ignore_writes: Vec<(String, bool)>,
     watch_writes: Vec<(String, bool)>,
+    realname_writes: Vec<String>,
     /// The file transfers the session handed to the task layer, and the two
     /// things it says about one afterwards.
     jobs: Vec<TransferJob>,
@@ -108,6 +109,7 @@ impl Harness {
             sts_upgrades: Vec::new(),
             ignore_writes: Vec::new(),
             watch_writes: Vec::new(),
+            realname_writes: Vec::new(),
             jobs: Vec::new(),
             stopped: Vec::new(),
             resumed_at: Vec::new(),
@@ -144,6 +146,7 @@ impl Harness {
                 Action::StsUpgrade { port } => self.sts_upgrades.push(port),
                 Action::Ignore { nick, ignored } => self.ignore_writes.push((nick, ignored)),
                 Action::Watch { nick, watched } => self.watch_writes.push((nick, watched)),
+                Action::Realname { text } => self.realname_writes.push(text),
                 Action::RunTransfer(job) => self.jobs.push(*job),
                 Action::StopTransfer { id } => self.stopped.push(id),
                 Action::ResumeTransferAt { id, from } => self.resumed_at.push((id, from)),
@@ -907,6 +910,71 @@ fn a_refused_rename_does_not_walk_the_fallback_list() {
     session.feed(":irc.libera.chat 437 sykk newnick :Nick/channel is temporarily unavailable");
 
     assert!(session.sent().is_empty(), "no NICK is sent back");
+}
+
+#[test]
+fn setname_sends_the_rest_of_the_line_as_the_name() {
+    let mut session = registered("setname");
+
+    let outcome = session.submit("*", "/setname Sykk, of ircx");
+
+    assert!(matches!(outcome, CommandOutcome::Handled));
+    assert_eq!(session.sent(), vec!["SETNAME :Sykk, of ircx"]);
+}
+
+/// The real name is only changeable mid-connection where the server offers it,
+/// and the refusal has to say what to do instead.
+#[test]
+fn setname_is_refused_where_the_server_does_not_offer_it() {
+    let mut session = registered("");
+
+    let outcome = session.submit("*", "/setname Sykk, of ircx");
+
+    match outcome {
+        CommandOutcome::Rejected(text) => {
+            assert!(text.contains("Libera.Chat"), "{text}");
+            assert!(text.contains("reconnect"), "{text}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(session.sent().is_empty(), "nothing goes to the server");
+}
+
+/// The echo is the server agreeing, and it has to reach both distances: the
+/// reconnect inside this run, which registers from the session's own config,
+/// and the next launch, which registers from the store.
+#[test]
+fn the_echo_of_a_setname_is_registered_with_again_and_written_down() {
+    let mut session = registered("setname");
+    session.feed(":sykk!~sykk@user/sykk SETNAME :Sykk, of ircx");
+
+    assert_eq!(session.realname_writes, vec!["Sykk, of ircx".to_string()]);
+    let said: Vec<&str> = session.messages().iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(said, vec!["Your real name is now Sykk, of ircx."]);
+
+    session.connect();
+    assert!(
+        session
+            .sent()
+            .contains(&"USER sykk 0 * :Sykk, of ircx".to_string()),
+        "the reconnect registers with the name the server took"
+    );
+}
+
+/// `Member` carries no real name and the inspector draws none, so there is
+/// nowhere for somebody else's to go. Receiving them is not optional: the
+/// capability is one, and asking for it is what makes `SETNAME` sendable.
+#[test]
+fn somebody_elses_setname_is_not_drawn() {
+    let mut session = registered("setname");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":rae!~rae@example.net JOIN #ircx");
+    session.events.clear();
+
+    session.feed(":rae!~rae@example.net SETNAME :Rae, elsewhere");
+
+    assert!(session.messages().is_empty());
+    assert!(session.realname_writes.is_empty());
 }
 
 #[test]

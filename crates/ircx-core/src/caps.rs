@@ -19,6 +19,7 @@ pub const SUPPORTED: &[&str] = &[
     "multi-prefix",
     "sasl",
     "server-time",
+    "setname",
     "standard-replies",
     "userhost-in-names",
 ];

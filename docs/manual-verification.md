@@ -119,12 +119,18 @@ cannot drive and the conditions a loopback rig does not have.
   client that does IPv6 DCC. The loopback tests cover the path and the interop
   probe cannot: HexChat has nowhere to put an IPv6 address in an offer and
   sends `0`.
-- [ ] Forward a port range, set it on the Transfers page, and confirm an offer
-  opens a port inside it.
+- [ ] Forward a port range, set it on the Transfers page, and confirm the port
+  an offer names is reachable from outside. Which port is opened is
+  `opens_a_port_inside_the_range_it_was_given` in `ircx-net`; whether a router
+  forwards it is what is left here.
 - [ ] Accept an offer over a link slow enough to watch: the progress and the
   percentage must move, and Cancel must stop it and leave the part file.
+  Verified against a scripted sender on 2026-08-27, at 224 KB of 7.6 MB and
+  moving; the Cancel left 1.4 MB in `beach.mov.part` and nothing under the
+  offered name.
 - [ ] Decline an offer and confirm the sender's client stops waiting rather
-  than timing out.
+  than timing out. Verified 2026-08-27: `DCC REJECT SEND` reached the sender as
+  the row went to Declined.
 
 ## Credentials
 

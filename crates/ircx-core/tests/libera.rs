@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use ircx_core::{
     spawn_network, Action, CaseMapping, ISupport, NetworkHandle, SessionCommand, SessionConfig,
-    SessionState, SUPPORTED_CAPS,
+    SessionState, SERVER_TARGET, SUPPORTED_CAPS,
 };
 use ircx_ipc::{
     Channel, ChatMessage, CommandOutcome, ConnectionStatus, Delivery, HistoryRequest, IrcxEvent,
@@ -211,6 +211,7 @@ async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &st
     names_for_a_channel_we_are_not_in(report, &mut live).await;
     a_busy_channel(report, &mut live).await;
     say_something(report, &mut live, marker).await;
+    a_ban_list_is_read(report, &mut live).await;
     a_query_window(report, &mut live, nick).await;
     part_and_rejoin(report, &mut live).await;
     nick_collision(report, &mut live, Arc::clone(&store), nick).await;
@@ -577,6 +578,77 @@ async fn say_something(report: &mut Report, live: &mut Live, marker: &str) {
 
 /// NickServ is the one correspondent guaranteed to answer, and one `INFO` is
 /// the least traffic that gets a reply.
+/// The ban list, read off solanum. #664 taught the client what a `367` means
+/// and could only ask ergo, which names the setter as a whole `nick!user@host`
+/// where Libera sends a bare nick, and ends an empty list in different words.
+/// Both go through the one sentence.
+///
+/// A read and nothing else: listing bans needs no ops, and nothing here sets
+/// one on a channel that is not ours.
+async fn a_ban_list_is_read(report: &mut Report, live: &mut Live) {
+    live.submit(CHANNEL, "/mode b").await;
+
+    let row = live
+        .wait(Duration::from_secs(30), |event| match event {
+            IrcxEvent::MessagesAppended {
+                target, messages, ..
+            } if target == CHANNEL => messages
+                .iter()
+                .find(|message| message.text.contains("banned in"))
+                .cloned(),
+            _ => None,
+        })
+        .await;
+    match row {
+        Some(row) => {
+            report.pass("ban list", &row.text);
+            // Whether ##test has anything banned in it is not ours to arrange,
+            // and the entry is the half of this only a real solanum can answer:
+            // it names the setter as a bare nick where ergo sends a whole
+            // `nick!user@host`.
+            // An entry opens with the mask it is about; the empty list opens
+            // with `Nobody`.
+            if !row.text.starts_with('`') {
+                report.unverified(
+                    "a listed ban",
+                    &format!("{CHANNEL} has nothing banned in it, so no entry was drawn"),
+                );
+            }
+        }
+        None => {
+            report.fail(
+                "ban list",
+                "asking for the ban list said nothing in the channel",
+            );
+            live.dump("the last lines after asking for the ban list");
+            return;
+        }
+    }
+
+    // What the answer used to be: the numeric's parameters joined, in the
+    // server tab, the `368` at the end of them and all. Both wordings, because
+    // ergo ends the list `End of list` and solanum `End of channel ban list`.
+    let leaked = live.seen_any(|event| match event {
+        IrcxEvent::MessagesAppended {
+            target, messages, ..
+        } if target == SERVER_TARGET => messages
+            .iter()
+            .find(|message| {
+                message.text.contains("End of channel ban list")
+                    || message.text.contains("End of list")
+            })
+            .cloned(),
+        _ => None,
+    });
+    report.check(
+        "the ban list is not also in the server tab",
+        leaked.is_none(),
+        &leaked
+            .map(|row| row.text)
+            .unwrap_or_else(|| "the console said nothing about it".into()),
+    );
+}
+
 async fn a_query_window(report: &mut Report, live: &mut Live, nick: &str) {
     live.submit("*", &format!("/msg NickServ INFO {nick}"))
         .await;

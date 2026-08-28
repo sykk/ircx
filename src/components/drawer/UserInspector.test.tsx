@@ -84,8 +84,16 @@ describe("UserInspector", () => {
     await waitFor(() => expect(lookUpMember).toHaveBeenCalledWith("libera", "rae"));
   });
 
-  it("asks nothing about somebody whose real name it already has", () => {
+  /** A `352` has a real name in it and nowhere to put an account, so on a
+   * server without `WHOX` the real name arriving says nothing about the other
+   * blank. */
+  it("asks about somebody whose account is not known, real name or not", async () => {
     inspect(member("rae", { realname: "Rae, of somewhere" }));
+    await waitFor(() => expect(lookUpMember).toHaveBeenCalledWith("libera", "rae"));
+  });
+
+  it("asks nothing about somebody it already has both of", () => {
+    inspect(member("rae", { realname: "Rae, of somewhere", account: "rae" }));
     expect(lookUpMember).not.toHaveBeenCalled();
   });
 

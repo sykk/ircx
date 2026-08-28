@@ -353,6 +353,12 @@ pub struct SessionState {
     /// Nicks a whois is outstanding for that nobody typed: the inspector asks
     /// for one when it is opened on somebody whose real name is not known.
     quiet_whois: HashSet<String>,
+    /// Nicks a quiet whois has already gone out for on this connection, asked
+    /// or answered. The inspector asks about somebody signed in to nothing as
+    /// readily as about somebody it has not heard of, and a server with no
+    /// account to report answers with no `330` at all — so without this the
+    /// panel asked again every time it was opened on the same person.
+    looked_up: HashSet<String>,
     /// Channels a `WHO` is outstanding for, folded. It is what tells this
     /// client's own roster question from a `WHO` somebody typed: replies under
     /// a channel in here fill the member list and go no further, and every
@@ -493,6 +499,7 @@ impl SessionState {
             queries: HashMap::new(),
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
+            looked_up: HashSet::new(),
             pending_who: HashSet::new(),
             watch_status: HashMap::new(),
             whowas: HashSet::new(),
@@ -923,16 +930,21 @@ impl SessionState {
     /// Asks the server about somebody without drawing the answer.
     ///
     /// The inspector calls this when it is opened on a member whose real name
-    /// is not known. That used to be everybody who was already in the channel
-    /// when the reader arrived; the `WHO` a join sends answers for them now
-    /// (#677), and what is left here is whoever it could not — somebody a
-    /// server with no `WHOX` and no real name in its `352` said nothing about,
-    /// and somebody who is not in a channel at all. It stays a request the
-    /// reader caused by looking, which is the same bargain the preview fetch
-    /// makes.
+    /// or account it does not have. That used to be everybody who was already
+    /// in the channel when the reader arrived; the `WHO` a join sends answers
+    /// for most of them now (#677), and what is left is what that reply could
+    /// not carry — a `352` has no account field at all, so on a server with no
+    /// `WHOX` this is still the only thing that fills one in; and a server with
+    /// no `extended-join` says nothing about anybody who arrives after the
+    /// `WHO` has run.
+    ///
+    /// Once per person per connection. It stays a request the reader caused by
+    /// looking, which is the same bargain the preview fetch makes, and a reader
+    /// who opens the same panel twice is not two questions.
     pub fn look_up(&mut self, nick: &str) -> Vec<Action> {
         let folded = self.fold(nick);
-        if self.registered && self.quiet_whois.insert(folded) {
+        if self.registered && self.looked_up.insert(folded.clone()) {
+            self.quiet_whois.insert(folded);
             self.send_command("WHOIS", &[nick]);
         }
         self.drain()
@@ -3810,6 +3822,9 @@ impl SessionState {
         self.isupport = ISupport::default();
         self.monitored.clear();
         self.pending_who.clear();
+        // A new connection is a new roster, and what the `WHO` on join fills is
+        // filled again. What it could not fill is worth one more question.
+        self.looked_up.clear();
         self.registered = false;
         self.cap_ended = false;
         self.sts_verified_transport = false;

@@ -36,14 +36,16 @@ export function UserInspector({
     }
   }, [network, member.nick, isIgnored]);
 
-  // The one thing that fills a real name in for somebody who was already here
-  // when the reader arrived: nothing else asks, and `extended-join` only speaks
-  // for people who arrived afterwards. Failures are silent — a panel that could
-  // not ask shows the blank it already had.
+  // What the `WHO` a join sends could not answer. That reply carries a real
+  // name on every server and an account only where the server has `WHOX`, so
+  // either blank is a reason to ask and neither is proof the other arrived.
+  // The session sends at most one question per person, so opening this panel
+  // again is not another. Failures are silent — a panel that could not ask
+  // shows the blank it already had.
   useEffect(() => {
-    if (member.realname !== null) return;
+    if (member.realname !== null && member.account !== null) return;
     void ipc.lookUpMember(network, member.nick).catch(() => {});
-  }, [network, member.nick, member.realname]);
+  }, [network, member.nick, member.realname, member.account]);
 
   const shared = useMemo(() => {
     const channels: string[] = [];

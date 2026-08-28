@@ -1189,6 +1189,33 @@ fn somebody_elses_setname_moves_their_real_name_and_draws_nothing() {
 
 /// The inspector's question. One `WHOIS` goes out, the answer lands on the
 /// member, and none of the block reaches the server tab.
+/// A `352` carries a real name and has nowhere to put an account, so on a
+/// server with no `WHOX` the look-up is still the only thing that fills one in.
+/// #677.
+#[test]
+fn a_look_up_still_fills_the_account_a_plain_who_could_not() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sykk rae");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+    session.feed(":irc.libera.chat 352 sykk #ircx ~rae example.net irc.libera.chat rae H :0 Rae");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+    assert_eq!(
+        session.member("#ircx", "rae").unwrap().account,
+        None,
+        "the WHO answered with no account field at all"
+    );
+
+    session.look_up("rae");
+    session.feed(":irc.libera.chat 330 sykk rae raeaccount :is logged in as");
+    session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
+
+    assert_eq!(
+        session.member("#ircx", "rae").unwrap().account.as_deref(),
+        Some("raeaccount")
+    );
+}
+
 #[test]
 fn a_looked_up_whois_fills_the_member_and_draws_no_row() {
     let mut session = registered("");
@@ -1258,21 +1285,25 @@ fn a_typed_whois_keeps_the_real_name_it_narrates() {
 /// The inspector mounts twice under StrictMode and asks twice. The second one
 /// is not a second question for the server.
 #[test]
-fn a_second_look_up_while_one_is_outstanding_asks_once() {
+fn a_look_up_asks_once_for_one_person_on_one_connection() {
     let mut session = registered("");
     session.look_up("rae");
     session.sent();
 
     session.look_up("rae");
-    assert!(session.sent().is_empty());
+    assert!(session.sent().is_empty(), "one is still outstanding");
 
+    // It was askable again here, on the reasoning that an answered question can
+    // be asked afresh. What the panel asks about widened with #677 — an unknown
+    // account is a reason to look as much as an unknown real name — and
+    // somebody signed in to nothing is answered with no `330` at all, so under
+    // the old rule opening the panel on them twice was two questions and
+    // opening it ten times was ten.
     session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
     session.look_up("rae");
-    assert_eq!(
-        session.sent(),
-        vec!["WHOIS rae"],
-        "answered, so askable again"
-    );
+    assert!(session.sent().is_empty(), "answered, and not asked again");
+    session.look_up("RAE");
+    assert!(session.sent().is_empty(), "and it is the same person");
 }
 
 #[test]

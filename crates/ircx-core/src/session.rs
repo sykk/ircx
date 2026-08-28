@@ -1422,6 +1422,14 @@ impl SessionState {
             RPL_ENDOFBANLIST => self.on_end_of_mode_list(ModeList::Ban, params, message),
             RPL_ENDOFEXCEPTLIST => self.on_end_of_mode_list(ModeList::Exception, params, message),
             RPL_ENDOFINVITELIST => self.on_end_of_mode_list(ModeList::Invite, params, message),
+            RPL_QUIETLIST => match without_mode_letter(params, 'q') {
+                Some(params) => self.on_mode_list(ModeList::Quiet, &params, message),
+                None => self.on_other_numeric(code, params, message),
+            },
+            RPL_ENDOFQUIETLIST => match without_mode_letter(params, 'q') {
+                Some(params) => self.on_end_of_mode_list(ModeList::Quiet, &params, message),
+                None => self.on_other_numeric(code, params, message),
+            },
             RPL_AWAY => self.on_away_reply(params),
             RPL_MONONLINE => self.on_monitor_status(params, true),
             RPL_MONOFFLINE => self.on_monitor_status(params, false),
@@ -4000,14 +4008,32 @@ fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {
     }
 }
 
-/// One of the three lists a channel keeps under a mode: who may not come in,
-/// who may come in despite a ban, and who needs no invitation. The three
-/// arrive in one shape and differ only in what an entry means.
+/// `728` and `729` name the mode they are about, between the channel and the
+/// rest — `##ircx q hush!*@* somebody 1787952261`. Taken out, what is left is
+/// the shape `367` and its kind arrive in and everything below can read.
+///
+/// `None` where the letter is not the one expected: the numeric is solanum's,
+/// its documentation is its source, and a server using it for some other list
+/// is better left saying what it said than relabelled as a quiet.
+fn without_mode_letter(params: &[String], letter: char) -> Option<Vec<String>> {
+    let named = params.get(1)?;
+    if named.len() != 1 || !named.starts_with(letter) {
+        return None;
+    }
+    let mut rest = params.to_vec();
+    rest.remove(1);
+    Some(rest)
+}
+
+/// One of the lists a channel keeps under a mode: who may not come in, who may
+/// come in despite a ban, who needs no invitation, and who may come in without
+/// speaking. They arrive in one shape and differ only in what an entry means.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum ModeList {
     Ban,
     Exception,
     Invite,
+    Quiet,
 }
 
 impl ModeList {
@@ -4017,6 +4043,10 @@ impl ModeList {
             ModeList::Ban => format!("is banned in {channel}"),
             ModeList::Exception => format!("is exempt from the bans in {channel}"),
             ModeList::Invite => format!("can join {channel} without an invitation"),
+            // Not "muted": muting is what the reader does to a conversation of
+            // their own, and this is the channel stopping somebody speaking in
+            // it. The two would read as the same word for opposite things.
+            ModeList::Quiet => format!("cannot speak in {channel}"),
         }
     }
 
@@ -4028,6 +4058,7 @@ impl ModeList {
             ModeList::Ban => format!("Nobody is banned in {channel}"),
             ModeList::Exception => format!("Nobody is exempt from the bans in {channel}"),
             ModeList::Invite => format!("Nobody is on the invite list for {channel}"),
+            ModeList::Quiet => format!("Nobody is stopped from speaking in {channel}"),
         }
     }
 }

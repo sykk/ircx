@@ -41,6 +41,14 @@ pub const RPL_WHOWASUSER: u16 = 314;
 pub const RPL_WHOISACTUALLY: u16 = 338;
 pub const RPL_ENDOFWHOWAS: u16 = 369;
 pub const ERR_WASNOSUCHNICK: u16 = 406;
+/// The quiet list, which is solanum's rather than anybody's specification: a
+/// channel's `+q`, the mode that lets somebody in and stops them speaking.
+///
+/// It is the one list reply that names the mode it is about, in the middle of
+/// its parameters, which is why `session.rs` takes the letter out before
+/// reading the rest as every other list.
+pub const RPL_QUIETLIST: u16 = 728;
+pub const RPL_ENDOFQUIETLIST: u16 = 729;
 /// The WHOIS replies worth rewriting. Each puts its data *before* the server's
 /// trailing text, so joining the parameters — which is what an unhandled
 /// numeric falls back to — reads backwards or unlabelled. `session.rs` writes

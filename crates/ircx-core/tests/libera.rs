@@ -212,6 +212,7 @@ async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &st
     a_busy_channel(report, &mut live).await;
     say_something(report, &mut live, marker).await;
     a_ban_list_is_read(report, &mut live).await;
+    a_quiet_list_is_read(report, &mut live).await;
     a_query_window(report, &mut live, nick).await;
     part_and_rejoin(report, &mut live).await;
     nick_collision(report, &mut live, Arc::clone(&store), nick).await;
@@ -648,6 +649,48 @@ async fn a_ban_list_is_read(report: &mut Report, live: &mut Live) {
             .map(|row| row.text)
             .unwrap_or_else(|| "the console said nothing about it".into()),
     );
+}
+
+/// The other list solanum keeps, under `+q`: who may come in and not speak.
+///
+/// `728` is the one list reply that names its own mode, between the channel and
+/// everything else, so this is what says the letter is being taken out rather
+/// than read as the mask.
+async fn a_quiet_list_is_read(report: &mut Report, live: &mut Live) {
+    live.submit(CHANNEL, "/mode q").await;
+
+    let row = live
+        .wait(Duration::from_secs(30), |event| match event {
+            IrcxEvent::MessagesAppended {
+                target, messages, ..
+            } if target == CHANNEL => messages
+                .iter()
+                .find(|message| message.text.contains("speak"))
+                .cloned(),
+            _ => None,
+        })
+        .await;
+    match row {
+        Some(row) => {
+            report.pass("quiet list", &row.text);
+            // Whether anything is quieted in a channel this run is a guest in
+            // is not ours to arrange, and the entry is the half that carries
+            // the mode letter through.
+            if !row.text.starts_with('`') {
+                report.unverified(
+                    "a listed quiet",
+                    &format!("nobody is quieted in {CHANNEL}, so no entry was drawn"),
+                );
+            }
+        }
+        None => {
+            report.fail(
+                "quiet list",
+                "asking for the quiet list said nothing in the channel",
+            );
+            live.dump("the last lines after asking for the quiet list");
+        }
+    }
 }
 
 async fn a_query_window(report: &mut Report, live: &mut Live, nick: &str) {

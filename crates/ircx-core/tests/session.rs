@@ -3711,6 +3711,102 @@ fn a_new_listing_starts_from_nothing() {
 /// The lines are ergo's, off a channel with one of each set on it. A server
 /// sends one numeric per entry and nothing whatever for a list that is empty,
 /// so both the entries and the end of them are the client's to write.
+/// The lines are Libera's, off a channel with a `+q` set on it. Solanum's `728`
+/// is the one list reply that names its own mode, and ergo has no such numeric
+/// at all — `q` there is the owner prefix rather than a list.
+mod the_quiet_list {
+    use super::*;
+
+    fn joined() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+        session
+    }
+
+    fn said(session: &Harness) -> Vec<(String, String)> {
+        session
+            .messages()
+            .iter()
+            .map(|message| (message.target.clone(), message.text.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_quiet_says_what_it_stops() {
+        let mut session = joined();
+        session.feed(
+            ":molybdenum.libera.chat 728 sykk #ircx q hush!*@* \
+             ircxq57822!~ircxtest@2607:3c40:2900:b480::4cd 1787952261",
+        );
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "`hush!*@*` cannot speak in #ircx — set by ircxq57822 on 2026-08-28 at 21:24 UTC"
+                    .to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn an_empty_quiet_list_says_so() {
+        let mut session = joined();
+        session.feed(":molybdenum.libera.chat 729 sykk #ircx q :End of Channel Quiet List");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "Nobody is stopped from speaking in #ircx".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn the_end_of_a_list_with_a_quiet_in_it_says_nothing() {
+        let mut session = joined();
+        session.feed(":molybdenum.libera.chat 728 sykk #ircx q hush!*@* somebody 1787952261");
+        session.events.clear();
+        session.feed(":molybdenum.libera.chat 729 sykk #ircx q :End of Channel Quiet List");
+
+        assert!(said(&session).is_empty(), "{:?}", said(&session));
+    }
+
+    /// The quiets and the bans are asked for separately and counted separately:
+    /// an empty one of either says so on its own.
+    #[test]
+    fn a_quiet_does_not_answer_for_a_ban() {
+        let mut session = joined();
+        session.feed(":molybdenum.libera.chat 728 sykk #ircx q hush!*@* somebody 1787952261");
+        session.events.clear();
+        session.feed(":molybdenum.libera.chat 368 sykk #ircx :End of Channel Ban List");
+
+        assert_eq!(
+            said(&session),
+            vec![("#ircx".to_string(), "Nobody is banned in #ircx".to_string())]
+        );
+    }
+
+    /// `728` is solanum's, and its documentation is its source. A server
+    /// sending it about some other mode is saying something this client has no
+    /// wording for, and the server's own words beat a wrong label.
+    #[test]
+    fn a_list_about_some_other_mode_keeps_the_servers_words() {
+        let mut session = joined();
+        session.feed(":irc.example.org 728 sykk #ircx Z somebody!*@* somebody 1787952261");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "*".to_string(),
+                "#ircx Z somebody!*@* somebody 1787952261".to_string()
+            )]
+        );
+    }
+}
+
 /// The lines are real: ergo's for a nick that quit a moment earlier, Libera's
 /// for one that disconnected seconds before. The two servers answer an unknown
 /// nickname differently, and Libera sends two numerics inside the block that a

@@ -3706,6 +3706,195 @@ fn a_new_listing_starts_from_nothing() {
     assert_eq!(names, vec!["#second".to_string()]);
 }
 
+/// The lines are ergo's, off a channel with one of each set on it. A server
+/// sends one numeric per entry and nothing whatever for a list that is empty,
+/// so both the entries and the end of them are the client's to write.
+mod a_channels_mode_lists {
+    use super::*;
+
+    fn joined() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+        session
+    }
+
+    fn said(session: &Harness) -> Vec<(String, String)> {
+        session
+            .messages()
+            .iter()
+            .map(|message| (message.target.clone(), message.text.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_ban_is_a_sentence_in_the_channel_it_is_about() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #ircx bad!*@* probe!~u@f6u3beryjfghu.irc 1787876147");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "`bad!*@*` is banned in #ircx — set by probe on 2026-08-28 at 00:15 UTC"
+                    .to_string()
+            )]
+        );
+    }
+
+    /// The entries have said it. `368` is the server's own `End of list`, which
+    /// named neither the list nor anything in it.
+    #[test]
+    fn the_end_of_a_list_with_something_in_it_says_nothing() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #ircx bad!*@* probe 1787876147");
+        session.events.clear();
+        session.feed(":ergo.test 368 sykk #ircx :End of list");
+
+        assert!(said(&session).is_empty(), "{:?}", said(&session));
+    }
+
+    #[test]
+    fn an_empty_ban_list_says_that_nobody_is_banned() {
+        let mut session = joined();
+        session.feed(":ergo.test 368 sykk #ircx :End of list");
+
+        assert_eq!(
+            said(&session),
+            vec![("#ircx".to_string(), "Nobody is banned in #ircx".to_string())]
+        );
+    }
+
+    /// Asked for twice, answered twice: the count is spent by the end of the
+    /// list it belongs to and not carried into the next one.
+    #[test]
+    fn a_second_empty_list_says_it_again() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #ircx bad!*@* probe 1787876147");
+        session.feed(":ergo.test 368 sykk #ircx :End of list");
+        session.events.clear();
+        session.feed(":ergo.test 368 sykk #ircx :End of list");
+
+        assert_eq!(
+            said(&session),
+            vec![("#ircx".to_string(), "Nobody is banned in #ircx".to_string())]
+        );
+    }
+
+    /// One list running does not answer for another: `348` under way says
+    /// nothing about whether anything is banned.
+    #[test]
+    fn the_three_lists_are_counted_apart() {
+        let mut session = joined();
+        session.feed(":ergo.test 348 sykk #ircx good!*@example.com probe 1787876147");
+        session.events.clear();
+        session.feed(":ergo.test 368 sykk #ircx :End of list");
+
+        assert_eq!(
+            said(&session),
+            vec![("#ircx".to_string(), "Nobody is banned in #ircx".to_string())]
+        );
+    }
+
+    #[test]
+    fn an_exception_and_an_invite_each_say_what_they_are() {
+        let mut session = joined();
+        session.feed(":ergo.test 348 sykk #ircx good!*@example.com probe 1787876147");
+        session.feed(":ergo.test 346 sykk #ircx friend!*@* probe 1787876147");
+        session.feed(":ergo.test 349 sykk #ircx :End of list");
+        session.feed(":ergo.test 347 sykk #ircx :End of list");
+
+        let texts: Vec<String> = said(&session).into_iter().map(|(_, text)| text).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "`good!*@example.com` is exempt from the bans in #ircx — set by probe on 2026-08-28 at 00:15 UTC".to_string(),
+                "`friend!*@*` can join #ircx without an invitation — set by probe on 2026-08-28 at 00:15 UTC".to_string(),
+            ]
+        );
+    }
+
+    /// An empty invite list is not "nobody may join": the channel has granted
+    /// no standing exemption, which is a different sentence.
+    #[test]
+    fn an_empty_invite_list_says_what_the_list_is() {
+        let mut session = joined();
+        session.feed(":ergo.test 347 sykk #ircx :End of list");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "Nobody is on the invite list for #ircx".to_string()
+            )]
+        );
+    }
+
+    /// `346` and `348` are a mask alone in the specification, and several
+    /// servers send them that way. What is missing costs the clause it is in.
+    #[test]
+    fn an_entry_with_nothing_behind_the_mask_is_still_a_sentence() {
+        let mut session = joined();
+        session.feed(":irc.libera.chat 346 sykk #ircx friend!*@*");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "`friend!*@*` can join #ircx without an invitation".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_time_the_server_did_not_send_as_seconds_still_names_who_set_it() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #ircx bad!*@* probe notatimestamp");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "`bad!*@*` is banned in #ircx — set by probe".to_string()
+            )]
+        );
+    }
+
+    /// A list can be asked for about a channel the reader has not joined, and
+    /// an answer about a conversation nobody has open has nowhere else to go.
+    #[test]
+    fn a_list_about_a_channel_nobody_is_in_lands_in_the_server_tab() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #elsewhere bad!*@* probe 1787876147");
+
+        assert_eq!(
+            said(&session)
+                .into_iter()
+                .map(|(target, _)| target)
+                .collect::<Vec<_>>(),
+            vec!["*".to_string()]
+        );
+    }
+
+    /// The numeric comes back in whatever case the server holds the channel
+    /// in. The row belongs to the conversation the reader joined, under the
+    /// name they know it by.
+    #[test]
+    fn a_channel_the_server_spells_differently_is_still_the_one_open() {
+        let mut session = joined();
+        session.feed(":ergo.test 367 sykk #IRCX bad!*@* probe 1787876147");
+
+        assert_eq!(
+            said(&session),
+            vec![(
+                "#ircx".to_string(),
+                "`bad!*@*` is banned in #ircx — set by probe on 2026-08-28 at 00:15 UTC"
+                    .to_string()
+            )]
+        );
+    }
+}
+
 mod topic_on_join {
     use super::*;
 

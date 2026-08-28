@@ -20,6 +20,16 @@ pub const RPL_LISTEND: u16 = 323;
 pub const RPL_CHANNELMODEIS: u16 = 324;
 pub const RPL_NOTOPIC: u16 = 331;
 pub const RPL_TOPICWHOTIME: u16 = 333;
+/// The three lists a channel keeps under a mode, and the numeric that ends
+/// each. An entry is a mask and, on most servers, who set it and when; an
+/// empty list is the end numeric by itself, which is why `session.rs` counts
+/// what came under one.
+pub const RPL_INVITELIST: u16 = 346;
+pub const RPL_ENDOFINVITELIST: u16 = 347;
+pub const RPL_EXCEPTLIST: u16 = 348;
+pub const RPL_ENDOFEXCEPTLIST: u16 = 349;
+pub const RPL_BANLIST: u16 = 367;
+pub const RPL_ENDOFBANLIST: u16 = 368;
 /// The WHOIS replies worth rewriting. Each puts its data *before* the server's
 /// trailing text, so joining the parameters — which is what an unhandled
 /// numeric falls back to — reads backwards or unlabelled. `session.rs` writes

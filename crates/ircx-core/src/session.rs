@@ -355,6 +355,11 @@ pub struct SessionState {
     /// Last status heard for a watched nick. An absent value is the initial
     /// MONITOR reply, which must not announce everybody already online.
     watch_status: HashMap<String, bool>,
+    /// Which of a channel's mode lists an entry has arrived under, folded
+    /// channel and list. A server sends nothing at all for an empty list, so
+    /// its end numeric is the only place that can say it was empty, and this
+    /// is how it knows.
+    mode_lists_answered: HashSet<(String, ModeList)>,
     pub(crate) batches: HashMap<String, BatchState>,
     pub(crate) actions: Vec<Action>,
     pub(crate) registered: bool,
@@ -477,6 +482,7 @@ impl SessionState {
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
             watch_status: HashMap::new(),
+            mode_lists_answered: HashSet::new(),
             batches: HashMap::new(),
             actions: Vec::new(),
             registered: false,
@@ -1396,6 +1402,12 @@ impl SessionState {
             RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(params),
+            RPL_BANLIST => self.on_mode_list(ModeList::Ban, params, message),
+            RPL_EXCEPTLIST => self.on_mode_list(ModeList::Exception, params, message),
+            RPL_INVITELIST => self.on_mode_list(ModeList::Invite, params, message),
+            RPL_ENDOFBANLIST => self.on_end_of_mode_list(ModeList::Ban, params, message),
+            RPL_ENDOFEXCEPTLIST => self.on_end_of_mode_list(ModeList::Exception, params, message),
+            RPL_ENDOFINVITELIST => self.on_end_of_mode_list(ModeList::Invite, params, message),
             RPL_AWAY => self.on_away_reply(params),
             RPL_MONONLINE => self.on_monitor_status(params, true),
             RPL_MONOFFLINE => self.on_monitor_status(params, false),
@@ -2074,6 +2086,69 @@ impl SessionState {
         };
         channel.modes = modes;
         self.emit_channel(&key);
+    }
+
+    /// `367 <me> <channel> <mask> [<who> <set-at>]`, and the same shape under
+    /// `348` and `346`, with the leading target already stripped by the numeric
+    /// dispatch.
+    ///
+    /// A row apiece rather than one collected list like `/list`: the reader
+    /// asked what is banned in the channel they are in, and the answer belongs
+    /// beside the rest of what has happened to it.
+    fn on_mode_list(&mut self, list: ModeList, params: &[String], message: &Message) {
+        let (Some(channel), Some(mask)) = (params.first(), params.get(1)) else {
+            return;
+        };
+        // Ergo sends the whole `nick!user@host` and Libera a bare nick, which
+        // is the difference `333` has and the same answer: a mask inside a
+        // sentence is noise.
+        let who = params
+            .get(2)
+            .map(|who| who.split('!').next().unwrap_or(who))
+            .filter(|who| !who.trim().is_empty());
+        let when = params
+            .get(3)
+            .and_then(|epoch| rfc3339(epoch))
+            .as_deref()
+            .and_then(readable);
+        let (target, name) = self.mode_list_target(channel);
+        let entry = format!("`{mask}` {}", list.entry(&name));
+        let sentence = match (who, when) {
+            (Some(who), Some(when)) => format!("{entry} — set by {who} on {when}"),
+            (Some(who), None) => format!("{entry} — set by {who}"),
+            (None, Some(when)) => format!("{entry} — set on {when}"),
+            (None, None) => entry,
+        };
+        self.mode_lists_answered.insert((self.fold(channel), list));
+        let note = self.chat_message(message, &target, MessageKind::Server, sentence);
+        self.append(note);
+    }
+
+    /// `368`, and the two like it. The entries have already said everything
+    /// there is to say, so this speaks only for a list nothing came under —
+    /// where the server's own line is `#ircx :End of list` and a question
+    /// answered with that alone reads as one that failed.
+    fn on_end_of_mode_list(&mut self, list: ModeList, params: &[String], message: &Message) {
+        let Some(channel) = params.first() else {
+            return;
+        };
+        if self.mode_lists_answered.remove(&(self.fold(channel), list)) {
+            return;
+        }
+        let (target, name) = self.mode_list_target(channel);
+        let note = self.chat_message(message, &target, MessageKind::Server, list.empty(&name));
+        self.append(note);
+    }
+
+    /// Where the answer goes, and what it calls the channel: the conversation
+    /// while the reader is in it, under the spelling they joined by rather than
+    /// the one the numeric came back with, and the server tab otherwise — a
+    /// list can be asked for about a channel nobody has open.
+    fn mode_list_target(&self, channel: &str) -> (String, String) {
+        match self.channels.get(&self.fold(channel)) {
+            Some(held) => (held.name.clone(), held.name.clone()),
+            None => (SERVER_TARGET.to_string(), channel.to_string()),
+        }
     }
 
     fn on_away_reply(&mut self, params: &[String]) {
@@ -3834,6 +3909,38 @@ fn set_prefix(member: &mut MemberState, prefix: char, adding: bool) {
         true if !member.prefixes.contains(&prefix) => member.prefixes.push(prefix),
         false => member.prefixes.retain(|held| *held != prefix),
         true => {}
+    }
+}
+
+/// One of the three lists a channel keeps under a mode: who may not come in,
+/// who may come in despite a ban, and who needs no invitation. The three
+/// arrive in one shape and differ only in what an entry means.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum ModeList {
+    Ban,
+    Exception,
+    Invite,
+}
+
+impl ModeList {
+    /// What an entry says about the mask in front of it.
+    fn entry(self, channel: &str) -> String {
+        match self {
+            ModeList::Ban => format!("is banned in {channel}"),
+            ModeList::Exception => format!("is exempt from the bans in {channel}"),
+            ModeList::Invite => format!("can join {channel} without an invitation"),
+        }
+    }
+
+    /// What the end of the list says when nothing came under it. The invite
+    /// list keeps its own wording: nobody on it does not mean nobody may join,
+    /// only that the channel has granted no standing exemption.
+    fn empty(self, channel: &str) -> String {
+        match self {
+            ModeList::Ban => format!("Nobody is banned in {channel}"),
+            ModeList::Exception => format!("Nobody is exempt from the bans in {channel}"),
+            ModeList::Invite => format!("Nobody is on the invite list for {channel}"),
+        }
     }
 }
 

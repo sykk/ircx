@@ -119,6 +119,7 @@ async fn against_ergo() {
     topic_on_join(&mut report, &mut live, &mut other).await;
     a_topic_typed_here_comes_back_changed(&mut report, &mut live).await;
     a_topic_refused_says_why(&mut report, &mut live).await;
+    a_mode_list_is_read_in_the_channel(&mut report, &mut live).await;
     a_setname_is_taken_and_shows_in_a_whois(&mut report, &mut live).await;
     a_look_up_fills_a_member_and_draws_nothing(&mut report, &mut live).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
@@ -372,6 +373,52 @@ async fn a_topic_refused_says_why(report: &mut Report, live: &mut Live) {
             "topic refused",
             "the server refused with 482 and nothing was said",
         ),
+    }
+}
+
+/// The three lists a channel keeps, asked for in the channel they are about.
+///
+/// What needs a real server is the empty one: it arrives as the end numeric by
+/// itself, and until #663 the whole answer was the server's `End of list` in
+/// the console. The ban is set first and read back after, because a list with
+/// something in it and one with nothing in it are answered by different code.
+async fn a_mode_list_is_read_in_the_channel(report: &mut Report, live: &mut Live) {
+    // The channel this client opened: setting a ban needs the `+o` ergo gives
+    // whoever arrives first.
+    live.submit(OWN_CHANNEL, "/mode b").await;
+
+    match live
+        .said(PATIENCE, |message| {
+            message.text.starts_with("Nobody is banned")
+        })
+        .await
+    {
+        Some(message) if message.target == OWN_CHANNEL => {
+            report.pass("empty ban list", &message.text)
+        }
+        Some(message) => report.fail(
+            "empty ban list",
+            &format!("said it in {} rather than the channel", message.target),
+        ),
+        None => report.fail(
+            "empty ban list",
+            "a channel with nothing banned in it said nothing at all",
+        ),
+    }
+
+    live.submit(OWN_CHANNEL, "/mode +b probe!*@*").await;
+    live.submit(OWN_CHANNEL, "/mode b").await;
+
+    match live
+        .said(PATIENCE, |message| message.text.contains("is banned in"))
+        .await
+    {
+        Some(message) if message.text.contains("set by") => report.pass("ban list", &message.text),
+        Some(message) => report.fail(
+            "ban list",
+            &format!("listed the ban without who set it: {}", message.text),
+        ),
+        None => report.fail("ban list", "the ban just set was not listed back"),
     }
 }
 

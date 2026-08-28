@@ -492,16 +492,23 @@ async fn say_something(report: &mut Report, live: &mut Live, marker: &str) {
         &format!("{:?}", local.delivery),
     );
 
+    // A sent message is updated twice — `Sent` when the line leaves the socket
+    // and `Delivered` when the echo comes back — so the confirmation is what
+    // this waits for rather than the first update carrying the id. Taking the
+    // first and asking afterwards is what had this step reporting that a
+    // message the archive holds as `Delivered` was never confirmed.
     let wanted = local.id.clone();
     let confirmed = live
         .wait(Duration::from_secs(30), |event| match event {
-            IrcxEvent::MessageUpdated { message } if message.id == wanted => {
+            IrcxEvent::MessageUpdated { message }
+                if message.id == wanted && message.delivery == Delivery::Delivered =>
+            {
                 Some(message.as_ref().clone())
             }
             _ => None,
         })
         .await;
-    let Some(confirmed) = confirmed.filter(|m| m.delivery == Delivery::Delivered) else {
+    let Some(confirmed) = confirmed else {
         report.fail(
             "echo-message delivery confirmation",
             "the echo never confirmed the local copy",
@@ -512,6 +519,25 @@ async fn say_something(report: &mut Report, live: &mut Live, marker: &str) {
     report.pass(
         "echo-message delivery confirmation",
         "the echo was matched to the local copy",
+    );
+
+    // The state the timeline draws while a message is in flight, and the one
+    // this step used to mistake for the confirmation.
+    let sent = live.seen_any(|event| match event {
+        IrcxEvent::MessageUpdated { message }
+            if message.id == wanted && message.delivery == Delivery::Sent =>
+        {
+            Some(())
+        }
+        _ => None,
+    });
+    report.check(
+        "a message is marked sent before it is confirmed",
+        sent.is_some(),
+        match sent {
+            Some(()) => "the write was reported, then the echo",
+            None => "nothing reported the write; the echo was the only update",
+        },
     );
 
     // The echo is the only place the server's own identity for our message

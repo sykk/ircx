@@ -88,7 +88,12 @@ PY
 	ln -sfn "$ERGO/languages" "$LAB/languages"
 	rm -f "$LAB/ircd.lock"
 	(cd "$LAB" && "$ERGO/ergo" initdb --conf ircd.yaml > /dev/null 2>&1 || true)
-	(cd "$LAB" && nohup "$ERGO/ergo" run --conf ircd.yaml > "$LAB/ergo.log" 2>&1 &)
+	# `setsid` rather than `nohup`: a daemon left as a child of this script is
+	# one the shell waits for on the way out, and `test` then never returns to
+	# whatever is reading its output. Every one of these is started the same
+	# way and found again by pattern, `$!` naming the setsid rather than what
+	# it started.
+	(cd "$LAB" && setsid --fork "$ERGO/ergo" run --conf ircd.yaml > "$LAB/ergo.log" 2>&1 < /dev/null &)
 	sleep 2
 	pgrep -f "ergo run --conf ircd.yaml" | head -1 > "$LAB/ergo.pid"
 	grep -q "now listening on 127.0.0.1:$PORT" "$LAB/ergo.log" || {
@@ -98,9 +103,9 @@ PY
 }
 
 start_display() {
-	Xvfb "$DISPLAY_NUMBER" -screen 0 1280x900x24 > "$LAB/xvfb.log" 2>&1 &
-	echo $! > "$LAB/xvfb.pid"
+	setsid --fork Xvfb "$DISPLAY_NUMBER" -screen 0 1280x900x24 > "$LAB/xvfb.log" 2>&1 < /dev/null &
 	sleep 1
+	pgrep -f "Xvfb $DISPLAY_NUMBER " | head -1 > "$LAB/xvfb.pid"
 }
 
 configure_hexchat() {
@@ -164,7 +169,7 @@ start_hexchat() {
 		echo "export IRCX_DCC_PORT='$PORT'"
 		echo "export IRCX_DCC_PEER='$PEER'"
 	} > "$LAB/env.sh"
-	DISPLAY=$DISPLAY_NUMBER nohup hexchat -d "$LAB/hexchat" > "$LAB/hexchat.log" 2>&1 &
+	DISPLAY=$DISPLAY_NUMBER setsid --fork hexchat -d "$LAB/hexchat" > "$LAB/hexchat.log" 2>&1 < /dev/null &
 	sleep 6
 	pgrep -f "hexchat -d $LAB" | head -1 > "$LAB/hexchat.pid"
 	grep -q "Welcome" "$LAB/hexchat/logs/labnet/labnet.log" 2>/dev/null || {

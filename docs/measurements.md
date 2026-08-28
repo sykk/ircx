@@ -1243,6 +1243,39 @@ pane can be — the gap `MIN_PANE_PX` has too. 680 and 84vh are chosen to leave
 the conversation showing above and below, not measured against a page that
 stops fitting.
 
+## What the WHO a join sends costs
+
+**Measured 2026-08-28**, `cargo test -p ircx-core --test libera -- --ignored
+--nocapture` against `molybdenum.libera.chat`, joining `#libera` on a throwaway
+unregistered nick and reading the replies off the wire.
+
+| `#libera` on one join | |
+|---|---|
+| members | 1449 |
+| `353` replies the `NAMES` took | 26 |
+| `354` replies the `WHO` took | 1449 |
+| already away, and drawn here before this | **476** |
+| signed in to an account | 1300 |
+| carrying a real name | 1448 |
+
+**One reply per member is the whole cost, and it is charged once per join.**
+`NAMES` packs fifty-odd nicks into a line and answers in 26; a `WHO` answers
+about one person per line and cannot be packed, so a channel's roster costs
+lines in proportion to itself. Both go through the same pacing as every other
+line the client sends, and `#libera` is close to the worst case Libera has.
+
+**A third of that channel was away**, and none of the 476 carried a reason: a
+`WHO` says whether and never why, so what fills a reason is still an `AWAY`
+arriving afterwards. What the number is here for is the other direction —
+before #677 every one of those 476 was drawn present, and would have stayed
+that way until they came back.
+
+**Covers:** the replies to one `WHO` for one channel, on a server advertising
+`WHOX`. **Excludes:** what a reconnect into many channels costs, which is this
+per channel and has not been measured together; and the plain `WHO` a server
+without `WHOX` answers, whose `352` carries the away flag and the real name and
+no account.
+
 ## Not measured
 
 - macOS and Windows. Everything here is Linux x86-64.

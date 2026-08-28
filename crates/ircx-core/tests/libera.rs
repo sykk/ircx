@@ -917,6 +917,8 @@ async fn a_busy_channel(report: &mut Report, live: &mut Live) {
         ),
     );
 
+    who_on_join_answers_for_the_crowd(report, live, before_join).await;
+
     membership_under_churn(report, live, after_the_list, &held).await;
 
     live.send(SessionCommand::Part {
@@ -936,6 +938,100 @@ async fn a_busy_channel(report: &mut Report, live: &mut Live) {
         "leaving the busy channel again",
         left.is_some(),
         &format!("parted {CROWD}"),
+    );
+}
+
+/// #677, and the half of it no loopback server can answer: solanum, `WHOX`, and
+/// a channel with enough people in it that somebody is always away.
+///
+/// The join above sent one `WHO`, and what comes back is the away state, the
+/// account and the real name for everybody who was already here — none of which
+/// `NAMES` carries and none of which `away-notify` or `extended-join` speaks for
+/// on a roster that predates the join.
+///
+/// The cost is recorded as well as the answer. One reply per member is what a
+/// channel this size charges for the question, and that number belongs
+/// somewhere it can be read rather than guessed at.
+async fn who_on_join_answers_for_the_crowd(report: &mut Report, live: &mut Live, before: usize) {
+    let ended = live
+        .wait(Duration::from_secs(120), |event| match event {
+            IrcxEvent::RawLine {
+                outgoing: false,
+                line,
+                ..
+            } if numeric_for(line, 315, CROWD) => Some(()),
+            _ => None,
+        })
+        .await;
+    if ended.is_none() {
+        report.fail(
+            "the WHO a join sends comes back",
+            &format!("no 315 for {CROWD} in two minutes"),
+        );
+        return;
+    }
+
+    let replies = live.incoming[before..]
+        .iter()
+        .filter(|line| numeric_for(line, 352, CROWD) || numeric_for(line, 354, CROWD))
+        .count();
+    let Some(members) = live.members(CROWD).await else {
+        report.fail(
+            "the WHO a join sends comes back",
+            "no member list came back",
+        );
+        return;
+    };
+
+    let away = members
+        .iter()
+        .filter(|member| member.away.is_some())
+        .count();
+    let accounts = members
+        .iter()
+        .filter(|member| member.account.is_some())
+        .count();
+    let realnames = members
+        .iter()
+        .filter(|member| member.realname.is_some())
+        .count();
+
+    // Somebody is always away in a channel this size, so nobody being away is
+    // the reply having been read rather than the channel being unusually
+    // attentive.
+    report.check(
+        "somebody who was already away is drawn away",
+        away > 0,
+        &format!("{away} of {} members away", members.len()),
+    );
+    report.check(
+        "the reply fills the account and the real name too",
+        accounts > 0 && realnames > 0,
+        &format!(
+            "{accounts} signed in and {realnames} with a real name, of {}",
+            members.len()
+        ),
+    );
+    // A `WHO` says whether and never why. A reason on any of these came from an
+    // `AWAY` that arrived after the join, which is the other path and is fine;
+    // every one of them carrying a reason would mean this step is watching that
+    // path rather than its own.
+    let with_a_reason = members
+        .iter()
+        .filter(|member| {
+            member
+                .away
+                .as_deref()
+                .is_some_and(|reason| !reason.is_empty())
+        })
+        .count();
+    report.note(
+        "away with a reason",
+        &format!("{with_a_reason} of the {away} away, the rest from the WHO"),
+    );
+    report.number(
+        &format!("{CROWD} WHO on join"),
+        &format!("{replies} replies for {} members", members.len()),
     );
 }
 

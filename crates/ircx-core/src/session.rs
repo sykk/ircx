@@ -24,6 +24,7 @@ use crate::scram;
 use crate::sts;
 use crate::text;
 use crate::transfers::{TransferJob, TransferRecord};
+use crate::who;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 
@@ -352,6 +353,12 @@ pub struct SessionState {
     /// Nicks a whois is outstanding for that nobody typed: the inspector asks
     /// for one when it is opened on somebody whose real name is not known.
     quiet_whois: HashSet<String>,
+    /// Channels a `WHO` is outstanding for, folded. It is what tells this
+    /// client's own roster question from a `WHO` somebody typed: replies under
+    /// a channel in here fill the member list and go no further, and every
+    /// other one is the server answering a person and is drawn as it always
+    /// was.
+    pending_who: HashSet<String>,
     /// Last status heard for a watched nick. An absent value is the initial
     /// MONITOR reply, which must not announce everybody already online.
     watch_status: HashMap<String, bool>,
@@ -486,6 +493,7 @@ impl SessionState {
             queries: HashMap::new(),
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
+            pending_who: HashSet::new(),
             watch_status: HashMap::new(),
             whowas: HashSet::new(),
             mode_lists_answered: HashSet::new(),
@@ -915,10 +923,13 @@ impl SessionState {
     /// Asks the server about somebody without drawing the answer.
     ///
     /// The inspector calls this when it is opened on a member whose real name
-    /// is not known — the one thing that fills it in for the people who were
-    /// already in the channel when the reader arrived. It is a request the
+    /// is not known. That used to be everybody who was already in the channel
+    /// when the reader arrived; the `WHO` a join sends answers for them now
+    /// (#677), and what is left here is whoever it could not — somebody a
+    /// server with no `WHOX` and no real name in its `352` said nothing about,
+    /// and somebody who is not in a channel at all. It stays a request the
     /// reader caused by looking, which is the same bargain the preview fetch
-    /// makes; nothing asks on behalf of a roster nobody is reading.
+    /// makes.
     pub fn look_up(&mut self, nick: &str) -> Vec<Action> {
         let folded = self.fold(nick);
         if self.registered && self.quiet_whois.insert(folded) {
@@ -1400,6 +1411,18 @@ impl SessionState {
             RPL_LISTEND => self.on_list_end(),
             RPL_NAMREPLY => self.on_names(params),
             RPL_ENDOFNAMES => self.on_end_of_names(params),
+            RPL_WHOREPLY => match who::reply(params) {
+                Some(reply) if self.asked_who(&reply.channel) => self.take_who(reply),
+                _ => self.on_other_numeric(code, params, message),
+            },
+            RPL_WHOSPCRPL => match who::whox_reply(params) {
+                Some(reply) if self.asked_who(&reply.channel) => self.take_who(reply),
+                _ => self.on_other_numeric(code, params, message),
+            },
+            RPL_ENDOFWHO => match params.first() {
+                Some(name) if self.asked_who(name) => self.on_end_of_who(name.clone()),
+                _ => self.on_other_numeric(code, params, message),
+            },
             RPL_TOPIC => self.on_topic_reply(params),
             RPL_NOTOPIC => self.on_no_topic(params),
             RPL_TOPICWHOTIME => self.on_topic_who_time(params),
@@ -1895,6 +1918,82 @@ impl SessionState {
             .collect();
         self.emit_members(&key);
         self.emit_channel(&key);
+    }
+
+    /// One question per join, asked for everybody who was already there.
+    ///
+    /// `NAMES` arrives with the join and carries the prefixes and nothing else.
+    /// Who is away comes from `away-notify`, which speaks only for somebody who
+    /// moves while this client is watching, and an account and a real name come
+    /// from an `extended-join`, which speaks only for somebody who arrives after
+    /// it. Everybody already in the channel was drawn here, signed in to
+    /// nothing and called nothing, and stayed that way until they went away
+    /// again. A `WHO` is the one question that answers for all of them. #677.
+    ///
+    /// Sent unconditionally, on every join and so on every rejoin: what a
+    /// reconnect into twenty channels costs is twenty lines through the same
+    /// pacing every other line goes through, and a roster nobody asked about is
+    /// a roster that is wrong for as long as nobody moves.
+    fn ask_who(&mut self, channel: &str) {
+        let Some(line) = who::request(channel, self.isupport.whox) else {
+            return;
+        };
+        self.pending_who.insert(self.fold(channel));
+        self.send_line(line);
+    }
+
+    /// Whether a `WHO` reply is an answer to the one sent on joining.
+    ///
+    /// A reply naming any other channel is the server answering somebody who
+    /// typed a `WHO`, and goes to the server tab where a typed one has always
+    /// printed.
+    fn asked_who(&self, channel: &str) -> bool {
+        self.pending_who.contains(&self.fold(channel))
+    }
+
+    /// What a `WHO` said about one member, folded into the one already held.
+    ///
+    /// Never a new member. `NAMES` is the roster and arrives first, so a reply
+    /// about somebody outside it has nowhere to go, and the whole run is drawn
+    /// once at `315` rather than a member at a time: a channel with a thousand
+    /// people in it is a thousand replies, and each of them an event of its own
+    /// would be a join that redrew the member list a thousand times.
+    fn take_who(&mut self, reply: who::Reply) {
+        let key = self.fold(&reply.channel);
+        let folded = self.fold(&reply.nick);
+        let Some(member) = self
+            .channels
+            .get_mut(&key)
+            .and_then(|channel| channel.members.get_mut(&folded))
+        else {
+            return;
+        };
+        match reply.away {
+            // A `WHO` says whether somebody is away and never why, so a reason
+            // an `AWAY` already gave is kept rather than blanked to an away
+            // with nothing on it. `Some("")` is what the member list already
+            // draws as away with no reason given.
+            Some(true) => {
+                member.away.get_or_insert_with(String::new);
+            }
+            Some(false) => member.away = None,
+            None => {}
+        }
+        // Two different silences: a reply that had no account field states
+        // nothing about one, and a plain `WHO` never has one, so an account an
+        // `extended-join` gave outlives a server with no `WHOX`.
+        if let Some(account) = reply.account {
+            member.account = account;
+        }
+        if let Some(realname) = reply.realname {
+            member.realname = Some(realname);
+        }
+    }
+
+    fn on_end_of_who(&mut self, channel: String) {
+        let key = self.fold(&channel);
+        self.pending_who.remove(&key);
+        self.emit_members(&key);
     }
 
     /// The topic a channel already had, which arrives on every join.
@@ -2693,6 +2792,7 @@ impl SessionState {
             channel.rejoin = true;
             channel.members.clear();
             self.send_command("MODE", &[&name]);
+            self.ask_who(&name);
             self.actions
                 .push(Action::Remember(OpenTarget::Channel(name.clone())));
             self.backfill(&name);
@@ -3709,6 +3809,7 @@ impl SessionState {
         self.caps.forget_all();
         self.isupport = ISupport::default();
         self.monitored.clear();
+        self.pending_who.clear();
         self.registered = false;
         self.cap_ended = false;
         self.sts_verified_transport = false;

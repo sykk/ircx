@@ -355,6 +355,11 @@ pub struct SessionState {
     /// Last status heard for a watched nick. An absent value is the initial
     /// MONITOR reply, which must not announce everybody already online.
     watch_status: HashMap<String, bool>,
+    /// Nicks a `WHOWAS` block is open for and has said something about,
+    /// folded. It answers two questions: whether a `312` or a `338` is about
+    /// somebody gone or somebody here, and whether the end of the block is
+    /// speaking for a nickname the server remembered nothing of.
+    whowas: HashSet<String>,
     /// Which of a channel's mode lists an entry has arrived under, folded
     /// channel and list. A server sends nothing at all for an empty list, so
     /// its end numeric is the only place that can say it was empty, and this
@@ -482,6 +487,7 @@ impl SessionState {
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
             watch_status: HashMap::new(),
+            whowas: HashSet::new(),
             mode_lists_answered: HashSet::new(),
             batches: HashMap::new(),
             actions: Vec::new(),
@@ -1399,6 +1405,14 @@ impl SessionState {
             RPL_TOPICWHOTIME => self.on_topic_who_time(params),
             RPL_CREATIONTIME => {}
             RPL_LOCALUSERS | RPL_GLOBALUSERS => self.server_sentence(message),
+            RPL_WHOWASUSER | ERR_WASNOSUCHNICK => self.on_whowas(code, params, message),
+            RPL_ENDOFWHOWAS => self.on_end_of_whowas(params, message),
+            // The two numerics a whois and a whowas share. Inside a block they
+            // are about somebody who has gone, and the whois sentence for `312`
+            // would say they are connected.
+            RPL_WHOISSERVER | RPL_WHOISACTUALLY if self.inside_a_whowas(params) => {
+                self.on_whowas(code, params, message)
+            }
             RPL_WHOISUSER | RPL_WHOISSERVER | RPL_WHOISIDLE | RPL_WHOISCHANNELS
             | RPL_WHOISACCOUNT => self.on_whois(code, params, message),
             RPL_CHANNELMODEIS => self.on_channel_modes(params),
@@ -1965,6 +1979,80 @@ impl SessionState {
             _ => {}
         }
         true
+    }
+
+    /// Whether a `WHOWAS` block is open for the nick this numeric names.
+    fn inside_a_whowas(&self, params: &[String]) -> bool {
+        params
+            .first()
+            .is_some_and(|nick| self.whowas.contains(&self.fold(nick)))
+    }
+
+    /// A `WHOWAS` reply: what the server remembers of somebody who has gone.
+    ///
+    /// Written apart from `on_whois` rather than beside it because two of these
+    /// numerics are the whois ones over again and say the opposite here. The
+    /// tense is the whole difference a reader needs: `was`, and where they were
+    /// last seen.
+    fn on_whowas(&mut self, code: u16, params: &[String], message: &Message) {
+        let Some(who) = params.first().cloned() else {
+            return;
+        };
+        let sentence = match code {
+            RPL_WHOWASUSER => {
+                let user = params.get(1).map(String::as_str).unwrap_or("");
+                let host = params.get(2).map(String::as_str).unwrap_or("");
+                // The `*` between the host and the real name is a field no
+                // server has ever used, which is why the name is fourth.
+                let real = params.get(4).map(String::as_str).unwrap_or("");
+                match real.trim().is_empty() || real.eq_ignore_ascii_case(&who) {
+                    true => format!("{who} was {user}@{host}"),
+                    false => format!("{who} was {user}@{host}, calling themselves {real}"),
+                }
+            }
+            RPL_WHOISSERVER => {
+                let server = params.get(1).map(String::as_str).unwrap_or("");
+                // Libera puts a date a person can read here, ergo sends no
+                // `312` at all, and the specification promises neither.
+                let when = params.get(2).map(String::as_str).unwrap_or("");
+                match when.trim().is_empty() {
+                    true => format!("{who} was last seen on {server}"),
+                    false => format!("{who} was last seen on {server}, {when}"),
+                }
+            }
+            RPL_WHOISACTUALLY => {
+                let host = params.get(1).map(String::as_str).unwrap_or("");
+                format!("{who} was connecting from {host}")
+            }
+            ERR_WASNOSUCHNICK => self.forgotten(&who),
+            _ => return,
+        };
+        self.whowas.insert(self.fold(&who));
+        let note = self.chat_message(message, SERVER_TARGET, MessageKind::Server, sentence);
+        self.append(note);
+    }
+
+    /// `369`. Libera answers a nickname it has never heard of with this and
+    /// nothing else — no `406` anywhere — so the end of the block is the only
+    /// place that can speak for one nothing came under, and a command that
+    /// answers with silence looks like one that failed.
+    fn on_end_of_whowas(&mut self, params: &[String], message: &Message) {
+        let Some(who) = params.first().cloned() else {
+            return;
+        };
+        if self.whowas.remove(&self.fold(&who)) {
+            return;
+        }
+        let sentence = self.forgotten(&who);
+        let note = self.chat_message(message, SERVER_TARGET, MessageKind::Server, sentence);
+        self.append(note);
+    }
+
+    /// What both ways of saying "never heard of them" come out as. A server
+    /// keeps its record for a while and then drops it, so this is about what
+    /// the server still holds rather than about who ever existed.
+    fn forgotten(&self, who: &str) -> String {
+        format!("{} remembers no nickname `{who}`", self.network_name())
     }
 
     /// A WHOIS reply, in a sentence rather than in the order it arrived.

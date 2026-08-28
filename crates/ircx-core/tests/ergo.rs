@@ -120,6 +120,7 @@ async fn against_ergo() {
     a_topic_typed_here_comes_back_changed(&mut report, &mut live).await;
     a_topic_refused_says_why(&mut report, &mut live).await;
     a_mode_list_is_read_in_the_channel(&mut report, &mut live).await;
+    a_record_of_somebody_who_has_gone(&mut report, &mut live, room.path()).await;
     a_setname_is_taken_and_shows_in_a_whois(&mut report, &mut live).await;
     a_look_up_fills_a_member_and_draws_nothing(&mut report, &mut live).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
@@ -419,6 +420,51 @@ async fn a_mode_list_is_read_in_the_channel(report: &mut Report, live: &mut Live
             &format!("listed the ban without who set it: {}", message.text),
         ),
         None => report.fail("ban list", "the ban just set was not listed back"),
+    }
+}
+
+/// `WHOWAS`, which needs somebody to have gone. A fourth client, registered and
+/// then stopped, is the only way to arrange that inside one run.
+///
+/// The state is what a real server is wanted for: `312` and `338` arrive inside
+/// the block and mean the opposite of what a whois means by them, and the end
+/// of a block speaks only for one nothing came under. Ergo answers an unknown
+/// nickname with `406` and `369` both, where Libera sends the `369` alone.
+async fn a_record_of_somebody_who_has_gone(report: &mut Report, live: &mut Live, room: &Path) {
+    const GONE: &str = "ircx-gone";
+    let store = match Store::open(&room.join("gone.sqlite3")) {
+        Ok(store) => Arc::new(store),
+        Err(error) => return report.fail("whowas", &format!("fourth Store::open failed: {error}")),
+    };
+    let mut gone = Live::start(config("ergo-4", GONE), store, None);
+    if !registered(report, &mut gone).await {
+        return report.fail("whowas", "the client that was to leave never arrived");
+    }
+    gone.stop().await;
+
+    live.submit(SERVER_TARGET, &format!("/whowas {GONE}")).await;
+    match live
+        .said(PATIENCE, |message| message.text.starts_with(GONE))
+        .await
+    {
+        Some(message) if message.text.contains("was ") => report.pass("whowas", &message.text),
+        Some(message) => report.fail("whowas", &format!("came back as {}", message.text)),
+        None => report.fail("whowas", "the server remembered nothing and said nothing"),
+    }
+
+    live.submit(SERVER_TARGET, "/whowas nobodyeverhadthisnick")
+        .await;
+    match live
+        .said(PATIENCE, |message| {
+            message.text.contains("remembers no nickname")
+        })
+        .await
+    {
+        Some(message) => report.pass("whowas for a nickname nobody had", &message.text),
+        None => report.fail(
+            "whowas for a nickname nobody had",
+            "a nickname the server never heard of was answered with silence",
+        ),
     }
 }
 

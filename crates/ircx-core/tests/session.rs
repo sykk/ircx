@@ -1432,6 +1432,7 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
     session.submit("#ircx", "/nick sykk2");
     session.submit("#ircx", "/away back later");
     session.submit("#ircx", "/whois sable");
+    session.submit("#ircx", "/whowas sable");
     session.submit("#ircx", "/raw PING token");
 
     assert_eq!(
@@ -1448,6 +1449,7 @@ fn slash_commands_reach_the_wire_as_the_protocol_spells_them() {
             "NICK sykk2",
             "AWAY :back later",
             "WHOIS sable",
+            "WHOWAS sable",
             "PING token",
         ]
     );
@@ -3709,6 +3711,168 @@ fn a_new_listing_starts_from_nothing() {
 /// The lines are ergo's, off a channel with one of each set on it. A server
 /// sends one numeric per entry and nothing whatever for a list that is empty,
 /// so both the entries and the end of them are the client's to write.
+/// The lines are real: ergo's for a nick that quit a moment earlier, Libera's
+/// for one that disconnected seconds before. The two servers answer an unknown
+/// nickname differently, and Libera sends two numerics inside the block that a
+/// whois sends about somebody who is still here.
+mod remembering_somebody_who_has_gone {
+    use super::*;
+
+    fn said(session: &Harness) -> Vec<String> {
+        session
+            .messages()
+            .iter()
+            .map(|message| message.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_record_is_a_sentence_in_the_past_tense() {
+        let mut session = registered("");
+        session.feed(":ergo.test 314 sykk departed ~u f6u3beryjfghu.irc * :Someone Who Left");
+
+        assert_eq!(
+            said(&session),
+            vec![
+                "departed was ~u@f6u3beryjfghu.irc, calling themselves Someone Who Left"
+                    .to_string()
+            ]
+        );
+    }
+
+    /// Servers overwhelmingly set the real name to the nick, and the whois
+    /// sentence does not say it twice either.
+    #[test]
+    fn a_real_name_that_is_the_nick_is_left_out() {
+        let mut session = registered("");
+        session.feed(":ergo.test 314 sykk departed ~u host.example * :departed");
+
+        assert_eq!(
+            said(&session),
+            vec!["departed was ~u@host.example".to_string()]
+        );
+    }
+
+    /// `312` inside a block is where they were last seen. Said as a whois says
+    /// it, the client would tell the reader that somebody who has gone is
+    /// connected.
+    #[test]
+    fn the_server_they_were_on_is_where_they_were_last_seen() {
+        let mut session = registered("");
+        session.feed(
+            ":cadmium.libera.chat 314 sykk ircxwas32700 ~ircxtest 2607:3c40:2900:b480::4cd * \
+             :ircx verification run",
+        );
+        session.events.clear();
+        session.feed(
+            ":cadmium.libera.chat 312 sykk ircxwas32700 cadmium.libera.chat \
+             :Fri Aug 28 01:19:55 2026",
+        );
+
+        assert_eq!(
+            said(&session),
+            vec![
+                "ircxwas32700 was last seen on cadmium.libera.chat, Fri Aug 28 01:19:55 2026"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn the_host_they_were_really_on_is_drawn_too() {
+        let mut session = registered("");
+        session.feed(":cadmium.libera.chat 314 sykk gone ~u 2607:3c40:2900:b480::4cd * :gone");
+        session.events.clear();
+        session.feed(
+            ":cadmium.libera.chat 338 sykk gone 2607:3c40:2900:b480::4cd :actually using host",
+        );
+
+        assert_eq!(
+            said(&session),
+            vec!["gone was connecting from 2607:3c40:2900:b480::4cd".to_string()]
+        );
+    }
+
+    /// The same numeric outside a block is still a whois answer about somebody
+    /// who is here.
+    #[test]
+    fn a_whois_still_says_where_somebody_is_connected() {
+        let mut session = registered("");
+        session.feed(":irc.libera.chat 312 sykk sable molybdenum.libera.chat :Libera.Chat");
+
+        assert_eq!(
+            said(&session),
+            vec!["sable is connected to molybdenum.libera.chat (Libera.Chat)".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_nickname_the_server_never_heard_of_says_so() {
+        let mut session = registered("");
+        session.feed(":ergo.test 406 sykk nobodyeverhadthisnick :There was no such nickname");
+        session.feed(":ergo.test 369 sykk nobodyeverhadthisnick :End of WHOWAS");
+
+        assert_eq!(
+            said(&session),
+            vec!["Libera.Chat remembers no nickname `nobodyeverhadthisnick`".to_string()]
+        );
+    }
+
+    /// Libera sends no `406` whatever. The end of the block is the only line
+    /// there is, so it is the one that has to speak.
+    #[test]
+    fn an_end_with_nothing_under_it_says_the_same() {
+        let mut session = registered("");
+        session.feed(":cadmium.libera.chat 369 sykk nobodyeverhadthisnickatall :End of WHOWAS");
+
+        assert_eq!(
+            said(&session),
+            vec!["Libera.Chat remembers no nickname `nobodyeverhadthisnickatall`".to_string()]
+        );
+    }
+
+    #[test]
+    fn the_end_of_a_block_with_a_record_in_it_says_nothing() {
+        let mut session = registered("");
+        session.feed(":ergo.test 314 sykk departed ~u host.example * :Someone Who Left");
+        session.events.clear();
+        session.feed(":ergo.test 369 sykk departed :End of WHOWAS");
+
+        assert!(said(&session).is_empty(), "{:?}", said(&session));
+    }
+
+    /// Asked twice, answered twice: the block is closed by its own end.
+    #[test]
+    fn a_second_whowas_for_the_same_nick_is_answered_again() {
+        let mut session = registered("");
+        session.feed(":ergo.test 314 sykk departed ~u host.example * :departed");
+        session.feed(":ergo.test 369 sykk departed :End of WHOWAS");
+        session.events.clear();
+        session.feed(":ergo.test 369 sykk departed :End of WHOWAS");
+
+        assert_eq!(
+            said(&session),
+            vec!["Libera.Chat remembers no nickname `departed`".to_string()]
+        );
+    }
+
+    /// A whois for somebody who has just quit is where the command is wanted,
+    /// and 401 is the only line the reader gets.
+    #[test]
+    fn a_whois_for_somebody_gone_says_what_to_type_next() {
+        let mut session = registered("");
+        session.feed(":irc.libera.chat 401 sykk departed :No such nick/channel");
+
+        assert_eq!(
+            said(&session),
+            vec![
+                "There is no user called `departed` on Libera.Chat — `/whowas departed` may say who they were"
+                    .to_string()
+            ]
+        );
+    }
+}
+
 mod a_channels_mode_lists {
     use super::*;
 

@@ -30,6 +30,17 @@ pub const RPL_EXCEPTLIST: u16 = 348;
 pub const RPL_ENDOFEXCEPTLIST: u16 = 349;
 pub const RPL_BANLIST: u16 = 367;
 pub const RPL_ENDOFBANLIST: u16 = 368;
+/// The `WHOWAS` block: what a server remembers of somebody who has gone.
+///
+/// `312` and `338` arrive inside one as readily as inside a whois, and mean
+/// the opposite there — where somebody was last seen rather than where they
+/// are — which is why `session.rs` tracks whether a block is open. Libera
+/// answers a nickname it has never heard of with `369` alone and no `406`.
+pub const RPL_WHOWASUSER: u16 = 314;
+/// The host a whois or a whowas says somebody was really connecting from.
+pub const RPL_WHOISACTUALLY: u16 = 338;
+pub const RPL_ENDOFWHOWAS: u16 = 369;
+pub const ERR_WASNOSUCHNICK: u16 = 406;
 /// The WHOIS replies worth rewriting. Each puts its data *before* the server's
 /// trailing text, so joining the parameters — which is what an unhandled
 /// numeric falls back to — reads backwards or unlabelled. `session.rs` writes
@@ -60,9 +71,11 @@ pub fn describe(code: u16, params: &[String], network: &str) -> Option<(Severity
     let reason = params.last().map(String::as_str).unwrap_or("");
 
     let sentence = match code {
+        // The command to type next, because a nick that answers this is
+        // usually one that was there a moment ago.
         ERR_NOSUCHNICK => (
             Severity::Warning,
-            format!("There is no user called `{first}` on {network}"),
+            format!("There is no user called `{first}` on {network} — `/whowas {first}` may say who they were"),
         ),
         402 => (
             Severity::Warning,

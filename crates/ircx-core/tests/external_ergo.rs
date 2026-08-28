@@ -10,6 +10,15 @@
 //! than building a chain, so a self-signed certificate made in thirty seconds
 //! is as good as one from an authority.
 //!
+//! The server, the certificates, the account and the fingerprint on it are all
+//! `scripts/sasl-rigs.sh`:
+//!
+//! ```text
+//! scripts/sasl-rigs.sh test
+//! ```
+//!
+//! By hand, which is what that script does:
+//!
 //! ```text
 //! # a server with a TLS listener, an account, and the fingerprint on it:
 //! openssl req -x509 -newkey rsa:2048 -keyout client.key -out client.crt \
@@ -37,9 +46,18 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 const HOST: &str = "127.0.0.1";
+
 /// The TLS listener. EXTERNAL over plaintext is a contradiction — there is no
 /// outer layer to take the credentials from — so this probe has no plain port.
-const PORT: u16 = 6698;
+///
+/// `scripts/sasl-rigs.sh` serves a port of its own, so that a run cannot
+/// collide with a server somebody else started.
+fn port() -> u16 {
+    std::env::var("IRCX_SASL_TLS_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(6698)
+}
 const ACCOUNT: &str = "certwalk";
 
 struct Walk {
@@ -51,10 +69,11 @@ struct Walk {
 /// Without this, a missing server is a timeout and then an assertion about a
 /// numeric that never arrived, which reads like the client is broken.
 fn require_ergo() {
-    if std::net::TcpStream::connect((HOST, PORT)).is_err() {
+    let port = port();
+    if std::net::TcpStream::connect((HOST, port)).is_err() {
         panic!(
-            "nothing is listening on {HOST}:{PORT} — start ergo with a TLS listener \
-             (see the notes at the top of this file)"
+            "nothing is listening on {HOST}:{port} — start the rig, or an ergo with a TLS \
+             listener (see the notes at the top of this file)"
         );
     }
 }
@@ -76,7 +95,7 @@ async fn walk(nick: &str, certificate: Option<PathBuf>) -> Walk {
         network: Uuid::new_v4().to_string(),
         name: "ergo".into(),
         host: HOST.into(),
-        port: PORT,
+        port: port(),
         tls: true,
         // The listener's certificate is the one `ergo mkcerts` made, which no
         // authority has heard of. What is under test is the other direction.

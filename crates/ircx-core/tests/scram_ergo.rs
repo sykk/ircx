@@ -7,9 +7,16 @@
 //! `sasl=PLAIN,EXTERNAL,SCRAM-SHA-256` with `advertise-scram: true`, the
 //! default, and registers an account with one line.
 //!
+//! The server, the account and the run are `scripts/sasl-rigs.sh`:
+//!
+//! ```text
+//! scripts/sasl-rigs.sh test
+//! ```
+//!
+//! By hand it is a server, one line to NickServ, and the usual invocation:
+//!
 //! ```text
 //! ergo run --conf ircd.yaml &
-//! # once, to create the account these tests log in as:
 //! /msg NickServ REGISTER correct-horse-battery   # as nick `scramwalk`
 //! cargo test -p ircx-core --test scram_ergo -- --ignored --nocapture
 //! ```
@@ -25,7 +32,16 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 const HOST: &str = "127.0.0.1";
-const PORT: u16 = 6667;
+
+/// The plaintext listener. `scripts/sasl-rigs.sh` serves a port of its own, so
+/// that a run cannot collide with a server somebody else started; the default
+/// is the one an ergo out of the box listens on.
+fn port() -> u16 {
+    std::env::var("IRCX_SASL_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(6667)
+}
 const ACCOUNT: &str = "scramwalk";
 const PASSWORD: &str = "correct-horse-battery";
 
@@ -43,8 +59,9 @@ async fn walk(nick: &str, password: &str) -> Walk {
 /// Without this, a missing server is a 30-second timeout and then an assertion
 /// about a numeric that never arrived, which reads like the client is broken.
 fn require_ergo() {
-    if std::net::TcpStream::connect((HOST, PORT)).is_err() {
-        panic!("nothing is listening on {HOST}:{PORT} — start ergo first (see the notes at the top of this file)");
+    let port = port();
+    if std::net::TcpStream::connect((HOST, port)).is_err() {
+        panic!("nothing is listening on {HOST}:{port} — start the rig first (see the notes at the top of this file)");
     }
 }
 
@@ -55,7 +72,7 @@ async fn walk_with(nick: &str, password: &str, mechanism: SaslMechanism) -> Walk
         network,
         name: "ergo".into(),
         host: HOST.into(),
-        port: PORT,
+        port: port(),
         tls: false,
         tls_verify: false,
         socks5_proxy: None,

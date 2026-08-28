@@ -6,6 +6,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use ircx_core::{
     Action, PageBack, Restored, SaslCredentials, SessionConfig, SessionState, TransferJob,
+    SERVER_TARGET,
 };
 use ircx_ipc::{
     ChatMessage, CommandOutcome, ConnectionStatus, Delivery, IrcxEvent, Member, MessageKind,
@@ -673,6 +674,155 @@ fn userhost_in_names_does_not_leak_the_mask_into_the_nick() {
 }
 
 #[test]
+fn a_join_asks_who_is_in_the_channel() {
+    let mut plain = registered("");
+    plain.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    assert!(
+        plain.sent().contains(&"WHO #ircx".to_string()),
+        "a server with no WHOX is asked the question it can answer"
+    );
+
+    let mut whox = registered("");
+    whox.feed(":irc.libera.chat 005 sykk WHOX :are supported by this server");
+    whox.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    assert!(
+        whox.sent().contains(&"WHO #ircx %cnfar".to_string()),
+        "a WHOX server is asked for the fields, the account among them"
+    );
+}
+
+/// The whole of #677: `away-notify` speaks for somebody who moves while this
+/// client is watching, and everybody who was already away was drawn here.
+#[test]
+fn a_who_reply_says_who_was_already_away() {
+    let mut session = registered("away-notify");
+    session.feed(":irc.libera.chat 005 sykk WHOX :are supported by this server");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sable ash sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    assert!(
+        session
+            .members("#ircx")
+            .iter()
+            .all(|member| member.away.is_none()),
+        "NAMES says nothing about it, so nobody is away yet"
+    );
+
+    session.feed(":irc.libera.chat 354 sykk #ircx sable G sable :Sable");
+    session.feed(":irc.libera.chat 354 sykk #ircx ash H 0 :Ash");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+
+    let members = session.members("#ircx");
+    let sable = members
+        .iter()
+        .find(|member| member.nick == "sable")
+        .unwrap();
+    assert_eq!(
+        sable.away.as_deref(),
+        Some(""),
+        "away with no reason, because a WHO carries none"
+    );
+    assert_eq!(sable.account.as_deref(), Some("sable"));
+    assert_eq!(sable.realname.as_deref(), Some("Sable"));
+
+    let ash = members.iter().find(|member| member.nick == "ash").unwrap();
+    assert_eq!(ash.away, None, "H is here");
+    assert_eq!(ash.account, None, "`0` is signed in to nothing");
+}
+
+/// A thousand replies would be a thousand redraws, so the run is drawn once at
+/// its end.
+#[test]
+fn a_who_run_redraws_the_member_list_at_its_end() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sable sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    session.events.clear();
+
+    session.feed(":irc.libera.chat 352 sykk #ircx ~s user/sable irc.libera.chat sable G :0 Sable");
+    assert!(
+        session.last_members().is_empty(),
+        "nothing is published while the replies are still arriving"
+    );
+
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+    let drawn = session.last_members();
+    assert_eq!(drawn.len(), 2);
+    assert_eq!(
+        drawn
+            .iter()
+            .find(|member| member.nick == "sable")
+            .unwrap()
+            .away
+            .as_deref(),
+        Some("")
+    );
+}
+
+/// A `WHO` says whether somebody is away and never why, and an `AWAY` that
+/// already said why is the better answer of the two.
+#[test]
+fn a_who_reply_keeps_a_reason_an_away_already_gave() {
+    let mut session = registered("away-notify");
+    session.feed(":irc.libera.chat 005 sykk WHOX :are supported by this server");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sable sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    session.feed(":sable!~s@user/sable AWAY :out for lunch");
+
+    session.feed(":irc.libera.chat 354 sykk #ircx sable G 0 :Sable");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+
+    assert_eq!(
+        session.member("#ircx", "sable").unwrap().away.as_deref(),
+        Some("out for lunch")
+    );
+}
+
+/// The account is the one field a plain `WHO` has nowhere to put, which is not
+/// the same as it saying there is none.
+#[test]
+fn a_plain_who_does_not_erase_an_account_an_extended_join_gave() {
+    let mut session = registered("extended-join");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx * :sykk on ircx");
+    session.feed(":sable!~s@user/sable JOIN #ircx sable :Sable");
+    session.feed(":irc.libera.chat 352 sykk #ircx ~s user/sable irc.libera.chat sable H :0 Sable");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+
+    assert_eq!(
+        session.member("#ircx", "sable").unwrap().account.as_deref(),
+        Some("sable")
+    );
+}
+
+/// The replies are swallowed because this client asked for them. One it did not
+/// ask for belongs to whoever typed the `WHO`, and prints where a typed one
+/// always printed.
+#[test]
+fn a_who_reply_for_a_channel_nobody_asked_about_is_drawn() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sable sykk");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list.");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+
+    session.feed(":irc.libera.chat 352 sykk #elsewhere ~a user/ash irc.libera.chat ash H :0 Ash");
+    session.feed(":irc.libera.chat 315 sykk #elsewhere :End of /WHO list.");
+
+    let drawn: Vec<&str> = session
+        .messages()
+        .iter()
+        .filter(|message| message.target == SERVER_TARGET)
+        .map(|message| message.text.as_str())
+        .collect();
+    assert!(
+        drawn.iter().any(|text| text.contains("#elsewhere")),
+        "a WHO somebody typed still reaches the server tab: {drawn:?}"
+    );
+}
+
+#[test]
 fn rfc1459_folding_finds_a_member_whose_nick_changed_case() {
     let mut session = registered("");
     session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
@@ -1039,6 +1189,33 @@ fn somebody_elses_setname_moves_their_real_name_and_draws_nothing() {
 
 /// The inspector's question. One `WHOIS` goes out, the answer lands on the
 /// member, and none of the block reaches the server tab.
+/// A `352` carries a real name and has nowhere to put an account, so on a
+/// server with no `WHOX` the look-up is still the only thing that fills one in.
+/// #677.
+#[test]
+fn a_look_up_still_fills_the_account_a_plain_who_could_not() {
+    let mut session = registered("");
+    session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+    session.feed(":irc.libera.chat 353 sykk = #ircx :sykk rae");
+    session.feed(":irc.libera.chat 366 sykk #ircx :End of NAMES list");
+    session.feed(":irc.libera.chat 352 sykk #ircx ~rae example.net irc.libera.chat rae H :0 Rae");
+    session.feed(":irc.libera.chat 315 sykk #ircx :End of /WHO list.");
+    assert_eq!(
+        session.member("#ircx", "rae").unwrap().account,
+        None,
+        "the WHO answered with no account field at all"
+    );
+
+    session.look_up("rae");
+    session.feed(":irc.libera.chat 330 sykk rae raeaccount :is logged in as");
+    session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
+
+    assert_eq!(
+        session.member("#ircx", "rae").unwrap().account.as_deref(),
+        Some("raeaccount")
+    );
+}
+
 #[test]
 fn a_looked_up_whois_fills_the_member_and_draws_no_row() {
     let mut session = registered("");
@@ -1108,21 +1285,25 @@ fn a_typed_whois_keeps_the_real_name_it_narrates() {
 /// The inspector mounts twice under StrictMode and asks twice. The second one
 /// is not a second question for the server.
 #[test]
-fn a_second_look_up_while_one_is_outstanding_asks_once() {
+fn a_look_up_asks_once_for_one_person_on_one_connection() {
     let mut session = registered("");
     session.look_up("rae");
     session.sent();
 
     session.look_up("rae");
-    assert!(session.sent().is_empty());
+    assert!(session.sent().is_empty(), "one is still outstanding");
 
+    // It was askable again here, on the reasoning that an answered question can
+    // be asked afresh. What the panel asks about widened with #677 — an unknown
+    // account is a reason to look as much as an unknown real name — and
+    // somebody signed in to nothing is answered with no `330` at all, so under
+    // the old rule opening the panel on them twice was two questions and
+    // opening it ten times was ten.
     session.feed(":irc.libera.chat 318 sykk rae :End of /WHOIS list");
     session.look_up("rae");
-    assert_eq!(
-        session.sent(),
-        vec!["WHOIS rae"],
-        "answered, so askable again"
-    );
+    assert!(session.sent().is_empty(), "answered, and not asked again");
+    session.look_up("RAE");
+    assert!(session.sent().is_empty(), "and it is the same person");
 }
 
 #[test]

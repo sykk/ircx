@@ -20,6 +20,14 @@ pub const RPL_LISTEND: u16 = 323;
 pub const RPL_CHANNELMODEIS: u16 = 324;
 pub const RPL_NOTOPIC: u16 = 331;
 pub const RPL_TOPICWHOTIME: u16 = 333;
+/// The `WHO` a channel is asked on join, which is the only question that
+/// answers for everybody already in it. `352` is the reply every server has;
+/// `354` is the one a `WHOX` server sends back, carrying the account as well.
+/// `315` ends either, and `session.rs` swallows all three for a channel it
+/// asked about and draws them for one it did not.
+pub const RPL_ENDOFWHO: u16 = 315;
+pub const RPL_WHOREPLY: u16 = 352;
+pub const RPL_WHOSPCRPL: u16 = 354;
 /// The three lists a channel keeps under a mode, and the numeric that ends
 /// each. An entry is a mask and, on most servers, who set it and when; an
 /// empty list is the end numeric by itself, which is why `session.rs` counts

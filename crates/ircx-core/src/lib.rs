@@ -31,6 +31,7 @@ mod sts;
 mod task;
 mod text;
 mod transfers;
+mod who;
 
 pub use caps::SUPPORTED as SUPPORTED_CAPS;
 pub use casemap::CaseMapping;

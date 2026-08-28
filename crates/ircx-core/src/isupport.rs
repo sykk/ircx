@@ -21,6 +21,10 @@ pub struct ISupport {
     /// `None` when MONITOR was not advertised; `Some(None)` when the server
     /// states no limit; otherwise the most nicks it will hold.
     pub monitor: Option<Option<u32>>,
+    /// Whether a `WHO` may name the fields it wants back. Without it the roster
+    /// question still gets an answer, in a `352` that has nowhere to put an
+    /// account.
+    pub whox: bool,
     targmax: Vec<(String, Option<u32>)>,
 }
 
@@ -35,6 +39,7 @@ impl Default for ISupport {
             statusmsg: String::new(),
             chathistory: None,
             monitor: None,
+            whox: false,
             targmax: Vec::new(),
         }
     }
@@ -77,6 +82,7 @@ impl ISupport {
             // the capability is still a draft; either is the same statement.
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = value.parse().ok(),
             "MONITOR" => self.monitor = Some(value.parse().ok()),
+            "WHOX" => self.whox = true,
             "TARGMAX" => self.targmax = parse_targmax(value),
             _ => {}
         }
@@ -93,6 +99,7 @@ impl ISupport {
             "STATUSMSG" => self.statusmsg = defaults.statusmsg,
             "CHATHISTORY" | "DRAFT/CHATHISTORY" => self.chathistory = None,
             "MONITOR" => self.monitor = None,
+            "WHOX" => self.whox = false,
             "TARGMAX" => self.targmax = Vec::new(),
             _ => {}
         }

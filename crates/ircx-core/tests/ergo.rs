@@ -48,6 +48,12 @@ const CHANNEL: &str = "#ircx-drive";
 const OTHER_NICK: &str = "ircx-other";
 /// A channel this client opens itself, so it holds `+o` there.
 const OWN_CHANNEL: &str = "#ircx-topic";
+/// A channel the other client is in, and away in, before this one ever
+/// arrives. That order is the whole of the step: `away-notify` answers for
+/// somebody who moves while this client is watching, and nothing answered for
+/// somebody who had already moved.
+const AWAY_CHANNEL: &str = "#ircx-away";
+const AWAY_REASON: &str = "gone for a sandwich";
 const TOPIC: &str = "read the FAQ before asking";
 /// Long enough for a loopback server, short enough that a server which is not
 /// running fails the run rather than hanging it.
@@ -122,7 +128,8 @@ async fn against_ergo() {
     a_mode_list_is_read_in_the_channel(&mut report, &mut live).await;
     a_record_of_somebody_who_has_gone(&mut report, &mut live, room.path()).await;
     a_setname_is_taken_and_shows_in_a_whois(&mut report, &mut live).await;
-    a_look_up_fills_a_member_and_draws_nothing(&mut report, &mut live).await;
+    a_look_up_draws_nothing(&mut report, &mut live).await;
+    a_who_on_join_says_who_was_already_away(&mut report, &mut live, &mut other).await;
     a_reply_carries_its_parent(&mut report, &mut live, &mut other).await;
     a_reaction_goes_out_as_a_tagmsg(&mut report, &mut live).await;
     an_annotator_sees_what_arrives(&mut report, &mut live, &mut other).await;
@@ -518,31 +525,41 @@ async fn a_setname_is_taken_and_shows_in_a_whois(report: &mut Report, live: &mut
 /// the person until `318`, on the strength of every whois numeric putting them
 /// first, and a server answering with one that does not would leak a line into
 /// the server tab. Ergo sends six of them.
-async fn a_look_up_fills_a_member_and_draws_nothing(report: &mut Report, live: &mut Live) {
+///
+/// It asserted the fill as well, waiting on the member update the answer
+/// caused. That update stopped happening: the `WHO` a join now sends (#677)
+/// fills the real name before anybody looks at anybody, so the whois agrees
+/// with what is already held and changes nothing. The fill is asserted where it
+/// now happens, in the step below this one; what is left here is the half that
+/// no other step covers.
+async fn a_look_up_draws_nothing(report: &mut Report, live: &mut Live) {
     live.send(SessionCommand::LookUp {
         nick: OTHER_NICK.into(),
     })
     .await;
 
-    let found = live
+    // `318` is the end of the block and so the point every numeric in it has
+    // been through. Waiting on the answer rather than on the request, because a
+    // request that went out and was never answered would leave the check below
+    // passing on a block that had not arrived yet.
+    if live
         .wait(PATIENCE, |event| match event {
-            IrcxEvent::MemberUpdated { member, .. } if member.nick == OTHER_NICK => {
-                member.realname.clone()
-            }
+            IrcxEvent::RawLine {
+                outgoing: false,
+                line,
+                ..
+            } if numeric_about(line, "318", OTHER_NICK) => Some(()),
             _ => None,
         })
-        .await;
-    match found {
-        Some(realname) => report.pass("look up", &realname),
-        None => {
-            report.fail("look up", "no real name came back on the member");
-            return;
-        }
+        .await
+        .is_none()
+    {
+        report.fail("look up", "the whois was never answered");
+        return;
     }
 
-    // By now `311` has been through, so a drawn one would be in hand. Named,
-    // because the step above this one types a `/whois` whose sentence is drawn
-    // and is supposed to be.
+    // Named, because the step above this one types a `/whois` whose sentence is
+    // drawn and is supposed to be.
     match live.seen_message(|message| {
         message.text.contains("calling themselves") && message.text.contains(OTHER_NICK)
     }) {
@@ -550,6 +567,97 @@ async fn a_look_up_fills_a_member_and_draws_nothing(report: &mut Report, live: &
         None => report.pass(
             "look up drew nothing",
             "the block stayed out of the server tab",
+        ),
+    }
+}
+
+/// The command of a server line is the token after its tags and its source, and
+/// a probe reading raw lines off the wire has no parser in it. Ergo stamps
+/// `server-time` on everything, so the second token is never the command.
+fn numeric_about(line: &str, code: &str, nick: &str) -> bool {
+    let mut tokens = line
+        .split(' ')
+        .skip_while(|token| token.starts_with('@') || token.starts_with(':'));
+    tokens.next() == Some(code) && line.contains(nick)
+}
+
+/// #677. The one arrangement no capability covers: somebody already away in a
+/// channel this client has not joined yet.
+///
+/// A channel of its own, because the order is what is being tested and the
+/// channel every other step uses has been joined since the run started.
+///
+/// Ergo 2.19 does not advertise `WHOX` — its `005` names `SAFERATE` and
+/// `MSGREFTYPES` and no `WHOX` at all — so what this run exercises is the plain
+/// `WHO` and the `352` that answers it, away flag and real name and no account.
+/// The `354` form is Libera's, and `tests/libera.rs` is where it is driven.
+async fn a_who_on_join_says_who_was_already_away(
+    report: &mut Report,
+    live: &mut Live,
+    other: &mut Live,
+) {
+    if !other.join(AWAY_CHANNEL).await {
+        report.fail("who on join", "the other client never joined");
+        return;
+    }
+    other
+        .submit(AWAY_CHANNEL, &format!("/away {AWAY_REASON}"))
+        .await;
+    // `306` in the other client's own console. Waited for rather than assumed:
+    // an away that had not taken effect yet would make this step pass or fail
+    // on timing rather than on what it is about.
+    if other
+        .said(PATIENCE, |message| {
+            message.target == SERVER_TARGET && message.text.to_lowercase().contains("away")
+        })
+        .await
+        .is_none()
+    {
+        report.fail("who on join", "the other client never went away");
+        return;
+    }
+
+    if !live.join(AWAY_CHANNEL).await {
+        report.fail("who on join", "never joined the channel");
+        return;
+    }
+
+    // `NAMES` draws the list first and says nothing about any of this, so the
+    // first list to arrive is the one with nobody away in it. This waits for a
+    // later one.
+    let found = live
+        .wait(PATIENCE, |event| match event {
+            IrcxEvent::MembersReplaced { members, .. } => members
+                .iter()
+                .find(|member| member.nick == OTHER_NICK && member.away.is_some())
+                .cloned(),
+            _ => None,
+        })
+        .await;
+
+    let Some(member) = found else {
+        report.fail("who on join", "the member list drew them here");
+        return;
+    };
+    report.pass("who on join", &format!("{OTHER_NICK} came back away"));
+
+    // A `WHO` carries whether and never why, so the reason is empty here. That
+    // is the honest answer and not a missing one: the member list draws an
+    // empty reason as away with none given.
+    match member.away.as_deref() {
+        Some("") => report.pass("who on join carries no reason", "away, reason empty"),
+        Some(reason) => report.fail(
+            "who on join carries no reason",
+            &format!("a WHO has no reason to give and gave {reason:?}"),
+        ),
+        None => {}
+    }
+
+    match member.realname.as_deref() {
+        Some(realname) => report.pass("who on join fills the real name", realname),
+        None => report.fail(
+            "who on join fills the real name",
+            "the reply carried a real name and the member has none",
         ),
     }
 }

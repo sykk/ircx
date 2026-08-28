@@ -268,11 +268,14 @@ pub struct Member {
     pub account: Option<String>,
     /// Highest first. Only complete when `multi-prefix` is negotiated.
     pub prefixes: Vec<String>,
+    /// `None` is here. `Some` is away, and what is in it is the reason, which
+    /// is empty where the answer came from the `WHO` sent on joining: that
+    /// carries whether somebody is away and never why.
     pub away: Option<String>,
     /// What somebody calls themselves. `None` is not knowing rather than not
-    /// having one: it arrives with an `extended-join`, in a `SETNAME`, or in
-    /// the `WHOIS` the inspector asks for, and nothing asks on behalf of
-    /// everybody already in the channel.
+    /// having one: it arrives with an `extended-join`, in a `SETNAME`, in the
+    /// `WHOIS` the inspector asks for, or in the `WHO` a join sends for
+    /// everybody who was already there.
     pub realname: Option<String>,
 }
 

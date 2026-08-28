@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import type * as Ipc from "@/lib/ipc";
-import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
+import { TEST_VIEW, activeTarget, oneView } from "@/components/shell/fixtures";
 import { makeMessage } from "@/components/timeline/fixtures";
 import { Composer } from "./Composer";
 
@@ -495,6 +495,27 @@ describe("Composer replying", () => {
 
     await waitFor(() => expect(ipcMock.submitInput).toHaveBeenCalled());
     expect(staged()).toBe("123");
+  });
+
+  /** A join is typed to read the channel, so the pane goes there rather than
+   * staying where it was with the new channel only in the sidebar. */
+  it("shows the channel a join opened", async () => {
+    const box = await mount();
+    type(box, "/join ##test");
+    press(box, "Enter");
+
+    await waitFor(() =>
+      expect(activeTarget()).toEqual({ network: "libera", target: "##test" }),
+    );
+  });
+
+  it("stays where it is for any other command", async () => {
+    const box = await mount();
+    type(box, "/whois phrack");
+    press(box, "Enter");
+
+    await waitFor(() => expect(ipcMock.submitInput).toHaveBeenCalled());
+    expect(activeTarget()).toEqual({ network: "libera", target: "#ctf-ops" });
   });
 
   /** The control that arms a reply is a button in the timeline, so the caret is

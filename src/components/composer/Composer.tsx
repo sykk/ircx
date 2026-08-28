@@ -20,7 +20,7 @@ import { targetKey, useMembers, useQueued, useReplyTarget, useView } from "@/sto
 import { plainText } from "@/components/timeline/Markdown";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
-import { matchCommands, runConnectionCommand } from "./commands";
+import { channelJoinedBy, matchCommands, runConnectionCommand } from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
 import { useRecall } from "./recall";
 
@@ -350,8 +350,15 @@ function ComposerFor({
       useAppStore.getState().setLatestJump(view, true);
       return;
     }
-    if (outcome.kind !== "rejected") return;
-    refuse(outcome.value, text);
+    if (outcome.kind === "rejected") {
+      refuse(outcome.value, text);
+      return;
+    }
+    // A join is read where it lands. The channel is not in the store yet — the
+    // JOIN is on its way and the server has not acknowledged it — and does not
+    // need to be: a pane names its conversation.
+    const joined = channelJoinedBy(text);
+    if (joined) useAppStore.getState().showTarget({ network, target: joined });
   };
 
   const complete = (el: HTMLTextAreaElement) => {

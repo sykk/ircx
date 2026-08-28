@@ -223,6 +223,7 @@ async fn session(report: &mut Report, store: Arc<Store>, nick: &str, marker: &st
     let probe = tokio::spawn(a_server_initiated_ping(format!("{nick}p")));
     ping_and_lag(report, &mut live).await;
     reconnect(report, &mut live).await;
+    a_record_of_somebody_who_has_gone(report, &mut live, nick).await;
     match probe.await {
         Ok(outcome) => outcome.report(report),
         Err(error) => report.fail("answering the server's own PING", &error.to_string()),
@@ -1132,6 +1133,75 @@ async fn nick_collision(report: &mut Report, live: &mut Live, store: Arc<Store>,
     }
 
     second.stop().await;
+}
+
+/// `WHOWAS`, off solanum and after the reconnect — which is what makes this
+/// free: the socket this run dropped left a record of its own nick behind, so
+/// nothing here has to connect again to have somebody to ask about.
+///
+/// Libera is the reason the block is tracked at all. It answers a nickname it
+/// has never heard of with `369` and no `406` whatever, and it sends `312` and
+/// `338` inside the block, where they mean where somebody was last seen rather
+/// than where they are.
+async fn a_record_of_somebody_who_has_gone(report: &mut Report, live: &mut Live, nick: &str) {
+    live.submit(SERVER_TARGET, &format!("/whowas {nick}")).await;
+
+    let seen = live
+        .wait(Duration::from_secs(30), |event| match event {
+            IrcxEvent::MessagesAppended { messages, .. } => messages
+                .iter()
+                .find(|message| message.text.starts_with(nick) && message.text.contains("was "))
+                .cloned(),
+            _ => None,
+        })
+        .await;
+    match seen {
+        Some(message) => report.pass("whowas", &message.text),
+        None => {
+            report.fail(
+                "whowas",
+                "the server remembered our own dropped session not at all",
+            );
+            live.dump("the last lines after the whowas");
+        }
+    }
+
+    // `312` is the numeric a whois uses for the server somebody is connected
+    // to, and it arrives after the `314` above rather than before it — waited
+    // for rather than looked back at, or the answer is always that it never
+    // came.
+    let last_seen = live
+        .wait(Duration::from_secs(15), |event| match event {
+            IrcxEvent::MessagesAppended { messages, .. } => messages
+                .iter()
+                .find(|message| message.text.contains("was last seen on"))
+                .cloned(),
+            _ => None,
+        })
+        .await;
+    match last_seen {
+        Some(message) => report.pass("whowas says where they were last seen", &message.text),
+        None => report.unverified("whowas 312", "no 312 arrived inside the block"),
+    }
+
+    live.submit(SERVER_TARGET, "/whowas nobodyeverhadthisnickatall")
+        .await;
+    match live
+        .wait(Duration::from_secs(30), |event| match event {
+            IrcxEvent::MessagesAppended { messages, .. } => messages
+                .iter()
+                .find(|message| message.text.contains("remembers no nickname"))
+                .cloned(),
+            _ => None,
+        })
+        .await
+    {
+        Some(message) => report.pass("whowas for a nickname nobody had", &message.text),
+        None => report.fail(
+            "whowas for a nickname nobody had",
+            "Libera answered with 369 alone and the client said nothing",
+        ),
+    }
 }
 
 async fn ping_and_lag(report: &mut Report, live: &mut Live) {

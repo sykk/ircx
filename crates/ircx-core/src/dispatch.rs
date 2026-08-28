@@ -35,6 +35,7 @@ const HELP: &str = "\
 /list [pattern]           find channels, filtered by the server
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
+/whowas <nick>            look up somebody who has gone
 /away [reason]            mark yourself away
 /back                     come back
 /ignore [nick]            stop hearing from somebody, or list who is ignored
@@ -312,6 +313,7 @@ impl SessionState {
             "invite" => self.cmd_invite(target, args),
             "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
+            "whowas" => self.one_argument("WHOWAS", args, "/whowas <nickname>"),
             "away" => self.cmd_away(args),
             "back" => self.cmd_back(),
             "ignore" => self.cmd_ignore(target, args),
@@ -928,8 +930,8 @@ impl SessionState {
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
-    "nick", "topic", "mode", "kick", "invite", "list", "whois", "away", "ignore", "unignore",
-    "watch", "quit", "raw", "quote", "close", "help", "back",
+    "nick", "topic", "mode", "kick", "invite", "list", "whois", "whowas", "away", "ignore",
+    "unignore", "watch", "quit", "raw", "quote", "close", "help", "back",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

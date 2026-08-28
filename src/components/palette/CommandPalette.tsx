@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ipc } from "@/lib/ipc";
 import { displayChord } from "@/lib/keybindings";
-import { runConnectionCommand } from "@/components/composer/commands";
+import { channelJoinedBy, runConnectionCommand } from "@/components/composer/commands";
 import { applyTheme, selectDensity, selectPresentation, selectTheme } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { splitTargetKey, targetKey } from "@/store/keys";
@@ -351,19 +351,6 @@ function Palette() {
       </div>
     </div>
   );
-}
-
-/**
- * The one channel `input` joins, if it joins exactly one.
- *
- * A join run from the palette should leave the pane in the channel: the palette
- * is the only route to a join before any conversation is open, and that is
- * exactly when the pane behind it reads "No conversation open".
- */
-function channelJoinedBy(input: string): string | null {
-  const [name = "", channel = ""] = input.slice(1).split(/\s+/);
-  if (name.toLowerCase() !== "join") return null;
-  return /^[#&!+][^,]*$/.test(channel) ? channel : null;
 }
 
 function offsetOf(groups: { results: RankedResult[] }[], index: number): number {

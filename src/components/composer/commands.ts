@@ -104,3 +104,23 @@ export function matchCommands(text: string): SlashCommand[] | null {
   const matches = COMMANDS.filter((c) => c.name.startsWith(prefix));
   return matches.length > 0 ? matches : null;
 }
+
+/**
+ * The one channel `input` joins, if it joins exactly one.
+ *
+ * A join is typed to read the channel, so the pane goes there — from the
+ * composer as much as from the palette, which was the only route to a join
+ * before any conversation was open and so the only place this was done. `/join`
+ * elsewhere sent the line and left the reader where they were, with the channel
+ * in the sidebar and nothing on screen to say it had worked.
+ *
+ * The name has to be a channel already: core prefixes an unprefixed one with
+ * whatever the network's `CHANTYPES` starts with, which is a fact the window
+ * does not hold. A join of several at once names no single channel to show.
+ */
+export function channelJoinedBy(input: string): string | null {
+  if (!input.startsWith("/")) return null;
+  const [name = "", channel = ""] = input.slice(1).split(/\s+/);
+  if (!["join", "j"].includes(name.toLowerCase())) return null;
+  return /^[#&!+][^,]*$/.test(channel) ? channel : null;
+}

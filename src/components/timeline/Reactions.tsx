@@ -131,19 +131,20 @@ export function RowControls({
   const anchor = useRef<HTMLButtonElement>(null);
   const picker = useRef<HTMLSpanElement>(null);
 
-  // The picker opens upward, over rows that painted before it. On a row near
-  // the top of the scroller there is nothing above to open into and it went out
-  // over the channel header instead — the one place in this app anything is
-  // drawn over it. The timeline's own top is the ceiling: a pane's, so a split
-  // measures its own. Read in a layout effect, which runs after it is laid out
-  // and before it is painted, so the flip is not a flicker somebody sees.
+  // The timeline is the ceiling and floor: a pane's, so a split measures its
+  // own. Prefer the side with more room when neither fits the whole picker;
+  // otherwise a row near the composer opens underneath it and makes the reader
+  // scroll to reach the control they just opened.
   useLayoutEffect(() => {
     if (!open) return;
     const button = anchor.current;
     const panel = picker.current;
     if (!button || !panel) return;
-    const ceiling = button.closest("[data-ui='timeline']")?.getBoundingClientRect().top ?? 0;
-    setAbove(button.getBoundingClientRect().top - ceiling >= panel.offsetHeight + PICKER_GAP);
+    const timeline = button.closest("[data-ui='timeline']")?.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    const roomAbove = buttonRect.top - (timeline?.top ?? 0);
+    const roomBelow = (timeline?.bottom ?? window.innerHeight) - buttonRect.bottom;
+    setAbove(roomAbove >= panel.offsetHeight + PICKER_GAP || roomAbove >= roomBelow);
   }, [open]);
 
   return (

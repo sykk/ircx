@@ -3,21 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordRecent } from "@/lib/emojiPrefs";
 import { Reactions, RowControls } from "./Reactions";
 
-/** The compact picker's height, and the room a row has above it. */
+/** The picker's height, and the room a row has above it. */
 const PICKER_PX = 40;
 const TIMELINE_TOP = 100;
 
 /**
- * jsdom lays nothing out, so the two measurements the flip is decided on are
- * stated here: where the timeline's top edge is, and how tall the picker is.
- * `openAt` puts the button that many pixels below the timeline's top.
+ * jsdom lays nothing out, so the measurements the flip is decided on are
+ * stated here. `openAt` puts the button between the two amounts of room.
  */
-function openAt(roomAbove: number) {
+function openAt(roomAbove: number, roomBelow = 300) {
   const rect = vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")
     .mockImplementation(function (this: HTMLElement) {
-      const top = this.dataset.ui === "timeline" ? TIMELINE_TOP : TIMELINE_TOP + roomAbove;
-      return { top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top } as DOMRect;
+      const timeline = this.dataset.ui === "timeline";
+      const top = timeline ? TIMELINE_TOP : TIMELINE_TOP + roomAbove;
+      const bottom = timeline ? TIMELINE_TOP + roomAbove + roomBelow : top;
+      return { top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: top } as DOMRect;
     });
   const height = vi
     .spyOn(HTMLElement.prototype, "offsetHeight", "get")
@@ -92,5 +93,11 @@ describe("the reaction picker", () => {
     const className = openAt(PICKER_PX - 1);
     expect(className).toContain("top-full");
     expect(className).not.toContain("bottom-full");
+  });
+
+  it("opens upward near the composer when neither side fits", () => {
+    const className = openAt(PICKER_PX - 1, 8);
+    expect(className).toContain("bottom-full");
+    expect(className).not.toContain("top-full");
   });
 });

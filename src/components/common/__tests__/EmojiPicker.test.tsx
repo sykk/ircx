@@ -25,6 +25,17 @@ describe("EmojiPicker", () => {
     expect(screen.getByRole("button", { name: "Eggplant" })).toBeTruthy();
   });
 
+  it("opens the full catalog when recents contain only one emoji", () => {
+    localStorage.setItem("ircx.emoji.recents", JSON.stringify(["👍"]));
+
+    render(<EmojiPicker onPick={vi.fn()} />);
+
+    expect(screen.getByRole("tab", { name: "Smileys & people" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(screen.getAllByRole("button", { name: /Face/ }).length).toBeGreaterThan(1);
+  });
+
   // Tailwind wraps `group-hover:` in `@media (hover: hover)`, so a machine
   // without a pointer never matches it, and `opacity-0` hides the focus ring
   // along with the glyph. A star revealed only that way is a control somebody

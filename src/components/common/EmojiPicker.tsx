@@ -104,7 +104,7 @@ function EmojiGrid({
  */
 export function EmojiPicker({ onPick, compact = false, className, ariaLabel }: Props) {
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<Tab>(() => (loadRecents().length > 0 ? "recent" : "people"));
+  const [tab, setTab] = useState<Tab>("people");
   const [recents, setRecents] = useState(loadRecents);
   const [favorites, setFavorites] = useState(loadFavorites);
 

@@ -573,6 +573,7 @@ impl SessionState {
             port: self.config.port,
             tls: self.config.tls,
             status: self.status.clone(),
+            configured_nick: self.config.nick.clone(),
             current_nick: self.registered.then(|| self.nick.clone()),
             sasl: self.sasl.clone(),
             caps_enabled: self.caps.enabled(),

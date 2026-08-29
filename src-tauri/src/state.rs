@@ -749,6 +749,7 @@ fn offline(id: &NetworkId, config: &NetworkConfig) -> Network {
         port: config.port,
         tls: config.tls,
         status: ConnectionStatus::Disconnected,
+        configured_nick: config.nick.clone(),
         current_nick: None,
         sasl: SaslStatus::NotConfigured,
         caps_enabled: Vec::new(),

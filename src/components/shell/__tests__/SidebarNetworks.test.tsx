@@ -144,7 +144,7 @@ describe("SidebarNetworks", () => {
     expect(screen.getAllByTitle("Unsent draft")).toHaveLength(2);
   });
 
-  it("filters conversations and keeps each network visible", () => {
+  it("flattens filtered conversations and tags every row with its network", () => {
     seedStore(
       [
         makeNetwork("libera", { name: "Libera.Chat" }),
@@ -160,17 +160,34 @@ describe("SidebarNetworks", () => {
     useAppStore.getState().setSidebarFilter("mentions");
     render(<SidebarNetworks />);
 
-    expect(screen.getByText("Mentions")).toBeTruthy();
-    expect(screen.getByRole("treeitem", { name: "#loud" })).toBeTruthy();
-    expect(screen.getByRole("treeitem", { name: "phrack" })).toBeTruthy();
+    expect(screen.getByText("Mentions — 2 conversations")).toBeTruthy();
+    expect(
+      screen.getByRole("treeitem", { name: "#loud, network Libera.Chat" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("treeitem", { name: "phrack, network Libera.Chat" }),
+    ).toBeTruthy();
+    expect(screen.getAllByTitle("Libera.Chat")).toHaveLength(2);
     expect(screen.queryByRole("treeitem", { name: "#quiet" })).toBeNull();
     expect(screen.queryByRole("treeitem", { name: "#read" })).toBeNull();
-    expect(screen.getByRole("treeitem", { name: /^OFTC,/ })).toBeTruthy();
-    expect(screen.getByText("No matching conversations")).toBeTruthy();
+    expect(screen.queryByRole("treeitem", { name: /^OFTC,/ })).toBeNull();
+    expect(screen.queryByText("No matching conversations.")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear sidebar filter" }));
     expect(screen.getByRole("treeitem", { name: "#quiet" })).toBeTruthy();
     expect(screen.getByRole("treeitem", { name: "#read" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: /^OFTC,/ })).toBeTruthy();
+    expect(screen.queryByTitle("Libera.Chat")).toBeNull();
+  });
+
+  it("names an empty filtered result without claiming there are no networks", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "#read")]);
+    useAppStore.getState().setSidebarFilter("unread");
+    render(<SidebarNetworks />);
+
+    expect(screen.getByText("Unread — 0 conversations")).toBeTruthy();
+    expect(screen.getByText("No matching conversations.")).toBeTruthy();
+    expect(screen.queryByText("No networks configured.")).toBeNull();
   });
 
   it("filters to conversations with drafts", () => {
@@ -183,7 +200,9 @@ describe("SidebarNetworks", () => {
     useAppStore.getState().setSidebarFilter("drafts");
     render(<SidebarNetworks />);
 
-    expect(screen.getByRole("treeitem", { name: "#draft, draft" })).toBeTruthy();
+    expect(
+      screen.getByRole("treeitem", { name: "#draft, network libera, draft" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("treeitem", { name: "#read" })).toBeNull();
     expect(screen.queryByRole("treeitem", { name: "phrack" })).toBeNull();
   });
@@ -197,6 +216,66 @@ describe("SidebarNetworks", () => {
       .filter((row) => row.getAttribute("aria-level") === "1")
       .map((row) => row.getAttribute("aria-label")?.split(",")[0]);
     expect(groups).toEqual(["Libera.Chat", "OFTC", "Rizon"]);
+  });
+
+  it("pins a network above the alphabetical remainder", () => {
+    seedStore([
+      makeNetwork("efnet", { name: "efnet" }),
+      makeNetwork("libera", { name: "Libera.Chat" }),
+      makeNetwork("oftc", { name: "OFTC" }),
+    ]);
+    render(<SidebarNetworks />);
+
+    openRowMenu("Libera.Chat");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin network" }));
+
+    const names = () =>
+      within(screen.getByRole("tree", { name: "Networks and conversations" }))
+        .getAllByRole("treeitem")
+        .filter((row) => row.getAttribute("aria-level") === "1")
+        .map((row) => row.getAttribute("aria-label")?.split(",")[0]);
+    expect(names()).toEqual(["Libera.Chat", "efnet", "OFTC"]);
+    expect(screen.getByRole("treeitem", { name: /Libera\.Chat.*pinned/ })).toBeTruthy();
+    expect(screen.getByTitle("Pinned")).toBeTruthy();
+
+    openRowMenu("Libera.Chat");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unpin network" }));
+    expect(names()).toEqual(["efnet", "Libera.Chat", "OFTC"]);
+  });
+
+  it("shows a collision nick only when it differs from the configured nick", () => {
+    seedStore([
+      makeNetwork("libera", { name: "Libera.Chat" }),
+      makeNetwork("oftc", {
+        name: "OFTC",
+        configuredNick: "sable",
+        currentNick: "sable_",
+      }),
+    ]);
+    render(<SidebarNetworks />);
+
+    expect(
+      screen.getByRole("treeitem", { name: "OFTC, Connected, current nick sable_" }),
+    ).toBeTruthy();
+    expect(screen.getByTitle("Current nick: sable_")).toBeTruthy();
+    expect(screen.queryByTitle("Current nick: sable")).toBeNull();
+  });
+
+  it("keeps network rows above their panels while the sidebar scrolls", () => {
+    seedStore([makeNetwork("libera", { name: "Libera.Chat" })]);
+    render(<SidebarNetworks />);
+
+    expect(
+      screen.getByRole("treeitem", { name: /^Libera\.Chat,/ }).parentElement?.className,
+    ).toContain("sticky");
+  });
+
+  it("keeps a double channel sigil in the channel name", () => {
+    seedStore([makeNetwork("libera")], [makeChannel("libera", "##chat")]);
+    render(<SidebarNetworks />);
+
+    expect(within(screen.getByRole("treeitem", { name: "##chat" })).getByText("##chat"))
+      .toBeTruthy();
   });
 
   it("collapsing hides the panel's conversations and surfaces their unread total", () => {
@@ -250,6 +329,17 @@ describe("SidebarNetworks", () => {
       expect(row.getAttribute("aria-selected")).toBe("true");
       expect(row.getAttribute("aria-expanded")).toBe("true");
       expect(screen.getByRole("treeitem", { name: "#ctf-ops" })).toBeTruthy();
+    });
+
+    it("collapses from the disclosure shown to a mouse", () => {
+      render(<SidebarNetworks />);
+      const row = screen.getByRole("treeitem", { name: /^Libera\.Chat,/ });
+
+      fireEvent.click(screen.getByTitle("Hide Libera.Chat conversations"));
+
+      expect(row.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("treeitem", { name: "#ctf-ops" })).toBeNull();
+      expect(activeTarget()).toBeNull();
     });
 
     it("opens the console on the protocol log from its menu", () => {

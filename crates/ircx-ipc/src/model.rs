@@ -181,6 +181,7 @@ pub struct Network {
     pub status: ConnectionStatus,
     /// May differ from the configured nick after a collision.
     pub current_nick: Option<String>,
+    pub configured_nick: String,
     pub sasl: SaslStatus,
     pub caps_enabled: Vec<String>,
     pub lag_ms: Option<u32>,

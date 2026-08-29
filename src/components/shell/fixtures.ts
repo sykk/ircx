@@ -63,6 +63,7 @@ export function makeNetwork(id: string, patch: Partial<Network> = {}): Network {
     port: 6697,
     tls: true,
     status: { state: "connected" },
+    configuredNick: "sable",
     currentNick: "sable",
     sasl: { state: "notConfigured" },
     capsEnabled: [],

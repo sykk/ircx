@@ -171,6 +171,7 @@ export const SEED = `
       port: 6667,
       tls: false,
       status: { state: "connected" },
+      configuredNick: "walker",
       currentNick: "walker",
       sasl: { state: "authenticated", detail: { account: "walker", refused: null } },
       capsEnabled: ["message-tags", "echo-message", "server-time", "chathistory"],

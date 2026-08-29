@@ -1542,6 +1542,28 @@ describe("the order the networks are in", () => {
 
     expect(store().networkOrder).toEqual(["n1", "n2"]);
   });
+
+  it("holds pinned networks above the alphabetical remainder", () => {
+    arrives("n1", "Zulu");
+    arrives("n2", "Alpha");
+    arrives("n3", "Beta");
+
+    store().togglePinnedNetwork("n1");
+    store().togglePinnedNetwork("n3");
+    expect(store().networkOrder).toEqual(["n1", "n3", "n2"]);
+
+    store().togglePinnedNetwork("n1");
+    expect(store().networkOrder).toEqual(["n3", "n2", "n1"]);
+  });
+
+  it("applies a restored pin order after the networks have arrived", () => {
+    arrives("n1", "Zulu");
+    arrives("n2", "Alpha");
+
+    store().setPinnedNetworks(["n1"]);
+
+    expect(store().networkOrder).toEqual(["n1", "n2"]);
+  });
 });
 
 /** A removed network dropped its channels, queries, timelines and members —
@@ -1575,6 +1597,8 @@ describe("removing a network", () => {
     store().rememberInput("oftc", "#tor", "typed there");
     store().togglePinnedTarget(gone);
     store().togglePinnedTarget(kept);
+    store().togglePinnedNetwork("libera");
+    store().togglePinnedNetwork("oftc");
     store().showTarget({ network: "libera", target: "#ctf-ops" });
 
     store().applyEvent({ type: "networkRemoved", network: "libera" });
@@ -1586,6 +1610,7 @@ describe("removing a network", () => {
     expect(store().replyTo[gone]).toBeUndefined();
     expect(store().inputHistory[gone]).toBeUndefined();
     expect(store().recent).not.toContain(gone);
+    expect(store().pinnedNetworks).not.toContain("libera");
     expect(store().pinnedTargets).not.toContain(gone);
   });
 
@@ -1594,6 +1619,7 @@ describe("removing a network", () => {
     expect(store().channelList["oftc"]).toBeTruthy();
     expect(store().replyTo[kept]).toBe("msg-2");
     expect(store().inputHistory[kept]).toEqual(["typed there"]);
+    expect(store().pinnedNetworks).toContain("oftc");
     expect(store().pinnedTargets).toContain(kept);
   });
 });

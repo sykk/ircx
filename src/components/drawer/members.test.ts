@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
+import { makeMessage } from "@/components/timeline/fixtures";
 import {
   MEMBERS_PREVIEW,
   actionsFor,
@@ -7,6 +8,7 @@ import {
   groupMembers,
   groupOf,
   rankOf,
+  recentSpeakers,
   toRows,
 } from "./members";
 
@@ -88,6 +90,18 @@ describe("groupMembers", () => {
     ]);
   });
 
+  it("puts recent speakers before the alphabetical remainder", () => {
+    const sections = groupMembers(
+      [member("alpha"), member("bravo"), member("charlie")],
+      ["charlie", "bravo"],
+    );
+    expect(sections[0]?.members.map((m) => m.nick)).toEqual([
+      "charlie",
+      "bravo",
+      "alpha",
+    ]);
+  });
+
   it("does not reorder the array it was given", () => {
     const members = [member("zed"), member("alpha")];
     groupMembers(members);
@@ -100,6 +114,19 @@ describe("groupMembers", () => {
     const total = sections.reduce((sum, s) => sum + s.members.length, 0);
     expect(total).toBe(4000);
     expect(sections.map((s) => s.group)).toEqual(["operators", "members"]);
+  });
+});
+
+describe("recentSpeakers", () => {
+  it("returns newest unique speakers and ignores presence traffic", () => {
+    expect(
+      recentSpeakers([
+        makeMessage({ id: "a", nick: "alpha" }),
+        makeMessage({ id: "j", nick: "joiner", kind: "join" }),
+        makeMessage({ id: "b", nick: "bravo", kind: "action" }),
+        makeMessage({ id: "c", nick: "ALPHA", kind: "notice" }),
+      ]),
+    ).toEqual(["ALPHA", "bravo"]);
   });
 });
 

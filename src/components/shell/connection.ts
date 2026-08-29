@@ -10,6 +10,30 @@ export function useDisplayedNetwork(): Network | undefined {
   return useNetwork(active?.network ?? first);
 }
 
+const CONNECTION_PRIORITY: Record<ConnectionStatus["state"], number> = {
+  connected: 0,
+  connecting: 1,
+  registering: 1,
+  disconnected: 2,
+  reconnecting: 3,
+  failed: 4,
+};
+
+export function worstConnectionStatus(networks: readonly Network[]): ConnectionStatus | undefined {
+  return networks.reduce<ConnectionStatus | undefined>((worst, network) => {
+    if (worst === undefined) return network.status;
+    return CONNECTION_PRIORITY[network.status.state] > CONNECTION_PRIORITY[worst.state]
+      ? network.status
+      : worst;
+  }, undefined);
+}
+
+export function problemNetworks(networks: readonly Network[]): Network[] {
+  return networks.filter(
+    (network) => network.status.state === "failed" || network.status.state === "reconnecting",
+  );
+}
+
 export function connectionColor(status: ConnectionStatus): string {
   switch (status.state) {
     case "connected":

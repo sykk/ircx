@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import type { ConnectionStatus, InstalledPlugin } from "@/types";
 import { StatusBar } from "../StatusBar";
-import { makeNetwork, resetStore, seedStore } from "../fixtures";
+import { makeNetwork, oneView, resetStore, seedStore } from "../fixtures";
 
 function plugin(name: string, granted: boolean): InstalledPlugin {
   return {
@@ -75,6 +75,23 @@ describe("StatusBar", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("names a failing network outside the displayed pane", () => {
+    seedStore([
+      makeNetwork("libera", { host: "irc.libera.chat" }),
+      makeNetwork("oftc", {
+        host: "irc.oftc.net",
+        status: { state: "failed", detail: { message: "certificate expired" } },
+      }),
+    ]);
+    useAppStore.setState(oneView({ network: "libera", target: "#ircx" }));
+    render(<StatusBar />);
+
+    expect(screen.getByText("· irc.oftc.net failed")).toBeTruthy();
+    expect(
+      screen.getByLabelText("Other network problems: oftc: certificate expired"),
+    ).toBeTruthy();
+  });
+
   describe("reconnecting", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
@@ -105,7 +122,7 @@ describe("StatusBar", () => {
     mount({ state: "connected" }, { capsEnabled: ["server-time", "sasl"] });
     expect(
       screen.getByLabelText("Capabilities: sasl, server-time").textContent,
-    ).toContain("Caps 2");
+    ).toContain("Caps 2/20");
   });
 
   it("reports no capabilities rather than an empty list", () => {
@@ -209,10 +226,9 @@ describe("StatusBar", () => {
   });
 
   describe("plugins", () => {
-    it("says none are installed rather than nothing at all", () => {
+    it("leaves no permanent slot for an empty plugin library", () => {
       const bar = mount({ state: "connected" });
-      expect(bar.textContent).toContain("Plugins 0");
-      expect(screen.getByLabelText("Plugins 0: No plugins installed")).toBeTruthy();
+      expect(bar.textContent).not.toContain("Plugins");
     });
 
     it("counts and names the plugins that hold a permission", () => {

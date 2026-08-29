@@ -7,6 +7,7 @@ import { useTransferFor } from "@/store/selectors";
 import { Clock } from "./Clock";
 import { Block } from "./MessageBlock";
 import {
+  describePresenceSummary,
   describePresenceRun,
   describePresenceSpan,
   partitionSystemRun,
@@ -47,25 +48,7 @@ function systemText(message: ChatMessage): string {
   }
 }
 
-function presenceColor(kind: MessageKind, verb: string): string {
-  switch (kind) {
-    case "join":
-      return "var(--success)";
-    case "part":
-    case "quit":
-      return "var(--danger)";
-    case "mode":
-      return verb === "blocked outside" || verb === "allowed outside"
-        ? "var(--accent)"
-        : "var(--warning)";
-    case "nick":
-      return "var(--accent)";
-    default:
-      return "var(--text-muted)";
-  }
-}
-
-function PresenceIcon({ kind }: { kind: MessageKind | "involving" }) {
+function PresenceIcon({ kind }: { kind: MessageKind }) {
   const paths = (() => {
     switch (kind) {
       case "join":
@@ -83,12 +66,7 @@ function PresenceIcon({ kind }: { kind: MessageKind | "involving" }) {
       case "nick":
         return <path d="M3 5h9M9 2l3 3-3 3M13 11H4M7 8l-3 3 3 3" />;
       default:
-        return (
-          <>
-            <circle cx="8" cy="5" r="2.3" />
-            <path d="M3.5 13c0-2.2 2-3.5 4.5-3.5s4.5 1.3 4.5 3.5" />
-          </>
-        );
+        return null;
     }
   })();
 
@@ -134,7 +112,6 @@ export function SystemMessage({
   const digest = loud.length > 0 || presence.length > 0;
   const presenceSummary = summarizePresence(presence);
   const presenceSpan = describePresenceSpan(presence);
-  const involving = presenceInvolving(presence, ownNick);
 
   return (
     <Block spine={false}>
@@ -142,10 +119,16 @@ export function SystemMessage({
         className="flex items-start gap-2 text-[12px]"
         style={digest ? { paddingBlock: "var(--timeline-rule-gap)" } : undefined}
       >
-        <Clock at={messages[0]!.timestamp} />
+        {!digest && <Clock at={messages[0]!.timestamp} />}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {loud.length > 0 && (
-            <span style={{ color: "var(--warning)" }}>{loud.map(systemText).join(", ")}</span>
+            <span
+              className="flex flex-wrap items-baseline gap-x-3"
+              style={{ color: "var(--warning)" }}
+            >
+              <span>{loud.map(systemText).join(", ")}</span>
+              {presence.length === 0 && <Clock at={messages[0]!.timestamp} faint />}
+            </span>
           )}
           {presence.length > 0 && (
             <button
@@ -153,7 +136,7 @@ export function SystemMessage({
               aria-label={describePresenceRun(presence, ownNick)}
               aria-expanded={expanded}
               onClick={() => setExpanded((open) => !open)}
-              className="min-w-0 cursor-pointer text-left font-[family-name:var(--font-mono)]"
+              className="min-w-0 cursor-pointer text-left"
               style={{ color: "var(--text-muted)" }}
             >
               <span className="flex flex-col gap-1">
@@ -170,32 +153,31 @@ export function SystemMessage({
                   data-ui="presence-events"
                   className="flex flex-wrap items-center gap-x-4 gap-y-1"
                 >
-                  {presenceSummary.map(({ kind, verb, count }) => (
-                    <span
-                      key={verb}
-                      data-event-kind={kind}
-                      className="flex items-center gap-1.5"
-                      style={{ color: presenceColor(kind, verb) }}
-                    >
-                      <PresenceIcon kind={kind} />
-                      <span>
-                        {count} {verb}
+                  {presenceSummary.map((summary) => {
+                    const highlighted =
+                      presenceInvolving(summary.messages, ownNick) >
+                      summary.messages.filter((message) => message.sender.isSelf).length;
+                    return (
+                      <span
+                        key={summary.verb}
+                        data-event-kind={summary.kind}
+                        className="flex items-center gap-1.5"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        <PresenceIcon kind={summary.kind} />
+                        <span
+                          className={clsx(
+                            highlighted &&
+                              "underline decoration-[var(--accent)] underline-offset-2",
+                          )}
+                        >
+                          {describePresenceSummary(summary, ownNick)}
+                        </span>
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
+                  <Clock at={messages[0]!.timestamp} faint />
                 </span>
-                {involving > 0 && (
-                  <span
-                    data-ui="presence-involving"
-                    className="flex items-center gap-1.5"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    <PresenceIcon kind="involving" />
-                    <span>
-                      {involving} {involving === 1 ? "involves" : "involve"} you
-                    </span>
-                  </span>
-                )}
               </span>
             </button>
           )}

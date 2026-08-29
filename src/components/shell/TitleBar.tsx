@@ -4,7 +4,14 @@ import { IconButton } from "@/components/common/IconButton";
 import { insideTauri } from "@/lib/ipc";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useAppStore } from "@/store";
-import { connectionColor, connectionLabel, useDisplayedNetwork } from "./connection";
+import { useNetworks } from "@/store/selectors";
+import {
+  connectionColor,
+  connectionLabel,
+  problemNetworks,
+  useDisplayedNetwork,
+  worstConnectionStatus,
+} from "./connection";
 
 /** `getCurrentWindow` reads globals the webview injects, so it throws under
  * vitest and in a plain browser. The controls go inert there instead. */
@@ -16,6 +23,9 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
   const togglePalette = useAppStore((s) => s.togglePalette);
   const openSettings = useAppStore((s) => s.openSettings);
   const network = useDisplayedNetwork();
+  const networks = useNetworks();
+  const aggregateStatus = worstConnectionStatus(networks);
+  const problems = problemNetworks(networks);
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -53,30 +63,45 @@ export function TitleBar({ onToggleSidebar }: { onToggleSidebar?: (() => void) |
         Ctrl+K
       </button>
 
+      <IconButton
+        icon="settings"
+        label="Settings"
+        onClick={() => openSettings()}
+      />
+
       <span data-tauri-drag-region className="h-full flex-1" />
 
       {network && (
         <Tooltip
-          label={`${connectionLabel(network.status)} — ${network.host}:${network.port}`}
+          label={`${connectionLabel(network.status)} — ${network.host}:${network.port}${
+            problems.length === 0
+              ? ""
+              : ` · ${problems.length} ${
+                  problems.length === 1 ? "network needs" : "networks need"
+                } attention`
+          }`}
         >
           <span className="flex items-center gap-2 px-2 text-[11px] text-[var(--text-secondary)]">
             <span
-              className="h-2 w-2 rounded-full"
-              style={{ background: connectionColor(network.status) }}
+              className="size-2 rounded-full"
+              style={{ background: connectionColor(aggregateStatus ?? network.status) }}
             />
             {network.name}
+            {problems.length > 0 && (
+              <span
+                aria-label={`${problems.length} ${
+                  problems.length === 1 ? "network needs" : "networks need"
+                } attention`}
+                className="rounded-full border border-[var(--state-error)] px-1.5 text-[9px] tabular-nums text-[var(--state-error)]"
+              >
+                {problems.length}
+              </span>
+            )}
           </span>
         </Tooltip>
       )}
 
-      <div className="flex items-center gap-0.5 pl-1">
-        {/* The only affordance for the settings that is not a chord or the
-            palette. Icon-only, as the mockup draws every header action. */}
-        <IconButton
-          icon="settings"
-          label="Settings"
-          onClick={() => openSettings()}
-        />
+      <div className="ml-2 flex items-center gap-1 border-l border-[var(--border-default)] pl-2">
         <IconButton
           icon="minimize"
           label="Minimise"

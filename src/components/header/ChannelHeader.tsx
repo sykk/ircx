@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
-import { ipc } from "@/lib/ipc";
+import { ipc, openExternal } from "@/lib/ipc";
+import { leavingLabel } from "@/components/common/LeavesTheClient";
 import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork } from "@/store/selectors";
@@ -11,7 +12,6 @@ import { HeaderButton } from "./HeaderButton";
 import {
   CatchUpIcon,
   ChevronIcon,
-  ClearIcon,
   MembersIcon,
   OverflowIcon,
   SearchIcon,
@@ -38,11 +38,13 @@ export function ChannelHeader({
   const openSetup = useAppStore((s) => s.openSetup);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [topicExpanded, setTopicExpanded] = useState(true);
+  const [topicExpanded, setTopicExpanded] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [invitee, setInvitee] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [topicError, setTopicError] = useState<string | null>(null);
   useAnnounce(error);
+  useAnnounce(topicError);
 
   if (channel === undefined) return null;
 
@@ -126,14 +128,6 @@ export function ChannelHeader({
             <SearchIcon size={16} />
           </HeaderButton>
 
-          <HeaderButton
-            label={`Clear ${channel.name} buffer`}
-            title="Clear buffer"
-            onClick={() => clearBuffer(targetKey(channel.network, channel.name))}
-          >
-            <ClearIcon size={16} />
-          </HeaderButton>
-
           <div
             className="relative"
             onKeyDown={(event) => {
@@ -191,6 +185,15 @@ export function ChannelHeader({
                     >
                       {network ? `${network.name} settings` : "Network settings"}
                     </MenuItem>
+                    <MenuItem
+                      danger
+                      onClick={() => {
+                        closeMenu();
+                        clearBuffer(targetKey(channel.network, channel.name));
+                      }}
+                    >
+                      Clear buffer
+                    </MenuItem>
                   </>
                 )}
               </div>
@@ -214,7 +217,19 @@ export function ChannelHeader({
                 topicExpanded ? "whitespace-pre-wrap break-words" : "truncate",
               )}
             >
-              {topic.text}
+              {topicExpanded ? (
+                topic.text
+              ) : (
+                <CollapsedTopic
+                  text={topic.text}
+                  onOpen={(url) => {
+                    setTopicError(null);
+                    void openExternal(url).catch((reason: unknown) => {
+                      setTopicError(`Could not open ${url} — ${String(reason)}`);
+                    });
+                  }}
+                />
+              )}
             </p>
             {topicExpanded && (topic.setBy !== null || topic.setAt !== null) && (
               <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
@@ -222,6 +237,11 @@ export function ChannelHeader({
               </p>
             )}
           </div>
+          {topicError !== null && (
+            <span role="alert" className="shrink-0 text-[11px] text-[var(--danger)]">
+              {topicError}
+            </span>
+          )}
           <button
             type="button"
             aria-label={topicExpanded ? "Collapse topic" : "Expand topic"}
@@ -239,6 +259,51 @@ export function ChannelHeader({
   );
 }
 
+interface TopicSegment {
+  label: string | null;
+  url: string | null;
+  text: string;
+}
+
+export function parseTopicSegments(text: string): TopicSegment[] {
+  return text.split(/\s+(?:--|—|\|)\s+/).map((segment) => {
+    const linked = segment.match(/^(.*?):\s*(https?:\/\/\S+)(.*)$/);
+    if (linked === null) return { label: null, url: null, text: segment };
+    return {
+      label: linked[1]!.trim(),
+      url: linked[2]!,
+      text: linked[3]!.trim(),
+    };
+  });
+}
+
+function CollapsedTopic({ text, onOpen }: { text: string; onOpen: (url: string) => void }) {
+  const segments = parseTopicSegments(text);
+  return segments.map((segment, index) => (
+    <span key={`${segment.url ?? segment.text}:${index}`}>
+      {index > 0 && <span className="px-1.5 text-[var(--text-faint)]">·</span>}
+      {segment.url === null ? (
+        segment.text
+      ) : (
+        <>
+          <button
+            type="button"
+            aria-label={leavingLabel(segment.url)}
+            title={segment.url}
+            onClick={() => {
+              if (segment.url !== null) onOpen(segment.url);
+            }}
+            className="text-[var(--accent)] underline decoration-[var(--border-strong)] underline-offset-2 hover:text-[var(--accent-hover)]"
+          >
+            {segment.label}
+          </button>
+          {segment.text !== "" && ` ${segment.text}`}
+        </>
+      )}
+    </span>
+  ));
+}
+
 function topicMetadata(setBy: string | null, setAt: string | null): string {
   const setter = setBy === null ? null : `Set by ${setBy}`;
   const timestamp = setAt === null ? null : formatTopicTimestamp(setAt);
@@ -253,13 +318,26 @@ export function formatTopicTimestamp(timestamp: string): string {
   return `${day} at ${time} UTC`;
 }
 
-function MenuItem({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+function MenuItem({
+  onClick,
+  children,
+  danger = false,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  danger?: boolean;
+}) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="w-full rounded-[var(--radius-sm)] px-2 py-1 text-left text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+      className={clsx(
+        "w-full rounded-[var(--radius-sm)] px-2 py-1 text-left hover:bg-[var(--surface-hover)]",
+        danger
+          ? "text-[var(--danger)] hover:text-[var(--danger)]"
+          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+      )}
     >
       {children}
     </button>

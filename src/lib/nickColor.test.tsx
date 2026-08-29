@@ -41,8 +41,7 @@ describe("nickColor", () => {
   });
 });
 
-/** The `var(--nick-N)` an element's inline style asks for, whichever property
- * it sets it on: the roster paints a dot and the timeline paints text. */
+/** The `var(--nick-N)` an element's inline style asks for. */
 function token(element: Element | null | undefined): string {
   const match = /var\(--nick-\d+\)/.exec(element?.getAttribute("style") ?? "");
   if (!match) throw new Error(`no nick colour on ${element?.outerHTML ?? "nothing"}`);
@@ -78,9 +77,9 @@ describe("nick colour across surfaces", () => {
         />,
       );
 
-      const dot = roster.container.querySelector('span[aria-hidden="true"]');
-      const name = within(timeline.container).getByText(nick);
-      expect(token(dot)).toBe(token(name));
+      const rosterName = within(roster.container).getByText(nick);
+      const timelineName = within(timeline.container).getByText(nick);
+      expect(token(rosterName)).toBe(token(timelineName));
     },
   );
 });

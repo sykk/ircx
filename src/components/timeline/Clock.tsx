@@ -9,7 +9,15 @@ import { formatClock } from "./rows";
  * system line, and every message row for a reader who asked for the name on
  * each of them — and the last of those is drawn by a component the block
  * imports. */
-export function Clock({ at, column = false }: { at: string; column?: boolean }) {
+export function Clock({
+  at,
+  column = false,
+  faint = false,
+}: {
+  at: string;
+  column?: boolean;
+  faint?: boolean;
+}) {
   const format = useAppStore((s) => s.presentation.clock);
   const emphasis = useAppStore((s) => s.presentation.clockEmphasis);
   const clock = formatClock(at, format);
@@ -27,7 +35,7 @@ export function Clock({ at, column = false }: { at: string; column?: boolean }) 
       dateTime={at}
       className="shrink-0 font-[family-name:var(--font-mono)] text-[12px] tabular-nums"
       style={{
-        color: emphasis === "quiet" ? "var(--text-faint)" : "var(--text-muted)",
+        color: faint || emphasis === "quiet" ? "var(--text-faint)" : "var(--text-muted)",
         minWidth: column && columns !== null ? `${columns}ch` : undefined,
       }}
     >

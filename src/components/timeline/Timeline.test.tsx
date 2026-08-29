@@ -471,14 +471,12 @@ describe("Timeline", () => {
     ]);
     render(<Timeline view={TEST_VIEW} />);
 
-    const digest = screen.getByRole("button", {
-      name: "2 joined. 1 of them involves you.",
-    });
-    expect(within(digest).getByText("2 joined").parentElement?.style.color).toBe(
-      "var(--success)",
+    const digest = screen.getByRole("button", { name: "You, kade joined." });
+    expect(within(digest).getByText("You, kade joined").parentElement?.style.color).toBe(
+      "var(--text-muted)",
     );
-    expect(within(digest).getByText("1 involves you")).toBeTruthy();
-    expect(digest.querySelectorAll('[data-ui="presence-icon"]')).toHaveLength(2);
+    expect(digest.querySelector('[data-ui="presence-involving"]')).toBeNull();
+    expect(digest.querySelectorAll('[data-ui="presence-icon"]')).toHaveLength(1);
   });
 
   /** Modes fold now: a channel handing out ops all day used to read as one
@@ -513,23 +511,23 @@ describe("Timeline", () => {
 
     // Counted with the rest, in reader-facing phrases rather than in `+o`.
     const digest = screen.getByRole("button", {
-      name: "1 joined, 1 took ops, 1 blocked outside, 1 quit.",
+      name: "kade joined, ChanServ took ops, ChanServ blocked outside, wren quit.",
     });
-    expect(within(digest).getByText("1 joined").parentElement?.style.color).toBe(
-      "var(--success)",
-    );
-    expect(within(digest).getByText("1 took ops").parentElement?.style.color).toBe(
-      "var(--warning)",
-    );
-    expect(within(digest).getByText("1 blocked outside").parentElement?.style.color).toBe(
-      "var(--accent)",
-    );
-    expect(within(digest).getByText("1 quit").parentElement?.style.color).toBe("var(--danger)");
+    for (const text of [
+      "kade joined",
+      "ChanServ took ops",
+      "ChanServ blocked outside",
+      "wren quit",
+    ]) {
+      expect(within(digest).getByText(text).parentElement?.style.color).toBe(
+        "var(--text-muted)",
+      );
+    }
     expect(digest.querySelectorAll('[data-ui="presence-icon"]')).toHaveLength(4);
     fireEvent.click(digest);
     // Opened, the line names who holds it — which the count cannot.
-    expect(screen.getByText("ChanServ took ops")).toBeTruthy();
-    expect(screen.getByText("kade joined")).toBeTruthy();
+    expect(screen.getAllByText("ChanServ took ops")).toHaveLength(2);
+    expect(screen.getAllByText("kade joined")).toHaveLength(2);
   });
 
   it("bounds a paste and states its length", () => {

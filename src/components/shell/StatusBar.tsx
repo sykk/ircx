@@ -3,8 +3,12 @@ import { Tooltip } from "@/components/common/Tooltip";
 import { pluginStatus } from "@/components/plugins";
 import { TransfersStatus } from "@/components/transfers/TransfersPanel";
 import { useAppStore } from "@/store";
+import { useNetworks } from "@/store/selectors";
 import type { ConnectionStatus, Network, SaslStatus } from "@/types";
-import { connectionColor, useDisplayedNetwork } from "./connection";
+import { connectionColor, problemNetworks, useDisplayedNetwork } from "./connection";
+
+// Mirrors `ircx_core::caps::SUPPORTED`, the set this count is measured against.
+const SUPPORTED_CAPABILITY_COUNT = 20;
 
 /** The backend reports the delay once per attempt, so the seconds are counted
  * down here and restarted whenever a new figure arrives. */
@@ -29,6 +33,8 @@ function useReconnectSeconds(status: ConnectionStatus): number | null {
 
 export function StatusBar() {
   const network = useDisplayedNetwork();
+  const networks = useNetworks();
+  const otherProblems = problemNetworks(networks).filter(({ id }) => id !== network?.id);
   const seconds = useReconnectSeconds(network?.status ?? { state: "disconnected" });
 
   return (
@@ -40,10 +46,11 @@ export function StatusBar() {
       {network ? (
         <span className="flex min-w-0 items-center gap-2">
           <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            className="size-2 shrink-0 rounded-full"
             style={{ background: connectionColor(network.status) }}
           />
           <ConnectionSummary network={network} seconds={seconds} />
+          <NetworkProblems networks={otherProblems} />
         </span>
       ) : (
         <span className="text-[var(--text-muted)]">No network</span>
@@ -65,6 +72,40 @@ export function StatusBar() {
         <Plugins />
       </span>
     </footer>
+  );
+}
+
+function NetworkProblems({ networks }: { networks: Network[] }) {
+  if (networks.length === 0) return null;
+  const first = networks[0]!;
+  const visible =
+    first.status.state === "failed"
+      ? `${first.host} failed`
+      : `${first.host} reconnecting`;
+  const detail = networks
+    .map((network) => {
+      if (network.status.state === "failed") {
+        return `${network.name}: ${network.status.detail.message}`;
+      }
+      if (network.status.state === "reconnecting") {
+        return `${network.name}: retrying in ${network.status.detail.inSeconds}s`;
+      }
+      return network.name;
+    })
+    .join("; ");
+
+  return (
+    <Tooltip label={detail} placement="top">
+      <span
+        tabIndex={0}
+        className="shrink-0"
+        style={{ color: connectionColor(first.status) }}
+        aria-label={`Other network problems: ${detail}`}
+      >
+        · {visible}
+        {networks.length > 1 ? ` +${networks.length - 1}` : ""}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -127,7 +168,7 @@ function Capabilities({ caps }: { caps: string[] }) {
   return (
     <Tooltip label={detail} placement="top">
       <span tabIndex={0} aria-label={`Capabilities: ${detail}`} className="tabular-nums">
-        Caps {caps.length}
+        Caps {caps.length}/{SUPPORTED_CAPABILITY_COUNT}
       </span>
     </Tooltip>
   );
@@ -156,6 +197,8 @@ function Plugins() {
     );
   }
 
+  if (plugins.length === 0) return null;
+
   return (
     <Tooltip label={detail} placement="top">
       <span tabIndex={0} aria-label={`${text}: ${detail}`} className="tabular-nums">
@@ -166,12 +209,11 @@ function Plugins() {
 }
 
 function Sasl({ status }: { status: SaslStatus }) {
-  const [text, color, detail] = saslDisplay(status);
+  const [text, detail] = saslDisplay(status);
 
   return (
     <Tooltip label={detail} placement="top">
-      <span tabIndex={0} aria-label={detail} className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+      <span tabIndex={0} aria-label={detail}>
         {text}
       </span>
     </Tooltip>
@@ -191,29 +233,27 @@ function Sasl({ status }: { status: SaslStatus }) {
  * The same argument the timeline makes about a mention: a colour says the
  * client noticed something and cannot say what it noticed.
  *
- * The label stays green under a refusal because the account is real — the
- * person is signed in, and saying otherwise would be the same mistake pointing
- * the other way. What the tooltip carries is the half they can act on.
+ * An authenticated label still names the account under a refusal because the
+ * account is real. The tooltip carries the half the reader can act on.
  */
-function saslDisplay(status: SaslStatus): [string, string, string] {
+function saslDisplay(status: SaslStatus): [string, string] {
   switch (status.state) {
     case "authenticated": {
       const { account, refused } = status.detail;
       return [
         `signed in as ${account}`,
-        "var(--state-connected)",
         refused === null
           ? `Authenticated as ${account}`
           : `Signed in as ${account}. ${refused}`,
       ];
     }
     case "inProgress":
-      return ["signing in", "var(--state-connecting)", "Authenticating"];
+      return ["signing in", "Authenticating"];
     case "failed":
-      return ["not signed in", "var(--state-error)", `SASL failed: ${status.detail.message}`];
+      return ["not signed in", `SASL failed: ${status.detail.message}`];
     // Nothing failed and nothing is signed in: the user did not ask to be.
     // Saying "not signed in" here would report an absence as a fault.
     case "notConfigured":
-      return ["no account", "var(--state-disconnected)", "SASL is not configured"];
+      return ["no account", "SASL is not configured"];
   }
 }

@@ -4,7 +4,7 @@ import { useAppStore } from "@/store";
 import { targetKey } from "@/store/keys";
 import { CTF_OPS, LIBERA } from "@/components/drawer/fixtures";
 import { TEST_VIEW, oneView } from "@/components/shell/fixtures";
-import { ChannelHeader, formatTopicTimestamp } from "./ChannelHeader";
+import { ChannelHeader, formatTopicTimestamp, parseTopicSegments } from "./ChannelHeader";
 import { makeMessage } from "@/components/timeline/fixtures";
 
 const TOPIC = "CTF discussions and operations — pwn-300 heap notes and flag drops";
@@ -82,37 +82,41 @@ describe("ChannelHeader", () => {
       const { container } = render(<ChannelHeader view={TEST_VIEW} />);
       const controls = container.querySelector('[data-ui="channel-header-row"]');
       const banner = container.querySelector('[data-ui="topic-banner"]');
+      const topic = container.querySelector(`p[title="${TOPIC}"]`);
       expect(controls).toBeTruthy();
       expect(banner).toBeTruthy();
-      expect(controls?.contains(screen.getByText(TOPIC))).toBe(false);
-      expect(banner?.contains(screen.getByText(TOPIC))).toBe(true);
+      expect(topic).toBeTruthy();
+      expect(controls?.contains(topic)).toBe(false);
+      expect(banner?.contains(topic)).toBe(true);
     });
 
-    it("shows who set it and when", () => {
+    it("shows who set it and when only when expanded", () => {
       render(<ChannelHeader view={TEST_VIEW} />);
+      expect(screen.queryByText(/Set by sable/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Expand topic" }));
       expect(screen.getByText("Set by sable on 2026-05-25 at 17:25 UTC")).toBeTruthy();
     });
 
-    it("expands the full topic and collapses it to one line", () => {
-      render(<ChannelHeader view={TEST_VIEW} />);
-      const topic = screen.getByText(TOPIC);
-
-      expect(topic.className).toContain("whitespace-pre-wrap");
-      expect(topic.className).not.toContain("truncate");
-      fireEvent.click(screen.getByRole("button", { name: "Collapse topic" }));
-
+    it("starts on one line and expands the full topic", () => {
+      const { container } = render(<ChannelHeader view={TEST_VIEW} />);
+      const topic = container.querySelector(`p[title="${TOPIC}"]`)!;
       expect(topic.className).toContain("truncate");
       expect(topic.className).not.toContain("whitespace-pre-wrap");
       expect(screen.queryByText(/Set by sable/)).toBeNull();
       expect(screen.getByRole("button", { name: "Expand topic" }).getAttribute("aria-expanded"))
         .toBe("false");
+
+      fireEvent.click(screen.getByRole("button", { name: "Expand topic" }));
+      expect(topic.className).toContain("whitespace-pre-wrap");
+      expect(topic.className).not.toContain("truncate");
+      expect(screen.getByText(TOPIC)).toBeTruthy();
     });
 
     /** A long one truncates rather than pushing the controls off the end, so
      * the whole of it has to be readable some other way. */
     it("carries the whole of itself for a truncated one to be read by", () => {
-      render(<ChannelHeader view={TEST_VIEW} />);
-      expect(screen.getByText(TOPIC)).toHaveProperty("title", TOPIC);
+      const { container } = render(<ChannelHeader view={TEST_VIEW} />);
+      expect(container.querySelector(`p[title="${TOPIC}"]`)).toBeTruthy();
     });
 
     it("draws nothing where a channel has none", () => {
@@ -147,6 +151,16 @@ describe("ChannelHeader", () => {
     expect(formatTopicTimestamp("server time unavailable")).toBe("server time unavailable");
   });
 
+  it("keeps topic labels and destinations together in the collapsed layout", () => {
+    expect(
+      parseTopicSegments("Welcome -- Forum: https://linux.example/forum | Ask an op"),
+    ).toEqual([
+      { label: null, url: null, text: "Welcome" },
+      { label: "Forum", url: "https://linux.example/forum", text: "" },
+      { label: null, url: null, text: "Ask an op" },
+    ]);
+  });
+
   it("hides and shows this pane's member list", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     const toggle = screen.getByRole("button", { name: "Toggle member list" });
@@ -168,7 +182,9 @@ describe("ChannelHeader", () => {
 
   it("clears only this conversation's buffer", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
-    fireEvent.click(screen.getByRole("button", { name: `Clear ${CTF_OPS.name} buffer` }));
+    expect(screen.queryByRole("button", { name: `Clear ${CTF_OPS.name} buffer` })).toBeNull();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear buffer" }));
 
     const state = useAppStore.getState();
     expect(state.timelines[targetKey("libera", CTF_OPS.name)]).toEqual({

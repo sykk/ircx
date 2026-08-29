@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemberList } from "./MemberList";
 import { CTF_OPS_MEMBERS, member } from "./fixtures";
+import { nickColor } from "@/lib/nickColor";
 
 /* The virtualiser sizes itself from the scroll container, which jsdom reports
  * as zero high. Without a height it renders no rows at all. */
@@ -23,9 +24,19 @@ afterAll(() => {
   }
 });
 
-function show(members = CTF_OPS_MEMBERS, filter = "") {
+function show(
+  members = CTF_OPS_MEMBERS,
+  filter = "",
+  recentNicks: readonly string[] = [],
+) {
   return render(
-    <MemberList members={members} onSelect={vi.fn()} onMenu={vi.fn()} filter={filter} />,
+    <MemberList
+      members={members}
+      recentNicks={recentNicks}
+      onSelect={vi.fn()}
+      onMenu={vi.fn()}
+      filter={filter}
+    />,
   );
 }
 
@@ -33,11 +44,10 @@ function memberButtons() {
   return screen.queryAllByRole("listitem");
 }
 
-/** A row's presence dot, which is its only aria-hidden child. */
-function dot(nick: RegExp): HTMLElement {
-  const found = screen.getByRole("listitem", { name: nick }).querySelector("[aria-hidden]");
-  if (!found) throw new Error(`no presence dot on the ${String(nick)} row`);
-  return found as HTMLElement;
+function awayMarker(nick: RegExp): HTMLElement | null {
+  return screen
+    .getByRole("listitem", { name: nick })
+    .querySelector<HTMLElement>("[aria-hidden].rounded-full");
 }
 
 /** One group of `count` unprivileged nicks, so the truncation row lands in a
@@ -120,13 +130,13 @@ describe("MemberList", () => {
     ).toBeNull();
   });
 
-  it("puts the away reason on the row and dims the nick", () => {
+  it("puts the away reason on the row without replacing the nick's hue", () => {
     show();
     fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
     const wren = screen.getByRole("listitem", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
-    expect(within(wren).getByText("wren").className).toContain("--text-muted");
+    expect(within(wren).getByText("wren").style.color).toBe(nickColor("wren"));
   });
 
   /** #352: the column stops at 13rem, so a long enough nick truncates and the
@@ -151,15 +161,33 @@ describe("MemberList", () => {
     expect(within(wren).getByText("wren")).toHaveProperty("title", "wren");
   });
 
-  it("hollows the presence dot for an away member rather than fading it", () => {
+  it("draws a hollow marker only for an away member", () => {
     show();
     fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
-    expect(dot(/wren/).className).toContain("border-[1.5px]");
-    expect(dot(/phrack/).className).not.toContain("border-");
-    for (const nick of [/wren/, /phrack/]) {
-      expect(dot(nick).className).not.toContain("opacity");
-    }
+    expect(awayMarker(/wren/)?.className).toContain("border-[1.5px]");
+    expect(awayMarker(/phrack/)).toBeNull();
+    expect(awayMarker(/wren/)?.className).not.toContain("opacity");
+  });
+
+  it("orders the preview by recent speakers and can return to A–Z", () => {
+    show(
+      [member("alpha"), member("bravo"), member("charlie")],
+      "",
+      ["charlie", "bravo"],
+    );
+    expect(memberButtons().map((row) => row.getAttribute("aria-label"))).toEqual([
+      "charlie",
+      "bravo",
+      "alpha",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort members A to Z" }));
+    expect(memberButtons().map((row) => row.getAttribute("aria-label"))).toEqual([
+      "alpha",
+      "bravo",
+      "charlie",
+    ]);
   });
 
   it("falls back to a bare away label when the server gave no reason", () => {

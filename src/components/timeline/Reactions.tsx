@@ -3,6 +3,8 @@ import clsx from "clsx";
 import type { Reaction } from "@/types";
 import { Tooltip } from "@/components/common/Tooltip";
 import { Icon } from "@/components/common/Icon";
+import { loadMostUsed, recordRecent } from "@/lib/emojiPrefs";
+import { REACTION_EMOJIS } from "@/lib/emojis";
 
 /** More names than this and the tooltip runs off the window, so the rest of
  * them stay a count. */
@@ -18,6 +20,11 @@ const CHIP = "flex items-center rounded-[var(--radius-sm)] border px-2 py-[3px]"
  * against the same gap the picker is drawn with. */
 const PICKER_GAP = 4;
 const QUIET = "border-[var(--border-default)] bg-[var(--surface-raised)]";
+
+function quickReactions(): string[] {
+  const ranked = loadMostUsed();
+  return [...ranked, ...REACTION_EMOJIS.filter((emoji) => !ranked.includes(emoji))].slice(0, 3);
+}
 
 interface Props {
   reactions: readonly Reaction[];
@@ -36,7 +43,6 @@ interface Props {
  */
 export function Reactions({ reactions, ownNick, onToggle }: Props) {
   if (reactions.length === 0) return null;
-  const pick = onToggle === null ? null : (emoji: string) => onToggle(emoji, true);
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -48,7 +54,6 @@ export function Reactions({ reactions, ownNick, onToggle }: Props) {
           onToggle={onToggle}
         />
       ))}
-      {pick !== null && <RowControls alone={false} onReply={null} onPick={pick} onBookmark={null} bookmarked={false} />}
     </div>
   );
 }
@@ -122,6 +127,7 @@ export function RowControls({
 }) {
   const [open, setOpen] = useState(false);
   const [above, setAbove] = useState(true);
+  const [mostUsed, setMostUsed] = useState(quickReactions);
   const anchor = useRef<HTMLButtonElement>(null);
   const picker = useRef<HTMLSpanElement>(null);
 
@@ -160,6 +166,24 @@ export function RowControls({
       }}
     >
       <span className="relative inline-flex gap-0.5">
+        {onPick !== null &&
+          mostUsed.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              aria-label={`React with ${emoji}`}
+              onClick={() => {
+                onPick(emoji);
+                recordRecent(emoji);
+                setMostUsed(quickReactions());
+              }}
+              className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")}
+            >
+              <span aria-hidden="true" className="text-[14px] leading-none">
+                {emoji}
+              </span>
+            </button>
+          ))}
         {onBookmark !== null && (
           <button type="button" aria-label={bookmarked ? "Remove bookmark" : "Bookmark this message"} aria-pressed={bookmarked} onClick={onBookmark} className={clsx(CHIP, QUIET, "hover:bg-[var(--surface-hover)]")} style={{ color: bookmarked ? "var(--accent)" : "var(--text-muted)" }}>
             <Icon name="pin" size={14} />
@@ -206,13 +230,13 @@ export function RowControls({
                 className={clsx(
                   // The unloaded shell stays as tall as the compact picker, so
                   // the position calculation above does not measure an empty chunk.
-                  "absolute left-0 z-10 min-h-[36px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]",
+                  "absolute right-0 z-10 min-h-[36px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-overlay)] p-1 shadow-[var(--shadow-overlay)]",
                   above ? "bottom-full mb-1" : "top-full mt-1",
                 )}
               >
                 <Suspense fallback={null}>
                   <EmojiPicker
-                    compact
+                    ariaLabel="React with"
                     onPick={(emoji) => {
                       onPick(emoji);
                       setOpen(false);

@@ -184,11 +184,7 @@ export function MessageRow({
             <RowControls
               alone
               onReply={msgid === null ? null : () => onReply(msgid)}
-              onPick={
-                (message.reactions ?? []).length === 0
-                  ? msgid === null ? null : (emoji) => onReact(msgid, emoji, true)
-                  : null
-              }
+              onPick={msgid === null ? null : (emoji) => onReact(msgid, emoji, true)}
               bookmarked={bookmarked}
               onBookmark={message.delivery.state === "pending" ? null : toggleBookmark}
             />

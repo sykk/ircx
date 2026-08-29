@@ -2058,7 +2058,7 @@ describe("reaction chips", () => {
     expect(screen.queryByRole("button", { name: "Add a reaction" })).toBe(null);
   });
 
-  it("opens the picker onto its first choice and sends the one taken", async () => {
+  it("opens the full picker at search and sends the emoji taken", async () => {
     seedReacted([{ emoji: "🔥", nicks: ["kade"] }]);
     render(<Timeline view={TEST_VIEW} />);
 
@@ -2066,10 +2066,11 @@ describe("reaction chips", () => {
     fireEvent.click(add);
 
     const picker = await screen.findByRole("group", { name: "React with" });
-    const choices = within(picker).getAllByRole("button");
-    expect(document.activeElement).toBe(choices[0]);
+    const search = within(picker).getByLabelText("Search emoji");
+    expect(document.activeElement).toBe(search);
 
-    fireEvent.click(within(picker).getByText("🎉"));
+    fireEvent.change(search, { target: { value: "party popper" } });
+    fireEvent.click(within(picker).getByRole("button", { name: "Party Popper" }));
     expect(ipcMock.react).toHaveBeenCalledWith("libera", "#ctf-ops", "123", "🎉", true);
     expect(screen.queryByRole("group", { name: "React with" })).toBe(null);
     expect(document.activeElement).toBe(add);

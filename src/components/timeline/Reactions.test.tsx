@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { RowControls } from "./Reactions";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { recordRecent } from "@/lib/emojiPrefs";
+import { Reactions, RowControls } from "./Reactions";
 
 /** The compact picker's height, and the room a row has above it. */
 const PICKER_PX = 40;
@@ -38,10 +39,50 @@ function openAt(roomAbove: number) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+beforeEach(() => localStorage.clear());
 
 describe("the reaction picker", () => {
+  it("keeps quick reactions out of the reacted row", () => {
+    render(
+      <Reactions
+        reactions={[{ emoji: "👍", nicks: ["syk"] }]}
+        ownNick="syk"
+        onToggle={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "👍 — you" })).toBeTruthy();
+  });
+
+  it("offers the three most-used emoji as quick reactions", () => {
+    recordRecent("🔥");
+    recordRecent("😂");
+    recordRecent("🔥");
+    recordRecent("🎉");
+
+    render(
+      <RowControls
+        alone={false}
+        onReply={null}
+        onBookmark={null}
+        bookmarked={false}
+        onPick={vi.fn()}
+      />,
+    );
+
+    const quick = screen.getAllByRole("button", { name: /^React with / });
+    expect(quick.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "React with 🔥",
+      "React with 🎉",
+      "React with 😂",
+    ]);
+  });
+
   it("opens upward, over the rows that painted before it", () => {
-    expect(openAt(PICKER_PX * 4)).toContain("bottom-full");
+    const className = openAt(PICKER_PX * 4);
+    expect(className).toContain("bottom-full");
+    expect(className).toContain("right-0");
   });
 
   // Near the top of the scroller there is nothing above to open into, and it

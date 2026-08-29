@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   loadFavorites,
+  loadMostUsed,
   loadRecents,
   recordRecent,
   toggleFavorite,
@@ -25,5 +26,14 @@ describe("emojiPrefs", () => {
 
     toggleFavorite("🔥");
     expect(loadFavorites()).toEqual([]);
+  });
+
+  it("ranks emoji by use count and then recency", () => {
+    recordRecent("🔥");
+    recordRecent("👍");
+    recordRecent("😂");
+    recordRecent("👍");
+
+    expect(loadMostUsed()).toEqual(["👍", "😂", "🔥"]);
   });
 });

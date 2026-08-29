@@ -19,6 +19,7 @@ interface Props {
   /** One row of reaction glyphs rather than the full composer grid. */
   compact?: boolean;
   className?: string;
+  ariaLabel?: string;
 }
 
 const CELL =
@@ -101,7 +102,7 @@ function EmojiGrid({
  * Full Unicode emoji picker with search, recents, favorites, and every
  * category Emoji Mart ships. Compact mode keeps the short reaction strip.
  */
-export function EmojiPicker({ onPick, compact = false, className }: Props) {
+export function EmojiPicker({ onPick, compact = false, className, ariaLabel }: Props) {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>(() => (loadRecents().length > 0 ? "recent" : "people"));
   const [recents, setRecents] = useState(loadRecents);
@@ -165,6 +166,8 @@ export function EmojiPicker({ onPick, compact = false, className }: Props) {
 
   return (
     <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
       className={clsx(
         "flex w-72 flex-col overflow-hidden rounded-[var(--radius-md)]",
         className,
@@ -186,7 +189,7 @@ export function EmojiPicker({ onPick, compact = false, className }: Props) {
         <div
           role="tablist"
           aria-label="Emoji categories"
-          className="flex gap-0.5 overflow-x-auto border-b border-[var(--border-subtle)] px-1 py-1"
+          className="grid grid-cols-10 border-b border-[var(--border-subtle)] px-1 py-1"
         >
           <TabButton active={tab === "recent"} label="Recent" onClick={() => setTab("recent")}>
             🕘
@@ -257,7 +260,7 @@ function TabButton({
       title={label}
       onClick={onClick}
       className={clsx(
-        "shrink-0 rounded-[var(--radius-sm)] px-1.5 py-1 text-[16px] leading-none",
+        "min-w-0 rounded-[var(--radius-sm)] px-1 py-1 text-[16px] leading-none",
         active
           ? "bg-[var(--surface-active)]"
           : "hover:bg-[var(--surface-hover)]",

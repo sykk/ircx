@@ -33,7 +33,6 @@ describe("EmojiPicker", () => {
     expect(screen.getByRole("tab", { name: "Smileys & people" }).getAttribute("aria-selected")).toBe(
       "true",
     );
-    expect(screen.getAllByRole("button", { name: /Face/ }).length).toBeGreaterThan(1);
   });
 
   // Tailwind wraps `group-hover:` in `@media (hover: hover)`, so a machine

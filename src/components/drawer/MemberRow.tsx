@@ -38,22 +38,14 @@ export function MemberRow({ member, onSelect, onMenu }: MemberRowProps) {
         onMenu(member, rect.left + 8, rect.top + 8);
       }}
       title={away ? `Away: ${awayReason}` : undefined}
-      className="flex h-full w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 text-left hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)] focus-visible:outline-none"
+      className="flex h-full w-full items-center gap-1.5 rounded-[var(--radius-sm)] px-2 text-left hover:bg-[var(--surface-hover)] focus-visible:bg-[var(--surface-hover)] focus-visible:outline-none"
     >
-      {/* Away is a shape, not a shade. Dimming the nick colour by a fixed
-       * fraction was tuned against a dark surface: the same fraction of a
-       * light-theme nick on #f6f8fa is a pale wash, and no fraction is right
-       * for both. A hollow dot carries the state at full strength in either
-       * theme and asks a theme for nothing. */}
       <span
         aria-hidden
-        className={`size-2 shrink-0 rounded-full ${away ? "border-[1.5px]" : ""}`}
-        style={
-          away
-            ? { borderColor: nickColor(member.nick) }
-            : { background: nickColor(member.nick) }
-        }
-      />
+        className="w-3 shrink-0 font-mono text-[var(--text-muted)]"
+      >
+        {sigil ?? ""}
+      </span>
       {/* The name is on the element that truncates rather than on the row,
        * which already carries the away reason and takes its accessible name
        * from this text — a title there would be read back as a description
@@ -66,14 +58,17 @@ export function MemberRow({ member, onSelect, onMenu }: MemberRowProps) {
        * every row rather than for the rows that need it. */}
       <span
         title={member.nick}
-        className={`truncate ${away ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"}`}
+        className="truncate"
+        style={{ color: nickColor(member.nick) }}
       >
         {member.nick}
       </span>
-      {sigil !== undefined && (
-        <span className="ml-auto shrink-0 font-mono text-[var(--text-muted)]">
-          {sigil}
-        </span>
+      {away && (
+        <span
+          aria-hidden
+          className="ml-auto size-2 shrink-0 rounded-full border-[1.5px]"
+          style={{ borderColor: nickColor(member.nick) }}
+        />
       )}
     </div>
   );

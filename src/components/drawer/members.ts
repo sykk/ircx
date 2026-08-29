@@ -1,4 +1,4 @@
-import type { Member } from "@/types";
+import type { ChatMessage, Member } from "@/types";
 
 /* The store exports a three-way `MemberGroup` splitting voiced off from plain
  * members. The list draws two groups (READABILITY.md, Member list), so it is
@@ -48,13 +48,30 @@ export interface MemberSection {
   members: Member[];
 }
 
-export function groupMembers(members: Member[]): MemberSection[] {
+export function groupMembers(
+  members: Member[],
+  recentNicks?: readonly string[],
+): MemberSection[] {
+  const recency = new Map(
+    recentNicks?.map((nick, index) => [nick.toLowerCase(), index]) ?? [],
+  );
   const buckets: Record<MemberGroup, Member[]> = { operators: [], members: [] };
   for (const member of members) buckets[groupOf(member)].push(member);
   return GROUP_ORDER.filter((group) => buckets[group].length > 0).map((group) => ({
     group,
-    members: buckets[group].sort(byNick),
+    members: buckets[group].sort((a, b) => byRecent(a, b, recency)),
   }));
+}
+
+function byRecent(a: Member, b: Member, recency: ReadonlyMap<string, number>): number {
+  const left = recency.get(a.nick.toLowerCase());
+  const right = recency.get(b.nick.toLowerCase());
+  if (left !== undefined || right !== undefined) {
+    if (left === undefined) return 1;
+    if (right === undefined) return -1;
+    if (left !== right) return left - right;
+  }
+  return byNick(a, b);
 }
 
 function byNick(a: Member, b: Member): number {
@@ -62,6 +79,22 @@ function byNick(a: Member, b: Member): number {
   const right = b.nick.toLowerCase();
   if (left !== right) return left < right ? -1 : 1;
   return a.nick < b.nick ? -1 : a.nick > b.nick ? 1 : 0;
+}
+
+export function recentSpeakers(messages: readonly ChatMessage[]): string[] {
+  const seen = new Set<string>();
+  const speakers: string[] = [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.kind !== "privmsg" && message.kind !== "notice" && message.kind !== "action") {
+      continue;
+    }
+    const folded = message.sender.nick.toLowerCase();
+    if (seen.has(folded)) continue;
+    seen.add(folded);
+    speakers.push(message.sender.nick);
+  }
+  return speakers;
 }
 
 export type MemberRow =

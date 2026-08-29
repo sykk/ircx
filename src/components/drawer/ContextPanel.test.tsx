@@ -21,10 +21,9 @@ describe("how wide the roster asks to be", () => {
     expect(width).toContain("7ch");
   });
 
-  it("counts the prefixes, which are drawn in the same column", () => {
-    // `Ariel` carries all three in `CTF_OPS_MEMBERS`, which is why she is there.
+  it("gives every prefix the same fixed slot", () => {
     const founder = member("Ariel", { prefixes: ["~", "@", "+"] });
-    expect(rosterWidth([founder], false)).toContain("8ch");
+    expect(rosterWidth([founder], false)).toContain("5ch");
   });
 
   it("never asks for less than the heading above it needs", () => {

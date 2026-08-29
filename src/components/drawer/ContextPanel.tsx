@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ContextMenu, type ContextMenuState } from "@/components/common/ContextMenu";
 import { IconButton } from "@/components/common/IconButton";
 import { useAnnounce } from "@/hooks/useAnnounce";
@@ -8,13 +8,14 @@ import { useAppStore } from "@/store";
 import { sameTarget, targetKey } from "@/store/keys";
 import { useChannelForView, useNetwork, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
-import type { Member } from "@/types";
+import type { ChatMessage, Member } from "@/types";
 import { MemberList } from "./MemberList";
 import { UserInspector } from "./UserInspector";
-import { actionsFor, rankOf } from "./members";
+import { actionsFor, rankOf, recentSpeakers } from "./members";
 
 /** Shared so an absent lookup returns one stable reference, not a fresh literal. */
 const NO_MEMBERS: Member[] = [];
+const NO_MESSAGES: ChatMessage[] = [];
 /** The same, for a network nobody on it is ignored on. */
 const NOBODY: string[] = [];
 
@@ -38,8 +39,8 @@ const ROSTER_MIN = "8rem";
 /** What it used to always be. A nick longer than this truncates rather than
  * taking the conversation's room. */
 const ROSTER_MAX = "13rem";
-/** Everything on a row that is not the name: the list's padding and the row's,
- * the presence dot, and the gap either side of the sigil. */
+/** Everything on a row that is not the name: list and row padding, the sigil
+ * slot, the away marker, and their gaps. */
 const ROSTER_GUTTER = "3.5rem";
 
 /** What the names ask for, which is what the column is until somebody drags it
@@ -49,7 +50,7 @@ export function rosterWidth(members: readonly Member[], inspecting: boolean): st
   // it takes the full column whatever the longest nick happens to be.
   if (inspecting) return ROSTER_MAX;
   const widest = members.reduce(
-    (chars, member) => Math.max(chars, member.prefixes.join("").length + member.nick.length),
+    (chars, member) => Math.max(chars, member.nick.length),
     0,
   );
   return `clamp(${ROSTER_MIN}, ${widest}ch + ${ROSTER_GUTTER}, ${ROSTER_MAX})`;
@@ -66,6 +67,10 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
   // One entry, not the whole map: subscribing to `s.members` re-rendered every
   // pane's panel on a join or part in any channel on any network.
   const members = useAppStore((s) => (key === null ? NO_MEMBERS : (s.members[key] ?? NO_MEMBERS)));
+  const messages = useAppStore((s) =>
+    key === null ? NO_MESSAGES : (s.timelines[key]?.messages ?? NO_MESSAGES),
+  );
+  const recentNicks = useMemo(() => recentSpeakers(messages), [messages]);
   const ignored = useAppStore((s) =>
     channel === undefined ? NOBODY : (s.ignored[channel.network] ?? NOBODY),
   );
@@ -291,6 +296,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
         {selected === undefined ? (
           <MemberList
             members={members}
+            recentNicks={recentNicks}
             onSelect={(member) => setSelectedNick(member.nick)}
             onMenu={openMemberMenu}
             filter={filter ?? ""}

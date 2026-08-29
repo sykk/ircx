@@ -423,10 +423,15 @@ function presenceVerb(message: ChatMessage): string {
   return verb === "" ? "changed the channel" : verb;
 }
 
-/** One line of prose for a run of comings and goings: "3 joined, 1 quit". */
-export function describePresence(messages: readonly ChatMessage[]): string {
+const PRESENCE_NAMES_LIMIT = 3;
+
+/** One line of prose for a run of comings and goings. */
+export function describePresence(
+  messages: readonly ChatMessage[],
+  ownNick: string | null = null,
+): string {
   return summarizePresence(messages)
-    .map(({ verb, count }) => `${count} ${verb}`)
+    .map((summary) => describePresenceSummary(summary, ownNick))
     .join(", ");
 }
 
@@ -434,6 +439,7 @@ export interface PresenceSummary {
   kind: MessageKind;
   verb: string;
   count: number;
+  messages: ChatMessage[];
 }
 
 export function summarizePresence(messages: readonly ChatMessage[]): PresenceSummary[] {
@@ -441,10 +447,55 @@ export function summarizePresence(messages: readonly ChatMessage[]): PresenceSum
   for (const message of messages) {
     const verb = presenceVerb(message);
     const current = counts.get(verb);
-    if (current === undefined) counts.set(verb, { kind: message.kind, verb, count: 1 });
-    else current.count += 1;
+    if (current === undefined) {
+      counts.set(verb, { kind: message.kind, verb, count: 1, messages: [message] });
+    } else {
+      current.count += 1;
+      current.messages.push(message);
+    }
   }
   return [...counts.values()];
+}
+
+export function describePresenceSummary(
+  summary: PresenceSummary,
+  ownNick: string | null,
+): string {
+  if (summary.count > PRESENCE_NAMES_LIMIT) return `${summary.count} ${summary.verb}`;
+
+  const subjects = summary.messages.map((message) => {
+    const self =
+      message.sender.isSelf ||
+      (ownNick !== null && message.sender.nick.toLowerCase() === ownNick.toLowerCase());
+    return self ? "You" : message.sender.nick;
+  });
+  if (new Set(subjects.map((subject) => subject.toLowerCase())).size < summary.count) {
+    return `${summary.count} ${summary.verb}`;
+  }
+
+  if (summary.kind === "nick" && summary.messages.length === 1) {
+    const message = summary.messages[0]!;
+    const next = message.text.match(/ is now known as (.+)$/)?.[1];
+    if (next !== undefined) {
+      const self =
+        message.sender.isSelf ||
+        (ownNick !== null && message.sender.nick.toLowerCase() === ownNick.toLowerCase());
+      return `${self ? "You are" : `${message.sender.nick} is`} now ${next}`;
+    }
+  }
+
+  const detail = sharedPresenceDetail(summary.messages);
+  return `${subjects.join(", ")} ${summary.verb}${detail === null ? "" : ` — ${detail}`}`;
+}
+
+function sharedPresenceDetail(messages: readonly ChatMessage[]): string | null {
+  if (!messages.every((message) => message.kind === "part" || message.kind === "quit")) {
+    return null;
+  }
+  const details = messages.map((message) => message.text.split(" — ")[1]?.trim() ?? "");
+  return details[0] !== "" && details.every((detail) => detail === details[0])
+    ? details[0]!
+    : null;
 }
 
 /**
@@ -462,14 +513,7 @@ export function describePresenceSpan(messages: readonly ChatMessage[]): string |
   return span === "under a minute" ? null : `Over ${span}`;
 }
 
-/**
- * How many of these are about the reader: their own coming or going, or a
- * parting line that names them.
- *
- * Presence is skippable exactly when this is zero, and a digest that does not
- * say so leaves the reader opening it to find out — which is the reading the
- * fold exists to save them.
- */
+/** How many clauses concern the reader, including their own presence event. */
 export function presenceInvolving(
   messages: readonly ChatMessage[],
   ownNick: string | null,
@@ -489,15 +533,7 @@ export function describePresenceRun(
   ownNick: string | null,
 ): string {
   const span = describePresenceSpan(messages);
-  const involving = presenceInvolving(messages, ownNick);
-  // Nothing is said when none of it was about the reader. Saying so put a
-  // sentence on every digest to report an absence, and a digest that names
-  // nobody already means nobody.
-  const clause =
-    involving === 0
-      ? ""
-      : ` ${involving} of them ${involving === 1 ? "involves" : "involve"} you.`;
-  return `${span === null ? "" : `${span}: `}${describePresence(messages)}.${clause}`;
+  return `${span === null ? "" : `${span}: `}${describePresence(messages, ownNick)}.`;
 }
 
 export function describeSpan(ms: number): string {

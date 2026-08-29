@@ -219,12 +219,14 @@ describe("buildRows system runs", () => {
 
   it("states the presence digest as one line of prose", () => {
     const presence = [
-      at(0, { id: "a", kind: "join" }),
-      at(1, { id: "b", kind: "join" }),
-      at(2, { id: "c", kind: "part" }),
-      at(3, { id: "d", kind: "nick" }),
+      at(0, { id: "a", nick: "mira", kind: "join" }),
+      at(1, { id: "b", nick: "dade", kind: "join" }),
+      at(2, { id: "c", nick: "wren", kind: "part" }),
+      at(3, { id: "d", nick: "old", kind: "nick", text: "old is now known as new" }),
     ];
-    expect(describePresence(presence)).toBe("2 joined, 1 left, 1 renamed");
+    expect(describePresence(presence)).toBe(
+      "mira, dade joined, wren left, old is now new",
+    );
   });
 
   it("shortens channel-message modes in the digest", () => {
@@ -232,16 +234,18 @@ describe("buildRows system runs", () => {
       describePresence([
         at(0, {
           id: "a",
+          nick: "ChanServ",
           kind: "mode",
           text: "blocked messages from outside the channel",
         }),
         at(1, {
           id: "b",
+          nick: "services",
           kind: "mode",
           text: "allowed messages from outside the channel",
         }),
       ]),
-    ).toBe("1 blocked outside, 1 allowed outside");
+    ).toBe("ChanServ blocked outside, services allowed outside");
   });
 });
 
@@ -263,20 +267,20 @@ describe("describePresenceRun", () => {
     expect(describePresenceRun(joins(3, 1000), null)).toBe("3 joined.");
   });
 
-  it("counts a line that names the reader", () => {
+  it("makes the reader the subject of a clause about them", () => {
     const run = [
       at(0, { id: "a", kind: "quit", text: "sable: back later" }),
       at(1, { id: "b", kind: "join" }),
     ];
-    expect(describePresenceRun(run, "sable")).toBe("1 quit, 1 joined. 1 of them involves you.");
+    expect(describePresenceRun(run, "sable")).toBe("You quit, You joined.");
   });
 
-  it("agrees with itself about singular and plural", () => {
+  it("keeps a count when one person appears more than once", () => {
     const run = [
       at(0, { id: "a", kind: "quit", text: "sable: one" }),
       at(1, { id: "b", kind: "quit", text: "sable: two" }),
     ];
-    expect(describePresenceRun(run, "sable")).toBe("2 quit. 2 of them involve you.");
+    expect(describePresenceRun(run, "sable")).toBe("2 quit.");
   });
 });
 

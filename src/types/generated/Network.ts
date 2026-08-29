@@ -6,4 +6,4 @@ export type Network = { id: string, name: string, host: string, port: number, tl
 /**
  * May differ from the configured nick after a collision.
  */
-currentNick: string | null, sasl: SaslStatus, capsEnabled: Array<string>, lagMs: number | null, };
+currentNick: string | null, configuredNick: string, sasl: SaslStatus, capsEnabled: Array<string>, lagMs: number | null, };

@@ -125,6 +125,7 @@ const network: Network = {
   port: 6697,
   tls: true,
   status: { state: "connected" },
+  configuredNick: "sable",
   currentNick: "sable",
   sasl: { state: "notConfigured" },
   capsEnabled: [],

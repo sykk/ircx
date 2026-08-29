@@ -179,6 +179,8 @@ export interface AppActions {
   setSidebarWidth: (px: number) => void;
   setSidebarCompact: (compact: boolean) => void;
   setSidebarFilter: (filter: SidebarFilter) => void;
+  setPinnedNetworks: (networks: string[]) => void;
+  togglePinnedNetwork: (network: string) => void;
   togglePinnedTarget: (target: TargetKey) => void;
   /** Null gives the column back to the names in it. */
   setRosterWidth: (px: number | null) => void;
@@ -240,6 +242,7 @@ const initialState: AppState = {
   sidebarWidth: 240,
   sidebarCompact: false,
   sidebarFilter: null,
+  pinnedNetworks: [],
   pinnedTargets: [],
   rosterWidth: null,
   themes: [],
@@ -811,6 +814,23 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   setSidebarFilter: (sidebarFilter) => set({ sidebarFilter }),
 
+  setPinnedNetworks: (pinnedNetworks) =>
+    set((s) => ({
+      pinnedNetworks,
+      networkOrder: orderNetworks(s.networks, pinnedNetworks),
+    })),
+
+  togglePinnedNetwork: (network) =>
+    set((s) => {
+      const pinnedNetworks = s.pinnedNetworks.includes(network)
+        ? s.pinnedNetworks.filter((held) => held !== network)
+        : [...s.pinnedNetworks, network];
+      return {
+        pinnedNetworks,
+        networkOrder: orderNetworks(s.networks, pinnedNetworks),
+      };
+    }),
+
   togglePinnedTarget: (target) =>
     set((s) => ({
       pinnedTargets: s.pinnedTargets.includes(target)
@@ -1224,7 +1244,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
   switch (event.type) {
     case "networkUpdated": {
       const networks = { ...s.networks, [event.network.id]: event.network };
-      return { networks, networkOrder: orderNetworks(networks) };
+      return { networks, networkOrder: orderNetworks(networks, s.pinnedNetworks) };
     }
 
     case "networkRemoved": {
@@ -1277,6 +1297,7 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
         rawLog,
         channelList,
         recent: s.recent.filter((key) => !key.startsWith(prefix)),
+        pinnedNetworks: s.pinnedNetworks.filter((id) => id !== event.network),
         pinnedTargets: s.pinnedTargets.filter((key) => !key.startsWith(prefix)),
         views,
         viewAnchor,
@@ -1730,18 +1751,31 @@ function patchNetwork(
 }
 
 /**
- * The names, rather than the order the servers answered in. Each network is a
- * lane of its own in the event pump and one `NetworkUpdated` supersedes another
- * inside a lane, so arrival order is the order they connected in: two dialling
- * at once came out reversed between one launch and the next (#480). Recomputed
- * on every update because a rename arrives as one, and the id breaks a tie
- * because nothing makes a name unique.
+ * Pinned networks keep the order they were pinned in; the rest use their names
+ * rather than the order the servers answered in. Each network is a lane of its
+ * own in the event pump and one `NetworkUpdated` supersedes another inside a
+ * lane, so arrival order is the order they connected in: two dialling at once
+ * came out reversed between one launch and the next (#480). Recomputed on every
+ * update because a rename arrives as one, and the id breaks a tie because
+ * nothing makes a name unique.
  */
-function orderNetworks(networks: AppState["networks"]): string[] {
+function orderNetworks(networks: AppState["networks"], pinnedNetworks: string[]): string[] {
+  const pinnedAt = new Map(pinnedNetworks.map((id, index) => [id, index]));
   return Object.keys(networks).sort(
-    (a, b) =>
-      networks[a]!.name.localeCompare(networks[b]!.name, undefined, { sensitivity: "base" }) ||
-      a.localeCompare(b),
+    (a, b) => {
+      const aPinned = pinnedAt.get(a);
+      const bPinned = pinnedAt.get(b);
+      if (aPinned !== undefined || bPinned !== undefined) {
+        if (aPinned === undefined) return 1;
+        if (bPinned === undefined) return -1;
+        return aPinned - bPinned;
+      }
+      return (
+        networks[a]!.name.localeCompare(networks[b]!.name, undefined, {
+          sensitivity: "base",
+        }) || a.localeCompare(b)
+      );
+    },
   );
 }
 

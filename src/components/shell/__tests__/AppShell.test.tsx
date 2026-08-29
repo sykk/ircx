@@ -77,6 +77,7 @@ describe("AppShell", () => {
       sidebarWidth: 256,
       rosterWidth: null,
       collapsedNetworks: ["libera"],
+      pinnedNetworks: [],
       pinnedTargets: [],
       layout: null,
     });
@@ -90,6 +91,41 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
 
     expect(loadViewState()?.pinnedTargets).toHaveLength(1);
+  });
+
+  it("persists pinned networks", () => {
+    seedStore([
+      makeNetwork("efnet", { name: "efnet" }),
+      makeNetwork("libera", { name: "Libera.Chat" }),
+    ]);
+    render(<AppShell />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Libera.Chat actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin network" }));
+
+    expect(loadViewState()?.pinnedNetworks).toEqual(["libera"]);
+  });
+
+  it("restores pinned networks above the alphabetical remainder", () => {
+    localStorage.setItem(
+      "ircx.shell.view",
+      JSON.stringify({
+        sidebarWidth: 240,
+        collapsedNetworks: [],
+        pinnedNetworks: ["libera"],
+      }),
+    );
+    seedStore([
+      makeNetwork("efnet", { name: "efnet" }),
+      makeNetwork("libera", { name: "Libera.Chat" }),
+    ]);
+    render(<AppShell />);
+
+    const names = screen
+      .getAllByRole("treeitem")
+      .filter((row) => row.getAttribute("aria-level") === "1")
+      .map((row) => row.getAttribute("aria-label")?.split(",")[0]);
+    expect(names).toEqual(["Libera.Chat", "efnet"]);
   });
 
   it("writes the panes down as the conversations they hold", () => {

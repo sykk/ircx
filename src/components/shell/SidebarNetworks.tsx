@@ -27,6 +27,7 @@ type Row =
       kind: "network";
       network: Network;
       collapsed: boolean;
+      pinned: boolean;
       unread: number;
       draft: boolean;
       attention: number;
@@ -71,6 +72,7 @@ export function SidebarNetworks() {
   const collapsedNetworks = useAppStore((s) => s.collapsedNetworks);
   const compact = useAppStore((s) => s.sidebarCompact);
   const filter = useAppStore((s) => s.sidebarFilter);
+  const pinnedNetworks = useAppStore((s) => s.pinnedNetworks);
   const pinnedTargets = useAppStore((s) => s.pinnedTargets);
   const active = useActiveTarget();
   const showTarget = useAppStore((s) => s.showTarget);
@@ -78,6 +80,7 @@ export function SidebarNetworks() {
   const toggleNetworkCollapsed = useAppStore((s) => s.toggleNetworkCollapsed);
   const openSetup = useAppStore((s) => s.openSetup);
   const browseChannels = useAppStore((s) => s.browseChannels);
+  const togglePinnedNetwork = useAppStore((s) => s.togglePinnedNetwork);
   const togglePinnedTarget = useAppStore((s) => s.togglePinnedTarget);
   const setSidebarFilter = useAppStore((s) => s.setSidebarFilter);
 
@@ -120,6 +123,7 @@ export function SidebarNetworks() {
           kind: "network",
           network,
           collapsed: collapsedNetworks[id] ?? false,
+          pinned: pinnedNetworks.includes(id),
           // A collapsed panel hides its queries with its channels, so the count
           // on the row has to answer for both.
           unread:
@@ -148,19 +152,31 @@ export function SidebarNetworks() {
       });
     }
     return out;
-  }, [networks, networkOrder, channels, queries, drafts, collapsedNetworks, pinnedTargets, filter]);
+  }, [
+    networks,
+    networkOrder,
+    channels,
+    queries,
+    drafts,
+    collapsedNetworks,
+    pinnedNetworks,
+    pinnedTargets,
+    filter,
+  ]);
 
   const startupFailed = useAppStore((s) => s.startupFailure !== null);
 
   /** The panels flattened into what the arrow keys walk. */
   const rows = useMemo<Row[]>(
     () =>
-      panels.flatMap((panel) =>
-        panel.header.collapsed
-          ? [panel.header]
-          : [panel.header, ...panel.channels, ...panel.queries],
-      ),
-    [panels],
+      filter === null
+        ? panels.flatMap((panel) =>
+            panel.header.collapsed
+              ? [panel.header]
+              : [panel.header, ...panel.channels, ...panel.queries],
+          )
+        : panels.flatMap((panel) => [...panel.channels, ...panel.queries]),
+    [filter, panels],
   );
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -297,7 +313,7 @@ export function SidebarNetworks() {
     return active.network === network && sameTarget(active.target, target);
   }
 
-  function renderRow(row: Row) {
+  function renderRow(row: Row, networkLabel?: string) {
     const selected = isSelected(row);
     const tabbable = row.id === tabbableId;
     const registerButton = (el: HTMLButtonElement | null) => {
@@ -310,7 +326,7 @@ export function SidebarNetworks() {
         <div
           key={row.id}
           className={clsx(
-            "group flex items-center",
+            "group sticky top-0 z-10 flex items-center bg-[var(--surface-sidebar)]",
             !selected && "hover:bg-[var(--surface-hover)]",
           )}
         >
@@ -319,17 +335,20 @@ export function SidebarNetworks() {
             selected={selected}
             tabbable={tabbable}
             onActivate={() => activate(row)}
+            onCollapse={() => toggleNetworkCollapsed(row.network.id)}
             registerButton={registerButton}
             compact={compact}
           />
           <NetworkMenu
             network={row.network}
             collapsed={row.collapsed}
+            pinned={row.pinned}
             resting={selected}
             tabbable={tabbable}
             open={menuFor === row.network.id}
             onOpenChange={(open) => setMenuFor(open ? row.network.id : null)}
             onCollapse={() => toggleNetworkCollapsed(row.network.id)}
+            onTogglePinned={() => togglePinnedNetwork(row.network.id)}
             onConnection={() => void toggleConnection(row.network)}
             onReconnect={() => void reconnect(row.network)}
             onRawLog={() => openConsole(row.network.id, true)}
@@ -372,6 +391,8 @@ export function SidebarNetworks() {
           onActivate={() => activate(row)}
           registerButton={registerButton}
           compact={compact}
+          level={networkLabel ? 1 : 2}
+          networkLabel={networkLabel}
         />
         <CloseButton
           label={
@@ -424,7 +445,10 @@ export function SidebarNetworks() {
 
       {filter !== null && (
         <div className="flex items-center gap-1 px-3 pb-1 text-[11px] text-[var(--text-muted)]">
-          <span>{SIDEBAR_FILTER_LABELS[filter]}</span>
+          <span>
+            {SIDEBAR_FILTER_LABELS[filter]} — {rows.length}{" "}
+            {rows.length === 1 ? "conversation" : "conversations"}
+          </span>
           <button
             type="button"
             aria-label="Clear sidebar filter"
@@ -437,7 +461,7 @@ export function SidebarNetworks() {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {Object.keys(networks).length === 0 ? (
         // Silent rather than empty-handed while the window is saying it could
         // not read its own data: there may be a dozen networks configured, and
         // this is the one thing on screen that would flatly deny it.
@@ -446,6 +470,10 @@ export function SidebarNetworks() {
             No networks configured.
           </p>
         )
+      ) : filter !== null && rows.length === 0 ? (
+        <p className="px-3 py-2 text-[12px] text-[var(--text-muted)]">
+          No matching conversations.
+        </p>
       ) : (
         <div
           className="min-h-0 flex-1 overflow-y-auto pb-2"
@@ -456,34 +484,36 @@ export function SidebarNetworks() {
           }}
         >
           <div role="tree" aria-label="Networks and conversations">
-            {panels.map((panel) => (
-              <div
-                key={panel.header.id}
-                role="none"
-                className={compact ? "mb-0" : "mb-1"}
-              >
-                {renderRow(panel.header)}
-                {!panel.header.collapsed && (
-                  <div role="group" aria-label={panel.header.network.name}>
-                    {panel.channels.map(renderRow)}
-                    {panel.channels.length > 0 && panel.queries.length > 0 && (
-                      <div
-                        className={clsx(
-                          "mx-3 border-t border-[var(--border-subtle)]",
-                          compact ? "my-0.5" : "my-1",
+            {filter === null
+              ? panels.map((panel) => (
+                  <div
+                    key={panel.header.id}
+                    role="none"
+                    className={compact ? "mb-0" : "mb-1"}
+                  >
+                    {renderRow(panel.header)}
+                    {!panel.header.collapsed && (
+                      <div role="group" aria-label={panel.header.network.name}>
+                        {panel.channels.map((row) => renderRow(row))}
+                        {panel.channels.length > 0 && panel.queries.length > 0 && (
+                          <div
+                            className={clsx(
+                              "mx-3 border-t border-[var(--border-subtle)]",
+                              compact ? "my-0.5" : "my-1",
+                            )}
+                          />
                         )}
-                      />
-                    )}
-                    {panel.queries.map(renderRow)}
-                    {filter !== null && panel.channels.length === 0 && panel.queries.length === 0 && (
-                      <p className="px-3 py-1 text-[11px] text-[var(--text-faint)]">
-                        No matching conversations
-                      </p>
+                        {panel.queries.map((row) => renderRow(row))}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
+                ))
+              : rows.map((row) => {
+                  if (row.kind === "network") return renderRow(row);
+                  const network =
+                    row.kind === "channel" ? row.channel.network : row.query.network;
+                  return renderRow(row, networks[network]?.name ?? network);
+                })}
           </div>
         </div>
       )}
@@ -530,10 +560,15 @@ function NetworkRow({
   selected,
   tabbable,
   onActivate,
+  onCollapse,
   registerButton,
   compact,
-}: RowProps & { row: Extract<Row, { kind: "network" }> }) {
+}: RowProps & { row: Extract<Row, { kind: "network" }>; onCollapse: () => void }) {
   const detail = connectionDetail(row.network.status);
+  const currentNick =
+    row.network.currentNick !== null && row.network.currentNick !== row.network.configuredNick
+      ? row.network.currentNick
+      : null;
   return (
     <button
       data-row-id={row.id}
@@ -545,13 +580,24 @@ function NetworkRow({
       aria-expanded={!row.collapsed}
       aria-level={1}
       aria-selected={selected}
-      aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}${detail ? `, ${detail}` : ""}`}
+      aria-label={`${row.network.name}, ${connectionLabel(row.network.status)}${detail ? `, ${detail}` : ""}${currentNick ? `, current nick ${currentNick}` : ""}${row.pinned ? ", pinned" : ""}`}
       title={`Server messages from ${row.network.name}`}
       className={clsx(
         "flex min-w-0 flex-1 items-center gap-2 px-3 text-[12px] font-medium text-[var(--text-primary)]",
         compact ? "h-6" : "h-8",
       )}
     >
+      <span
+        aria-hidden="true"
+        title={`${row.collapsed ? "Show" : "Hide"} ${row.network.name} conversations`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onCollapse();
+        }}
+        className="hidden w-2 shrink-0 cursor-pointer justify-center text-[9px] text-[var(--text-faint)] group-hover:flex"
+      >
+        {row.collapsed ? "▸" : "▾"}
+      </span>
       <StatusDot network={row.network} />
       <span className="truncate">{row.network.name}</span>
       {detail && (
@@ -567,6 +613,15 @@ function NetworkRow({
         </span>
       )}
       <span className="flex-1" />
+      {currentNick && (
+        <span
+          className="shrink-0 font-mono text-[10px] font-normal text-[var(--warning)]"
+          title={`Current nick: ${currentNick}`}
+        >
+          {currentNick}
+        </span>
+      )}
+      {row.pinned && <PinnedMark />}
       {row.collapsed && row.draft && <DraftMark />}
       {row.collapsed && row.attention > 0 && <Badge count={row.attention} highlight />}
       {row.collapsed && row.attention === 0 && row.unread > 0 && (
@@ -583,7 +638,13 @@ function SidebarRow({
   onActivate,
   registerButton,
   compact,
-}: RowProps & { row: Exclude<Row, { kind: "network" }> }) {
+  level,
+  networkLabel,
+}: RowProps & {
+  row: Exclude<Row, { kind: "network" }>;
+  level: 1 | 2;
+  networkLabel: string | undefined;
+}) {
   const shared = {
     "data-row-id": row.id,
     role: "treeitem",
@@ -597,9 +658,9 @@ function SidebarRow({
     return (
       <button
         {...shared}
-        aria-level={2}
+        aria-level={level}
         aria-selected={selected}
-        aria-label={`${row.query.nick}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
+        aria-label={`${row.query.nick}${networkLabel ? `, network ${networkLabel}` : ""}${row.query.online ? "" : ", offline"}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
         className={rowClass(selected, compact)}
       >
         {/* Where a channel draws its sigil, a query draws whether the other
@@ -617,6 +678,7 @@ function SidebarRow({
           {row.query.nick}
         </span>
         <span className="flex-1" />
+        {networkLabel && <NetworkTag name={networkLabel} />}
         {row.draft && <DraftMark />}
         {row.pinned && <PinnedMark />}
         {row.query.muted && <MutedMark />}
@@ -631,9 +693,9 @@ function SidebarRow({
   return (
     <button
       {...shared}
-      aria-level={2}
+      aria-level={level}
       aria-selected={selected}
-      aria-label={`${name}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
+      aria-label={`${name}${networkLabel ? `, network ${networkLabel}` : ""}${restricted ? ", restricted" : ""}${row.draft ? ", draft" : ""}${row.pinned ? ", pinned" : ""}`}
       className={rowClass(selected, compact)}
     >
       <span className="flex w-2 shrink-0 justify-center text-[var(--text-faint)]">
@@ -641,6 +703,7 @@ function SidebarRow({
       </span>
       <span className="truncate">{stripSigil(name)}</span>
       <span className="flex-1" />
+      {networkLabel && <NetworkTag name={networkLabel} />}
       {row.draft && <DraftMark />}
       {row.pinned && <PinnedMark />}
       {restricted && (
@@ -654,6 +717,17 @@ function SidebarRow({
         <UnreadMark count={row.channel.unread} />
       )}
     </button>
+  );
+}
+
+function NetworkTag({ name }: { name: string }) {
+  return (
+    <span
+      className="max-w-20 shrink-0 truncate rounded-[var(--radius-sm)] border border-[var(--border-default)] px-1 font-mono text-[9px] leading-[14px] text-[var(--text-faint)]"
+      title={name}
+    >
+      {name}
+    </span>
   );
 }
 
@@ -700,11 +774,13 @@ function MutedMark() {
 function NetworkMenu({
   network,
   collapsed,
+  pinned,
   resting,
   tabbable,
   open,
   onOpenChange,
   onCollapse,
+  onTogglePinned,
   onConnection,
   onReconnect,
   onRawLog,
@@ -713,12 +789,14 @@ function NetworkMenu({
 }: {
   network: Network;
   collapsed: boolean;
+  pinned: boolean;
   /** Drawn without a hover, because this network's console is the one on show. */
   resting: boolean;
   tabbable: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCollapse: () => void;
+  onTogglePinned: () => void;
   onConnection: () => void;
   onReconnect: () => void;
   onRawLog: () => void;
@@ -799,6 +877,9 @@ function NetworkMenu({
         >
           <MenuItem onClick={choose(onCollapse)}>
             {collapsed ? "Show conversations" : "Hide conversations"}
+          </MenuItem>
+          <MenuItem onClick={choose(onTogglePinned)}>
+            {pinned ? "Unpin network" : "Pin network"}
           </MenuItem>
           <MenuItem onClick={choose(onConnection)}>
             {network.status.state === "disconnected" ? "Connect" : "Disconnect"}
@@ -994,5 +1075,7 @@ function channelSigil(name: string): string {
 }
 
 function stripSigil(name: string): string {
-  return /^[#&+!]/.test(name) ? name.slice(1) : name;
+  if (!/^[#&+!]/.test(name)) return name;
+  const remainder = name.slice(1);
+  return /^[#&+!]/.test(remainder) ? name : remainder;
 }

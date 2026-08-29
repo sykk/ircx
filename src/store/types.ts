@@ -159,7 +159,7 @@ export interface TimelineState {
 export interface AppState {
   // World.
   networks: Record<string, Network>;
-  /** Display order in the sidebar; networks arrive unordered. */
+  /** Pinned networks first, then the remaining names; networks arrive unordered. */
   networkOrder: string[];
   channels: Record<TargetKey, Channel>;
   queries: Record<TargetKey, Query>;
@@ -321,6 +321,8 @@ export interface AppState {
   /** Fits more network and conversation rows without changing their type. */
   sidebarCompact: boolean;
   sidebarFilter: SidebarFilter;
+  /** Networks held above the alphabetical remainder, in pin order. */
+  pinnedNetworks: string[];
   pinnedTargets: TargetKey[];
   /** What somebody dragged the member list to, or null while it is still
    * sizing itself to the longest name in it. One width for every roster: a

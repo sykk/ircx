@@ -28,6 +28,7 @@ describe("saving", () => {
       sidebarWidth: 320,
       rosterWidth: null,
       collapsedNetworks: ["libera"],
+      pinnedNetworks: [],
       pinnedTargets: [],
       layout: split,
     });
@@ -42,6 +43,7 @@ describe("loading", () => {
       sidebarWidth: 240,
       rosterWidth: null,
       collapsedNetworks: [],
+      pinnedNetworks: [],
       pinnedTargets: [],
       layout: null,
     });
@@ -61,6 +63,19 @@ describe("loading", () => {
     expect(loadViewState()?.pinnedTargets).toEqual([pinned]);
   });
 
+  it("keeps pinned network ids and drops other values", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        sidebarWidth: 240,
+        collapsedNetworks: [],
+        pinnedNetworks: ["libera", 7, null],
+      }),
+    );
+
+    expect(loadViewState()?.pinnedNetworks).toEqual(["libera"]);
+  });
+
   it("drops a layout it cannot read without losing the sidebar with it", () => {
     localStorage.setItem(
       KEY,
@@ -71,6 +86,7 @@ describe("loading", () => {
       sidebarWidth: 240,
       rosterWidth: null,
       collapsedNetworks: [],
+      pinnedNetworks: [],
       pinnedTargets: [],
       layout: null,
     });

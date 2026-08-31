@@ -101,6 +101,20 @@ describe.each(THEMES)("$id nick palette", ({ css }) => {
   });
 });
 
+describe.each(THEMES)("$id unread separator", ({ css }) => {
+  const all = readVars(css, "");
+  const divider = all["divider-unread"]!;
+
+  it("uses a cool hue", () => {
+    expect(hue(divider)).toBeGreaterThanOrEqual(COOL_MIN);
+    expect(hue(divider)).toBeLessThanOrEqual(COOL_MAX);
+  });
+
+  it("clears AA on the timeline", () => {
+    expect(contrast(divider, all["surface-base"]!)).toBeGreaterThanOrEqual(AA_BODY);
+  });
+});
+
 // The disabled fraction is a token because a ratio tuned against one palette is
 // wrong against the other: 0.4 read as quiet on the dark surface and as empty
 // on the light one. The rule that produced each theme's value is the floor

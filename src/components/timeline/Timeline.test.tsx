@@ -248,9 +248,12 @@ describe("Timeline", () => {
       "b",
     );
     render(<Timeline view={TEST_VIEW} />);
-    expect(
-      screen.getByText("2 messages, 2 people, 45 minutes · 1 of them mentions you"),
-    ).toBeTruthy();
+    const label = screen.getByText(
+      "2 messages, 2 people, 45 minutes · 1 of them mentions you",
+    );
+    expect(label.style.color).toBe("var(--divider-unread)");
+    expect(label.previousElementSibling?.className).toContain("border-dotted");
+    expect(label.nextElementSibling?.className).toContain("border-dotted");
   });
 
   it("walks mentions in the unread messages and returns to the live edge", () => {

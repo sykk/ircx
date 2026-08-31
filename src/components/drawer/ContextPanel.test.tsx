@@ -56,11 +56,6 @@ beforeAll(() => {
   });
 });
 
-/**
- * #482. The filter is absent until it is used, which is the roster
- * `docs/mockup.png` draws, so a key is what opens it and there is nothing on
- * screen to click.
- */
 describe("filtering the roster", () => {
   const roster = () => screen.getByRole("complementary");
   const strip = () => screen.queryByRole("textbox", { name: /Filter #ctf-ops members/ });
@@ -79,6 +74,16 @@ describe("filtering the roster", () => {
 
   it("draws no filter until one is asked for", () => {
     expect(strip()).toBeNull();
+  });
+
+  it("shows the channel count and opens the filter from the roster header", () => {
+    expect(screen.getByRole("heading", { name: "Members 16" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter members" }));
+
+    expect(strip()).toHaveProperty("value", "");
+    expect(document.activeElement).toBe(strip());
+    expect(screen.getByRole("button", { name: "Close member filter" })).toBeTruthy();
   });
 
   it("shows member actions only from the context menu", () => {

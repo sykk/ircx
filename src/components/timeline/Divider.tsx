@@ -16,11 +16,19 @@ function Rule({ tint, children }: { tint: string; children: ReactNode }) {
       }}
       role="separator"
     >
-      <span className="h-px flex-1" style={{ background: tint }} />
+      <span
+        aria-hidden
+        className="flex-1 border-t border-dotted"
+        style={{ borderColor: tint }}
+      />
       <span className="text-[11px] font-medium" style={{ color: tint }}>
         {children}
       </span>
-      <span className="h-px flex-1" style={{ background: tint }} />
+      <span
+        aria-hidden
+        className="flex-1 border-t border-dotted"
+        style={{ borderColor: tint }}
+      />
     </div>
   );
 }

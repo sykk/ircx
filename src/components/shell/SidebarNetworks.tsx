@@ -375,7 +375,9 @@ export function SidebarNetworks() {
         key={row.id}
         className={clsx(
           "group relative flex items-center",
-          selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]",
+          selected
+            ? "bg-[var(--surface-active)] before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-[var(--accent)]"
+            : "hover:bg-[var(--surface-hover)]",
         )}
         onContextMenu={(event) => {
           // Right-click opens the same menu the button does, so the two are one

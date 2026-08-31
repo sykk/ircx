@@ -85,11 +85,11 @@ export function ChatPane({ view }: { view: ViewId | null }) {
             <Timeline view={view} catchUp={catchUp} />
           </div>
           {!hidden && (
-            <div className="col-start-2 row-start-2 row-end-4 min-h-0">
+            <div className="col-start-2 row-start-1 row-end-5 min-h-0">
               <ContextPanel view={view} />
             </div>
           )}
-          <div className="col-span-2 row-start-4 min-w-0">
+          <div className="col-start-1 row-start-4 min-w-0">
             <Composer view={view} />
           </div>
         </div>

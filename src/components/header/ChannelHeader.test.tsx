@@ -59,7 +59,7 @@ describe("ChannelHeader", () => {
   it("names the channel and counts its members", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     expect(screen.getByRole("heading", { name: CTF_OPS.name })).toBeTruthy();
-    expect(screen.getByText("16 members")).toBeTruthy();
+    expect(screen.getByLabelText("16 members")).toBeTruthy();
   });
 
   it("exposes the catch-up filter as a pressed header action", () => {
@@ -78,16 +78,20 @@ describe("ChannelHeader", () => {
    * being in the mockup, before anything had established that nothing else
    * showed it either. */
   describe("the topic", () => {
-    it("is drawn in a separate banner below the controls", () => {
+    it("is drawn with the controls until it is expanded", () => {
       const { container } = render(<ChannelHeader view={TEST_VIEW} />);
       const controls = container.querySelector('[data-ui="channel-header-row"]');
       const banner = container.querySelector('[data-ui="topic-banner"]');
       const topic = container.querySelector(`p[title="${TOPIC}"]`);
       expect(controls).toBeTruthy();
-      expect(banner).toBeTruthy();
+      expect(banner).toBeNull();
       expect(topic).toBeTruthy();
-      expect(controls?.contains(topic)).toBe(false);
-      expect(banner?.contains(topic)).toBe(true);
+      expect(controls?.contains(topic)).toBe(true);
+
+      fireEvent.click(screen.getByRole("button", { name: "Expand topic" }));
+      const expanded = container.querySelector('[data-ui="topic-banner"]');
+      expect(expanded).toBeTruthy();
+      expect(expanded?.contains(container.querySelector(`p[title="${TOPIC}"]`))).toBe(true);
     });
 
     it("shows who set it and when only when expanded", () => {
@@ -99,16 +103,17 @@ describe("ChannelHeader", () => {
 
     it("starts on one line and expands the full topic", () => {
       const { container } = render(<ChannelHeader view={TEST_VIEW} />);
-      const topic = container.querySelector(`p[title="${TOPIC}"]`)!;
-      expect(topic.className).toContain("truncate");
-      expect(topic.className).not.toContain("whitespace-pre-wrap");
+      const collapsed = container.querySelector(`p[title="${TOPIC}"]`)!;
+      expect(collapsed.className).toContain("truncate");
+      expect(collapsed.className).not.toContain("whitespace-pre-wrap");
       expect(screen.queryByText(/Set by sable/)).toBeNull();
       expect(screen.getByRole("button", { name: "Expand topic" }).getAttribute("aria-expanded"))
         .toBe("false");
 
       fireEvent.click(screen.getByRole("button", { name: "Expand topic" }));
-      expect(topic.className).toContain("whitespace-pre-wrap");
-      expect(topic.className).not.toContain("truncate");
+      const expanded = container.querySelector(`p[title="${TOPIC}"]`)!;
+      expect(expanded.className).toContain("whitespace-pre-wrap");
+      expect(expanded.className).not.toContain("truncate");
       expect(screen.getByText(TOPIC)).toBeTruthy();
     });
 
@@ -125,7 +130,7 @@ describe("ChannelHeader", () => {
       });
       render(<ChannelHeader view={TEST_VIEW} />);
       expect(screen.queryByText(TOPIC)).toBeNull();
-      expect(screen.getByText("16 members")).toBeTruthy();
+      expect(screen.getByLabelText("16 members")).toBeTruthy();
       expect(document.querySelector('[data-ui="topic-banner"]')).toBeNull();
     });
 

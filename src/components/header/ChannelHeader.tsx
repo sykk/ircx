@@ -82,7 +82,7 @@ export function ChannelHeader({
     <header className="contents">
       <div
         data-ui="channel-header-row"
-        className="col-span-2 row-start-1 flex h-10 items-center gap-2.5 bg-[var(--surface-base)] px-3"
+        className="col-start-1 row-start-1 flex h-10 min-w-0 items-center gap-2.5 border-b border-[var(--border-subtle)] bg-[var(--surface-base)] px-3"
       >
         <h1
           className={clsx(
@@ -92,11 +92,50 @@ export function ChannelHeader({
         >
           {channel.name}
         </h1>
-        <span className="shrink-0 text-[var(--text-muted)]">
-          {channel.memberCount} {channel.memberCount === 1 ? "member" : "members"}
+
+        {topic !== null && !topicExpanded && (
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <p
+              title={topic.text}
+              className="selectable min-w-0 truncate text-[var(--text-secondary)]"
+            >
+              <CollapsedTopic
+                text={topic.text}
+                onOpen={(url) => {
+                  setTopicError(null);
+                  void openExternal(url).catch((reason: unknown) => {
+                    setTopicError(`Could not open ${url} — ${String(reason)}`);
+                  });
+                }}
+              />
+            </p>
+            <button
+              type="button"
+              aria-label="Expand topic"
+              aria-expanded={false}
+              onClick={() => setTopicExpanded(true)}
+              className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <span className="block rotate-[-90deg]">
+                <ChevronIcon size={14} />
+              </span>
+            </button>
+          </div>
+        )}
+
+        <span
+          aria-label={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
+          title={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
+          className={clsx(
+            "flex shrink-0 items-center gap-1 text-[var(--text-muted)]",
+            topic === null ? "mr-auto" : topicExpanded && "ml-auto",
+          )}
+        >
+          <MembersIcon size={14} />
+          <span aria-hidden="true">{channel.memberCount}</span>
         </span>
 
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {onCatchUp && (
             <HeaderButton
               label="Catch up"
@@ -204,55 +243,42 @@ export function ChannelHeader({
         </div>
       </div>
 
-      {topic !== null && (
+      {topic !== null && (topicExpanded || topicError !== null) && (
         <div
           data-ui="topic-banner"
           className="col-start-1 row-start-2 flex min-w-0 items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-1.5"
         >
-          <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <p
-              title={topic.text}
-              className={clsx(
-                "selectable min-w-0 text-[var(--text-primary)]",
-                topicExpanded ? "whitespace-pre-wrap break-words" : "truncate",
-              )}
-            >
-              {topicExpanded ? (
-                topic.text
-              ) : (
-                <CollapsedTopic
-                  text={topic.text}
-                  onOpen={(url) => {
-                    setTopicError(null);
-                    void openExternal(url).catch((reason: unknown) => {
-                      setTopicError(`Could not open ${url} — ${String(reason)}`);
-                    });
-                  }}
-                />
-              )}
-            </p>
-            {topicExpanded && (topic.setBy !== null || topic.setAt !== null) && (
-              <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
-                {topicMetadata(topic.setBy, topic.setAt)}
+          {topicExpanded && (
+            <div className="flex min-w-0 flex-1 items-baseline gap-2">
+              <p
+                title={topic.text}
+                className="selectable min-w-0 whitespace-pre-wrap break-words text-[var(--text-primary)]"
+              >
+                {topic.text}
               </p>
-            )}
-          </div>
+              {(topic.setBy !== null || topic.setAt !== null) && (
+                <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
+                  {topicMetadata(topic.setBy, topic.setAt)}
+                </p>
+              )}
+            </div>
+          )}
           {topicError !== null && (
-            <span role="alert" className="shrink-0 text-[11px] text-[var(--danger)]">
+            <span role="alert" className="min-w-0 flex-1 truncate text-[11px] text-[var(--danger)]">
               {topicError}
             </span>
           )}
-          <button
-            type="button"
-            aria-label={topicExpanded ? "Collapse topic" : "Expand topic"}
-            aria-expanded={topicExpanded}
-            onClick={() => setTopicExpanded((expanded) => !expanded)}
-            className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <span className={clsx("block", !topicExpanded && "rotate-[-90deg]")}>
+          {topicExpanded && (
+            <button
+              type="button"
+              aria-label="Collapse topic"
+              aria-expanded={true}
+              onClick={() => setTopicExpanded(false)}
+              className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
               <ChevronIcon size={14} />
-            </span>
-          </button>
+            </button>
+          )}
         </div>
       )}
     </header>

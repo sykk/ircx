@@ -94,6 +94,7 @@ struct Harness {
     jobs: Vec<TransferJob>,
     stopped: Vec<String>,
     resumed_at: Vec<(String, u64)>,
+    stalled: Vec<String>,
     closed: bool,
 }
 
@@ -114,6 +115,7 @@ impl Harness {
             jobs: Vec::new(),
             stopped: Vec::new(),
             resumed_at: Vec::new(),
+            stalled: Vec::new(),
             closed: false,
         }
     }
@@ -151,6 +153,7 @@ impl Harness {
                 Action::RunTransfer(job) => self.jobs.push(*job),
                 Action::StopTransfer { id } => self.stopped.push(id),
                 Action::ResumeTransferAt { id, from } => self.resumed_at.push((id, from)),
+                Action::Stalled { reason } => self.stalled.push(reason),
                 Action::Close => self.closed = true,
             }
         }
@@ -2926,6 +2929,98 @@ fn the_measured_lag_is_still_there_at_the_next_snapshot() {
         None,
         "a new socket has not been measured yet"
     );
+}
+
+/// An interval of silence after a `PING` is a socket the far end has
+/// forgotten. Nothing else notices: the write succeeds, the kernel retransmits
+/// for a quarter of an hour, and the window goes on saying Connected.
+#[test]
+fn a_ping_nothing_answers_ends_the_connection() {
+    let mut session = registered("");
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    assert_eq!(session.sent().len(), 1, "the first tick asks");
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    assert_eq!(session.stalled, vec!["the server stopped answering"]);
+    assert!(
+        session.sent().is_empty(),
+        "a connection being given up on is not asked again"
+    );
+}
+
+/// The ordinary round, so that the check above is not the only thing a tick
+/// can do: the answer arrives and the next one asks again.
+#[test]
+fn an_answered_ping_is_followed_by_another() {
+    let mut session = registered("");
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    let token = session.sent()[0]
+        .strip_prefix("PING ")
+        .expect("the keepalive sends a token")
+        .to_string();
+    session.feed(&format!(
+        ":cadmium.libera.chat PONG cadmium.libera.chat :{token}"
+    ));
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    assert!(session.stalled.is_empty());
+    assert_eq!(session.sent().len(), 1);
+}
+
+/// The question is whether anything arrived, not whether the token came back,
+/// so a server whose `PONG` this client cannot match against what it sent is
+/// left alone. It is talking, which is the whole of what is being asked.
+#[test]
+fn a_server_still_talking_is_not_given_up_on() {
+    let mut session = registered("");
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    session.sent();
+
+    session.feed(":cadmium.libera.chat PONG cadmium.libera.chat :somebody-elses");
+    assert_eq!(
+        session.state.snapshot().lag_ms,
+        None,
+        "a token that does not match measures nothing"
+    );
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    assert!(session.stalled.is_empty());
+    assert_eq!(session.sent().len(), 1, "and the connection is asked again");
+}
+
+/// A connection dialled again starts the count over. The mark the last one left
+/// is older than every tick on the new socket, which would give up on it before
+/// the server had been asked anything.
+#[test]
+fn a_new_connection_is_not_judged_by_the_last_ones_silence() {
+    let mut session = registered("");
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    session.sent();
+
+    let actions = session
+        .state
+        .on_disconnected("the server stopped answering");
+    session.apply(actions);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :");
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+    session.sent();
+    session.stalled.clear();
+
+    let actions = session.state.keepalive();
+    session.apply(actions);
+    assert!(session.stalled.is_empty());
+    assert_eq!(session.sent().len(), 1);
 }
 
 /// The socket drops without the session being asked to stop, which is what a

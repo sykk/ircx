@@ -77,6 +77,12 @@ pub enum Action {
     StsUpgrade {
         port: u16,
     },
+    /// The connection is still open as far as the socket knows and is not
+    /// carrying anything. Drop it and reconnect; `reason` is what the user is
+    /// told the connection ended for.
+    Stalled {
+        reason: String,
+    },
     /// Write an ignore down, or take it away.
     ///
     /// The session has already applied it — this is durability, so the next
@@ -400,6 +406,11 @@ pub struct SessionState {
     written: u64,
     next_label: u64,
     ping: Option<(String, Instant)>,
+    /// When a line last arrived from the server, which is what `keepalive`
+    /// judges the connection by. A line is the far end talking whatever it
+    /// says, so a server whose `PONG` this client cannot match against a token
+    /// is still audibly there.
+    last_heard: Instant,
     lag_ms: Option<u32>,
     /// Collected between `321` and `323`. A `LIST` is answered with one reply
     /// per channel and a network has tens of thousands, so they are gathered
@@ -520,6 +531,7 @@ impl SessionState {
             written: 0,
             next_label: 1,
             ping: None,
+            last_heard: Instant::now(),
             lag_ms: None,
             listing: Vec::new(),
             archived: HashMap::new(),
@@ -671,6 +683,9 @@ impl SessionState {
     }
 
     pub fn on_line(&mut self, line: &str) -> Vec<Action> {
+        // Before the parse, because a line this client cannot read is still
+        // the server having said something.
+        self.last_heard = Instant::now();
         let line = self.redact_libera_registration(line);
         self.emit(IrcxEvent::RawLine {
             network: self.config.network.clone(),
@@ -693,15 +708,34 @@ impl SessionState {
             .replace(password, "<credentials>")
     }
 
-    /// Measures the round trip so the UI can show lag. A server that never
-    /// answers simply leaves the last figure standing.
+    /// Measures the round trip so the UI can show lag, and gives up on a
+    /// connection that has gone quiet.
+    ///
+    /// The test is not whether the last `PING` was answered but whether
+    /// anything at all arrived after it went out, so a server with its own idea
+    /// of what a `PONG` looks like is not disconnected for talking. Silence
+    /// across a whole interval is the far end having forgotten the socket:
+    /// nothing else notices until the kernel stops retransmitting, which is a
+    /// quarter of an hour of typing into a connection nobody is reading.
+    ///
+    /// Only once registered, because `ping` is only set once registered. A
+    /// connection that hangs before it is a different failure.
     pub fn keepalive(&mut self) -> Vec<Action> {
-        if self.registered {
-            let token = format!("ircx{}", self.next_label);
-            self.next_label += 1;
-            self.ping = Some((token.clone(), Instant::now()));
-            self.send_command("PING", &[&token]);
+        if !self.registered {
+            return self.drain();
         }
+        if let Some((_, sent)) = &self.ping {
+            if self.last_heard < *sent {
+                self.actions.push(Action::Stalled {
+                    reason: "the server stopped answering".into(),
+                });
+                return self.drain();
+            }
+        }
+        let token = format!("ircx{}", self.next_label);
+        self.next_label += 1;
+        self.ping = Some((token.clone(), Instant::now()));
+        self.send_command("PING", &[&token]);
         self.drain()
     }
 
@@ -3849,6 +3883,7 @@ impl SessionState {
         self.first_pages.clear();
         self.abandon_unwritten();
         self.ping = None;
+        self.last_heard = Instant::now();
         self.lag_ms = None;
         // A spent exchange left here would swallow the next connection's
         // `AUTHENTICATE +`: the go-ahead reads as the end of an empty

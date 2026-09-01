@@ -29,6 +29,9 @@ enum Control {
     Continue,
     Stop,
     Upgrade(u16),
+    /// The connection is open and dead. Carries the reason so the loop ends the
+    /// same way a transport `Disconnected` does, and the backoff dials again.
+    Stalled(String),
 }
 
 fn unix_time() -> i64 {
@@ -681,6 +684,10 @@ async fn drive(
                     stop = true;
                     break;
                 }
+                Control::Stalled(why) => {
+                    reason = why;
+                    break;
+                }
                 Control::Upgrade(port) => {
                     endpoint.1 = port;
                     endpoint.2 = true;
@@ -1186,6 +1193,10 @@ impl Context {
                     control = Control::Upgrade(port);
                 }
                 Action::StsUpgrade { .. } => {}
+                Action::Stalled { reason } if !matches!(control, Control::Stop) => {
+                    control = Control::Stalled(reason);
+                }
+                Action::Stalled { .. } => {}
                 Action::Ignore { nick, ignored } => {
                     // The session already stopped listening; this is what makes
                     // the next launch start out not listening either. A write

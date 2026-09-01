@@ -96,6 +96,12 @@ covers what the icon says; these cover whether there is an icon to say it.
   unread seam still uses the server marker.
 - [ ] Search into another conversation and return to the live edge. The target
   must open once, the hit must be centered, and its unread seam must survive.
+- [ ] Blackhole an established connection so the socket stays open and nothing
+  arrives — `sudo iptables -I INPUT -s <server> -j DROP`, or suspend the
+  machine. Within two keepalive intervals the network must say the server
+  stopped answering and begin its backoff, rather than waiting out the kernel's
+  retransmits. Only a real socket shows this; a test can drop a connection but
+  not leave one open and silent.
 - [ ] Upload a small file through the Catbox preset and open the resulting URL.
 - [ ] Upload through a real S3-compatible account. Check the configured region,
   a private-object warning, and an anonymously readable object.

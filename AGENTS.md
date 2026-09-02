@@ -290,6 +290,24 @@ hundred kilobytes arrive faster than anything can be watched happening, and
 ergo's IP cloaking has to be off, because HexChat resolves its own hostname to
 decide what address to put in an offer and a cloak resolves to nothing.
 
+The same argument reaches registration and redaction, and for the same
+reason: both were written against a script this project also wrote, so passing
+it proves the two halves agree rather than that either is right.
+`crates/ircx-core/tests/registration_ergo.rs` registers an account against a
+real ergo, signs in with it, says something and withdraws it, and then reads
+the archive back — the row blanked, the words out of the search index.
+`scripts/registration-rig.sh` stands the server up, because neither capability
+is on in a stock one: registration needs `accounts.registration.enabled`, and
+ergo does not advertise `draft/message-redaction` at all until
+`history.retention.allow-individual-delete` is. A run against a server without
+them measures the client declining to act, which is a different test.
+
+What that probe does not reach is the verification code, which arrives by
+email. The capability ergo advertises here is `before-connect` alone, so a
+registration with `*` for an address is answered `SUCCESS` outright, and
+`REGISTER VERIFICATION_REQUIRED` stays where the scripted tests and
+`docs/manual-verification.md` have it.
+
 Every pane on a channel draws its own member list inside it. A split carries a
 ratio and its divider moves by pointer or arrow key. The layout tree survives a
 restart, written down as the conversations its panes hold; one whose

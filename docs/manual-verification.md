@@ -89,11 +89,12 @@ covers what the icon says; these cover whether there is an icon to say it.
 - [ ] On a disposable Libera.Chat nick over verified TLS, complete guided
   registration, follow the emailed verification command, reconnect, and
   confirm SASL PLAIN signs into the new account.
-- [ ] On a server that advertises `draft/account-registration` — ergo does —
-  register an account from Networks, run `/verify` with the code it sends, and
-  confirm SASL PLAIN signs into it afterwards. The tests drive the capability's
-  replies; what they cannot establish is that a real service accepts the line
-  as this client sends it.
+- [ ] Register an account on a server whose `draft/account-registration`
+  carries `email-required`, then run `/verify` with the emailed code. The rest
+  of that capability is `crates/ircx-core/tests/registration_ergo.rs`, which
+  registers and signs in against a real ergo; what it cannot reach is the
+  verification path, because the code arrives by email and the rig has no MTA
+  to read it out of.
 - [ ] Connect to Libera.Chat with SASL PLAIN and SCRAM-SHA-512. Repeat with a
   wrong password and confirm registration stops with an actionable error.
 - [ ] Set an away time in Notifications, leave the keyboard for it, and
@@ -102,12 +103,11 @@ covers what the icon says; these cover whether there is an icon to say it.
   hand and repeat both halves: neither the reason nor the away itself may
   change, which is the one thing about this that a second pair of eyes has to
   see.
-- [ ] On a server that advertises `draft/message-redaction` — ergo does —
-  withdraw one of your own messages and have somebody with the power to do it
-  withdraw one of yours. Both must leave the row saying who took it away, and a
-  search must stop finding the words. Then restart the client and confirm the
-  archive says the same: the tests drive the event, and what they cannot
-  establish is that the blanked row survives a round trip through SQLite.
+- [ ] Have a channel operator withdraw one of *your* messages, and confirm the
+  row says they took it away rather than you. Withdrawing your own is
+  `crates/ircx-core/tests/registration_ergo.rs`, through the server and back
+  out of SQLite; somebody else doing it needs a second account with the power
+  to, which is a rig this one is not.
 - [ ] Connect two authenticated sessions to a server with read markers. Move
   the marker in one session, replace history in the other, and confirm the
   unread seam still uses the server marker.

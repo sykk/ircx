@@ -271,6 +271,21 @@ function Body({
   highlight: HighlightRule | null;
   nickColors: boolean;
 }) {
+  // Before every other shape, because a withdrawn message has no shape left:
+  // there is no text to draw as an action, a notice or prose. What stays is
+  // that a line was here, which is what the specification asks a client to
+  // keep and what stops a reply below it answering nothing.
+  if (message.redactedBy != null) {
+    const own = message.redactedBy === message.sender.nick;
+    return (
+      <span className="italic" style={{ color: "var(--text-faint)" }}>
+        {own
+          ? `${message.sender.nick} withdrew this message`
+          : `${message.redactedBy} removed this message`}
+      </span>
+    );
+  }
+
   if (message.kind === "action") {
     return (
       <span>

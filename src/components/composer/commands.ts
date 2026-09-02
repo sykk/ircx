@@ -59,6 +59,7 @@ export const COMMANDS: SlashCommand[] = [
   { name: "ctcp", args: "<nick> <command> [args]", summary: "Send a CTCP query" },
   { name: "react", args: "<msgid> <value>", summary: "React to a message" },
   { name: "unreact", args: "<msgid> <value>", summary: "Take a reaction back" },
+  { name: "redact", args: "<msgid> [reason]", summary: "Withdraw a message you sent" },
   { name: "nick", args: "<nick>", summary: "Change your nickname" },
   { name: "setname", args: "<text>", summary: "Change the real name a whois shows" },
   { name: "topic", args: "[topic]", summary: "Show or set the channel topic" },

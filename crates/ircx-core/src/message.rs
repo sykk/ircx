@@ -52,6 +52,7 @@ impl SessionState {
             reactions: Vec::new(),
             annotations: Vec::new(),
             raised_by: Vec::new(),
+            redacted_by: None,
             reply_to: reply_to(source),
             source: batch
                 .as_deref()
@@ -94,6 +95,7 @@ impl SessionState {
             reactions: Vec::new(),
             annotations: Vec::new(),
             raised_by: Vec::new(),
+            redacted_by: None,
             reply_to: None,
             batch: None,
             delivery: Delivery::Delivered,

@@ -164,6 +164,10 @@ fn lane(event: &IrcxEvent) -> Option<Lane> {
         // drop one, and the second does not carry what the first said.
         IrcxEvent::TypingChanged { .. }
         | IrcxEvent::ReactionChanged { .. }
+        // A redaction is a delta too, and one that must not be folded into the
+        // message lane: the message it names may be in the same batch, and
+        // merging the two would deliver the words it exists to take away.
+        | IrcxEvent::MessageRedacted { .. }
         | IrcxEvent::RawLine { .. }
         // A finished list arrives once for a `LIST` and writes where nothing
         // else does, so it shares a lane with nothing.
@@ -324,6 +328,7 @@ mod tests {
             reactions: vec![],
             annotations: vec![],
             raised_by: vec![],
+            redacted_by: None,
             reply_to: None,
             batch: None,
             delivery: Delivery::Sent,

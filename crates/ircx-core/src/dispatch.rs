@@ -27,6 +27,7 @@ const HELP: &str = "\
 /ctcp <nick> <cmd> [args] send a CTCP query
 /react <msgid> <value>    react to a message
 /unreact <msgid> <value>  take that reaction back
+/redact <msgid> [reason]  withdraw a message you sent
 /nick <nick>              change your nickname
 /setname <text>           change the real name a whois shows
 /topic [text]             read or set the topic
@@ -377,6 +378,7 @@ impl SessionState {
             "ctcp" => self.cmd_ctcp(target, args),
             "react" => self.cmd_react(target, args, true),
             "unreact" => self.cmd_react(target, args, false),
+            "redact" => self.cmd_redact(target, args),
             "me" => self.cmd_me(target, args, reply_to),
             "query" => self.cmd_query(args),
             "nick" => self.one_argument("NICK", args, "/nick <nickname>"),
@@ -787,6 +789,38 @@ impl SessionState {
         CommandOutcome::Handled
     }
 
+    /// Withdraws a message.
+    ///
+    /// Whether it may be withdrawn is the server's answer and not this
+    /// client's: an operator may take away somebody else's line, a window may
+    /// have closed on your own, and both come back as a `FAIL REDACT` that
+    /// already draws. So nothing here checks who sent what — sending the line
+    /// and reading the refusal is the only account of the rules that is not a
+    /// guess about them.
+    fn cmd_redact(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let (msgid, reason) = args.split_once(' ').unwrap_or((args, ""));
+        if msgid.is_empty() {
+            return CommandOutcome::Rejected("`/redact <msgid> [reason]` needs a message".into());
+        }
+        if target == SERVER_TARGET {
+            return CommandOutcome::Rejected(
+                "This tab is the server's, not a conversation. A redaction is addressed to the channel or person the message was in.".into(),
+            );
+        }
+        if !self.caps.is_enabled(REDACTION) {
+            return CommandOutcome::Rejected(format!(
+                "{} does not offer message redaction, so a message cannot be withdrawn here.",
+                self.network_name()
+            ));
+        }
+        let reason = reason.trim();
+        match reason.is_empty() {
+            true => self.send_command("REDACT", &[target, msgid]),
+            false => self.send_command("REDACT", &[target, msgid, reason]),
+        }
+        CommandOutcome::Handled
+    }
+
     fn cmd_topic(&mut self, target: &str, args: &str) -> CommandOutcome {
         if !self.isupport.is_channel(target) {
             return CommandOutcome::Rejected("`/topic` only works in a channel".into());
@@ -1185,6 +1219,9 @@ impl SessionState {
 /// all ask about the same capability.
 pub(crate) const REGISTRATION: &str = "draft/account-registration";
 
+/// Named once, for the command and the reply handler both.
+pub(crate) const REDACTION: &str = "draft/message-redaction";
+
 /// Whether the capability's value carries this key. The value is a
 /// comma-separated list whose items are a bare key or `key=value`.
 fn offers(value: Option<&str>, key: &str) -> bool {
@@ -1214,7 +1251,7 @@ pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
     "nick", "topic", "mode", "kick", "invite", "list", "whois", "whowas", "away", "ignore",
     "unignore", "watch", "quit", "raw", "quote", "close", "help", "back", "verify", "kickban",
-    "op", "deop", "voice", "devoice", "ban", "unban", "names", "cycle", "knock", "oper",
+    "redact", "op", "deop", "voice", "devoice", "ban", "unban", "names", "cycle", "knock", "oper",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

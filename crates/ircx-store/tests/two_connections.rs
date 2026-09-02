@@ -42,6 +42,7 @@ fn message(id: &str, text: &str) -> ChatMessage {
         reactions: vec![],
         annotations: vec![],
         raised_by: vec![],
+        redacted_by: None,
         reply_to: None,
         batch: None,
         delivery: Delivery::Delivered,

@@ -30,6 +30,7 @@ const MIGRATIONS: &[&str] = &[
     TRAY_SETTINGS,
     HUSHED_NICKS,
     AWAY_SETTINGS,
+    REDACTIONS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -483,6 +484,18 @@ CREATE TABLE away_settings (
     only         INTEGER PRIMARY KEY CHECK (only = 0),
     idle_minutes INTEGER NOT NULL
 );
+"#;
+
+/// Who withdrew a message, for the ones that were.
+///
+/// A column rather than a table, and the text is blanked in place rather than
+/// the row being deleted. The `messages_fts` and `messages_substr` triggers
+/// both fire on `UPDATE`, so blanking takes the words out of the two search
+/// indexes with nothing further to write; deleting the row would take the
+/// evidence that anything was ever there with it, and the specification asks
+/// for the opposite — the message may go, the fact of its going should not.
+const REDACTIONS: &str = r#"
+ALTER TABLE messages ADD COLUMN redacted_by TEXT;
 "#;
 
 #[cfg(test)]

@@ -1433,6 +1433,24 @@ function reduce(s: AppState, event: IrcxEvent): Partial<AppState> {
       return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
     }
 
+    case "messageRedacted": {
+      const key = targetKey(event.network, event.target);
+      const timeline = s.timelines[key];
+      // Like a reaction, a redaction can name a message that scrolled out of
+      // this window or one said before the client connected. The archive is
+      // where it lands in that case, and hands the message back withdrawn.
+      if (!timeline) return {};
+      const at = timeline.messages.findIndex((m) => serverMsgid(m) === event.message);
+      if (at === -1) return {};
+
+      const held = timeline.messages[at]!;
+      const messages = timeline.messages.slice();
+      // The words go here as well as in the archive. A copy kept in memory is
+      // one a search of this window would still find.
+      messages[at] = { ...held, text: "", redactedBy: event.by };
+      return { timelines: { ...s.timelines, [key]: { ...timeline, messages } } };
+    }
+
     case "reactionChanged": {
       const key = targetKey(event.network, event.target);
       const timeline = s.timelines[key];

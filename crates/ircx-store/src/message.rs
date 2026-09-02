@@ -8,12 +8,12 @@ use crate::{from_json_column, to_json, StoreError};
 pub(crate) const COLUMNS: &str = "m.message_id, m.network, m.target, m.kind, m.sender_nick, \
      m.sender_user, m.sender_host, m.sender_account, m.sender_is_self, m.timestamp, \
      m.timestamp_is_local, m.text, m.tags, m.reply_to, m.batch, m.delivery, m.attachments, \
-     m.encryption, m.raw, m.server_msgid, m.via";
+     m.encryption, m.raw, m.server_msgid, m.via, m.redacted_by";
 
 /// How many columns `COLUMNS` selects. A query that appends its own column
 /// reads it at this index; hardcoding the number instead means the next column
 /// added above silently hands that query the wrong one.
-pub(crate) const COLUMN_COUNT: usize = 21;
+pub(crate) const COLUMN_COUNT: usize = 22;
 
 const INSERT: &str = "INSERT OR IGNORE INTO messages (
         message_id, server_msgid, network, target, kind, sender_nick, sender_user, sender_host,
@@ -195,6 +195,7 @@ pub(crate) fn from_row(row: &Row) -> Result<ChatMessage, StoreError> {
         annotations: Vec::new(),
         // Same, from `attach_raised`.
         raised_by: Vec::new(),
+        redacted_by: row.get(21)?,
         reply_to: row.get(13)?,
         batch: row.get(14)?,
         delivery: from_json_column(row, 15)?,

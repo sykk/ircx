@@ -56,4 +56,12 @@ annotations?: Array<Annotation>,
  * and cannot lower, so there is no third state. Defaulted for the reason
  * `annotations` is.
  */
-raisedBy?: Array<string>, };
+raisedBy?: Array<string>, 
+/**
+ * Who withdrew this message, if somebody did. `text` is empty when this
+ * is set and the words are gone from the archive and both search indexes;
+ * what is left is the fact that a line was here, which is what the
+ * specification asks a client to keep. Defaulted for the reason
+ * `reactions` is — nothing archived before redaction existed has it.
+ */
+redactedBy?: string, };

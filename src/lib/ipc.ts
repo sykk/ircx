@@ -89,8 +89,8 @@ export const ipc = {
   listNetworkConfigs: () => invoke<NetworkConfig[]>("list_network_configs"),
   saveNetwork: (config: NetworkConfig) =>
     invoke<string>("save_network", { config }),
-  registerLiberaAccount: (network: string, account: string, password: string, email: string) =>
-    invoke<void>("register_libera_account", { network, account, password, email }),
+  registerAccount: (network: string, account: string, password: string, email: string) =>
+    invoke<void>("register_account", { network, account, password, email }),
   removeNetwork: (network: string) => invoke<void>("remove_network", { network }),
   showMessageNotification: (
     title: string,

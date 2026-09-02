@@ -36,6 +36,7 @@ const HELP: &str = "\
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
 /whowas <nick>            look up somebody who has gone
+/verify [account] <code>  finish registering an account
 /away [reason]            mark yourself away
 /back                     come back
 /ignore [nick]            stop hearing from somebody, or list who is ignored
@@ -150,36 +151,98 @@ impl SessionState {
         self.drain()
     }
 
-    pub fn register_libera(
+    /// Registers an account with the network: by the capability where there is
+    /// one, and by NickServ where there is not.
+    ///
+    /// `draft/account-registration` is the same act the guided Libera flow was
+    /// already performing by hand. What it changes is who knows the rules — the
+    /// server says whether it takes registrations at all, whether an account may
+    /// be named anything but the current nick, and whether it wants an email,
+    /// instead of this client holding one network's answers to those. Where the
+    /// capability is absent the message to NickServ is still what works, which
+    /// is the ordinary bargain: a missing capability reduces what is offered
+    /// rather than failing.
+    ///
+    /// Either way the SASL PLAIN login is saved, because registering an account
+    /// this client then cannot sign in with is half a job.
+    pub fn register_account(
         &mut self,
         account: &str,
         password: &str,
         email: &str,
     ) -> Result<Vec<Action>, String> {
-        if password.is_empty() || email.is_empty() {
-            return Err("Enter a password and email address for the Libera.Chat account".into());
+        if password.is_empty() {
+            return Err(format!(
+                "Enter a password for the {} account",
+                self.network_name()
+            ));
         }
         if !self.registered {
-            return Err("Libera.Chat is not ready yet — wait until it is connected".into());
-        }
-        if !self.is_me(account) {
             return Err(format!(
-                "Libera.Chat registers the nick currently in use ({}). Enter that nick or change it first.",
-                self.nick
+                "{} is not ready yet — wait until it is connected",
+                self.network_name()
             ));
         }
 
-        self.config.sasl = Some(SaslCredentials {
-            mechanism: SaslMechanism::Plain,
-            account: account.to_string(),
-            password: Some(password.to_string()),
-        });
-        self.libera_registration_secrets = Some((password.to_string(), email.to_string()));
+        if self.caps.is_enabled(REGISTRATION) {
+            let offered = self.caps.value(REGISTRATION);
+            if !offers(offered, "custom-account-name") && !self.is_me(account) {
+                return Err(self.must_be_the_nick());
+            }
+            if offers(offered, "email-required") && email.is_empty() {
+                return Err(format!(
+                    "{} needs an email address to register an account",
+                    self.network_name()
+                ));
+            }
+            self.remember_registration(account, password, email);
+            // `*` is the spelling for an email the server did not ask for.
+            let address = match email.is_empty() {
+                true => "*",
+                false => email,
+            };
+            self.send_command("REGISTER", &[account, address, password]);
+            return Ok(self.drain());
+        }
+
+        // No capability, so the account service is the only way in. Atheme's
+        // syntax, which is what Libera and the networks like it answer; a
+        // server running something else says so in its own words and the reply
+        // is drawn like any other.
+        if email.is_empty() {
+            return Err(format!(
+                "Enter an email address for the {} account",
+                self.network_name()
+            ));
+        }
+        if !self.is_me(account) {
+            return Err(self.must_be_the_nick());
+        }
+        self.remember_registration(account, password, email);
         self.send_command(
             "PRIVMSG",
             &["NickServ", &format!("REGISTER {password} {email}")],
         );
         Ok(self.drain())
+    }
+
+    fn must_be_the_nick(&self) -> String {
+        format!(
+            "{} registers the nick currently in use ({}). Enter that nick or change it first.",
+            self.network_name(),
+            self.nick
+        )
+    }
+
+    /// Saves the login the registration is for, and holds the two values a
+    /// reply may echo so the raw log does not carry them.
+    fn remember_registration(&mut self, account: &str, password: &str, email: &str) {
+        self.config.sasl = Some(SaslCredentials {
+            mechanism: SaslMechanism::Plain,
+            account: account.to_string(),
+            password: Some(password.to_string()),
+        });
+        self.registration_secrets = Some((password.to_string(), email.to_string()));
     }
 
     pub fn quit(&mut self, reason: Option<&str>) -> Vec<Action> {
@@ -314,6 +377,7 @@ impl SessionState {
             "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
             "whowas" => self.one_argument("WHOWAS", args, "/whowas <nickname>"),
+            "verify" => self.cmd_verify(args),
             "away" => self.cmd_away(args),
             "back" => self.cmd_back(),
             "ignore" => self.cmd_ignore(target, args),
@@ -530,6 +594,34 @@ impl SessionState {
             ));
         }
         self.send_command("SETNAME", &[args]);
+        CommandOutcome::Handled
+    }
+
+    /// Finishes a registration the server sent a code out for.
+    ///
+    /// A command rather than another field on the form, because the code
+    /// arrives by email some minutes later and the settings dialog is shut by
+    /// then. The account is optional and defaults to the nick, which is what it
+    /// is on every server that does not offer `custom-account-name`.
+    ///
+    /// There is no `/register` beside it on purpose: a command typed into the
+    /// composer is kept by the recall list, and a password does not belong
+    /// there. Registering stays on the form, which holds neither.
+    fn cmd_verify(&mut self, args: &str) -> CommandOutcome {
+        if !self.caps.is_enabled(REGISTRATION) {
+            return CommandOutcome::Rejected(format!(
+                "{} does not verify accounts from the client. Follow what it sent you instead.",
+                self.network_name()
+            ));
+        }
+        let (account, code) = match args.split_once(char::is_whitespace) {
+            Some((account, code)) => (account.to_string(), code.trim()),
+            None => (self.nick.clone(), args),
+        };
+        if code.is_empty() {
+            return CommandOutcome::Rejected("`/verify [account] <code>` needs a code".into());
+        }
+        self.send_command("VERIFY", &[&account, code]);
         CommandOutcome::Handled
     }
 
@@ -925,13 +1017,29 @@ impl SessionState {
     }
 }
 
+/// Named once, because the command, the form behind it and the reply handler
+/// all ask about the same capability.
+pub(crate) const REGISTRATION: &str = "draft/account-registration";
+
+/// Whether the capability's value carries this key. The value is a
+/// comma-separated list whose items are a bare key or `key=value`.
+fn offers(value: Option<&str>, key: &str) -> bool {
+    let Some(value) = value else {
+        return false;
+    };
+    value.split(',').any(|item| {
+        let name = item.split_once('=').map_or(item, |(name, _)| name);
+        name.trim().eq_ignore_ascii_case(key)
+    })
+}
+
 /// The commands ircx answers itself. A plugin cannot take one of these over:
 /// the routing in `plugins.rs` looks here first. Every name in the match in
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
     "nick", "topic", "mode", "kick", "invite", "list", "whois", "whowas", "away", "ignore",
-    "unignore", "watch", "quit", "raw", "quote", "close", "help", "back",
+    "unignore", "watch", "quit", "raw", "quote", "close", "help", "back", "verify",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

@@ -201,7 +201,7 @@ pub enum SessionCommand {
     Raw {
         line: String,
     },
-    RegisterLibera {
+    RegisterAccount {
         account: String,
         password: String,
         email: String,
@@ -842,12 +842,12 @@ async fn apply(
             context.forget_transfer(&id);
             session.transfer_finished(&id, at, failure)
         }
-        SessionCommand::RegisterLibera {
+        SessionCommand::RegisterAccount {
             account,
             password,
             email,
             reply,
-        } => match session.register_libera(&account, &password, &email) {
+        } => match session.register_account(&account, &password, &email) {
             Ok(actions) => {
                 let _ = reply.send(Ok(()));
                 actions

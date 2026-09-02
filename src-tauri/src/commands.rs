@@ -73,7 +73,7 @@ pub async fn save_network(app: State<'_, App>, config: NetworkConfig) -> Result<
 }
 
 #[tauri::command]
-pub async fn register_libera_account(
+pub async fn register_account(
     app: State<'_, App>,
     network: NetworkId,
     account: String,
@@ -87,9 +87,9 @@ pub async fn register_libera_account(
         .into_iter()
         .find(|config| config.id.as_ref() == Some(&network))
         .ok_or_else(|| "That network is no longer configured — add it again".to_string())?;
-    validate_libera_registration(&config, &account, &password, &email)?;
+    validate_registration(&config, &account, &password, &email)?;
 
-    app.ask(&network, |reply| SessionCommand::RegisterLibera {
+    app.ask(&network, |reply| SessionCommand::RegisterAccount {
         account: account.clone(),
         password: password.clone(),
         email,
@@ -109,37 +109,37 @@ pub async fn register_libera_account(
     })
 }
 
-fn validate_libera_registration(
+/// What can be judged before the session sees it. Whether the network takes a
+/// registration at all, and whether it wants an email, is the session's to
+/// answer — it is what holds the negotiated capability.
+///
+/// Verified TLS is required of every network rather than of Libera alone. A
+/// registration puts a password and an address on the wire, and a connection
+/// nothing authenticates is one where somebody else may be reading them.
+fn validate_registration(
     config: &NetworkConfig,
     account: &str,
     password: &str,
     email: &str,
 ) -> Result<(), String> {
-    let host = config.host.trim_end_matches('.').to_ascii_lowercase();
-    if host != "libera.chat" && !host.ends_with(".libera.chat") {
+    if !config.tls || !config.tls_verify {
         return Err(format!(
-            "{} is not a Libera.Chat server — choose the Libera.Chat network",
+            "Registering on {} needs verified TLS — enable TLS and certificate verification first",
             config.host
         ));
     }
-    if !config.tls || !config.tls_verify {
-        return Err(
-            "Libera.Chat registration needs verified TLS — enable TLS and certificate verification first"
-                .into(),
-        );
-    }
     if account.trim().is_empty() {
-        return Err("Enter the Libera.Chat nick to register".into());
+        return Err("Enter the account name to register".into());
     }
     if password.is_empty() {
-        return Err("Enter a password for the Libera.Chat account".into());
+        return Err("Enter a password for the account".into());
     }
     if password.chars().any(char::is_whitespace) {
-        return Err(
-            "The Libera.Chat password cannot contain spaces — choose another password".into(),
-        );
+        return Err("The password cannot contain spaces — choose another password".into());
     }
-    if !email.contains('@') || email.chars().any(char::is_whitespace) {
+    // Empty is not an error here: a server that does not ask for an address is
+    // the common case, and the session refuses an empty one where it does.
+    if !email.is_empty() && (!email.contains('@') || email.chars().any(char::is_whitespace)) {
         return Err("Enter a complete email address without spaces".into());
     }
     Ok(())
@@ -932,9 +932,7 @@ mod tests {
     };
     use ircx_store::Store;
 
-    use super::{
-        gave_up, stopped, unwritable, validate_libera_registration, write_export, StoreError,
-    };
+    use super::{gave_up, stopped, unwritable, validate_registration, write_export, StoreError};
 
     fn libera() -> NetworkConfig {
         NetworkConfig {
@@ -961,52 +959,47 @@ mod tests {
     }
 
     #[test]
-    fn guided_registration_requires_verified_tls_to_libera() {
+    fn registration_requires_verified_tls_of_every_network() {
         let mut config = libera();
-        assert!(validate_libera_registration(
-            &config,
-            "sable",
-            "correct-horse",
-            "private@example.com"
-        )
-        .is_ok());
+        assert!(
+            validate_registration(&config, "sable", "correct-horse", "private@example.com").is_ok()
+        );
 
         config.tls_verify = false;
-        assert!(validate_libera_registration(
-            &config,
-            "sable",
-            "correct-horse",
-            "private@example.com"
-        )
-        .unwrap_err()
-        .contains("verified TLS"));
+        assert!(
+            validate_registration(&config, "sable", "correct-horse", "private@example.com")
+                .unwrap_err()
+                .contains("verified TLS")
+        );
 
+        // The host is no longer the question it was. Whether a network takes a
+        // registration is the capability's answer, and the session is what
+        // holds that; a name checked here would refuse servers that do.
         config = libera();
         config.host = "irc.example.com".into();
-        assert!(validate_libera_registration(
-            &config,
-            "sable",
-            "correct-horse",
-            "private@example.com"
-        )
-        .unwrap_err()
-        .contains("not a Libera.Chat server"));
+        assert!(
+            validate_registration(&config, "sable", "correct-horse", "private@example.com").is_ok()
+        );
     }
 
     #[test]
-    fn guided_registration_rejects_values_nickserv_cannot_parse() {
+    fn registration_rejects_values_no_service_can_parse() {
         let config = libera();
 
         assert!(
-            validate_libera_registration(&config, "sable", "two words", "private@example.com")
+            validate_registration(&config, "sable", "two words", "private@example.com")
                 .unwrap_err()
                 .contains("cannot contain spaces")
         );
         assert!(
-            validate_libera_registration(&config, "sable", "correct-horse", "not-an-email")
+            validate_registration(&config, "sable", "correct-horse", "not-an-email")
                 .unwrap_err()
                 .contains("complete email address")
         );
+        // Empty is not malformed. A server that never asks for an address is
+        // the ordinary case, and the session refuses an empty one where the
+        // capability says it is required.
+        assert!(validate_registration(&config, "sable", "correct-horse", "").is_ok());
     }
 
     #[test]

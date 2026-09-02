@@ -7,6 +7,7 @@ pub const SUPPORTED: &[&str] = &[
     "away-notify",
     "batch",
     "chghost",
+    "draft/account-registration",
     "draft/chathistory",
     "draft/multiline",
     "draft/read-marker",

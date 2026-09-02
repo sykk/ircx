@@ -89,6 +89,11 @@ covers what the icon says; these cover whether there is an icon to say it.
 - [ ] On a disposable Libera.Chat nick over verified TLS, complete guided
   registration, follow the emailed verification command, reconnect, and
   confirm SASL PLAIN signs into the new account.
+- [ ] On a server that advertises `draft/account-registration` — ergo does —
+  register an account from Networks, run `/verify` with the code it sends, and
+  confirm SASL PLAIN signs into it afterwards. The tests drive the capability's
+  replies; what they cannot establish is that a real service accepts the line
+  as this client sends it.
 - [ ] Connect to Libera.Chat with SASL PLAIN and SCRAM-SHA-512. Repeat with a
   wrong password and confirm registration stops with an actionable error.
 - [ ] Connect two authenticated sessions to a server with read markers. Move

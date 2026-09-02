@@ -11,9 +11,10 @@ import { AppContextMenu } from "@/components/common/AppContextMenu";
 import { loadViewState } from "@/components/shell/viewState";
 import { useAppHotkeys } from "@/hooks/useHotkeys";
 import { startBridge } from "@/lib/bridge";
-import { reasonOr } from "@/lib/ipc";
+import { ipc, reasonOr } from "@/lib/ipc";
 import { openFirstConversation } from "@/lib/firstPane";
 import { loadHighlightWords, loadHushedNicks } from "@/lib/highlights";
+import { useIdleAway } from "@/hooks/useIdleAway";
 import { openIrcLink, startIrcLinks } from "@/lib/ircLinks";
 import { startNotifications } from "@/lib/notifications";
 import { startNotificationRouting } from "@/lib/notificationRouting";
@@ -43,6 +44,10 @@ export function App() {
    * not say there are no networks configured. */
   const failure = useAppStore((state) => state.startupFailure);
   const setStartupFailure = useAppStore((state) => state.setStartupFailure);
+  // Says away for the reader once their keyboard has been quiet long enough,
+  // and comes back when it is not. Every network is told; each decides, which
+  // is where an away the reader typed themselves is known about.
+  useIdleAway(useAppStore((state) => state.awayAfter));
 
   useEffect(() => {
     const themes = startThemes();
@@ -53,6 +58,12 @@ export function App() {
     // them and re-reads them in the same call.
     void loadHighlightWords();
     void loadHushedNicks();
+    // Read once, and kept current by the page that writes it. Nothing runs
+    // until somebody has chosen a number.
+    void ipc
+      .awayAfter()
+      .then((minutes) => useAppStore.getState().setAwayAfter(minutes))
+      .catch(() => {});
     // Follows whether the window has focus, which is what keeps a notification
     // from arriving for the line somebody just watched appear.
     const notifications = startNotifications();

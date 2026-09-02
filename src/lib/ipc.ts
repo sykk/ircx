@@ -220,6 +220,9 @@ export const ipc = {
     invoke<void>("set_transfer_settings", { settings }),
   /** `available` is answered fresh each call: whether the desktop gave this
    * client a status icon is a fact about the session, not a stored choice. */
+  awayAfter: () => invoke<number | null>("away_after"),
+  setAwayAfter: (minutes: number | null) => invoke<void>("set_away_after", { minutes }),
+  setIdle: (idle: boolean) => invoke<void>("set_idle", { idle }),
   traySettings: () => invoke<TraySettings>("tray_settings"),
   setCloseToTray: (hide: boolean) => invoke<void>("set_close_to_tray", { hide }),
   /** Every network's transfers. Read once by a window that has just started;

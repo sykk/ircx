@@ -96,6 +96,12 @@ covers what the icon says; these cover whether there is an icon to say it.
   as this client sends it.
 - [ ] Connect to Libera.Chat with SASL PLAIN and SCRAM-SHA-512. Repeat with a
   wrong password and confirm registration stops with an actionable error.
+- [ ] Set an away time in Notifications, leave the keyboard for it, and
+  confirm from a second client that the nick reads as away with this network's
+  own message. Touch the keyboard and confirm it clears. Then set an `/away` by
+  hand and repeat both halves: neither the reason nor the away itself may
+  change, which is the one thing about this that a second pair of eyes has to
+  see.
 - [ ] Connect two authenticated sessions to a server with read markers. Move
   the marker in one session, replace history in the other, and confirm the
   unread seam still uses the server marker.

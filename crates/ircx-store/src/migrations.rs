@@ -29,6 +29,7 @@ const MIGRATIONS: &[&str] = &[
     DEFAULT_MESSAGES,
     TRAY_SETTINGS,
     HUSHED_NICKS,
+    AWAY_SETTINGS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -468,6 +469,19 @@ const TRAY_SETTINGS: &str = r#"
 CREATE TABLE tray_settings (
     only          INTEGER PRIMARY KEY CHECK (only = 0),
     close_to_tray INTEGER NOT NULL
+);
+"#;
+
+/// After how many idle minutes to say you are away. One row, because it is a
+/// preference about the reader rather than about a network — the message each
+/// network says it with is already in that network's own settings.
+///
+/// Zero is off, and so is no row at all. Nobody is marked away for a setting
+/// they never made.
+const AWAY_SETTINGS: &str = r#"
+CREATE TABLE away_settings (
+    only         INTEGER PRIMARY KEY CHECK (only = 0),
+    idle_minutes INTEGER NOT NULL
 );
 "#;
 

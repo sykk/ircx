@@ -37,6 +37,16 @@ pub const SERVER_TARGET: &str = "*";
 /// and a hostile one could stream without end.
 const MAX_LISTING: usize = 50_000;
 
+/// Who decided this client is away. The distinction is the whole of what
+/// makes an idle timer safe to run: it may only take back what it said itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AwaySource {
+    /// `/away`, typed by the reader.
+    Reader,
+    /// The idle timer.
+    Idle,
+}
+
 #[derive(Debug)]
 pub enum Action {
     /// `ticket` is what the transport reports back once the line is written.
@@ -405,6 +415,17 @@ pub struct SessionState {
     /// The highest ticket the transport has reported writing.
     written: u64,
     next_label: u64,
+    /// Whether this client has told the server it is away, and who decided
+    /// it. Only what the idle timer said does the idle timer take back: an
+    /// away the reader typed outlives their keyboard going quiet.
+    away: Option<AwaySource>,
+    /// The last thing the window said about whether the reader is at it.
+    ///
+    /// Kept across a reconnect, unlike `away`. A keyboard does not know a
+    /// socket dropped, so nothing would report it again, and a reader who
+    /// walked away before the reconnect would come back present without having
+    /// come back.
+    idle: bool,
     ping: Option<(String, Instant)>,
     /// When a line last arrived from the server, which is what `keepalive`
     /// judges the connection by. A line is the far end talking whatever it
@@ -530,6 +551,8 @@ impl SessionState {
             next_ticket: 1,
             written: 0,
             next_label: 1,
+            away: None,
+            idle: false,
             ping: None,
             last_heard: Instant::now(),
             lag_ms: None,
@@ -746,6 +769,49 @@ impl SessionState {
         self.ping = Some((token.clone(), Instant::now()));
         self.send_command("PING", &[&token]);
         self.drain()
+    }
+
+    /// The window reporting whether the reader is still at it.
+    ///
+    /// What counts as being at it is the window's question — it is where the
+    /// keyboard is — and what to do about the answer is this one's.
+    pub fn on_idle(&mut self, idle: bool) -> Vec<Action> {
+        self.idle = idle;
+        self.follow_idle();
+        self.drain()
+    }
+
+    /// Says away, or comes back, where the idle timer is what decided it.
+    ///
+    /// An away the reader typed is left alone in both directions: going idle
+    /// does not overwrite the reason they wrote, and touching the keyboard
+    /// afterwards does not cancel it. `/back` while still idle is the same
+    /// bargain read the other way — it is an explicit "I am here", so this
+    /// leaves them here until they go idle again.
+    fn follow_idle(&mut self) {
+        if !self.registered {
+            return;
+        }
+        match (self.idle, self.away) {
+            (true, None) => {
+                let reason = self
+                    .config
+                    .away_message
+                    .clone()
+                    .unwrap_or_else(|| crate::dispatch::DEFAULT_AWAY.to_string());
+                self.send_command("AWAY", &[&reason]);
+                self.away = Some(AwaySource::Idle);
+            }
+            (false, Some(AwaySource::Idle)) => {
+                self.send_command("AWAY", &[]);
+                self.away = None;
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn set_away_source(&mut self, source: Option<AwaySource>) {
+        self.away = source;
     }
 
     /// Replaces the words that raise a conversation beside the nick.
@@ -1570,6 +1636,7 @@ impl SessionState {
             network: self.snapshot(),
         });
         self.server_words(SERVER_TARGET, message);
+        self.follow_idle();
 
         if self.config.sasl.is_some() && !matches!(self.sasl, SaslStatus::Authenticated { .. }) {
             let name = self.network_name().to_string();
@@ -3933,6 +4000,7 @@ impl SessionState {
         // ask in that conversation for the rest of the session.
         self.first_pages.clear();
         self.abandon_unwritten();
+        self.away = None;
         self.ping = None;
         self.last_heard = Instant::now();
         self.lag_ms = None;

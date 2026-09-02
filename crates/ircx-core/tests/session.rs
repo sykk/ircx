@@ -3125,6 +3125,107 @@ fn the_measured_lag_is_still_there_at_the_next_snapshot() {
     );
 }
 
+/// The keyboard going quiet says away, and touching it says so no longer. The
+/// message is the network's own, which is where the reader already wrote one.
+#[test]
+fn a_quiet_keyboard_says_away_and_a_busy_one_takes_it_back() {
+    let mut session = registered("");
+
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    assert_eq!(session.sent(), vec!["AWAY Away"]);
+
+    let actions = session.state.on_idle(false);
+    session.apply(actions);
+    assert_eq!(session.sent(), vec!["AWAY"]);
+}
+
+/// The distinction the whole thing rests on. An away the reader typed says
+/// something they wrote, so a timer may neither overwrite the reason nor
+/// cancel it — what it did not say is not its to take back.
+#[test]
+fn an_away_the_reader_typed_outlives_their_keyboard() {
+    let mut session = registered("");
+    session.submit("#ircx", "/away making dinner");
+    assert_eq!(session.sent(), vec!["AWAY :making dinner"]);
+
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    assert!(
+        session.sent().is_empty(),
+        "going idle does not restate a reason the reader wrote"
+    );
+
+    let actions = session.state.on_idle(false);
+    session.apply(actions);
+    assert!(
+        session.sent().is_empty(),
+        "and coming back to the keyboard does not cancel it"
+    );
+}
+
+/// `/back` is the reader saying they are here, which outranks a timer that
+/// has not seen them type yet. They stay here until they go idle again.
+#[test]
+fn coming_back_by_hand_is_not_undone_by_still_being_idle() {
+    let mut session = registered("");
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    session.sent();
+
+    session.submit("#ircx", "/back");
+    assert_eq!(session.sent(), vec!["AWAY"]);
+
+    let actions = session.state.on_idle(false);
+    session.apply(actions);
+    assert!(session.sent().is_empty());
+
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    assert_eq!(
+        session.sent(),
+        vec!["AWAY Away"],
+        "and away again after that"
+    );
+}
+
+/// A keyboard does not know the socket dropped, so nothing would report the
+/// reader missing a second time. The mark outlives the connection and the new
+/// one is told once it can be.
+#[test]
+fn a_reconnect_says_away_again_while_the_reader_is_still_gone() {
+    let mut session = registered("");
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    session.sent();
+
+    let actions = session
+        .state
+        .on_disconnected("the server stopped answering");
+    session.apply(actions);
+    session.connect();
+    session.feed(":irc.libera.chat CAP * LS :");
+    session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+    assert!(
+        session.sent().iter().any(|line| line == "AWAY Away"),
+        "the reader has not come back, and the new connection has not been told"
+    );
+}
+
+/// Nothing goes out before there is a server to say it to, and the welcome is
+/// what says the line would be answered.
+#[test]
+fn going_idle_before_the_welcome_says_nothing() {
+    let mut session = Harness::new(config());
+    session.connect();
+    session.sent();
+
+    let actions = session.state.on_idle(true);
+    session.apply(actions);
+    assert!(session.sent().is_empty());
+}
+
 /// An interval of silence after a `PING` is a socket the far end has
 /// forgotten. Nothing else notices: the write succeeds, the kernel retransmits
 /// for a quarter of an hour, and the window goes on saying Connected.

@@ -492,6 +492,24 @@ impl App {
     /// The store is written first. A network too busy to be told picks the list
     /// up the next time it starts, and losing the write to save a send nobody
     /// is waiting for would be the wrong way round.
+    /// Hands every network the window's answer to whether the reader is still
+    /// at it. What to do about it is each session's, which is where a `/away`
+    /// the reader typed is known about.
+    pub async fn set_idle(&self, idle: bool) -> Result<(), String> {
+        // Collected before the awaits, because `guard` is a std lock — the
+        // same shape as `set_highlight_words` below, and for the same reason.
+        let senders: Vec<_> = self.guard().values().map(NetworkHandle::commands).collect();
+        for sender in senders {
+            let changed = SessionCommand::IdleChanged { idle };
+            match timeout(REPLY_TIMEOUT, sender.send(changed)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => warn!("a network stopped before it could be told the reader moved"),
+                Err(_) => warn!("a network was too busy to be told the reader moved"),
+            }
+        }
+        Ok(())
+    }
+
     pub async fn set_highlight_words(&self, words: Vec<String>) -> Result<(), String> {
         let words: Vec<String> = words
             .into_iter()

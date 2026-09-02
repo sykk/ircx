@@ -369,6 +369,10 @@ pub struct SessionState {
     /// Nicks a whois is outstanding for that nobody typed: the inspector asks
     /// for one when it is opened on somebody whose real name is not known.
     quiet_whois: HashSet<String>,
+    /// Channels whose `NAMES` was asked for by hand, folded. The reply arrives
+    /// on a join as well, where it fills the member list and says nothing, so
+    /// what tells the two apart is which of them somebody asked for.
+    pub(crate) named: HashSet<String>,
     /// Nicks a quiet whois has already gone out for on this connection, asked
     /// or answered. The inspector asks about somebody signed in to nothing as
     /// readily as about somebody it has not heard of, and a server with no
@@ -531,6 +535,7 @@ impl SessionState {
             queries: HashMap::new(),
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
+            named: HashSet::new(),
             looked_up: HashSet::new(),
             pending_who: HashSet::new(),
             watch_status: HashMap::new(),
@@ -2040,8 +2045,28 @@ impl SessionState {
             .into_iter()
             .map(|member| (mapping.fold(&member.nick), member))
             .collect();
+        // Read while the borrow is still here, written after it is gone.
+        let asked = self.named.remove(&key).then(|| {
+            let mut names: Vec<String> = channel
+                .members
+                .values()
+                .map(|member| {
+                    let prefix = member.prefixes.first().map(String::as_str).unwrap_or("");
+                    format!("{prefix}{}", member.nick)
+                })
+                .collect();
+            names.sort_by_key(|name| name.to_lowercase());
+            names
+        });
         self.emit_members(&key);
         self.emit_channel(&key);
+        if let Some(names) = asked {
+            let text = match names.is_empty() {
+                true => format!("Nobody is in {name}"),
+                false => format!("{} in {name}: {}", names.len(), names.join(", ")),
+            };
+            self.note(name, MessageKind::Client, text);
+        }
     }
 
     /// One question per join, asked for everybody who was already there.

@@ -11,6 +11,24 @@ import { ipc } from "@/lib/ipc";
  * `src/types/contract.test.ts` holds it against the dispatch table, so a
  * command added to one and not the other fails the build rather than the user.
  */
+/**
+ * Whether what was typed carries a secret in it.
+ *
+ * `/oper` is the one command whose password is a positional argument, so it is
+ * the one whose line must not be filed under Up. `redact` in `session.rs` keeps
+ * the same line out of the raw log; the recall list is the same leak by a
+ * shorter route, and a password sitting one keystroke from the composer is
+ * worse than one in a log nobody opened.
+ *
+ * `/msg nickserv identify …` is the other shape of this and is deliberately not
+ * here. It has always been recallable, the raw log already handles it by
+ * sniffing the verb, and widening the recall list to match is a change to a
+ * command this one did not add.
+ */
+export function carriesACredential(input: string): boolean {
+  return /^\/oper(\s|$)/i.test(input.trim());
+}
+
 export interface SlashCommand {
   name: string;
   /**
@@ -46,6 +64,21 @@ export const COMMANDS: SlashCommand[] = [
   { name: "topic", args: "[topic]", summary: "Show or set the channel topic" },
   { name: "mode", args: "<target> <modes>", summary: "Change channel or user modes" },
   { name: "kick", args: "<nick> [reason]", summary: "Remove someone from the channel" },
+  { name: "kickban", args: "<nick> [reason]", summary: "Ban the nick and remove them" },
+  { name: "op", args: "<nick>...", summary: "Give channel operator" },
+  { name: "deop", args: "<nick>...", summary: "Take channel operator away" },
+  { name: "voice", args: "<nick>...", summary: "Give voice" },
+  { name: "devoice", args: "<nick>...", summary: "Take voice away" },
+  { name: "ban", args: "[nick|mask]...", summary: "Ban, or read the list with no argument" },
+  { name: "unban", args: "<mask>...", summary: "Lift a ban" },
+  { name: "names", args: "[channel]", summary: "Who is in it, as the server has it" },
+  { name: "cycle", args: "[channel]", summary: "Leave and come straight back" },
+  {
+    name: "knock",
+    args: "<channel> [text]",
+    summary: "Ask to be let into an invite-only channel",
+  },
+  { name: "oper", args: "<name> <password>", summary: "Take server operator" },
   { name: "invite", args: "<nick> [channel]", summary: "Invite someone" },
   { name: "list", args: "[pattern]", summary: "List the channels on this network" },
   { name: "whois", args: "<nick>", summary: "Look someone up" },

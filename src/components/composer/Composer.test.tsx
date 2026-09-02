@@ -753,6 +753,22 @@ describe("Composer recall", () => {
     arrow(box, "ArrowUp");
     expect(box.value).toBe("/whois nobodu");
   });
+
+  /**
+   * The one line that is not worth getting back to. A password one keystroke
+   * from the composer is the same leak the raw log redacts, by a shorter route.
+   */
+  it("does not file a line carrying a password", async () => {
+    const box = await mount();
+    type(box, "/whois sable");
+    press(box, "Enter");
+    type(box, "/oper syk hunter2");
+    press(box, "Enter");
+    type(box, "");
+
+    arrow(box, "ArrowUp");
+    expect(box.value).toBe("/whois sable");
+  });
 });
 
 function queue(pending: number) {

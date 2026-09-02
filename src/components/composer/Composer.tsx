@@ -20,7 +20,12 @@ import { targetKey, useMembers, useQueued, useReplyTarget, useView } from "@/sto
 import { plainText } from "@/components/timeline/Markdown";
 import type { ViewId } from "@/store/types";
 import { CommandHint } from "./CommandHint";
-import { channelJoinedBy, matchCommands, runConnectionCommand } from "./commands";
+import {
+  carriesACredential,
+  channelJoinedBy,
+  matchCommands,
+  runConnectionCommand,
+} from "./commands";
 import { cycleCompletion, startCompletion, type Completion } from "./completion";
 import { useRecall } from "./recall";
 
@@ -302,8 +307,10 @@ function ComposerFor({
     completionRef.current = null;
     stopTyping();
     // Everything submitted is recallable, refusals included: a line the server
-    // would not take is exactly one worth getting back to fix.
-    recall.remember(text);
+    // would not take is exactly one worth getting back to fix. The exception is
+    // a line carrying a password, which is not worth getting back to anything.
+    if (carriesACredential(text)) recall.reset();
+    else recall.remember(text);
     void ipc.setDraft(network, target, "");
 
     // A command about the connection is performed here rather than sent: there

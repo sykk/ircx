@@ -7,7 +7,7 @@
 //! get_snapshot()                              -> AppSnapshot
 //! list_network_configs()                      -> Vec<NetworkConfig>
 //! save_network(config: NetworkConfig)         -> NetworkId
-//! register_libera_account(network, account, password, email)
+//! register_account(network, account, password, email)
 //!                                             -> ()
 //! remove_network(network: NetworkId)          -> ()
 //! connect_network(network: NetworkId)         -> ()

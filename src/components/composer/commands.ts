@@ -50,6 +50,11 @@ export const COMMANDS: SlashCommand[] = [
   { name: "list", args: "[pattern]", summary: "List the channels on this network" },
   { name: "whois", args: "<nick>", summary: "Look someone up" },
   { name: "whowas", args: "<nick>", summary: "Look up somebody who has gone" },
+  {
+    name: "verify",
+    args: "[account] <code>",
+    summary: "Finish registering an account",
+  },
   { name: "away", args: "[reason]", summary: "Mark yourself away" },
   { name: "back", args: "", summary: "Come back from away" },
   { name: "ignore", args: "[nick]", summary: "Stop hearing from someone, or list who is ignored" },

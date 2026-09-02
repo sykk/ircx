@@ -9,10 +9,30 @@ import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc, reasonOr } from "@/lib/ipc";
 import type { Network } from "@/types";
 
-export function canRegisterLibera(network: Network): boolean {
+const REGISTRATION = "draft/account-registration";
+
+/**
+ * Whether the network said it takes registrations. Where it did, the whole
+ * exchange is the protocol's and the server answers for its own rules.
+ */
+export function offersRegistration(network: Network): boolean {
+  return network.capsEnabled.includes(REGISTRATION);
+}
+
+function isLibera(network: Network): boolean {
   const host = network.host.toLowerCase().replace(/\.$/, "");
+  return host === "libera.chat" || host.endsWith(".libera.chat");
+}
+
+/**
+ * Libera is still named here, and only here. It runs no such capability and
+ * answers a message to NickServ instead, which is a rule about one network
+ * rather than anything a server states — so it is the client that has to hold
+ * it. Every other network reaches this by saying so itself.
+ */
+export function canRegisterAccount(network: Network): boolean {
   return (
-    (host === "libera.chat" || host.endsWith(".libera.chat")) &&
+    (offersRegistration(network) || isLibera(network)) &&
     network.tls &&
     network.status.state === "connected" &&
     network.currentNick !== null &&
@@ -20,7 +40,7 @@ export function canRegisterLibera(network: Network): boolean {
   );
 }
 
-export function LiberaRegistrationForm({
+export function AccountRegistrationForm({
   network,
   onBack,
   onDone,
@@ -36,7 +56,8 @@ export function LiberaRegistrationForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  useAnnounce(error ?? (sent ? "Registration sent. Check your email to verify the account." : null));
+  const negotiated = offersRegistration(network);
+  useAnnounce(error ?? (sent ? "Registration sent." : null));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -44,12 +65,12 @@ export function LiberaRegistrationForm({
     reportBusy(true);
     setError(null);
     try {
-      await ipc.registerLiberaAccount(network.id, account, password, email);
+      await ipc.registerAccount(network.id, account, password, email);
       setPassword("");
       setEmail("");
       setSent(true);
     } catch (reason) {
-      setError(reasonOr(reason, "The Libera.Chat account could not be registered."));
+      setError(reasonOr(reason, `The ${network.name} account could not be registered.`));
     } finally {
       setBusy(false);
       reportBusy(false);
@@ -58,7 +79,7 @@ export function LiberaRegistrationForm({
 
   return (
     <SettingsPage
-      title="Register a Libera.Chat account"
+      title={`Register an account on ${network.name}`}
       blurb="Register the nick on this connection and save it for SASL login. The password and email bypass conversations, archives, notifications, plugins, and the readable raw log."
       onDone={onDone}
     >
@@ -68,9 +89,10 @@ export function LiberaRegistrationForm({
             Registration was sent and the SASL PLAIN login was saved.
           </p>
           <p className="text-[12px] leading-5 text-[var(--text-muted)]">
-            Check your email and run the NickServ verification command it contains within about
-            24 hours. After verification, reconnect from Networks to sign in with the saved
-            account.
+            {negotiated
+              ? "If the account needs verifying, the server said so in this network's tab. Run /verify with the code it sends you."
+              : `Check your email and run the NickServ verification command it contains within about 24 hours.`}{" "}
+            After verification, reconnect from Networks to sign in with the saved account.
           </p>
           <div className="flex">
             <SecondaryButton onClick={onBack}>Back to networks</SecondaryButton>
@@ -82,7 +104,7 @@ export function LiberaRegistrationForm({
             label="Account / nick"
             value={account}
             onChange={setAccount}
-            hint={`Libera.Chat registers the nick currently connected as ${network.currentNick}.`}
+            hint={`Most networks register the nick you are connected as (${network.currentNick}).`}
             autoFocus
           />
           <TextField
@@ -96,7 +118,11 @@ export function LiberaRegistrationForm({
             label="Email address"
             value={email}
             onChange={setEmail}
-            hint="Libera.Chat sends the verification command and account recovery mail here."
+            hint={
+              negotiated
+                ? `Where ${network.name} sends a verification code. Leave it empty if it does not ask for one.`
+                : `${network.name} sends the verification command and account recovery mail here.`
+            }
           />
 
           {error !== null && (

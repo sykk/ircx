@@ -7,7 +7,7 @@ import { ipc, reasonOr } from "@/lib/ipc";
 import { useAppStore } from "@/store";
 import { useNetworks } from "@/store/selectors";
 import type { Network } from "@/types";
-import { canRegisterLibera, LiberaRegistrationForm } from "./LiberaRegistrationForm";
+import { AccountRegistrationForm, canRegisterAccount } from "./AccountRegistrationForm";
 
 /**
  * Every configured network, what each one is doing, and the actions available
@@ -28,7 +28,7 @@ export function NetworkList({ onDone }: { onDone: () => void }) {
 
   if (registering !== null) {
     return (
-      <LiberaRegistrationForm
+      <AccountRegistrationForm
         network={registering}
         onBack={() => setRegistering(null)}
         onDone={onDone}
@@ -133,7 +133,7 @@ export function NetworkList({ onDone }: { onDone: () => void }) {
                     </>
                   ) : (
                     <>
-                      {canRegisterLibera(network) && (
+                      {canRegisterAccount(network) && (
                         <SecondaryButton
                           label={`Register an account on ${network.name}`}
                           onClick={() => setRegistering(network)}

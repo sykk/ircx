@@ -460,10 +460,10 @@ pub struct SessionState {
     /// round trip, so this holds enough for several conversations at once and
     /// nothing for a server that never answers.
     typing_labels: VecDeque<String>,
-    /// Values used only by the guided Libera registration. A service may echo
-    /// either one in its reply, so they are removed before the raw line is
-    /// emitted or parsed into a message.
-    pub(crate) libera_registration_secrets: Option<(String, String)>,
+    /// The password and email a guided registration was given. A service or a
+    /// `REGISTER` reply may echo either one, so they are removed before the raw
+    /// line is emitted or parsed into a message.
+    pub(crate) registration_secrets: Option<(String, String)>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
     ///
@@ -541,7 +541,7 @@ impl SessionState {
             gap_fills: HashMap::new(),
             page_backs: HashMap::new(),
             typing_labels: VecDeque::new(),
-            libera_registration_secrets: None,
+            registration_secrets: None,
             first_pages: HashSet::new(),
             transfers: Vec::new(),
             next_transfer_token: 0,
@@ -686,7 +686,7 @@ impl SessionState {
         // Before the parse, because a line this client cannot read is still
         // the server having said something.
         self.last_heard = Instant::now();
-        let line = self.redact_libera_registration(line);
+        let line = self.redact_registration(line);
         self.emit(IrcxEvent::RawLine {
             network: self.config.network.clone(),
             outgoing: false,
@@ -700,12 +700,21 @@ impl SessionState {
         self.drain()
     }
 
-    fn redact_libera_registration(&self, line: &str) -> String {
-        let Some((password, email)) = &self.libera_registration_secrets else {
+    fn redact_registration(&self, line: &str) -> String {
+        let Some((password, email)) = &self.registration_secrets else {
             return line.to_string();
         };
-        line.replace(email, "<email>")
-            .replace(password, "<credentials>")
+        // An empty needle matches between every pair of characters, and a
+        // registration with no email address holds one: `REGISTER` sends `*`
+        // where the server does not ask for one.
+        let line = match email.is_empty() {
+            true => line.to_string(),
+            false => line.replace(email, "<email>"),
+        };
+        match password.is_empty() {
+            true => line,
+            false => line.replace(password, "<credentials>"),
+        }
     }
 
     /// Measures the round trip so the UI can show lag, and gives up on a
@@ -1026,6 +1035,7 @@ impl SessionState {
                     "CHGHOST" => self.handle_chghost(message),
                     "BATCH" => self.handle_batch(message),
                     "MARKREAD" => self.handle_markread(message),
+                    "REGISTER" | "VERIFY" => self.handle_registration(&name, message),
                     "FAIL" | "WARN" | "NOTE" => self.handle_standard_reply(&name, message),
                     _ => debug!(command = name, "no handler for this command"),
                 }
@@ -3820,6 +3830,47 @@ impl SessionState {
         self.note(SERVER_TARGET, MessageKind::Client, text);
     }
 
+    /// What a server says about an account this client asked it to make.
+    ///
+    /// ```text
+    /// REGISTER SUCCESS <account> :<description>
+    /// REGISTER VERIFICATION_REQUIRED <account> :<description>
+    /// VERIFY SUCCESS <account> :<description>
+    /// ```
+    ///
+    /// A refusal arrives as `FAIL REGISTER <code>` and is already answered by
+    /// `handle_standard_reply`, which passes on the server's own sentence
+    /// because that is the only part written for a user. The same rule holds
+    /// here. The one thing added to it is the sentence after a verification,
+    /// because what finishes one is a command in this client and the server has
+    /// no way to name it.
+    fn handle_registration(&mut self, kind: &str, message: &Message) {
+        let outcome = message.param(0).unwrap_or_default().to_ascii_uppercase();
+        let account = message.param(1).unwrap_or_default().to_string();
+        // Below three parameters there is no description, only the outcome.
+        let described = (message.params.len() >= 3)
+            .then(|| message.params.last())
+            .flatten()
+            .filter(|text| !text.trim().is_empty())
+            .cloned();
+        let text = described.unwrap_or_else(|| match outcome.as_str() {
+            "SUCCESS" => format!("{account} is registered on {}", self.network_name()),
+            // A word this client does not know is still the server talking
+            // about the account, and saying so beats saying nothing.
+            _ => format!("{} sent {kind} {outcome}", self.network_name()),
+        });
+
+        self.notice(Severity::Info, text.clone(), &message.raw);
+        self.note(SERVER_TARGET, MessageKind::Client, text);
+        if kind == "REGISTER" && outcome == "VERIFICATION_REQUIRED" {
+            self.note(
+                SERVER_TARGET,
+                MessageKind::Client,
+                "Run /verify with the code once it arrives.".into(),
+            );
+        }
+    }
+
     pub(crate) fn notice(&mut self, severity: Severity, text: String, detail: &str) {
         self.emit(IrcxEvent::Notice {
             network: Some(self.config.network.clone()),
@@ -4306,7 +4357,11 @@ fn redact(line: &str) -> String {
             _ => format!("{command} <credentials>"),
         };
     }
-    if command.eq_ignore_ascii_case("PASS") || command.eq_ignore_ascii_case("OPER") {
+    if command.eq_ignore_ascii_case("PASS")
+        || command.eq_ignore_ascii_case("OPER")
+        || command.eq_ignore_ascii_case("REGISTER")
+        || command.eq_ignore_ascii_case("VERIFY")
+    {
         return format!("{command} <credentials>");
     }
     redact_service_message(line).unwrap_or_else(|| line.to_string())

@@ -6,7 +6,7 @@ import { useAppStore } from "@/store";
 import type { NetworkConfig } from "@/types";
 import { NetworksPage } from "./NetworksPage";
 
-const registerLiberaAccount = vi.fn<
+const registerAccount = vi.fn<
   (id: string, account: string, password: string, email: string) => Promise<void>
 >();
 const listNetworkConfigs = vi.fn<() => Promise<NetworkConfig[]>>();
@@ -21,8 +21,8 @@ vi.mock("@/lib/ipc", () => ({
     connectNetwork: (id: string) => connectNetwork(id),
     disconnectNetwork: (id: string) => disconnectNetwork(id),
     removeNetwork: (id: string) => removeNetwork(id),
-    registerLiberaAccount: (id: string, account: string, password: string, email: string) =>
-      registerLiberaAccount(id, account, password, email),
+    registerAccount: (id: string, account: string, password: string, email: string) =>
+      registerAccount(id, account, password, email),
   },
   onIrcxEvent: vi.fn(),
   reasonOr: (reason: unknown, fallback: string) =>
@@ -62,7 +62,7 @@ beforeEach(() => {
   connectNetwork.mockResolvedValue(undefined);
   disconnectNetwork.mockResolvedValue(undefined);
   removeNetwork.mockResolvedValue(undefined);
-  registerLiberaAccount.mockResolvedValue(undefined);
+  registerAccount.mockResolvedValue(undefined);
   seedStore([makeNetwork("libera", { name: "Libera.Chat", host: "irc.libera.chat" })]);
 });
 
@@ -162,11 +162,13 @@ describe("the list of networks", () => {
     expect(store().setup).toEqual({ network: null });
   });
 
-it("registers the connected Libera nick without using a conversation", async () => {
+it("registers the connected nick on a network that offers the capability", async () => {
     page();
     fireEvent.click(screen.getByRole("button", { name: "Register an account on Libera.Chat" }));
 
-    expect(screen.getByRole("heading", { name: "Register a Libera.Chat account" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Register an account on Libera.Chat" }),
+    ).toBeTruthy();
     expect(screen.getByLabelText("Account / nick").getAttribute("value")).toBe("sable");
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "correct-horse-battery-staple" },
@@ -179,7 +181,7 @@ it("registers the connected Libera nick without using a conversation", async () 
       fireEvent.click(screen.getByRole("button", { name: "Register account" }));
     });
 
-    expect(registerLiberaAccount).toHaveBeenCalledWith(
+    expect(registerAccount).toHaveBeenCalledWith(
       "libera",
       "sable",
       "correct-horse-battery-staple",
@@ -187,6 +189,37 @@ it("registers the connected Libera nick without using a conversation", async () 
     );
     expect(screen.getByText(/Check your email/)).toBeTruthy();
     expect(screen.queryByLabelText("Password")).toBeNull();
+  });
+
+  it("offers registration on any network that says it takes one", async () => {
+    seedStore([
+      makeNetwork("ergo", {
+        name: "Ergo",
+        host: "irc.ergo.test",
+        capsEnabled: ["draft/account-registration"],
+      }),
+    ]);
+    page();
+    fireEvent.click(screen.getByRole("button", { name: "Register an account on Ergo" }));
+
+    expect(screen.getByRole("heading", { name: "Register an account on Ergo" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-horse-battery-staple" },
+    });
+
+    // No address: the capability says whether the server wants one, and this
+    // one did not, so the form does not insist where the protocol does not.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Register account" }));
+    });
+
+    expect(registerAccount).toHaveBeenCalledWith(
+      "ergo",
+      "sable",
+      "correct-horse-battery-staple",
+      "",
+    );
+    expect(screen.getByText(/\/verify/)).toBeTruthy();
   });
 
   it("does not offer registration on another network or an unconnected one", () => {
@@ -205,7 +238,7 @@ it("registers the connected Libera nick without using a conversation", async () 
   });
 
   it("keeps the form open with the backend's actionable registration error", async () => {
-    registerLiberaAccount.mockRejectedValue("That nick is already registered. Choose another nick.");
+    registerAccount.mockRejectedValue("That nick is already registered. Choose another nick.");
     page();
     fireEvent.click(screen.getByRole("button", { name: "Register an account on Libera.Chat" }));
 
@@ -214,7 +247,9 @@ it("registers the connected Libera nick without using a conversation", async () 
     });
 
     expect(screen.getByRole("alert").textContent).toContain("already registered");
-    expect(screen.getByRole("heading", { name: "Register a Libera.Chat account" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Register an account on Libera.Chat" }),
+    ).toBeTruthy();
   });
 
 

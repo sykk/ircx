@@ -406,7 +406,7 @@ fn guided_libera_registration_stays_out_of_messages_and_raw_logs() {
 
     let actions = session
         .state
-        .register_libera("sykk", password, email)
+        .register_account("sykk", password, email)
         .expect("the connected nick can be registered");
 
     assert!(actions.iter().any(|action| {
@@ -448,7 +448,7 @@ fn guided_registration_sets_plain_sasl_for_the_next_connection() {
     let mut session = registered("");
     let actions = session
         .state
-        .register_libera(
+        .register_account(
             "sykk",
             "correct-horse-battery-staple",
             "private@example.com",
@@ -475,10 +475,204 @@ fn guided_registration_refuses_a_nick_other_than_the_connected_one() {
 
     let error = session
         .state
-        .register_libera("someone-else", "correct-horse", "private@example.com")
+        .register_account("someone-else", "correct-horse", "private@example.com")
         .unwrap_err();
 
     assert!(error.contains("currently in use (sykk)"), "{error}");
+}
+
+/// The capability is the same act by the protocol rather than by one network's
+/// service, so the account, the address and the password go out as arguments
+/// and the raw log carries none of them.
+#[test]
+fn a_network_that_offers_registration_is_asked_in_the_protocol() {
+    let mut session = registered("draft/account-registration");
+    let password = "correct-horse-battery-staple";
+
+    let actions = session
+        .state
+        .register_account("sykk", password, "private@example.com")
+        .expect("the connected nick can be registered");
+
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Send { line, .. }
+                if line == &format!("REGISTER sykk private@example.com {password}")
+        )
+    }));
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Emit(event)
+                if matches!(event.as_ref(), IrcxEvent::RawLine { outgoing: true, line, .. }
+                    if line == "REGISTER <credentials>")
+        )
+    }));
+}
+
+/// `*` is the spelling for an address the server never asked for. The
+/// capability says whether it wants one, so this client does not have to guess.
+#[test]
+fn a_registration_with_no_email_says_so_in_the_protocols_own_word() {
+    let mut session = registered("draft/account-registration");
+
+    let actions = session
+        .state
+        .register_account("sykk", "correct-horse-battery-staple", "")
+        .expect("an address is not required unless the capability says so");
+
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Send { line, .. }
+                if line == "REGISTER sykk * correct-horse-battery-staple"
+        )
+    }));
+}
+
+/// The redaction holds two values and replaces them wherever they appear. An
+/// empty one matches between every pair of characters in the line, which is
+/// reachable rather than theoretical now that an address is optional.
+#[test]
+fn a_registration_with_no_email_does_not_redact_the_whole_line() {
+    let mut session = registered("draft/account-registration");
+    let actions = session
+        .state
+        .register_account("sykk", "correct-horse-battery-staple", "")
+        .unwrap();
+    session.apply(actions);
+
+    let answer = session
+        .state
+        .on_line(":irc.libera.chat NOTICE sykk :nothing secret here");
+    let visible = format!("{answer:?}");
+    assert!(visible.contains("nothing secret here"), "{visible}");
+    assert!(!visible.contains("<email>"), "{visible}");
+}
+
+/// `email-required` is the server saying it cannot finish without one, and
+/// asking anyway would spend a round trip to be told so.
+#[test]
+fn a_network_that_requires_an_email_says_so_before_the_line_goes_out() {
+    let mut session = registered("draft/account-registration=email-required");
+
+    let error = session
+        .state
+        .register_account("sykk", "correct-horse-battery-staple", "")
+        .unwrap_err();
+
+    assert!(error.contains("needs an email address"), "{error}");
+    assert!(session.sent().is_empty());
+}
+
+/// Without `custom-account-name` the account is the nick, and the server would
+/// refuse anything else. With it, the server takes the name it is given.
+#[test]
+fn an_account_may_only_be_named_freely_where_the_capability_allows_it() {
+    let mut session = registered("draft/account-registration");
+    let error = session
+        .state
+        .register_account("someone-else", "correct-horse", "private@example.com")
+        .unwrap_err();
+    assert!(error.contains("currently in use (sykk)"), "{error}");
+
+    let mut session = registered("draft/account-registration=custom-account-name");
+    let actions = session
+        .state
+        .register_account("someone-else", "correct-horse", "private@example.com")
+        .expect("the capability allows a name of its own");
+    assert!(actions.iter().any(|action| {
+        matches!(
+            action,
+            Action::Send { line, .. }
+                if line == "REGISTER someone-else private@example.com correct-horse"
+        )
+    }));
+}
+
+/// The server's own sentence is what the reader is shown, the way every other
+/// standard reply is. What is added to it is the one thing the server cannot
+/// know: that finishing this takes a command in front of the reader.
+#[test]
+fn a_verification_says_what_the_server_said_and_where_to_answer_it() {
+    let mut session = registered("draft/account-registration");
+    session.feed(
+        ":irc.libera.chat REGISTER VERIFICATION_REQUIRED sykk \
+         :Check your email for the code",
+    );
+
+    let said = session
+        .messages()
+        .iter()
+        .map(|message| message.text.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        said.iter().any(|text| text.contains("Check your email")),
+        "{said:?}"
+    );
+    assert!(said.iter().any(|text| text.contains("/verify")), "{said:?}");
+}
+
+/// The code arrives minutes later, by which time the form is shut, so the
+/// answer is a command. The account defaults to the nick because that is what
+/// it is on every server that does not offer a name of its own.
+#[test]
+fn verify_answers_with_the_connected_nick_unless_told_another() {
+    let mut session = registered("draft/account-registration");
+
+    assert!(matches!(
+        session.submit("#ircx", "/verify abc123"),
+        CommandOutcome::Handled
+    ));
+    assert_eq!(session.sent(), vec!["VERIFY sykk abc123"]);
+
+    assert!(matches!(
+        session.submit("#ircx", "/verify someone-else abc123"),
+        CommandOutcome::Handled
+    ));
+    assert_eq!(session.sent(), vec!["VERIFY someone-else abc123"]);
+}
+
+/// The code is single use and worth as much as the password until it is spent.
+#[test]
+fn verify_keeps_the_code_out_of_the_raw_log() {
+    let mut session = registered("draft/account-registration");
+
+    // Straight from the actions: the harness drops every raw line, which is
+    // the one thing this has to look at.
+    let (_, actions) = session.state.submit("#ircx", "/verify abc123", None);
+    let logged = actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Emit(event) => match event.as_ref() {
+                IrcxEvent::RawLine {
+                    outgoing: true,
+                    line,
+                    ..
+                } => Some(line.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(logged.iter().any(|line| line == "VERIFY <credentials>"));
+    assert!(
+        !logged.iter().any(|line| line.contains("abc123")),
+        "{logged:?}"
+    );
+}
+
+/// A network with no such capability has nothing to answer, and saying so
+/// beats sending a line the server will reject.
+#[test]
+fn verify_says_so_where_the_network_does_not_offer_it() {
+    let mut session = registered("");
+
+    let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/verify abc123") else {
+        panic!("a network with no capability cannot verify");
+    };
+    assert!(reason.contains("does not verify accounts"), "{reason}");
 }
 
 #[test]

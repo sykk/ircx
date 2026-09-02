@@ -11,6 +11,11 @@ const setRetention = vi.fn();
 const deleteArchive = vi.fn();
 const exportArchive = vi.fn();
 const exportProfile = vi.fn();
+const readProfile = vi.fn();
+const saveNetwork = vi.fn();
+const setHighlightWords = vi.fn();
+const setMuted = vi.fn();
+const saveUploadProvider = vi.fn();
 const listNetworkConfigs = vi.fn();
 const getUploadProvider = vi.fn();
 const listThemes = vi.fn();
@@ -23,12 +28,18 @@ const announce = vi.fn();
 
 vi.mock("@/lib/ipc", async (importOriginal) => ({
   ...(await importOriginal<typeof Ipc>()),
+  setWindowZoom: () => Promise.resolve(),
   ipc: {
     archiveSummary: (...args: unknown[]) => summary(...args),
     setRetention: (...args: unknown[]) => setRetention(...args),
     deleteArchive: (...args: unknown[]) => deleteArchive(...args),
     exportArchive: (...args: unknown[]) => exportArchive(...args),
     exportProfile: (...args: unknown[]) => exportProfile(...args),
+    readProfile: (...args: unknown[]) => readProfile(...args),
+    saveNetwork: (...args: unknown[]) => saveNetwork(...args),
+    setHighlightWords: (...args: unknown[]) => setHighlightWords(...args),
+    setMuted: (...args: unknown[]) => setMuted(...args),
+    saveUploadProvider: (...args: unknown[]) => saveUploadProvider(...args),
     listNetworkConfigs: () => listNetworkConfigs(),
     getUploadProvider: () => getUploadProvider(),
     listThemes: () => listThemes(),
@@ -41,7 +52,11 @@ vi.mock("@/lib/ipc", async (importOriginal) => ({
 
 /** Answered per test: dismissed by default, a path where one is wanted. */
 const save = vi.hoisted(() => vi.fn());
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (...args: unknown[]) => save(...args) }));
+const open = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  save: (...args: unknown[]) => save(...args),
+  open: (...args: unknown[]) => open(...args),
+}));
 
 const KEPT = {
   messages: 4812n,
@@ -58,6 +73,11 @@ beforeEach(() => {
   deleteArchive.mockReset().mockResolvedValue(undefined);
   exportArchive.mockReset().mockResolvedValue(120n);
   exportProfile.mockReset().mockResolvedValue(240n);
+  readProfile.mockReset();
+  saveNetwork.mockReset().mockResolvedValue("imported-network");
+  setHighlightWords.mockReset().mockResolvedValue(undefined);
+  setMuted.mockReset().mockResolvedValue(undefined);
+  saveUploadProvider.mockReset().mockResolvedValue(undefined);
   listNetworkConfigs.mockReset().mockResolvedValue([]);
   getUploadProvider.mockReset().mockResolvedValue(null);
   listThemes.mockReset().mockResolvedValue([]);
@@ -66,6 +86,7 @@ beforeEach(() => {
   mutedConversations.mockReset().mockResolvedValue([]);
   announce.mockReset().mockResolvedValue(undefined);
   save.mockReset().mockResolvedValue(null);
+  open.mockReset().mockResolvedValue(null);
   resetStore();
 });
 
@@ -82,6 +103,52 @@ const done = vi.fn();
 
 function render_(here: SettingsScope | null = HERE) {
   return render(<PrivacyPage here={here} onDone={done} />);
+}
+
+function importableProfile() {
+  return {
+    format: "ircx-profile",
+    version: 1,
+    networks: [
+      {
+        name: "Libera.Chat",
+        host: "irc.libera.chat",
+        port: 6697,
+        tls: true,
+        tlsVerify: true,
+        socks5Proxy: null,
+        nick: "sable",
+        altNicks: [],
+        username: "sable",
+        realname: "Sable",
+        sasl: null,
+        autojoin: ["#ircx"],
+        autoConnect: true,
+        quitMessage: null,
+        partMessage: null,
+        awayMessage: null,
+      },
+    ],
+    appearance: {
+      theme: "ircx-dark",
+      installedThemes: [],
+      density: "comfortable",
+      presentation: {},
+      typography: {},
+      sidebarCompact: false,
+      themeOverrides: {},
+    },
+    notifications: {
+      desktop: { highlights: true, directMessages: false },
+      highlightWords: ["deploy"],
+      mutedConversations: [
+        { network: "source-network", networkName: "Libera.Chat", target: "#noise" },
+      ],
+    },
+    uploadProvider: null,
+    plugins: [],
+    omissions: [],
+  };
 }
 
 describe("saying what is kept", () => {
@@ -251,6 +318,59 @@ describe("the privacy page", () => {
     const [path, contents] = exportProfile.mock.calls[0] as [string, string];
     expect(path).toBe("/tmp/ircx-profile.json");
     expect(JSON.parse(contents)).toMatchObject({ format: "ircx-profile", version: 1 });
+  });
+
+  it("previews a profile before importing it", async () => {
+    open.mockResolvedValue("/tmp/ircx-profile.json");
+    readProfile.mockResolvedValue(JSON.stringify(importableProfile()));
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Import profile"));
+
+    const preview = await screen.findByRole("region", { name: "Review this profile" });
+    expect(within(preview).getByText(/1 to add, 0 to update/)).toBeTruthy();
+    expect(saveNetwork).not.toHaveBeenCalled();
+
+    fireEvent.click(within(preview).getByRole("button", { name: "Import profile" }));
+
+    await waitFor(() => expect(saveNetwork).toHaveBeenCalledOnce());
+    expect(saveNetwork.mock.calls[0]?.[0]).toMatchObject({
+      id: null,
+      name: "Libera.Chat",
+      host: "irc.libera.chat",
+      clientCertificate: null,
+      connectCommands: [],
+    });
+    expect(setHighlightWords).toHaveBeenCalledWith(["deploy"]);
+    expect(setMuted).toHaveBeenCalledWith("imported-network", "#noise", true);
+    expect(await screen.findByText(/Profile imported: 1 network, 1 mute/)).toBeTruthy();
+  });
+
+  it("does not import after the preview is cancelled", async () => {
+    open.mockResolvedValue("/tmp/ircx-profile.json");
+    readProfile.mockResolvedValue(JSON.stringify(importableProfile()));
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Import profile"));
+    const preview = await screen.findByRole("region", { name: "Review this profile" });
+    fireEvent.click(within(preview).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("region", { name: "Review this profile" })).toBeNull();
+    expect(saveNetwork).not.toHaveBeenCalled();
+  });
+
+  it("reports why a selected file is not an ircx profile", async () => {
+    open.mockResolvedValue("/tmp/not-a-profile.json");
+    readProfile.mockResolvedValue('{"format":"something-else","version":1}');
+    render_();
+    await screen.findByText(/4,812 messages/);
+
+    fireEvent.click(screen.getByText("Import profile"));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("not an ircx profile");
+    expect(saveNetwork).not.toHaveBeenCalled();
   });
 
   /** A file dialog nobody answers writes nothing. */

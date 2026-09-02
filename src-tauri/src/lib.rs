@@ -248,6 +248,7 @@ pub fn run() {
             commands::cancel_transfer,
             commands::export_archive,
             commands::export_profile,
+            commands::read_profile,
             message_notification::show_message_notification,
             commands::delete_archive,
             commands::announce,

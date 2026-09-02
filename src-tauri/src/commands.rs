@@ -573,6 +573,28 @@ pub async fn set_highlight_words(app: State<'_, App>, words: Vec<String>) -> Res
     app.set_highlight_words(words).await
 }
 
+/// After how many idle minutes to say the reader is away, or `null` for never.
+///
+/// The timer itself is the window's: what counts as the reader being at it is
+/// keyboards and pointers, which do not reach this side. What crosses is the
+/// answer, through `set_idle`.
+#[tauri::command]
+pub async fn away_after(app: State<'_, App>) -> Result<Option<u32>, String> {
+    app.store().away_after().map_err(describe)
+}
+
+#[tauri::command]
+pub async fn set_away_after(app: State<'_, App>, minutes: Option<u32>) -> Result<(), String> {
+    app.store()
+        .set_away_after(minutes.filter(|minutes| *minutes > 0))
+        .map_err(describe)
+}
+
+#[tauri::command]
+pub async fn set_idle(app: State<'_, App>, idle: bool) -> Result<(), String> {
+    app.set_idle(idle).await
+}
+
 /// The names whose lines never raise the reader — the inverse of the words
 /// above, and stored beside them.
 #[tauri::command]

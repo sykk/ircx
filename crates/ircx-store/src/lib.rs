@@ -1393,6 +1393,35 @@ impl Store {
         Ok(())
     }
 
+    /// After how many idle minutes to say the reader is away, or `None` for
+    /// never.
+    ///
+    /// No row means nobody has chosen, and the answer then is never. An away
+    /// status the reader did not ask for is this client telling a channel
+    /// something about them that they never said.
+    pub fn away_after(&self) -> Result<Option<u32>, StoreError> {
+        let chosen: Option<i64> = self
+            .reading()
+            .query_row(
+                "SELECT idle_minutes FROM away_settings WHERE only = 0",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(chosen
+            .filter(|minutes| *minutes > 0)
+            .and_then(|minutes| u32::try_from(minutes).ok()))
+    }
+
+    pub fn set_away_after(&self, minutes: Option<u32>) -> Result<(), StoreError> {
+        self.writing().execute(
+            "INSERT INTO away_settings (only, idle_minutes) VALUES (0, ?1)
+             ON CONFLICT (only) DO UPDATE SET idle_minutes = excluded.idle_minutes",
+            params![i64::from(minutes.unwrap_or(0))],
+        )?;
+        Ok(())
+    }
+
     /// `target` of `None` sets the network default. `days` of `None` keeps
     /// messages forever, and as a target override it outranks the default.
     pub fn set_retention(

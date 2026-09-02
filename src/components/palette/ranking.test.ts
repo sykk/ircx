@@ -96,6 +96,7 @@ function stateWith(channels: string[], queries: string[] = [], recent: TargetKey
     channelsOpen: null,
   highlightWords: [],
   hushedNicks: [],
+  awayAfter: null,
   };
 }
 

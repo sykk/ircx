@@ -21,6 +21,7 @@ import {
 } from "@/lib/notifications";
 import { ipc, reasonOr } from "@/lib/ipc";
 import { targetKey } from "@/store/keys";
+import { useAppStore } from "@/store";
 import type { SettingsScope } from "@/components/settings/scope";
 import type { IgnoredPerson, MutedConversation, TraySettings, WatchedPerson } from "@/types";
 
@@ -83,6 +84,9 @@ export function NotificationsPage({
         setError(reasonOr(reason, "What the close button does could not be read.")),
     );
   }, []);
+
+  const awayAfter = useAppStore((state) => state.awayAfter);
+  const setAwayAfter = useAppStore((state) => state.setAwayAfter);
 
   const readMuted = useCallback(() => {
     void ipc.mutedConversations().then(
@@ -408,6 +412,37 @@ export function NotificationsPage({
             Your desktop refused notifications for ircx. Allow them in its settings and try again.
           </Note>
         )}
+      </Group>
+
+      {/* The same subject read the other way round: above is what reaches the
+          reader when they are not looking, and this is what the people they
+          are talking to are told about it. */}
+      <Group title="When you are away from the keyboard">
+        <SelectField
+          label="Say you are away after"
+          value={String(awayAfter ?? 0)}
+          options={[
+            { value: "0", label: "Never" },
+            { value: "5", label: "5 minutes" },
+            { value: "10", label: "10 minutes" },
+            { value: "15", label: "15 minutes" },
+            { value: "30", label: "30 minutes" },
+            { value: "60", label: "An hour" },
+          ]}
+          onChange={(chosen) => {
+            const minutes = Number(chosen) || null;
+            setAwayAfter(minutes);
+            void ipc.setAwayAfter(minutes).catch((reason: unknown) => {
+              setAwayAfter(awayAfter);
+              setError(reasonOr(reason, "That could not be written down."));
+            });
+          }}
+          hint="Every connected network is told, in the away message on its own settings. Typing brings you back."
+        />
+        <Note>
+          An away you set yourself with /away is left alone: this neither replaces the reason you
+          wrote nor cancels it when you come back to the keyboard.
+        </Note>
       </Group>
 
       {/* Here rather than anywhere else because it is the same subject: none of

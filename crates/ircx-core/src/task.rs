@@ -201,6 +201,12 @@ pub enum SessionCommand {
     Raw {
         line: String,
     },
+    /// The window saying whether the reader is still at it. Every network is
+    /// told, because it is a fact about the reader rather than about one
+    /// connection.
+    IdleChanged {
+        idle: bool,
+    },
     RegisterAccount {
         account: String,
         password: String,
@@ -904,6 +910,7 @@ async fn apply(
             strike_cleared(&context.strikes, Hook::Notify, &plugin);
             Vec::new()
         }
+        SessionCommand::IdleChanged { idle } => session.on_idle(idle),
         SessionCommand::HighlightWordsChanged { words } => {
             session.set_highlight_words(words);
             Vec::new()

@@ -150,5 +150,6 @@ export function fixtureState(channelCount = 4000, networkCount = 12): AppState {
     channelsOpen: null,
   highlightWords: [],
   hushedNicks: [],
+  awayAfter: null,
   };
 }

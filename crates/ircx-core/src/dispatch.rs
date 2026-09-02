@@ -3,7 +3,7 @@ use ircx_proto::{MessageBuilder, MAX_MESSAGE_BYTES};
 use uuid::Uuid;
 
 use crate::multiline;
-use crate::session::{build, Action, SaslCredentials, SessionState, SERVER_TARGET};
+use crate::session::{build, Action, AwaySource, SaslCredentials, SessionState, SERVER_TARGET};
 use crate::text;
 
 /// What a bare `/away` says on a network that has no default of its own.
@@ -11,7 +11,7 @@ use crate::text;
 /// A reason is not optional the way `PART`'s and `QUIT`'s are: `AWAY` with an
 /// empty trailing parameter is how several servers read "back", so there is
 /// nothing to send that means away and says nothing.
-const DEFAULT_AWAY: &str = "Away";
+pub(crate) const DEFAULT_AWAY: &str = "Away";
 
 /// What `/help` prints. It lists `/connect` and `/disconnect` although this
 /// table answers to neither: they act on the connection rather than travelling
@@ -712,11 +712,13 @@ impl SessionState {
                 .unwrap_or_else(|| DEFAULT_AWAY.to_string()),
         };
         self.send_command("AWAY", &[&reason]);
+        self.set_away_source(Some(AwaySource::Reader));
         CommandOutcome::Handled
     }
 
     fn cmd_back(&mut self) -> CommandOutcome {
         self.send_command("AWAY", &[]);
+        self.set_away_source(None);
         CommandOutcome::Handled
     }
 

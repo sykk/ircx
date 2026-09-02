@@ -305,6 +305,10 @@ export interface AppState {
    * backend holds them. The badge is counted there and the tint is decided
    * here, and this is the copy the second half of that reads. */
   highlightWords: string[];
+  /** After how many idle minutes to say the reader is away, `null` for never.
+   * The timer is the window's, because keyboards and pointers do not reach the
+   * backend; what crosses is the answer it reaches. */
+  awayAfter: number | null;
   /** The names whose lines never raise the reader, as the backend holds them.
    * Beside the words above and read by the same two halves: the badge is
    * counted in Rust, the tint and the desktop notification are decided here. */

@@ -3282,3 +3282,19 @@ fn closing_to_the_tray_is_the_answer_until_somebody_says_otherwise() {
     store.set_close_to_tray(true).unwrap();
     assert!(store.close_to_tray().unwrap());
 }
+
+/// Never, until somebody chooses a number. An away status the reader did not
+/// ask for is this client saying something about them that they never said.
+#[test]
+fn nobody_is_marked_away_for_a_setting_they_never_made() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.away_after().unwrap(), None);
+
+    store.set_away_after(Some(15)).unwrap();
+    assert_eq!(store.away_after().unwrap(), Some(15));
+
+    // Off is a row saying zero as much as it is no row at all, because turning
+    // it off is a choice made after one that wrote something down.
+    store.set_away_after(None).unwrap();
+    assert_eq!(store.away_after().unwrap(), None);
+}

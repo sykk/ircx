@@ -32,6 +32,17 @@ const HELP: &str = "\
 /topic [text]             read or set the topic
 /mode [target] <modes>    read or set modes
 /kick <nick> [reason]     remove someone from the channel
+/kickban <nick> [reason]  ban the nick and remove them
+/op <nick>...             give channel operator
+/deop <nick>...           take it away
+/voice <nick>...          give voice
+/devoice <nick>...        take it away
+/ban [nick|mask]...       ban, or read the list with no argument
+/unban <mask>...          lift a ban
+/names [#channel]         who is in it, as the server has it
+/cycle [#channel]         leave and come straight back
+/knock <#channel> [text]  ask to be let into an invite-only channel
+/oper <name> <password>   take server operator
 /list [pattern]           find channels, filtered by the server
 /invite <nick> [#channel] invite someone in
 /whois <nick>             look someone up
@@ -373,6 +384,17 @@ impl SessionState {
             "topic" => self.cmd_topic(target, args),
             "mode" => self.cmd_mode(target, args),
             "kick" => self.cmd_kick(target, args),
+            "kickban" => self.cmd_kickban(target, args),
+            "op" => self.cmd_status(target, args, "+o", "/op <nick>..."),
+            "deop" => self.cmd_status(target, args, "-o", "/deop <nick>..."),
+            "voice" => self.cmd_status(target, args, "+v", "/voice <nick>..."),
+            "devoice" => self.cmd_status(target, args, "-v", "/devoice <nick>..."),
+            "ban" => self.cmd_ban(target, args, true),
+            "unban" => self.cmd_ban(target, args, false),
+            "names" => self.cmd_names(target, args),
+            "cycle" => self.cmd_cycle(target, args),
+            "knock" => self.cmd_knock(args),
+            "oper" => self.cmd_oper(args),
             "invite" => self.cmd_invite(target, args),
             "list" => self.cmd_list(args),
             "whois" => self.one_argument("WHOIS", args, "/whois <nickname>"),
@@ -622,6 +644,146 @@ impl SessionState {
             return CommandOutcome::Rejected("`/verify [account] <code>` needs a code".into());
         }
         self.send_command("VERIFY", &[&account, code]);
+        CommandOutcome::Handled
+    }
+
+    /// `+o`, `-o`, `+v`, `-v` for each name given.
+    ///
+    /// One `MODE` per name rather than the several a server would take at
+    /// once. How many that is is `MODES` in `ISUPPORT`, which this client does
+    /// not read, and the number below it is three — so a line packing four
+    /// would be refused on the servers that say the least about themselves.
+    /// Two lines that work beat one that might not.
+    fn cmd_status(&mut self, target: &str, args: &str, mode: &str, usage: &str) -> CommandOutcome {
+        if !self.isupport.is_channel(target) {
+            return CommandOutcome::Rejected(format!("`{usage}` only works in a channel"));
+        }
+        let nicks: Vec<&str> = args.split_whitespace().collect();
+        if nicks.is_empty() {
+            return CommandOutcome::Rejected(format!("`{usage}` needs a name"));
+        }
+        for nick in nicks {
+            self.send_command("MODE", &[target, mode, nick]);
+        }
+        CommandOutcome::Handled
+    }
+
+    /// Bans, lifts them, and with no argument asks who is banned.
+    ///
+    /// The bare form is the question `/ignore` answers the same way, and the
+    /// server answers it: `MODE #channel +b` with nothing after it is how the
+    /// list is asked for, and the reply already draws.
+    fn cmd_ban(&mut self, target: &str, args: &str, adding: bool) -> CommandOutcome {
+        let usage = match adding {
+            true => "/ban [nick|mask]...",
+            false => "/unban <mask>...",
+        };
+        if !self.isupport.is_channel(target) {
+            return CommandOutcome::Rejected(format!("`{usage}` only works in a channel"));
+        }
+        let masks: Vec<String> = args.split_whitespace().map(ban_mask).collect();
+        if masks.is_empty() {
+            if !adding {
+                return CommandOutcome::Rejected(format!("`{usage}` needs a mask"));
+            }
+            self.send_command("MODE", &[target, "+b"]);
+            return CommandOutcome::Handled;
+        }
+        let mode = match adding {
+            true => "+b",
+            false => "-b",
+        };
+        for mask in masks {
+            self.send_command("MODE", &[target, mode, &mask]);
+        }
+        CommandOutcome::Handled
+    }
+
+    /// The ban goes first, so the door is shut before they are put through it.
+    /// The other order is a race the kicked party can win.
+    fn cmd_kickban(&mut self, target: &str, args: &str) -> CommandOutcome {
+        if !self.isupport.is_channel(target) {
+            return CommandOutcome::Rejected("`/kickban` only works in a channel".into());
+        }
+        let (nick, reason) = args.split_once(' ').unwrap_or((args, ""));
+        if nick.is_empty() {
+            return CommandOutcome::Rejected("`/kickban <nick> [reason]` needs a name".into());
+        }
+        self.send_command("MODE", &[target, "+b", &ban_mask(nick)]);
+        match reason.trim().is_empty() {
+            true => self.send_command("KICK", &[target, nick]),
+            false => self.send_command("KICK", &[target, nick, reason.trim()]),
+        }
+        CommandOutcome::Handled
+    }
+
+    /// Asks who is in a channel and draws the answer.
+    ///
+    /// The member list beside the conversation is the same fact continuously,
+    /// so this is not how anybody finds out who is here. What it is for is the
+    /// two lists disagreeing: this asks the server again and writes down what
+    /// it said, which is the only way to see that they have.
+    fn cmd_names(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let channel = match self.isupport.is_channel(args) {
+            true => args.to_string(),
+            false => target.to_string(),
+        };
+        if !self.isupport.is_channel(&channel) {
+            return CommandOutcome::Rejected("`/names [#channel]` only works in a channel".into());
+        }
+        self.named.insert(self.fold(&channel));
+        self.send_command("NAMES", &[&channel]);
+        CommandOutcome::Handled
+    }
+
+    /// Leaves and rejoins, which is what clears a mode somebody set on you.
+    ///
+    /// No key is sent, the same as the rejoin after a reconnect: this client
+    /// does not keep the one a channel was joined with, so a `+k` channel is
+    /// left rather than cycled. That is a gap in both paths and is not this
+    /// command's to close.
+    fn cmd_cycle(&mut self, target: &str, args: &str) -> CommandOutcome {
+        let channel = match self.isupport.is_channel(args) {
+            true => args.to_string(),
+            false => target.to_string(),
+        };
+        if !self.isupport.is_channel(&channel) {
+            return CommandOutcome::Rejected("`/cycle [#channel]` only works in a channel".into());
+        }
+        self.send_part(&channel, None);
+        self.send_join(&channel, None);
+        CommandOutcome::Handled
+    }
+
+    /// Asks to be let into a channel. Named explicitly, because knocking is
+    /// what you do at one you are not in.
+    fn cmd_knock(&mut self, args: &str) -> CommandOutcome {
+        let (channel, reason) = args.split_once(' ').unwrap_or((args, ""));
+        if !self.isupport.is_channel(channel) {
+            return CommandOutcome::Rejected("`/knock <#channel> [text]` needs a channel".into());
+        }
+        match reason.trim().is_empty() {
+            true => self.send_command("KNOCK", &[channel]),
+            false => self.send_command("KNOCK", &[channel, reason.trim()]),
+        }
+        CommandOutcome::Handled
+    }
+
+    /// Takes server operator.
+    ///
+    /// The password is a positional argument, so this is the one command here
+    /// that carries a secret. `redact` keeps it out of the raw log, and
+    /// `carriesACredential` in the composer keeps the line out of the recall
+    /// list, which is the same leak by a shorter route.
+    fn cmd_oper(&mut self, args: &str) -> CommandOutcome {
+        let Some((name, password)) = args.split_once(' ') else {
+            return CommandOutcome::Rejected("`/oper <name> <password>` needs both".into());
+        };
+        let password = password.trim();
+        if name.is_empty() || password.is_empty() {
+            return CommandOutcome::Rejected("`/oper <name> <password>` needs both".into());
+        }
+        self.send_command("OPER", &[name, password]);
         CommandOutcome::Handled
     }
 
@@ -1035,13 +1197,24 @@ fn offers(value: Option<&str>, key: &str) -> bool {
     })
 }
 
+/// A nickname becomes the mask that bans whoever is answering to it. Anything
+/// already carrying `!`, `@` or `*` is a mask somebody wrote out, and is theirs
+/// rather than this function's to get right.
+fn ban_mask(argument: &str) -> String {
+    match argument.contains(['!', '@', '*']) {
+        true => argument.to_string(),
+        false => format!("{argument}!*@*"),
+    }
+}
+
 /// The commands ircx answers itself. A plugin cannot take one of these over:
 /// the routing in `plugins.rs` looks here first. Every name in the match in
 /// `dispatch` belongs in this list, or a plugin declaring that name steals it.
 pub(crate) const BUILTIN: &[&str] = &[
     "join", "j", "part", "leave", "msg", "notice", "ctcp", "react", "unreact", "me", "query",
     "nick", "topic", "mode", "kick", "invite", "list", "whois", "whowas", "away", "ignore",
-    "unignore", "watch", "quit", "raw", "quote", "close", "help", "back", "verify",
+    "unignore", "watch", "quit", "raw", "quote", "close", "help", "back", "verify", "kickban",
+    "op", "deop", "voice", "devoice", "ban", "unban", "names", "cycle", "knock", "oper",
 ];
 
 pub(crate) fn is_builtin(name: &str) -> bool {

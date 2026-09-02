@@ -3226,6 +3226,183 @@ fn going_idle_before_the_welcome_says_nothing() {
     assert!(session.sent().is_empty());
 }
 
+mod channel_commands {
+    use super::*;
+
+    fn in_a_channel() -> Harness {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.feed(":irc.libera.chat 353 sykk = #ircx :@sable +ash bob sykk");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list");
+        session.sent();
+        session.events.clear();
+        session
+    }
+
+    /// One `MODE` for each name. How many a server takes at once is `MODES` in
+    /// `ISUPPORT`, which this client does not read, and the floor under it is
+    /// three — so the packed line is the one that can be refused.
+    #[test]
+    fn status_modes_go_one_name_to_a_line() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/op sable ash");
+        assert_eq!(
+            session.sent(),
+            vec!["MODE #ircx +o sable", "MODE #ircx +o ash"]
+        );
+
+        session.submit("#ircx", "/devoice ash");
+        assert_eq!(session.sent(), vec!["MODE #ircx -v ash"]);
+    }
+
+    #[test]
+    fn status_modes_say_so_outside_a_channel() {
+        let mut session = registered("");
+        let CommandOutcome::Rejected(reason) = session.submit("sable", "/op sable") else {
+            panic!("a query has no channel operators");
+        };
+        assert!(reason.contains("only works in a channel"), "{reason}");
+    }
+
+    /// A nickname is not a ban. What is banned is whoever is answering to it,
+    /// and a mask somebody wrote out themselves is theirs to get right.
+    #[test]
+    fn a_bare_nickname_is_banned_as_a_mask() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/ban sable");
+        assert_eq!(session.sent(), vec!["MODE #ircx +b sable!*@*"]);
+
+        session.submit("#ircx", "/ban *!*@user/sable");
+        assert_eq!(session.sent(), vec!["MODE #ircx +b *!*@user/sable"]);
+
+        session.submit("#ircx", "/unban sable");
+        assert_eq!(session.sent(), vec!["MODE #ircx -b sable!*@*"]);
+    }
+
+    /// The bare form is the question `/ignore` answers the same way, and here
+    /// the server is what answers it.
+    #[test]
+    fn a_bare_ban_asks_who_is_banned() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/ban");
+        assert_eq!(session.sent(), vec!["MODE #ircx +b"]);
+
+        let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/unban") else {
+            panic!("lifting a ban needs to know which");
+        };
+        assert!(reason.contains("needs a mask"), "{reason}");
+    }
+
+    /// The ban first. The other order is a race the kicked party can win by
+    /// rejoining before the mode lands.
+    #[test]
+    fn a_kickban_shuts_the_door_before_putting_them_through_it() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/kickban sable spamming");
+        assert_eq!(
+            session.sent(),
+            vec!["MODE #ircx +b sable!*@*", "KICK #ircx sable spamming"]
+        );
+    }
+
+    /// The member list beside the conversation is the same fact continuously,
+    /// so what this is for is seeing that the two disagree.
+    #[test]
+    fn names_writes_down_what_the_server_said() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/names");
+        assert_eq!(session.sent(), vec!["NAMES #ircx"]);
+
+        session.feed(":irc.libera.chat 353 sykk = #ircx :@sable sykk");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list");
+
+        let said = session
+            .messages()
+            .iter()
+            .map(|message| message.text.clone())
+            .collect::<Vec<_>>();
+        assert!(
+            said.iter().any(|text| text == "2 in #ircx: @sable, sykk"),
+            "{said:?}"
+        );
+    }
+
+    /// The reply arrives on every join as well, where it fills the member list
+    /// and says nothing. Only what somebody asked for is written down.
+    #[test]
+    fn a_join_fills_the_list_without_writing_it_down() {
+        let mut session = in_a_channel();
+
+        session.feed(":irc.libera.chat 353 sykk = #ircx :@sable sykk");
+        session.feed(":irc.libera.chat 366 sykk #ircx :End of /NAMES list");
+
+        let said = session
+            .messages()
+            .iter()
+            .map(|message| message.text.clone())
+            .collect::<Vec<_>>();
+        assert!(
+            !said.iter().any(|text| text.contains("in #ircx:")),
+            "{said:?}"
+        );
+    }
+
+    #[test]
+    fn cycling_leaves_and_comes_straight_back() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/cycle");
+        assert_eq!(session.sent(), vec!["PART #ircx", "JOIN #ircx"]);
+    }
+
+    /// Named explicitly, because knocking is what you do at a channel you are
+    /// not in and so cannot have typed it in.
+    #[test]
+    fn knocking_needs_the_channel_said_out_loud() {
+        let mut session = in_a_channel();
+
+        session.submit("#ircx", "/knock #secret let me in");
+        assert_eq!(session.sent(), vec!["KNOCK #secret :let me in"]);
+
+        let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/knock") else {
+            panic!("a knock with no door is not one");
+        };
+        assert!(reason.contains("needs a channel"), "{reason}");
+    }
+
+    /// The one command here whose argument is a secret. The raw log carries
+    /// the verb and not the password, which is what `redact` already does for
+    /// `PASS` beside it.
+    #[test]
+    fn oper_keeps_its_password_out_of_the_raw_log() {
+        let mut session = registered("");
+
+        let (outcome, actions) = session.state.submit("#ircx", "/oper syk hunter2", None);
+        assert!(matches!(outcome, CommandOutcome::Handled));
+        assert!(actions.iter().any(|action| {
+            matches!(action, Action::Send { line, .. } if line == "OPER syk hunter2")
+        }));
+        assert!(actions.iter().any(|action| {
+            matches!(
+                action,
+                Action::Emit(event)
+                    if matches!(event.as_ref(), IrcxEvent::RawLine { outgoing: true, line, .. }
+                        if line == "OPER <credentials>")
+            )
+        }));
+
+        let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/oper syk") else {
+            panic!("a name with no password is half a command");
+        };
+        assert!(reason.contains("needs both"), "{reason}");
+    }
+}
+
 /// An interval of silence after a `PING` is a socket the far end has
 /// forgotten. Nothing else notices: the write succeeds, the kernel retransmits
 /// for a quarter of an hour, and the window goes on saying Connected.

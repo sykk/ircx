@@ -700,6 +700,49 @@ describe("paging backwards", () => {
   });
 });
 
+describe("a withdrawn message", () => {
+  function redaction(by: string, message = "123") {
+    return {
+      type: "messageRedacted",
+      network: "libera",
+      target: "#ctf-ops",
+      message,
+      by,
+    } as const;
+  }
+
+  beforeEach(() => {
+    useAppStore.getState().applyEvent({
+      type: "messagesAppended",
+      answers: null,
+      network: "libera",
+      target: "#ctf-ops",
+      messages: [makeMessage({ id: "123", text: "the passphrase is hunter2" })],
+    });
+  });
+
+  /** The copy in this window is as reachable as the one in the archive — a
+   * search of what is on screen would still find it — so the words go from
+   * both. */
+  it("takes the words away and keeps who took them", () => {
+    useAppStore.getState().applyEvent(redaction("sable"));
+
+    const held = timeline()!.messages[0]!;
+    expect(held.text).toBe("");
+    expect(held.redactedBy).toBe("sable");
+  });
+
+  /** A redaction can name a message that scrolled out of this window or one
+   * said before the client connected. The archive is where those land. */
+  it("leaves a message it does not hold alone", () => {
+    useAppStore.getState().applyEvent(redaction("sable", "not-here"));
+
+    const held = timeline()!.messages[0]!;
+    expect(held.text).toBe("the passphrase is hunter2");
+    expect(held.redactedBy).toBeUndefined();
+  });
+});
+
 describe("a reaction", () => {
   function reaction(nick: string, emoji: string, active: boolean) {
     return {

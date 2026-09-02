@@ -460,6 +460,27 @@ impl Store {
         message::set_reaction(&self.writing(), network, msgid, nick, emoji, active)
     }
 
+    /// Takes the words out of a message and records who withdrew it.
+    ///
+    /// The row stays and the text is blanked, which is what puts the words out
+    /// of reach: `messages_fts` and `messages_substr` both have `AFTER UPDATE`
+    /// triggers, so the two search indexes follow with nothing further to
+    /// write. Deleting the row would take with it the evidence that a message
+    /// was ever there, and a conversation that silently changes shape is one
+    /// the reader cannot trust.
+    ///
+    /// A `msgid` the archive does not hold is not an error. A redaction can
+    /// name a message from before this client was watching, and answering that
+    /// with a failure would put a line in the log about a message nobody has.
+    pub fn redact_message(&self, network: &str, msgid: &str, by: &str) -> Result<(), StoreError> {
+        self.writing().execute(
+            "UPDATE messages SET text = '', redacted_by = ?3
+             WHERE network = ?1 AND (server_msgid = ?2 OR message_id = ?2)",
+            params![network, msgid, by],
+        )?;
+        Ok(())
+    }
+
     /// Records what a plugin said about a message, replacing what that plugin
     /// said before. `msgid` need not be a message the archive holds — the row
     /// waits for one, exactly as a reaction's does.

@@ -102,6 +102,12 @@ covers what the icon says; these cover whether there is an icon to say it.
   hand and repeat both halves: neither the reason nor the away itself may
   change, which is the one thing about this that a second pair of eyes has to
   see.
+- [ ] On a server that advertises `draft/message-redaction` — ergo does —
+  withdraw one of your own messages and have somebody with the power to do it
+  withdraw one of yours. Both must leave the row saying who took it away, and a
+  search must stop finding the words. Then restart the client and confirm the
+  archive says the same: the tests drive the event, and what they cannot
+  establish is that the blanked row survives a round trip through SQLite.
 - [ ] Connect two authenticated sessions to a server with read markers. Move
   the marker in one session, replace history in the other, and confirm the
   unread seam still uses the server marker.

@@ -1107,6 +1107,7 @@ impl SessionState {
                     "BATCH" => self.handle_batch(message),
                     "MARKREAD" => self.handle_markread(message),
                     "REGISTER" | "VERIFY" => self.handle_registration(&name, message),
+                    "REDACT" => self.handle_redact(message),
                     "FAIL" | "WARN" | "NOTE" => self.handle_standard_reply(&name, message),
                     _ => debug!(command = name, "no handler for this command"),
                 }
@@ -2855,6 +2856,54 @@ impl SessionState {
             message: Box::new(message),
         });
         true
+    }
+
+    /// Somebody withdrew a message.
+    ///
+    /// ```text
+    /// :nick!user@host REDACT <target> <msgid> [:<reason>]
+    /// ```
+    ///
+    /// Passed on as a delta rather than acted on here, which is what a
+    /// reaction does and for the same reason: the id may name a message this
+    /// session never held — one from before it connected, or one already paged
+    /// out of the window — and the window and the archive each apply it to
+    /// what they have.
+    ///
+    /// The reason is read and dropped. It is written by whoever asked for the
+    /// redaction, about a message that is being taken away, and showing it
+    /// would be this client repeating one person's words about another's under
+    /// the row where the other's used to be.
+    fn handle_redact(&mut self, message: &Message) {
+        let sender = self.sender_of(message);
+        let Some(raw_target) = message.param(0) else {
+            return;
+        };
+        let Some(msgid) = message.param(1) else {
+            return;
+        };
+        // As in `handle_privmsg`: `@#chan` is the channel, not a query with
+        // whoever typed into it.
+        let raw_target = self
+            .isupport
+            .statusmsg_channel(raw_target)
+            .unwrap_or(raw_target);
+        let target = match self.isupport.is_channel(raw_target) {
+            true => raw_target.to_string(),
+            // A redaction in a query names us as the target, so the
+            // conversation it belongs to is the person who sent it.
+            false => match sender.is_self {
+                true => raw_target.to_string(),
+                false => sender.nick.clone(),
+            },
+        };
+
+        self.emit(IrcxEvent::MessageRedacted {
+            network: self.config.network.clone(),
+            target,
+            message: msgid.to_string(),
+            by: sender.nick.clone(),
+        });
     }
 
     fn handle_tagmsg(&mut self, message: &Message) {

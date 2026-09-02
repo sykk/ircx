@@ -1146,6 +1146,9 @@ impl Context {
                             active,
                             ..
                         } => self.record_reaction(message, nick, emoji, *active).await,
+                        IrcxEvent::MessageRedacted { message, by, .. } => {
+                            self.record_redaction(message, by).await
+                        }
                         IrcxEvent::QueryRenamed { from, to, .. } => {
                             self.move_draft(from, to).await;
                             self.move_muted(from, to).await;
@@ -1596,6 +1599,12 @@ impl Context {
             .await;
     }
 
+    async fn record_redaction(&self, message: &str, by: &str) {
+        self.archive
+            .redact(self.network.clone(), message.to_owned(), by.to_owned())
+            .await;
+    }
+
     /// The archived copy was written while the message was still in flight, so
     /// a confirmation has to reach the row it left behind. It reaches it because
     /// the insert went through the same queue first, in order.
@@ -1966,6 +1975,7 @@ mod tests {
                 raw: String::new(),
                 source: MessageSource::Live,
                 raised_by: Vec::new(),
+                redacted_by: None,
                 annotations: Vec::new(),
                 reactions: Vec::new(),
             }

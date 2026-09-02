@@ -3226,6 +3226,115 @@ fn going_idle_before_the_welcome_says_nothing() {
     assert!(session.sent().is_empty());
 }
 
+mod redaction {
+    use super::*;
+
+    fn redacted(session: &Harness) -> Vec<(String, String, String)> {
+        session
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                IrcxEvent::MessageRedacted {
+                    target,
+                    message,
+                    by,
+                    ..
+                } => Some((target.clone(), message.clone(), by.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A delta naming the message, the way a reaction is. What holds the
+    /// message is the window and the archive, and either may be the only one
+    /// that has it.
+    #[test]
+    fn a_withdrawn_message_is_named_rather_than_carried() {
+        let mut session = registered("draft/message-redaction");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.events.clear();
+
+        session.feed(":sable!~s@user/sable REDACT #ircx abc123 :spoiler");
+
+        assert_eq!(
+            redacted(&session),
+            vec![(
+                "#ircx".to_string(),
+                "abc123".to_string(),
+                "sable".to_string()
+            )]
+        );
+    }
+
+    /// A redaction in a query names this client as the target, so the
+    /// conversation it belongs to is the person it came from — the same turn
+    /// `handle_privmsg` makes.
+    #[test]
+    fn a_redaction_in_a_query_belongs_to_whoever_sent_it() {
+        let mut session = registered("draft/message-redaction");
+
+        session.feed(":sable!~s@user/sable REDACT sykk abc123");
+
+        assert_eq!(
+            redacted(&session),
+            vec![(
+                "sable".to_string(),
+                "abc123".to_string(),
+                "sable".to_string()
+            )]
+        );
+    }
+
+    /// Whether it may be withdrawn is the server's answer. An operator takes
+    /// away somebody else's line, a window closes on your own, and both come
+    /// back as a `FAIL REDACT` that already draws — so nothing here guesses.
+    #[test]
+    fn redact_sends_the_line_and_lets_the_server_rule_on_it() {
+        let mut session = registered("draft/message-redaction");
+
+        assert!(matches!(
+            session.submit("#ircx", "/redact abc123"),
+            CommandOutcome::Handled
+        ));
+        assert_eq!(session.sent(), vec!["REDACT #ircx abc123"]);
+
+        session.submit("#ircx", "/redact abc123 posted the wrong link");
+        assert_eq!(
+            session.sent(),
+            vec!["REDACT #ircx abc123 :posted the wrong link"]
+        );
+    }
+
+    #[test]
+    fn redact_says_so_where_the_network_does_not_offer_it() {
+        let mut session = registered("");
+
+        let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/redact abc123") else {
+            panic!("a network with no capability cannot withdraw a message");
+        };
+        assert!(
+            reason.contains("does not offer message redaction"),
+            "{reason}"
+        );
+    }
+
+    #[test]
+    fn redact_needs_a_message_and_a_conversation() {
+        let mut session = registered("draft/message-redaction");
+
+        let CommandOutcome::Rejected(reason) = session.submit("#ircx", "/redact") else {
+            panic!("a redaction naming nothing is not one");
+        };
+        assert!(reason.contains("needs a message"), "{reason}");
+
+        let CommandOutcome::Rejected(reason) = session.submit(SERVER_TARGET, "/redact abc123")
+        else {
+            panic!("the server tab is not a conversation");
+        };
+        assert!(reason.contains("not a conversation"), "{reason}");
+    }
+}
+
 mod channel_commands {
     use super::*;
 

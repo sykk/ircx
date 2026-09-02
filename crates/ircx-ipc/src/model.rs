@@ -55,6 +55,14 @@ pub struct ChatMessage {
     #[serde(default)]
     #[ts(as = "Option<Vec<String>>", optional)]
     pub raised_by: Vec<String>,
+    /// Who withdrew this message, if somebody did. `text` is empty when this
+    /// is set and the words are gone from the archive and both search indexes;
+    /// what is left is the fact that a line was here, which is what the
+    /// specification asks a client to keep. Defaulted for the reason
+    /// `reactions` is — nothing archived before redaction existed has it.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    pub redacted_by: Option<String>,
 }
 
 /// One `+draft/react` value and everyone who sent it. Names carry more

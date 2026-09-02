@@ -33,6 +33,7 @@ fn message(id: &str, target: &str, timestamp: &str, text: &str) -> ChatMessage {
         reactions: vec![],
         annotations: vec![],
         raised_by: vec![],
+        redacted_by: None,
         reply_to: None,
         batch: None,
         delivery: Delivery::Delivered,
@@ -120,6 +121,7 @@ fn a_round_trip_preserves_every_field() {
         reactions: vec![],
         annotations: vec![],
         raised_by: vec![],
+        redacted_by: None,
         reply_to: Some("earlier".into()),
         batch: Some("batch-1".into()),
         delivery: Delivery::Failed("no such channel".into()),
@@ -3297,4 +3299,57 @@ fn nobody_is_marked_away_for_a_setting_they_never_made() {
     // it off is a choice made after one that wrote something down.
     store.set_away_after(None).unwrap();
     assert_eq!(store.away_after().unwrap(), None);
+}
+
+/// The words go out of both search indexes, which is the whole point of
+/// honouring a redaction locally: an archive that still answers a search with
+/// the message has not withdrawn it, it has only stopped drawing it.
+#[test]
+fn a_redacted_message_stops_answering_a_search() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .append_messages(&[
+            message(
+                "a",
+                "#ircx",
+                "2026-01-01T00:00:00Z",
+                "the passphrase is hunter2",
+            ),
+            message(
+                "b",
+                "#ircx",
+                "2026-01-01T00:00:01Z",
+                "unrelated passphrase talk",
+            ),
+        ])
+        .unwrap();
+
+    let hits = |store: &Store| {
+        store
+            .search(&SearchRequest {
+                query: "hunter2".into(),
+                network: None,
+                target: None,
+                sender: None,
+                after: None,
+                limit: 10,
+            })
+            .unwrap()
+            .len()
+    };
+    assert_eq!(hits(&store), 1);
+
+    store.redact_message("libera", "a", "sable").unwrap();
+    assert_eq!(hits(&store), 0);
+}
+
+/// A redaction can name a message from before this client was watching. That
+/// is not an error, and answering it with one would put a line in the log
+/// about a message nobody has.
+#[test]
+fn redacting_a_message_the_archive_never_had_is_not_an_error() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .redact_message("libera", "never-seen", "sable")
+        .unwrap();
 }

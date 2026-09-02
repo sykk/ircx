@@ -1099,6 +1099,7 @@ mod tests {
             reactions: Vec::new(),
             annotations: Vec::new(),
             raised_by: Vec::new(),
+            redacted_by: None,
         }
     }
 

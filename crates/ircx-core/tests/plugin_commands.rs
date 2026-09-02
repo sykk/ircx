@@ -467,6 +467,7 @@ fn message(nick: &str, text: &str) -> ircx_ipc::ChatMessage {
         reactions: Vec::new(),
         annotations: Vec::new(),
         raised_by: Vec::new(),
+        redacted_by: None,
         attachments: Vec::new(),
         encryption: ircx_ipc::EncryptionState::Plaintext,
         via: None,

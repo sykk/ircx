@@ -45,6 +45,11 @@ enum Change {
         emoji: String,
         active: bool,
     },
+    Redact {
+        network: NetworkId,
+        message: String,
+        by: String,
+    },
     Annotation {
         network: NetworkId,
         message: String,
@@ -120,6 +125,18 @@ impl Archive {
             nick,
             emoji,
             active,
+        })
+        .await;
+    }
+
+    /// Behind the insert, through the same queue: a message redacted in the
+    /// same breath it arrived in has to find the row, and the row is written
+    /// by the job in front of this one.
+    pub(crate) async fn redact(&self, network: NetworkId, message: String, by: String) {
+        self.ask(Change::Redact {
+            network,
+            message,
+            by,
         })
         .await;
     }
@@ -230,6 +247,15 @@ fn apply(store: &Store, change: Change) {
         } => {
             if let Err(error) = store.set_reaction(&network, &message, &nick, &emoji, active) {
                 warn!(%error, "could not write a reaction to the archive");
+            }
+        }
+        Change::Redact {
+            network,
+            message,
+            by,
+        } => {
+            if let Err(error) = store.redact_message(&network, &message, &by) {
+                warn!(%error, "could not write a redaction to the archive");
             }
         }
         Change::Annotation {

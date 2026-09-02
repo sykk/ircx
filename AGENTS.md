@@ -198,6 +198,29 @@ ignore that stops working. Not a hostmask pattern: a pattern language is a thing
 to explain and get wrong, and the question being asked is "I do not want to hear
 from this person".
 
+A redaction is the other half of that bargain and runs the opposite way.
+`draft/message-redaction` names a message that has already arrived, already
+drawn and already been written down, so honouring one means reaching back —
+which is the thing an ignore never has to do. The archive does not delete the
+row. `redact_message` blanks the text in place, and because `messages_fts` and
+`messages_substr` both carry `AFTER UPDATE` triggers, the words leave the two
+search indexes with nothing further written; what stays is `redacted_by` and
+the fact that a line was there. Deleting the row would take that fact with it,
+and a conversation that silently changes shape underneath a reply is one the
+reader cannot account for — the specification asks for the opposite, a message
+that may go and a deletion that should not be invisible.
+
+Nothing decides locally whether a redaction is allowed. An operator may take
+away somebody else's line and a window may have closed on your own; both are
+the server's ruling and both come back as a `FAIL REDACT` that already draws.
+So `/redact` sends and reads the refusal rather than guessing the rules, which
+is the same reason `register_account` stopped holding one network's answers.
+`MessageRedacted` is a delta naming a `msgid`, the shape a reaction has, for
+the reason a reaction has it: the id may name a message this session never
+held, and the window and the archive each apply it to what they have. It shares
+a lane with nothing — folded into the message lane it would merge with the
+message it is about and deliver the words it exists to take away.
+
 `/ignore` and `/unignore` move the session's own set first and tell the store
 afterwards, so the very next line is already gone; a bare `/ignore` lists who is
 ignored, in the server tab, while the confirmation lands in the conversation it

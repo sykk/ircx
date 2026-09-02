@@ -142,6 +142,20 @@ pub enum IrcxEvent {
     /// delta rather than the whole set, because a reaction can name a message
     /// nothing here holds. Applying one twice has to land where applying it
     /// once did: an echo of our own reaction follows the local copy.
+    /// Somebody withdrew a message. A delta naming the message rather than a
+    /// new copy of it, for `ReactionChanged`'s reason: the id may name a
+    /// message nothing here holds, and the window applies it to whatever it
+    /// has.
+    MessageRedacted {
+        network: NetworkId,
+        target: TargetName,
+        /// The `msgid` the redaction named.
+        message: String,
+        /// The nick that asked for it, which is not always the author: a
+        /// channel operator may withdraw somebody else's line, and the server
+        /// is what decides whether they may.
+        by: String,
+    },
     ReactionChanged {
         network: NetworkId,
         target: TargetName,

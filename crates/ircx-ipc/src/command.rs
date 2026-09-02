@@ -50,6 +50,7 @@
 //! set_watched(network, nick, watched)         -> ()
 //! export_archive(scope, path)                 -> u64
 //! export_profile(path, contents)               -> u64
+//! read_profile(path)                           -> String
 //! delete_archive(scope)                       -> ()
 //! ```
 //!

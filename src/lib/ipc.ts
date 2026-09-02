@@ -163,6 +163,7 @@ export const ipc = {
     invoke<number>("export_archive", { scope, path }),
   exportProfile: (path: string, contents: string) =>
     invoke<number>("export_profile", { path, contents }),
+  readProfile: (path: string) => invoke<string>("read_profile", { path }),
   deleteArchive: (scope: ArchiveScope) => invoke<void>("delete_archive", { scope }),
 
   loadHistory: (req: HistoryRequest) => invoke<ChatMessage[]>("load_history", { req }),

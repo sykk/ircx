@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use ircx_core::SessionCommand;
@@ -845,6 +846,32 @@ pub async fn export_profile(path: String, contents: String) -> Result<u64, Strin
     Ok(contents.len() as u64)
 }
 
+const PROFILE_LIMIT: u64 = 1024 * 1024;
+
+/// Reads no more than a profile can reasonably contain. The file picker is a
+/// hint rather than a boundary, so the command still treats the path as
+/// untrusted input.
+#[tauri::command]
+pub async fn read_profile(path: String) -> Result<String, String> {
+    read_profile_file(&path)
+}
+
+fn read_profile_file(path: &str) -> Result<String, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|error| format!("{path} could not be read: {}", in_words(&error)))?;
+    let mut bytes = Vec::new();
+    file.take(PROFILE_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("{path} could not be read: {}", in_words(&error)))?;
+    if bytes.len() as u64 > PROFILE_LIMIT {
+        return Err(format!(
+            "{path} is larger than 1 MB. Choose a profile exported by ircx."
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| format!("{path} is not UTF-8 text. Choose a JSON profile exported by ircx."))
+}
+
 /// The export without the Tauri state around it, so a test can aim it at a
 /// destination that refuses the write. The sentences below are chosen by
 /// `io::ErrorKind`, and a kind built by hand only ever proves the wording —
@@ -954,7 +981,10 @@ mod tests {
     };
     use ircx_store::Store;
 
-    use super::{gave_up, stopped, unwritable, validate_registration, write_export, StoreError};
+    use super::{
+        gave_up, read_profile_file, stopped, unwritable, validate_registration, write_export,
+        StoreError, PROFILE_LIMIT,
+    };
 
     fn libera() -> NetworkConfig {
         NetworkConfig {
@@ -1063,6 +1093,39 @@ mod tests {
         );
         assert!(!said.contains("/tmp/x.jsonl"), "said {said}");
         assert!(said.contains("newer version of ircx"), "said {said}");
+    }
+
+    #[test]
+    fn a_profile_is_read_as_text() {
+        let room = tempfile::tempdir().expect("a temporary directory");
+        let path = room.path().join("profile.json");
+        std::fs::write(&path, br#"{"format":"ircx-profile","version":1}"#)
+            .expect("write the profile");
+
+        assert_eq!(
+            read_profile_file(path.to_str().expect("a UTF-8 path")).unwrap(),
+            r#"{"format":"ircx-profile","version":1}"#
+        );
+    }
+
+    #[test]
+    fn a_profile_over_one_megabyte_is_refused() {
+        let room = tempfile::tempdir().expect("a temporary directory");
+        let path = room.path().join("profile.json");
+        std::fs::write(&path, vec![b'x'; PROFILE_LIMIT as usize + 1]).expect("write the profile");
+
+        let error = read_profile_file(path.to_str().expect("a UTF-8 path")).unwrap_err();
+        assert!(error.contains("larger than 1 MB"), "said {error}");
+    }
+
+    #[test]
+    fn a_profile_that_is_not_text_is_refused_in_words() {
+        let room = tempfile::tempdir().expect("a temporary directory");
+        let path = room.path().join("profile.json");
+        std::fs::write(&path, [0xff, 0xfe]).expect("write the profile");
+
+        let error = read_profile_file(path.to_str().expect("a UTF-8 path")).unwrap_err();
+        assert!(error.contains("not UTF-8 text"), "said {error}");
     }
 
     /// `BufWriter::new`'s capacity, which decides which of the two error paths

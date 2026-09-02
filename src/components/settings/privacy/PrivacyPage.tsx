@@ -2,11 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Group, PrimaryButton, SecondaryButton, SelectField } from "@/components/onboarding/fields";
 import { SettingsPage, useReportBusy } from "@/components/settings/SettingsPage";
 import { formatBytes } from "@/lib/bytes";
-import { chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
+import { chooseFile, chooseSavePath, ipc, reasonOr } from "@/lib/ipc";
 import type { SettingsScope } from "@/components/settings/scope";
 import type { ArchiveScope, ArchiveSummary } from "@/types";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { buildPortableProfile } from "@/lib/profileExport";
+import {
+  applyProfileImport,
+  prepareProfileImport,
+  type ProfileImportPlan,
+} from "@/lib/profileImport";
 
 /**
  * What a retention window may be set to.
@@ -53,6 +58,7 @@ export function PrivacyPage({
 }) {
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
   const [pending, setPending] = useState<Pending>(null);
+  const [importPlan, setImportPlan] = useState<ProfileImportPlan | null>(null);
   const [busy, setBusyHere] = useState(false);
   /* An export or a delete is a request the window must not be closed out from
      under, for the reason a plugin save is. */
@@ -107,7 +113,7 @@ export function PrivacyPage({
   }
 
   function failed(reason: unknown, fallback: string) {
-    setError(reasonOr(reason, fallback));
+    setError(reasonOr(reason instanceof Error ? reason.message : reason, fallback));
     setSaid(null);
   }
 
@@ -169,6 +175,51 @@ export function PrivacyPage({
       failed(reason, "The profile could not be written.");
     }
     setBusy(false);
+  }
+
+  async function chooseProfile() {
+    let path: string | null;
+    try {
+      path = await chooseFile("Import an ircx profile", [
+        { name: "JSON", extensions: ["json"] },
+      ]);
+    } catch (reason) {
+      failed(reason, "The file dialog could not be opened.");
+      return;
+    }
+    if (path === null) return;
+
+    setBusy(true);
+    try {
+      const plan = await prepareProfileImport(await ipc.readProfile(path));
+      setImportPlan(plan);
+      setError(null);
+      setSaid(null);
+    } catch (reason) {
+      failed(reason, "That profile could not be read.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importProfile() {
+    if (importPlan === null) return;
+    setBusy(true);
+    try {
+      const imported = await applyProfileImport(importPlan);
+      const networks = imported.added + imported.updated;
+      succeeded(
+        `Profile imported: ${networks} network${networks === 1 ? "" : "s"}, ${imported.muted} mute${imported.muted === 1 ? "" : "s"}, appearance and notifications.`,
+      );
+      setImportPlan(null);
+    } catch (reason) {
+      failed(
+        reason,
+        "The profile stopped while it was being imported. Changes already applied remain.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function destroy() {
@@ -280,11 +331,104 @@ export function PrivacyPage({
               history, drafts, custom theme files, plugin code, and plugin data stay on this
               computer.
             </p>
-            <div>
+            <div className="flex flex-wrap gap-2">
               <SecondaryButton onClick={() => void exportProfile()} disabled={busy}>
                 Export profile
               </SecondaryButton>
+              <SecondaryButton onClick={() => void chooseProfile()} disabled={busy}>
+                Import profile
+              </SecondaryButton>
             </div>
+            {importPlan !== null && (
+              <section
+                aria-labelledby="profile-import-preview"
+                className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-raised)] p-3"
+              >
+                <div className="flex flex-col gap-1">
+                  <h3
+                    id="profile-import-preview"
+                    className="text-[13px] font-medium text-[var(--text-primary)]"
+                  >
+                    Review this profile
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Existing networks and mutes not named here stay. Imported networks are saved
+                    without connecting during this import.
+                  </p>
+                </div>
+
+                <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]">
+                  <dt className="text-[var(--text-muted)]">Networks</dt>
+                  <dd>
+                    {importPlan.networks.filter((network) => network.action === "add").length} to
+                    add, {importPlan.networks.filter((network) => network.action === "update").length}
+                    {" "}to update
+                  </dd>
+                  {importPlan.networks.some((network) => network.authentication === "manual") && (
+                    <>
+                      <dt className="text-[var(--text-muted)]">Sign-in</dt>
+                      <dd>
+                        Configure {importPlan.networks
+                          .filter((network) => network.authentication === "manual")
+                          .map((network) => network.config.name)
+                          .join(", ")} manually
+                      </dd>
+                    </>
+                  )}
+                  <dt className="text-[var(--text-muted)]">Appearance</dt>
+                  <dd>
+                    {importPlan.profile.appearance.theme}, {importPlan.profile.appearance.density}
+                    {importPlan.selectedThemeAvailable ? "" : " — theme unavailable, current theme stays"}
+                  </dd>
+                  <dt className="text-[var(--text-muted)]">Notifications</dt>
+                  <dd>
+                    {importPlan.profile.notifications.highlightWords.length} highlight word
+                    {importPlan.profile.notifications.highlightWords.length === 1 ? "" : "s"},{" "}
+                    {importPlan.mutes.length} mute{importPlan.mutes.length === 1 ? "" : "s"}
+                  </dd>
+                  <dt className="text-[var(--text-muted)]">Uploads</dt>
+                  <dd>
+                    {importPlan.upload.action === "save"
+                      ? "Credential-free provider will be restored"
+                      : importPlan.upload.action === "manual"
+                        ? "Provider needs fields or credentials; configure it manually"
+                        : "Current provider stays"}
+                  </dd>
+                </dl>
+
+                {(importPlan.missingThemes.length > 0 ||
+                  importPlan.missingPlugins.length > 0 ||
+                  importPlan.skippedMutes > 0) && (
+                  <ul className="list-disc pl-4 text-[11px] text-[var(--warning)]">
+                    {importPlan.missingThemes.length > 0 && (
+                      <li>Install these theme folders separately: {importPlan.missingThemes.join(", ")}.</li>
+                    )}
+                    {importPlan.missingPlugins.length > 0 && (
+                      <li>Install these plugins separately: {importPlan.missingPlugins.join(", ")}.</li>
+                    )}
+                    {importPlan.skippedMutes > 0 && (
+                      <li>
+                        {importPlan.skippedMutes} mute{importPlan.skippedMutes === 1 ? "" : "s"}{" "}
+                        could not be matched to one imported network.
+                      </li>
+                    )}
+                  </ul>
+                )}
+
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Passwords, certificates, connect commands, theme files, plugin code and plugin
+                  permissions are not imported. Re-enter them where needed.
+                </p>
+                <div className="flex gap-2">
+                  <PrimaryButton onClick={() => void importProfile()} disabled={busy}>
+                    Import profile
+                  </PrimaryButton>
+                  <SecondaryButton onClick={() => setImportPlan(null)} disabled={busy}>
+                    Cancel
+                  </SecondaryButton>
+                </div>
+              </section>
+            )}
           </Group>
 
           <Group title="Delete">

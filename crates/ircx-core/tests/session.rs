@@ -3335,6 +3335,99 @@ mod redaction {
     }
 }
 
+mod channel_keys {
+    use super::*;
+
+    /// A `+k` channel rejoined without its key is a channel the reconnect
+    /// loses, and nothing said so — the JOIN goes out, the server refuses it
+    /// with a `475`, and the conversation is simply not there any more.
+    #[test]
+    fn a_reconnect_rejoins_with_the_key_it_joined_with() {
+        let mut session = registered("");
+        session.submit("#ircx", "/join #vault hunter2");
+        assert_eq!(session.sent(), vec!["JOIN #vault hunter2"]);
+        session.feed(":sykk!~sykk@user/sykk JOIN #vault");
+
+        let actions = session
+            .state
+            .on_disconnected("the server stopped answering");
+        session.apply(actions);
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :");
+        session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+        assert!(
+            session
+                .sent()
+                .iter()
+                .any(|line| line == "JOIN #vault hunter2"),
+            "the rejoin dropped the key"
+        );
+    }
+
+    /// The command this was found through: leaving and coming straight back is
+    /// what clears a mode somebody set on you, and doing it without the key
+    /// left you outside.
+    #[test]
+    fn cycling_comes_back_with_the_key() {
+        let mut session = registered("");
+        session.submit("#ircx", "/join #vault hunter2");
+        session.feed(":sykk!~sykk@user/sykk JOIN #vault");
+        session.sent();
+
+        session.submit("#vault", "/cycle");
+        assert_eq!(session.sent(), vec!["PART #vault", "JOIN #vault hunter2"]);
+    }
+
+    /// Joining without one says this channel does not need one. A stale key
+    /// replayed at a channel that has dropped `+k` is refused rather than
+    /// ignored, so remembering it forever would break the ordinary case to
+    /// serve the rare one.
+    #[test]
+    fn joining_without_a_key_forgets_the_one_before_it() {
+        let mut session = registered("");
+        session.submit("#ircx", "/join #vault hunter2");
+        session.feed(":sykk!~sykk@user/sykk JOIN #vault");
+        session.sent();
+
+        session.submit("#ircx", "/join #vault");
+        assert_eq!(session.sent(), vec!["JOIN #vault"]);
+
+        session.submit("#vault", "/cycle");
+        assert_eq!(session.sent(), vec!["PART #vault", "JOIN #vault"]);
+    }
+
+    /// A join the server refuses leaves nothing behind. Holding the key on the
+    /// channel's own state meant creating that state to hold it, and a wrong
+    /// key then drew a ghost of the channel it had failed to open.
+    #[test]
+    fn a_join_the_server_refuses_draws_no_channel() {
+        let mut session = registered("");
+        session.submit("#ircx", "/join #vault wrong-key");
+        session.feed(":irc.libera.chat 475 sykk #vault :Cannot join channel (+k)");
+
+        assert!(
+            !session
+                .state
+                .channels()
+                .iter()
+                .any(|channel| channel.name == "#vault"),
+            "a refused join left a channel behind"
+        );
+    }
+
+    /// A channel with no key cycles and rejoins as it always did.
+    #[test]
+    fn a_channel_with_no_key_is_asked_for_by_name_alone() {
+        let mut session = registered("");
+        session.feed(":sykk!~sykk@user/sykk JOIN #ircx");
+        session.sent();
+
+        session.submit("#ircx", "/cycle");
+        assert_eq!(session.sent(), vec!["PART #ircx", "JOIN #ircx"]);
+    }
+}
+
 mod channel_commands {
     use super::*;
 

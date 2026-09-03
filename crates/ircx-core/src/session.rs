@@ -227,6 +227,7 @@ pub(crate) struct ChannelState {
     /// The user asked to be in here and has not left. Survives a reconnect,
     /// which `joined` cannot: it is what the next registration rejoins.
     pub(crate) rejoin: bool,
+
     pub(crate) members: HashMap<String, MemberState>,
     pub(crate) names: Vec<MemberState>,
     pub(crate) unread: u32,
@@ -489,6 +490,19 @@ pub struct SessionState {
     /// `REGISTER` reply may echo either one, so they are removed before the raw
     /// line is emitted or parsed into a message.
     pub(crate) registration_secrets: Option<(String, String)>,
+    /// The key each channel was last asked to be joined with, folded.
+    ///
+    /// Its own map rather than a field on `ChannelState`, because the key is
+    /// known when the join is *asked for* and the channel state does not exist
+    /// until the server answers. Creating one to hold it drew a channel in the
+    /// sidebar for every join the server then refused.
+    ///
+    /// Held for the session, for `rejoin`'s reason: a dropped socket is not the
+    /// user leaving, and a `+k` channel rejoined without its key is one the
+    /// reconnect quietly loses. Never written down — a channel key is a shared
+    /// secret and the archive is not where this client keeps secrets, so it
+    /// goes no further than a restart.
+    pub(crate) channel_keys: HashMap<String, String>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
     ///
@@ -535,6 +549,7 @@ impl SessionState {
             queries: HashMap::new(),
             monitored: HashMap::new(),
             quiet_whois: HashSet::new(),
+            channel_keys: HashMap::new(),
             named: HashSet::new(),
             looked_up: HashSet::new(),
             pending_who: HashSet::new(),
@@ -1672,8 +1687,8 @@ impl SessionState {
                 },
             }
         }
-        for channel in self.channels_to_join() {
-            self.send_command("JOIN", &[&channel]);
+        for (channel, key) in self.channels_to_join() {
+            self.send_join(&channel, key.as_deref());
         }
         self.sync_monitor();
         self.request_query_markers();
@@ -1909,7 +1924,7 @@ impl SessionState {
     /// the connection went away. A channel joined by hand is remembered for the
     /// session only: `autojoin` is a saved preference and a dropped socket is
     /// not the user editing it.
-    fn channels_to_join(&self) -> Vec<String> {
+    fn channels_to_join(&self) -> Vec<(String, Option<String>)> {
         let mut names: Vec<String> = self
             .config
             .autojoin
@@ -1931,7 +1946,16 @@ impl SessionState {
                 names.push(name);
             }
         }
+        // The key each one was joined with, where this session still knows it.
+        // An `autojoin` entry gets one too: the saved list is names alone, and
+        // a channel named in both is still the channel with the key.
         names
+            .into_iter()
+            .map(|name| {
+                let key = self.channel_keys.get(&self.fold(&name)).cloned();
+                (name, key)
+            })
+            .collect()
     }
 
     fn apply_isupport(&mut self, tokens: &[String]) {
@@ -3802,7 +3826,7 @@ impl SessionState {
         }
     }
 
-    fn channel_entry(&mut self, key: &str, name: &str) -> &mut ChannelState {
+    pub(crate) fn channel_entry(&mut self, key: &str, name: &str) -> &mut ChannelState {
         self.channels
             .entry(key.to_string())
             .or_insert_with(|| ChannelState {

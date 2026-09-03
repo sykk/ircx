@@ -990,11 +990,18 @@ impl Store {
     /// the third door and it did not.
     pub fn remove_network(&self, id: &NetworkId) -> Result<(), StoreError> {
         self.credentials.delete(id)?;
+        // Before the rows that name them: a keyring entry whose row is gone is
+        // one nothing can find again.
+        for (channel, _) in self.channel_keys(id)? {
+            self.credentials
+                .delete(&credentials::channel_key(id, &channel))?;
+        }
         let mut conn = self.writing();
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM networks WHERE id = ?1", params![id])?;
         tx.execute("DELETE FROM open_targets WHERE network = ?1", params![id])?;
         tx.execute("DELETE FROM drafts WHERE network = ?1", params![id])?;
+        tx.execute("DELETE FROM channel_keys WHERE network = ?1", params![id])?;
         // Retention is a setting, and "forgets its settings" is what the screen
         // says. A window set for a network that is gone decides nothing and
         // reads as one somebody would have to find to change.
@@ -1046,6 +1053,67 @@ impl Store {
             });
         }
         Ok(targets)
+    }
+
+    /// Remembers the key a channel is joined with, or forgets it.
+    ///
+    /// The key goes to the keyring and the row says only that there is one, so
+    /// that `remove_network` has something to enumerate: a keyring cannot be
+    /// asked what it holds, and an entry nothing names is one nothing can ever
+    /// delete.
+    pub fn set_channel_key(
+        &self,
+        network: &NetworkId,
+        channel: &str,
+        key: Option<&str>,
+    ) -> Result<(), StoreError> {
+        let channel = channel.to_lowercase();
+        let entry = credentials::channel_key(network, &channel);
+        match key.filter(|key| !key.is_empty()) {
+            Some(key) => {
+                // Write the index first. If the keyring write fails, a harmless
+                // row remains; the other order can strand a secret that no row
+                // can name for later deletion.
+                self.writing().execute(
+                    "INSERT OR IGNORE INTO channel_keys (network, channel) VALUES (?1, ?2)",
+                    params![network, channel],
+                )?;
+                self.credentials.set(&entry, key)?;
+            }
+            None => {
+                self.credentials.delete(&entry)?;
+                self.writing().execute(
+                    "DELETE FROM channel_keys WHERE network = ?1 AND channel = ?2",
+                    params![network, channel],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Every channel on this network that has a key, with it.
+    ///
+    /// A row whose keyring entry has gone — the keyring cleared, the account
+    /// changed — is skipped rather than reported. What it would mean is a
+    /// channel this client cannot rejoin unaided, which is what it would have
+    /// been without any of this.
+    pub fn channel_keys(&self, network: &NetworkId) -> Result<Vec<(String, String)>, StoreError> {
+        let conn = self.reading();
+        let mut statement =
+            conn.prepare("SELECT channel FROM channel_keys WHERE network = ?1 ORDER BY channel")?;
+        let channels = statement
+            .query_map(params![network], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut held = Vec::new();
+        for channel in channels {
+            if let Some(key) = self
+                .credentials
+                .get(&credentials::channel_key(network, &channel))?
+            {
+                held.push((channel, key));
+            }
+        }
+        Ok(held)
     }
 
     pub fn sasl_password(&self, network: &NetworkId) -> Result<Option<String>, StoreError> {

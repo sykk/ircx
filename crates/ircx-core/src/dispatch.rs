@@ -94,14 +94,13 @@ impl SessionState {
         (self.query(&key), self.drain())
     }
 
-    /// Remembers the key as it asks, so that a reconnect or a `/cycle` asks
-    /// the same way. `None` forgets one: joining without a key is the user
-    /// saying this channel does not need one, and a stale key replayed at a
-    /// channel that has dropped `+k` is refused rather than ignored.
+    /// Keeps the key for reconnect and `/cycle`. The keyring is updated only
+    /// when the server confirms the join; a rejected key must not replace the
+    /// last one that worked.
     pub(crate) fn send_join(&mut self, channel: &str, key: Option<&str>) {
         let folded = self.fold(channel);
         match key {
-            Some(key) => self.channel_keys.insert(folded, key.to_string()),
+            Some(key) => self.channel_keys.insert(folded.clone(), key.to_string()),
             None => self.channel_keys.remove(&folded),
         };
         match key {

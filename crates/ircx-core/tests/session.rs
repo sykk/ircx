@@ -95,6 +95,7 @@ struct Harness {
     stopped: Vec<String>,
     resumed_at: Vec<(String, u64)>,
     stalled: Vec<String>,
+    channel_keys: Vec<(String, Option<String>)>,
     closed: bool,
 }
 
@@ -116,6 +117,7 @@ impl Harness {
             stopped: Vec::new(),
             resumed_at: Vec::new(),
             stalled: Vec::new(),
+            channel_keys: Vec::new(),
             closed: false,
         }
     }
@@ -153,6 +155,7 @@ impl Harness {
                 Action::RunTransfer(job) => self.jobs.push(*job),
                 Action::StopTransfer { id } => self.stopped.push(id),
                 Action::ResumeTransferAt { id, from } => self.resumed_at.push((id, from)),
+                Action::ChannelKey { channel, key } => self.channel_keys.push((channel, key)),
                 Action::Stalled { reason } => self.stalled.push(reason),
                 Action::Close => self.closed = true,
             }
@@ -387,6 +390,7 @@ fn registered_holding(name: &str, newest: &str) -> Harness {
     let actions = session.state.restore(vec![Restored {
         target: OpenTarget::Channel(name.into()),
         newest: Some(newest.into()),
+        key: None,
     }]);
     session.apply(actions);
     session.connect();
@@ -1974,6 +1978,7 @@ fn restored_queries_request_their_marker_when_the_capability_is_acked() {
     let actions = session.state.restore(vec![Restored {
         target: OpenTarget::Query("sable".into()),
         newest: None,
+        key: None,
     }]);
     session.apply(actions);
     session.connect();
@@ -3397,6 +3402,64 @@ mod channel_keys {
         assert_eq!(session.sent(), vec!["PART #vault", "JOIN #vault"]);
     }
 
+    /// The half a session cannot do on its own: a `+k` channel in the sidebar
+    /// on the first connection of a run, before anybody has typed a key this
+    /// time. The keyring is where it comes from and `restore` is where it
+    /// arrives.
+    #[test]
+    fn a_restored_channel_is_rejoined_with_the_key_it_was_saved_with() {
+        let mut session = Harness::new(config());
+        let actions = session.state.restore(vec![Restored {
+            target: OpenTarget::Channel("#vault".into()),
+            newest: None,
+            key: Some("hunter2".into()),
+        }]);
+        session.apply(actions);
+
+        session.connect();
+        session.feed(":irc.libera.chat CAP * LS :");
+        session.feed(":irc.libera.chat 001 sykk :Welcome to the Libera.Chat IRC Network sykk");
+
+        assert!(
+            session
+                .sent()
+                .iter()
+                .any(|line| line == "JOIN #vault hunter2"),
+            "the first connection of the run asked without the key"
+        );
+    }
+
+    /// The server's JOIN echo is what writes the key down. A request may be
+    /// refused, so sending it is too early to replace the last key that worked.
+    #[test]
+    fn joining_writes_the_key_down_and_joining_without_one_takes_it_back() {
+        let mut session = registered("");
+
+        session.submit("#ircx", "/join #vault hunter2");
+        assert!(session.channel_keys.is_empty());
+        session.feed(":sykk!~sykk@user/sykk JOIN #vault");
+        assert_eq!(
+            session.channel_keys,
+            vec![("#vault".to_string(), Some("hunter2".to_string()))]
+        );
+
+        session.channel_keys.clear();
+        session.submit("#ircx", "/join #vault");
+        assert!(session.channel_keys.is_empty());
+        session.feed(":sykk!~sykk@user/sykk JOIN #vault");
+        assert_eq!(session.channel_keys, vec![("#vault".to_string(), None)]);
+    }
+
+    #[test]
+    fn a_rejected_key_is_not_written_down() {
+        let mut session = registered("");
+
+        session.submit("#ircx", "/join #vault wrong-key");
+        session.feed(":irc.libera.chat 475 sykk #vault :Cannot join channel (+k)");
+
+        assert!(session.channel_keys.is_empty());
+    }
+
     /// A join the server refuses leaves nothing behind. Holding the key on the
     /// channel's own state meant creating that state to hold it, and a wrong
     /// key then drew a ghost of the channel it had failed to open.
@@ -3802,10 +3865,12 @@ fn the_conversations_from_the_last_run_come_back_and_are_rejoined() {
         Restored {
             target: OpenTarget::Channel("##test".into()),
             newest: None,
+            key: None,
         },
         Restored {
             target: OpenTarget::Query("NickServ".into()),
             newest: None,
+            key: None,
         },
     ]);
     session.apply(actions);
@@ -5290,6 +5355,7 @@ mod monitor {
             .map(|nick| Restored {
                 target: OpenTarget::Query((*nick).into()),
                 newest: None,
+                key: None,
             })
             .collect();
         let actions = session.state.restore(targets);
@@ -5397,6 +5463,7 @@ mod monitor {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Query("aster".into()),
             newest: None,
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -5496,6 +5563,7 @@ mod extended_monitor {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Query("sable".into()),
             newest: None,
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -6876,6 +6944,7 @@ mod the_page_a_join_already_asked_for {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Channel("#ircx".into()),
             newest: Some("2026-07-31T08:00:00.000Z".into()),
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -7190,6 +7259,7 @@ mod finding_missed_queries {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Channel("#ircx".into()),
             newest: Some("2026-07-31T08:00:00.000Z".into()),
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -7292,6 +7362,7 @@ mod finding_missed_queries {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Query("phrack".into()),
             newest: Some("2026-07-31T10:00:00.000Z".into()),
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -7342,6 +7413,7 @@ fn the_gap_is_measured_from_before_the_socket_was_opened() {
     let actions = session.state.restore(vec![Restored {
         target: OpenTarget::Channel("#ircx".into()),
         newest: Some("2026-07-31T08:00:00.000Z".into()),
+        key: None,
     }]);
     session.apply(actions);
     session.connect();
@@ -7373,6 +7445,7 @@ mod paging_a_gap {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Channel("#ircx".into()),
             newest: Some("2026-07-31T08:00:00.000Z".into()),
+            key: None,
         }]);
         session.apply(actions);
         session.connect();
@@ -7729,6 +7802,7 @@ mod coming_back_after_a_drop {
         let actions = session.state.restore(vec![Restored {
             target: OpenTarget::Channel("#ircx".into()),
             newest: Some(newest.into()),
+            key: None,
         }]);
         session.apply(actions);
         session

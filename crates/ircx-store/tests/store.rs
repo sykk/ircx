@@ -3353,3 +3353,73 @@ fn redacting_a_message_the_archive_never_had_is_not_an_error() {
         .redact_message("libera", "never-seen", "sable")
         .unwrap();
 }
+
+/// The key goes to the keyring and the row says only that there is one. Both
+/// halves have to be there for a rejoin to work, and both have to go when the
+/// key is forgotten.
+#[test]
+fn a_channel_key_is_remembered_and_forgotten_in_both_halves() {
+    let store = Store::open_in_memory().unwrap();
+    let network = "libera".to_string();
+
+    assert!(store.channel_keys(&network).unwrap().is_empty());
+
+    store
+        .set_channel_key(&network, "#vault", Some("hunter2"))
+        .unwrap();
+    assert_eq!(
+        store.channel_keys(&network).unwrap(),
+        vec![("#vault".to_string(), "hunter2".to_string())]
+    );
+
+    // Joining without one is the forgetting, so `None` has to reach both.
+    store.set_channel_key(&network, "#vault", None).unwrap();
+    assert!(store.channel_keys(&network).unwrap().is_empty());
+}
+
+/// Case is the server's business, not the reader's: a channel typed one way
+/// and joined another is one channel with one key.
+#[test]
+fn a_channel_key_is_found_whatever_case_it_was_typed_in() {
+    let store = Store::open_in_memory().unwrap();
+    let network = "libera".to_string();
+
+    store
+        .set_channel_key(&network, "#Vault", Some("hunter2"))
+        .unwrap();
+    store
+        .set_channel_key(&network, "#VAULT", Some("correct-horse"))
+        .unwrap();
+
+    assert_eq!(
+        store.channel_keys(&network).unwrap(),
+        vec![("#vault".to_string(), "correct-horse".to_string())],
+        "the second key replaced the first rather than making a second channel"
+    );
+}
+
+/// A keyring cannot be asked what it holds, so the rows are what name its
+/// entries. Removing a network has to take both, or it leaves secrets behind
+/// that nothing left can ever reach.
+#[test]
+fn removing_a_network_takes_its_channel_keys_with_it() {
+    let store = Store::open_in_memory().unwrap();
+    let removed = store.save_network(&network("Libera.Chat")).unwrap();
+    let kept = store.save_network(&network("OFTC")).unwrap();
+
+    store
+        .set_channel_key(&removed, "#vault", Some("hunter2"))
+        .unwrap();
+    store
+        .set_channel_key(&kept, "#vault", Some("correct-horse"))
+        .unwrap();
+
+    store.remove_network(&removed).unwrap();
+
+    assert!(store.channel_keys(&removed).unwrap().is_empty());
+    assert_eq!(
+        store.channel_keys(&kept).unwrap(),
+        vec![("#vault".to_string(), "correct-horse".to_string())],
+        "another network's key went with it"
+    );
+}

@@ -93,6 +93,16 @@ pub enum Action {
     Stalled {
         reason: String,
     },
+    /// Remember the key a channel is joined with, or forget it. `None` is the
+    /// forgetting, and is what an ordinary join sends.
+    ///
+    /// The session has already applied it — this is durability, so the first
+    /// connection of the next run can ask for a `+k` channel the way this one
+    /// learned to.
+    ChannelKey {
+        channel: String,
+        key: Option<String>,
+    },
     /// Write an ignore down, or take it away.
     ///
     /// The session has already applied it — this is durability, so the next
@@ -139,6 +149,9 @@ pub enum Action {
 pub struct Restored {
     pub target: OpenTarget,
     pub newest: Option<String>,
+    /// The key this channel was last joined with, where the keyring still has
+    /// one. `None` for a query, which has no such thing.
+    pub key: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -499,9 +512,10 @@ pub struct SessionState {
     ///
     /// Held for the session, for `rejoin`'s reason: a dropped socket is not the
     /// user leaving, and a `+k` channel rejoined without its key is one the
-    /// reconnect quietly loses. Never written down — a channel key is a shared
-    /// secret and the archive is not where this client keeps secrets, so it
-    /// goes no further than a restart.
+    /// reconnect quietly loses. `Action::ChannelKey` carries it to the keyring
+    /// beside the network's own password — not to the archive, which is not
+    /// where this client keeps secrets — and `restore` reads it back, so the
+    /// first connection of the next run asks the way this one learned to.
     pub(crate) channel_keys: HashMap<String, String>,
     /// Conversations whose first page of history has been asked for and not
     /// answered yet, folded.
@@ -611,6 +625,9 @@ impl SessionState {
             match restored.target {
                 OpenTarget::Channel(_) => {
                     self.channel_entry(&key, &name).rejoin = true;
+                    if let Some(joined_with) = restored.key {
+                        self.channel_keys.insert(key.clone(), joined_with);
+                    }
                     self.emit_channel(&key);
                 }
                 OpenTarget::Query(nick) => self.touch_query(&nick, None),
@@ -3009,6 +3026,10 @@ impl SessionState {
         if sender.is_self {
             self.user = sender.user.clone().or(self.user.clone());
             self.host = sender.host.clone().or(self.host.clone());
+            self.actions.push(Action::ChannelKey {
+                channel: name.clone(),
+                key: self.channel_keys.get(&key).cloned(),
+            });
             let channel = self.channel_entry(&key, &name);
             channel.joined = true;
             channel.rejoin = true;
@@ -4496,12 +4517,14 @@ const CREDENTIAL_VERBS: &[&str] = &[
 ];
 
 /// The raw log is a UI surface, so what is only ever a password does not reach
-/// it. Three shapes are, and the third is the one that cost something.
+/// it. Four shapes are.
 ///
 /// `AUTHENTICATE` was here first: its payload is the password in base64.
 /// `PASS` and `OPER` are the same case with no argument worth showing.
 ///
-/// The third is a message to a service — `identify`, `ghost`, `setpass` and the
+/// A keyed `JOIN` keeps the channel name and drops the key.
+///
+/// The last is a message to a service — `identify`, `ghost`, `setpass` and the
 /// rest. It is redacted only when it is not addressed to a channel, because the
 /// wire log exists to show messages and hiding them by sniffing their text is
 /// exactly what it should not do. Nobody identifies to a channel; somebody may
@@ -4529,6 +4552,13 @@ fn redact(line: &str) -> String {
         || command.eq_ignore_ascii_case("VERIFY")
     {
         return format!("{command} <credentials>");
+    }
+    if command.eq_ignore_ascii_case("JOIN") {
+        let (channels, key) = rest.split_once(' ').unwrap_or((rest, ""));
+        return match key.is_empty() {
+            true => line.to_string(),
+            false => format!("{command} {channels} <credentials>"),
+        };
     }
     redact_service_message(line).unwrap_or_else(|| line.to_string())
 }
@@ -4573,6 +4603,8 @@ mod redaction {
         );
         assert_eq!(redact("PASS hunter2"), "PASS <credentials>");
         assert_eq!(redact("OPER syk hunter2"), "OPER <credentials>");
+        assert_eq!(redact("JOIN #vault hunter2"), "JOIN #vault <credentials>");
+        assert_eq!(redact("JOIN #public"), "JOIN #public");
     }
 
     #[test]

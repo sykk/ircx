@@ -31,6 +31,7 @@ const MIGRATIONS: &[&str] = &[
     HUSHED_NICKS,
     AWAY_SETTINGS,
     REDACTIONS,
+    CHANNEL_KEYS,
 ];
 
 /// Applies every migration the database has not seen yet. Safe to call on a
@@ -496,6 +497,20 @@ CREATE TABLE away_settings (
 /// for the opposite — the message may go, the fact of its going should not.
 const REDACTIONS: &str = r#"
 ALTER TABLE messages ADD COLUMN redacted_by TEXT;
+"#;
+
+/// Which channels have a key, and nothing about what it is.
+///
+/// The key itself is in the keyring, the way a network's SASL password is. The
+/// row is the index over it: a keyring offers no way to ask what it holds, so
+/// without this a removed network would leave its channel keys behind with
+/// nothing left that could name them.
+const CHANNEL_KEYS: &str = r#"
+CREATE TABLE channel_keys (
+    network TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    PRIMARY KEY (network, channel)
+);
 "#;
 
 #[cfg(test)]

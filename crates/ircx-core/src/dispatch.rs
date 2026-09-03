@@ -94,11 +94,25 @@ impl SessionState {
         (self.query(&key), self.drain())
     }
 
-    fn send_join(&mut self, channel: &str, key: Option<&str>) {
+    /// Remembers the key as it asks, so that a reconnect or a `/cycle` asks
+    /// the same way. `None` forgets one: joining without a key is the user
+    /// saying this channel does not need one, and a stale key replayed at a
+    /// channel that has dropped `+k` is refused rather than ignored.
+    pub(crate) fn send_join(&mut self, channel: &str, key: Option<&str>) {
+        let folded = self.fold(channel);
+        match key {
+            Some(key) => self.channel_keys.insert(folded, key.to_string()),
+            None => self.channel_keys.remove(&folded),
+        };
         match key {
             Some(key) => self.send_command("JOIN", &[channel, key]),
             None => self.send_command("JOIN", &[channel]),
         }
+    }
+
+    /// The key this session last joined a channel with, if it has one.
+    fn channel_key(&self, channel: &str) -> Option<String> {
+        self.channel_keys.get(&self.fold(channel)).cloned()
     }
 
     /// The network's own default stands in for a reason nobody typed, and no
@@ -752,8 +766,12 @@ impl SessionState {
         if !self.isupport.is_channel(&channel) {
             return CommandOutcome::Rejected("`/cycle [#channel]` only works in a channel".into());
         }
+        // Read before the part, and handed back to the join: without it a
+        // `+k` channel is left rather than cycled, which is the whole of what
+        // this command must not do.
+        let key = self.channel_key(&channel);
         self.send_part(&channel, None);
-        self.send_join(&channel, None);
+        self.send_join(&channel, key.as_deref());
         CommandOutcome::Handled
     }
 

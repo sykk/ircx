@@ -15,7 +15,7 @@ import { DateSeparator, GapDivider, HistoryDivider, UnreadDivider } from "./Divi
 import { Clock } from "./Clock";
 import { useFrameMessages } from "./frameMessages";
 import { assignGroups } from "./groups";
-import { MessageBlock, TIMELINE_BLOCK_MAX } from "./MessageBlock";
+import { MessageBlock, timelineBlockLayout } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { buildRows, rowIndexOfMessage, rowMessages, type TimelineRow } from "./rows";
@@ -860,10 +860,11 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
 }
 
 function StickyAuthor({ message }: { message: ChatMessage }) {
-  const { align, clockSide, nickBrackets, nickColors, spine } = useAppStore(
+  const { align, clock, clockSide, nickBrackets, nickColors, spine } = useAppStore(
     (s) => s.presentation,
   );
   const name = nickBrackets ? `<${message.sender.nick}>` : message.sender.nick;
+  const layout = timelineBlockLayout(spine, clockSide, clock);
 
   return (
     <div
@@ -875,16 +876,19 @@ function StickyAuthor({ message }: { message: ChatMessage }) {
         className="grid"
         style={{
           width: "100%",
-          maxWidth: TIMELINE_BLOCK_MAX,
+          maxWidth: layout.maxWidth,
           marginInline: align === "center" ? "auto" : undefined,
-          gridTemplateColumns: spine
-            ? "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)"
-            : "0 0 minmax(0, 1fr)",
+          gridTemplateColumns: layout.columns,
           paddingLeft: "var(--timeline-rail-pad)",
           paddingRight: "16px",
         }}
       >
-        <div className="flex items-baseline gap-2" style={{ gridColumn: 3 }}>
+        {layout.clockAtRail && (
+          <div style={{ gridColumn: 1 }}>
+            <Clock at={message.timestamp} column />
+          </div>
+        )}
+        <div className="flex items-baseline gap-2" style={{ gridColumn: layout.contentColumn }}>
           {clockSide === "left" && <Clock at={message.timestamp} />}
           <span
             className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"

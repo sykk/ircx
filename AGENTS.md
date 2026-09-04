@@ -26,8 +26,9 @@ where the run names you; the mention is already marked by the line above the
 run and by the tint on its row, and letting it take the spine cost the accent
 the second block of every exchange the reader was in.
 
-The spine, the clock's format, the side of the nickname it is set on, whether
-the name is stated in front of every line or once above the run, and the angle
+The spine, the clock's format, whether it is set before the spine or on either
+side of the nickname, whether the name is stated in front of every line or once
+above the run, and the angle
 brackets an older client put round it are the reader's, on the settings
 window's Appearance page beside the density and in
 `src/lib/theme/presentation.ts`. They are settings

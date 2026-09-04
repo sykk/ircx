@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ChatMessage } from "@/types";
 import { nickColor } from "@/lib/nickColor";
+import { CLOCK_FORMATS, type ClockFormat, type ClockSide } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { isHighlight, type HighlightRule } from "@/store/selectors";
 import { Clock } from "./Clock";
@@ -9,12 +10,30 @@ import { MessageRow } from "./MessageRow";
 import { failureRuns, writesOwnNick } from "./rows";
 
 const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
-export const TIMELINE_BLOCK_MAX =
-  "calc(var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px)";
+const CLOCK_LADDER =
+  "max-content 8px var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
+const TIMELINE_BLOCK_WIDTH =
+  "var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px";
+export const TIMELINE_BLOCK_MAX = `calc(${TIMELINE_BLOCK_WIDTH})`;
 /** The same ladder with the spine's two columns closed up, for a reader who
  * turned it off: the room a spine would have taken goes back to the prose
  * rather than standing empty at the rail. */
 const FLAT = "0 0 minmax(0, 1fr)";
+const CLOCK_FLAT = "max-content 8px 0 0 minmax(0, 1fr)";
+
+export function timelineBlockLayout(spine: boolean, side: ClockSide, clock: ClockFormat) {
+  const clockAtRail = side === "before-spine" && clock !== "off";
+  const clockColumns = CLOCK_FORMATS.find((format) => format.id === clock)?.columns ?? 0;
+  return {
+    clockAtRail,
+    columns: clockAtRail ? (spine ? CLOCK_LADDER : CLOCK_FLAT) : spine ? LADDER : FLAT,
+    contentColumn: clockAtRail ? 5 : 3,
+    maxWidth: clockAtRail
+      ? `calc(${TIMELINE_BLOCK_WIDTH} + ${clockColumns}ch + 8px)`
+      : TIMELINE_BLOCK_MAX,
+    spineColumn: clockAtRail ? 3 : 1,
+  };
+}
 
 interface BlockProps {
   spine: boolean;
@@ -27,6 +46,7 @@ interface BlockProps {
   dimmed?: boolean;
   onSpineClick?: (() => void) | undefined;
   spinePressed?: boolean;
+  railClock?: ReactNode;
   children: ReactNode;
 }
 
@@ -46,10 +66,14 @@ export function Block({
   dimmed = false,
   onSpineClick,
   spinePressed = false,
+  railClock,
   children,
 }: BlockProps) {
   const drawn = useAppStore((s) => s.presentation.spine);
   const align = useAppStore((s) => s.presentation.align);
+  const clockSide = useAppStore((s) => s.presentation.clockSide);
+  const clock = useAppStore((s) => s.presentation.clock);
+  const layout = timelineBlockLayout(drawn, clockSide, clock);
   // Closing the gap between two blocks of one group is the spine's doing: it is
   // what spans the gap and says they are one thing. With no spine to span it
   // the blocks would run together with nothing accounting for it, so the gap
@@ -61,10 +85,10 @@ export function Block({
       className="grid"
       style={{
         width: "100%",
-        maxWidth: TIMELINE_BLOCK_MAX,
+        maxWidth: layout.maxWidth,
         marginInline: align === "center" ? "auto" : undefined,
         opacity: dimmed ? "var(--disabled-opacity)" : undefined,
-        gridTemplateColumns: drawn ? LADDER : FLAT,
+        gridTemplateColumns: layout.columns,
         paddingLeft: "var(--timeline-rail-pad)",
         paddingRight: "16px",
         // The gap between blocks moves onto the content column when a group
@@ -75,6 +99,11 @@ export function Block({
         paddingTop: continues ? undefined : "var(--timeline-block-gap)",
       }}
     >
+      {layout.clockAtRail && (
+        <div data-ui="rail-clock" style={{ gridColumn: 1 }}>
+          {railClock}
+        </div>
+      )}
       {/* Rounded on the right only. The radius is for the hover fill and the
           focus ring, but a radius on this box rounds the left border with it,
           and that border is the rule — a rounded 2px stroke rasterises as an
@@ -93,7 +122,7 @@ export function Block({
           title={spinePressed ? "Show all conversations" : "Focus this conversation"}
           onClick={onSpineClick}
           style={{
-            gridColumn: 1,
+            gridColumn: layout.spineColumn,
             width: "calc(var(--timeline-spine-width) + var(--timeline-spine-gap))",
             // A border rather than a fill: only a border can be dashed.
             borderLeftWidth: "var(--timeline-spine-width)",
@@ -116,7 +145,7 @@ export function Block({
         <div
           data-spine="solid"
           style={{
-            gridColumn: 1,
+            gridColumn: layout.spineColumn,
             borderLeftWidth: "var(--timeline-spine-width)",
             borderLeftStyle: "solid",
             borderLeftColor: spineTint,
@@ -127,7 +156,7 @@ export function Block({
       ) : null}
       <div
         style={{
-          gridColumn: 3,
+          gridColumn: layout.contentColumn,
           paddingTop: continues ? "var(--timeline-block-gap)" : undefined,
         }}
       >
@@ -285,6 +314,7 @@ export function MessageBlock({
       dimmed={focusedGroup !== null && group?.id !== focusedGroup}
       onSpineClick={group === null || onFocusGroup === undefined ? undefined : () => onFocusGroup(group.id)}
       spinePressed={group !== null && group.id === focusedGroup}
+      railClock={<Clock at={head.timestamp} column />}
     >
       {opensGroup && group !== null && group.name !== null && (
         <GroupName name={group.name} tint={groupTint ?? "var(--text-faint)"} />
@@ -329,7 +359,7 @@ export function MessageBlock({
         <>
           <div data-ui="message-head" className="flex items-baseline gap-2">
             {name}
-            <Clock at={head.timestamp} />
+            {clockSide === "right" && <Clock at={head.timestamp} />}
           </div>
           {rows}
         </>

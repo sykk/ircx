@@ -389,6 +389,16 @@ describe("AppearancePage", () => {
       expect(localStorage.getItem("ircx.presentation")).toContain('"clockSide":"left"');
     });
 
+    it("moves the timestamp before the spine", () => {
+      open();
+      fireEvent.change(field("Timestamp place"), { target: { value: "before-spine" } });
+
+      expect(useAppStore.getState().presentation.clockSide).toBe("before-spine");
+      expect(localStorage.getItem("ircx.presentation")).toContain(
+        '"clockSide":"before-spine"',
+      );
+    });
+
     it("keeps the chosen timestamp emphasis", () => {
       open();
       fireEvent.change(field("Timestamp emphasis"), { target: { value: "quiet" } });

@@ -279,7 +279,7 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
           className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-3 font-[family-name:var(--font-ui)]"
         >
           <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold tracking-[0.09em] text-[var(--text-secondary)] uppercase">
-            Members <span className="font-normal text-[var(--text-muted)]">{channel.memberCount}</span>
+            Members
           </h2>
           <HeaderButton
             label={filter === undefined ? "Filter members" : "Close member filter"}

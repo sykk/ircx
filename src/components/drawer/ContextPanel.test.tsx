@@ -27,7 +27,7 @@ describe("how wide the roster asks to be", () => {
   });
 
   it("never asks for less than the heading above it needs", () => {
-    // "MEMBERS — 1" is wider than a one-character nick, so the floor holds.
+    // "MEMBERS" is wider than a one-character nick, so the floor holds.
     // The whole clamp is pinned: the bounds are constants, so matching only
     // them passed for any input.
     expect(rosterWidth([member("j")], false)).toBe("clamp(8rem, 1ch + 3.5rem, 13rem)");
@@ -76,8 +76,8 @@ describe("filtering the roster", () => {
     expect(strip()).toBeNull();
   });
 
-  it("shows the channel count and opens the filter from the roster header", () => {
-    expect(screen.getByRole("heading", { name: "Members 16" })).toBeTruthy();
+  it("opens the filter from the roster header", () => {
+    expect(screen.getByText("Members", { selector: "h2" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Filter members" }));
 

@@ -95,6 +95,13 @@ covers what the icon says; these cover whether there is an icon to say it.
   registers and signs in against a real ergo; what it cannot reach is the
   verification path, because the code arrives by email and the rig has no MTA
   to read it out of.
+- [ ] Join a `+k` channel, quit, and launch again. It must come back joined
+  without the key being typed twice. The tests run against a credential store
+  in this process; whether the real keyring hands the key back to a second
+  launch of the packaged app is what only a second launch can say.
+- [ ] Remove that network and confirm the key is gone from the desktop's
+  keyring by hand. A keyring cannot be asked what it holds, so an entry left
+  behind by a bug here is one nothing in the app could ever find again.
 - [ ] Connect to Libera.Chat with SASL PLAIN and SCRAM-SHA-512. Repeat with a
   wrong password and confirm registration stops with an actionable error.
 - [ ] Set an away time in Notifications, leave the keyboard for it, and

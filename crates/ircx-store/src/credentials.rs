@@ -11,6 +11,19 @@ const SERVICE: &str = "ircx";
 /// take: an id is 32 hex characters, so nothing generated can equal this.
 pub(crate) const UPLOAD_PROVIDER: &str = "upload-provider";
 
+/// Where a channel's key is kept, under a name no network can take for the
+/// reason `UPLOAD_PROVIDER` cannot be taken: an id is 32 hex characters, and
+/// this carries a colon.
+///
+/// The channel is lowercased rather than folded by the network's casemapping,
+/// which this layer does not know. Two channels differing only in the case of
+/// `[`, `]`, `\` or `~` would share an entry under rfc1459 rules; they are the
+/// same channel on most networks and nowhere near common enough to carry the
+/// casemapping down here for.
+pub(crate) fn channel_key(network: &str, channel: &str) -> String {
+    format!("channel-key:{network}:{}", channel.to_lowercase())
+}
+
 /// The seam that keeps tests off the developer's real keyring.
 pub(crate) trait CredentialStore: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<String>, StoreError>;

@@ -12,7 +12,7 @@ use ircx_ipc::{
 use ircx_net::dcc::{self, TransferError};
 use ircx_net::{Backoff, BackoffPolicy, ConnectionConfig, LineSender, Transport, TransportEvent};
 use ircx_plugin::{AnnotateRequest, ArrivedMessage, Failure, NotifyRequest, PluginRuntime};
-use ircx_store::{Store, StsPolicy};
+use ircx_store::{OpenTarget, Store, StsPolicy};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, Instant};
@@ -601,6 +601,15 @@ async fn drive(
     // between coming back to a conversation and meeting one. An archive that
     // cannot be read asks for a first page, which is what a conversation with
     // no archive asks for anyway.
+    // Read once rather than per conversation: the keyring is a round trip to
+    // another process, and a channel with no key is the ordinary case.
+    let keys = context
+        .store
+        .channel_keys(&context.network)
+        .unwrap_or_else(|error| {
+            warn!(%error, "could not read the keys channels were joined with");
+            Vec::new()
+        });
     let remembered: Vec<Restored> = remembered
         .into_iter()
         .map(|target| {
@@ -611,7 +620,18 @@ async fn drive(
                     warn!(%error, "could not read where a conversation left off");
                     None
                 });
-            Restored { target, newest }
+            let key = match &target {
+                OpenTarget::Channel(name) => keys
+                    .iter()
+                    .find(|(channel, _)| channel.eq_ignore_ascii_case(name))
+                    .map(|(_, key)| key.clone()),
+                OpenTarget::Query(_) => None,
+            };
+            Restored {
+                target,
+                newest,
+                key,
+            }
         })
         .collect();
     let actions = session.restore(remembered);
@@ -1215,6 +1235,18 @@ impl Context {
                     // will not survive a restart is a sentence about SQLite.
                     if let Err(error) = self.store.set_ignored(&self.network, &nick, ignored) {
                         warn!(%error, %nick, "could not write an ignore down");
+                    }
+                }
+                Action::ChannelKey { channel, key } => {
+                    // A key that cannot be written down is a key this session
+                    // still holds; what is lost is the next run's first
+                    // connection, which is worth a line in the log and nothing
+                    // louder.
+                    if let Err(error) =
+                        self.store
+                            .set_channel_key(&self.network, &channel, key.as_deref())
+                    {
+                        warn!(%error, %channel, "could not write a channel key down");
                     }
                 }
                 Action::Watch { nick, watched } => {

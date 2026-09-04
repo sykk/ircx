@@ -50,8 +50,6 @@ function awayMarker(nick: RegExp): HTMLElement | null {
     .querySelector<HTMLElement>("[aria-hidden].rounded-full");
 }
 
-/** One group of `count` unprivileged nicks, so the truncation row lands in a
- * predictable place. */
 function plain(count: number) {
   return Array.from({ length: count }, (_, i) => member(`nick${i}`));
 }
@@ -99,12 +97,10 @@ describe("MemberList", () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ nick: "sable" }));
   });
 
-  it("heads two groups with their counts, folding voice into members", () => {
+  it("heads two groups without repeating the channel count", () => {
     show();
-    expect(screen.getByRole("heading", { name: /operators/i }).textContent).toContain(
-      "4",
-    );
-    expect(screen.getByRole("heading", { name: /members/i }).textContent).toContain("12");
+    expect(screen.getByRole("heading", { name: "Operators" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Members" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /voiced/i })).toBeNull();
 
     // A voiced member sits in members and still carries its sigil.
@@ -132,7 +128,6 @@ describe("MemberList", () => {
 
   it("puts the away reason on the row without replacing the nick's hue", () => {
     show();
-    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
     const wren = screen.getByRole("listitem", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
@@ -154,7 +149,6 @@ describe("MemberList", () => {
    * state belongs, and it is what the row is announced with. */
   it("leaves the away reason where it was", () => {
     show();
-    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
     const wren = screen.getByRole("listitem", { name: /wren/ });
     expect(wren).toHaveProperty("title", "Away: sleep");
@@ -163,7 +157,6 @@ describe("MemberList", () => {
 
   it("draws a hollow marker only for an away member", () => {
     show();
-    fireEvent.click(screen.getByRole("button", { name: "… and 2 more" }));
 
     expect(awayMarker(/wren/)?.className).toContain("border-[1.5px]");
     expect(awayMarker(/phrack/)).toBeNull();
@@ -198,34 +191,21 @@ describe("MemberList", () => {
     );
   });
 
-  it("truncates the members group and reveals the rest on demand", () => {
+  it("includes every member in the virtualized list", () => {
     show(plain(15));
-    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(10);
-
-    fireEvent.click(screen.getByRole("button", { name: "… and 5 more" }));
-
-    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(15);
-    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
-  });
-
-  it("never hides an operator behind the truncation", () => {
-    show(plain(15).map((m) => ({ ...m, prefixes: ["@"] })));
-
     expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(15);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
   it("renders a window of a several-thousand member channel", () => {
     show(plain(3000));
-    fireEvent.click(screen.getByRole("button", { name: "… and 2990 more" }));
 
     expect(memberButtons().length).toBeLessThan(100);
     expect(memberButtons().length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 });
 
-/** #482. The roster draws ten members and `… and n more`, so the filter is the
- * only way to see the other 390 without scrolling all of them. */
 describe("a filtered MemberList", () => {
   it("draws only the names carrying the filter", () => {
     show(CTF_OPS_MEMBERS, "ra");
@@ -235,19 +215,7 @@ describe("a filtered MemberList", () => {
     expect(screen.queryByRole("listitem", { name: /marrow/ })).toBeNull();
   });
 
-  it("counts the matches in the group heading, not the channel", () => {
-    show(CTF_OPS_MEMBERS, "ra");
-
-    expect(screen.getByRole("heading", { name: "Members — 2" })).toBeTruthy();
-  });
-
-  /* The whole of it: a filter reading only the ten members already on screen
-   * would answer for those ten and not for the channel.
-   *
-   * `nick39` matches eleven — itself and `nick390` through `nick399` — which is
-   * one more than `MEMBERS_PREVIEW`, so the truncation has something to hide.
-   * A filter matching ten or fewer would pass whether or not it was bypassed. */
-  it("reaches past the truncation without being expanded", () => {
+  it("matches members beyond the visible window", () => {
     show(plain(400), "nick39");
 
     expect(screen.getAllByRole("listitem", { name: /^nick39/ })).toHaveLength(11);
@@ -255,13 +223,12 @@ describe("a filtered MemberList", () => {
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
   });
 
-  it("puts the truncation back when the filter is emptied", () => {
+  it("shows the full list when the filter is emptied", () => {
     const { rerender } = show(plain(15), "nick1");
-    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
 
     rerender(<MemberList members={plain(15)} onSelect={vi.fn()} onMenu={vi.fn()} filter="" />);
 
-    expect(screen.getByRole("button", { name: "… and 5 more" })).toBeTruthy();
+    expect(screen.getAllByRole("listitem", { name: /^nick/ })).toHaveLength(15);
   });
 
   it("says who was looked for when nobody matches", () => {

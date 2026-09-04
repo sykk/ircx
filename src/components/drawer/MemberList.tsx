@@ -24,18 +24,11 @@ export function MemberList({
   onMenu,
   filter,
 }: MemberListProps) {
-  const [expandMembers, setExpandMembers] = useState(false);
   const [order, setOrder] = useState<"recent" | "alphabetical">("recent");
   const rows = useMemo(() => {
     const narrowed = filterMembers(members, filter);
-    // A filter that could not see past the tenth member would answer for the
-    // ten it was given rather than for the channel, so `… and n more` is not
-    // drawn over one. An empty filter is not narrowing anything and keeps it.
-    return toRows(
-      groupMembers(narrowed, order === "recent" ? recentNicks : undefined),
-      expandMembers || filter !== "",
-    );
-  }, [members, recentNicks, filter, expandMembers, order]);
+    return toRows(groupMembers(narrowed, order === "recent" ? recentNicks : undefined));
+  }, [members, recentNicks, filter, order]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Nothing the virtualiser returns leaves this component, so the compiler
@@ -79,7 +72,7 @@ export function MemberList({
                     }`}
                   >
                     <h3 className="tracking-wide uppercase">
-                      {GROUP_LABEL[row.group]} — {row.count}
+                      {GROUP_LABEL[row.group]}
                     </h3>
                     {row.group === "members" && (
                       <span className="flex items-center gap-1 text-[10px] tracking-normal normal-case">
@@ -112,14 +105,6 @@ export function MemberList({
                       </span>
                     )}
                   </div>
-                ) : row.kind === "more" ? (
-                  <button
-                    type="button"
-                    onClick={() => setExpandMembers(true)}
-                    className="flex h-full w-full items-center px-2 text-left font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  >
-                    … and {row.hidden} more
-                  </button>
                 ) : (
                   <MemberRow
                     member={row.member}

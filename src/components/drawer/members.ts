@@ -98,30 +98,15 @@ export function recentSpeakers(messages: readonly ChatMessage[]): string[] {
 }
 
 export type MemberRow =
-  | { kind: "header"; group: MemberGroup; count: number }
-  | { kind: "member"; member: Member }
-  | { kind: "more"; hidden: number };
+  | { kind: "header"; group: MemberGroup }
+  | { kind: "member"; member: Member };
 
-/** How much of the members group is shown before `… and n more` takes over. */
-export const MEMBERS_PREVIEW = 10;
-
-/** Sections to a flat row list, which is what the virtualiser indexes into.
- * Operators are enumerated whatever their number; only the members group
- * truncates, and only until `expandMembers`. */
-export function toRows(sections: MemberSection[], expandMembers = false): MemberRow[] {
+/** Sections to a flat row list, which is what the virtualiser indexes into. */
+export function toRows(sections: MemberSection[]): MemberRow[] {
   const rows: MemberRow[] = [];
   for (const section of sections) {
-    rows.push({ kind: "header", group: section.group, count: section.members.length });
-
-    const truncates = section.group === "members" && !expandMembers;
-    const hidden = truncates
-      ? Math.max(0, section.members.length - MEMBERS_PREVIEW)
-      : 0;
-    const shown =
-      hidden === 0 ? section.members : section.members.slice(0, MEMBERS_PREVIEW);
-
-    for (const member of shown) rows.push({ kind: "member", member });
-    if (hidden > 0) rows.push({ kind: "more", hidden });
+    rows.push({ kind: "header", group: section.group });
+    for (const member of section.members) rows.push({ kind: "member", member });
   }
   return rows;
 }

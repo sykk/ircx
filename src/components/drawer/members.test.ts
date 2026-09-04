@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { CTF_OPS_MEMBERS, crowd, member } from "./fixtures";
 import { makeMessage } from "@/components/timeline/fixtures";
 import {
-  MEMBERS_PREVIEW,
   actionsFor,
   filterMembers,
   groupMembers,
@@ -131,46 +130,19 @@ describe("recentSpeakers", () => {
 });
 
 describe("toRows", () => {
-  it("puts a counted header in front of each group", () => {
-    const rows = toRows(groupMembers(CTF_OPS_MEMBERS), true);
+  it("puts an uncounted header in front of each group", () => {
+    const rows = toRows(groupMembers(CTF_OPS_MEMBERS));
     const headers = rows.filter((row) => row.kind === "header");
     expect(headers).toEqual([
-      { kind: "header", group: "operators", count: 4 },
-      { kind: "header", group: "members", count: 12 },
+      { kind: "header", group: "operators" },
+      { kind: "header", group: "members" },
     ]);
     expect(rows.length).toBe(CTF_OPS_MEMBERS.length + headers.length);
   });
 
-  it("enumerates every operator however many there are", () => {
-    const sections = groupMembers(crowd(500));
-    const operators = sections.find((s) => s.group === "operators")!.members;
-    expect(operators.length).toBeGreaterThan(MEMBERS_PREVIEW);
-
-    const rows = toRows(sections);
-    const shownOperators = rows
-      .slice(0, rows.findIndex((row) => row.kind === "header" && row.group === "members"))
-      .filter((row) => row.kind === "member");
-
-    expect(shownOperators.length).toBe(operators.length);
-    expect(rows.filter((row) => row.kind === "more")).toHaveLength(1);
-  });
-
-  it("stops the members group at the preview and counts what it withheld", () => {
-    const sections = groupMembers(crowd(500));
-    const members = sections.find((s) => s.group === "members")!.members.length;
-    const rows = toRows(sections);
-    const more = rows.filter((row) => row.kind === "more");
-
-    expect(more).toEqual([{ kind: "more", hidden: members - MEMBERS_PREVIEW }]);
-    expect(rows.filter((row) => row.kind === "member").length).toBe(
-      500 - (members - MEMBERS_PREVIEW),
-    );
-  });
-
-  it("shows the whole members group once expanded", () => {
-    const rows = toRows(groupMembers(crowd(500)), true);
+  it("includes every member from every group", () => {
+    const rows = toRows(groupMembers(crowd(500)));
     expect(rows.filter((row) => row.kind === "member").length).toBe(500);
-    expect(rows.some((row) => row.kind === "more")).toBe(false);
   });
 });
 

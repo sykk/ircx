@@ -3,6 +3,7 @@ import clsx from "clsx";
 import type { ChatMessage, MessageKind } from "@/types";
 import { stripIrcFormatting } from "@/lib/ircFormat";
 import { TransferControls } from "@/components/transfers/TransferControls";
+import { useAppStore } from "@/store";
 import { useTransferFor } from "@/store/selectors";
 import { Clock } from "./Clock";
 import { Block } from "./MessageBlock";
@@ -105,6 +106,9 @@ export function SystemMessage({
 }) {
   const { loud, presence, plain } = partitionSystemRun(messages);
   const [expanded, setExpanded] = useState(false);
+  const clockAtRail = useAppStore(
+    (s) => s.presentation.clockSide === "before-spine" && s.presentation.clock !== "off",
+  );
   // The digest is weather between two stretches of conversation, so it is given
   // the room a rule is given rather than the room a message is. Console output
   // is not: a run of it is nothing but these lines, and spacing each one apart
@@ -114,12 +118,12 @@ export function SystemMessage({
   const presenceSpan = describePresenceSpan(presence);
 
   return (
-    <Block spine={false}>
+    <Block spine={false} railClock={<Clock at={messages[0]!.timestamp} column faint />}>
       <div
         className="flex items-start gap-2 text-[12px]"
         style={digest ? { paddingBlock: "var(--timeline-rule-gap)" } : undefined}
       >
-        {!digest && <Clock at={messages[0]!.timestamp} />}
+        {!digest && !clockAtRail && <Clock at={messages[0]!.timestamp} />}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {loud.length > 0 && (
             <span
@@ -127,7 +131,9 @@ export function SystemMessage({
               style={{ color: "var(--warning)" }}
             >
               <span>{loud.map(systemText).join(", ")}</span>
-              {presence.length === 0 && <Clock at={messages[0]!.timestamp} faint />}
+              {presence.length === 0 && !clockAtRail && (
+                <Clock at={messages[0]!.timestamp} faint />
+              )}
             </span>
           )}
           {presence.length > 0 && (
@@ -176,7 +182,7 @@ export function SystemMessage({
                       </span>
                     );
                   })}
-                  <Clock at={messages[0]!.timestamp} faint />
+                  {!clockAtRail && <Clock at={messages[0]!.timestamp} faint />}
                 </span>
               </span>
             </button>

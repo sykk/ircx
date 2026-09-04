@@ -4,8 +4,8 @@ const STORAGE_KEY = "ircx.presentation";
 
 export type ClockFormat = "24h" | "24h-seconds" | "12h" | "12h-bare" | "off";
 
-/** Which side of the nickname the clock is set on. */
-export type ClockSide = "left" | "right";
+/** Where the clock is set relative to the spine and nickname. */
+export type ClockSide = "before-spine" | "left" | "right";
 
 export type TimelineAlign = "rail" | "center";
 export type MessageSize = "13px" | "14px" | "15px";
@@ -105,6 +105,7 @@ export const CLOCK_FORMATS: readonly {
 ];
 
 export const CLOCK_SIDES: readonly { id: ClockSide; name: string }[] = [
+  { id: "before-spine", name: "Before the spine" },
   { id: "left", name: "Before the nickname" },
   { id: "right", name: "After the nickname" },
 ];

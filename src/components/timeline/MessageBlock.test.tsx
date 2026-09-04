@@ -278,6 +278,22 @@ describe("the nickname at the head of a run", () => {
     expect(name!.textContent).toBe("phrack");
     expect(name!.getAttribute("data-ui")).toBe("message-head");
   });
+
+  it("puts the clock before the spine", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, clockSide: "before-spine" },
+    });
+    const { container } = block();
+
+    const clock = container.querySelector("[data-ui='rail-clock']")!;
+    const spine = container.querySelector("[data-spine='solid']")!;
+    const content = container.querySelector("[data-ui='message-head']")!.parentElement!;
+    expect(clock.querySelector("time")).not.toBeNull();
+    expect(container.querySelectorAll("time")).toHaveLength(1);
+    expect(clock.getAttribute("style")).toContain("grid-column: 1");
+    expect(spine.getAttribute("style")).toContain("grid-column: 3");
+    expect(content.getAttribute("style")).toContain("grid-column: 5");
+  });
 });
 
 /* The clock in front used to leave the lines of the run starting at the rail,

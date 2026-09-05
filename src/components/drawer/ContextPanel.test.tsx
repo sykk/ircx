@@ -26,8 +26,7 @@ describe("how wide the roster asks to be", () => {
     expect(rosterWidth([founder], false)).toContain("5ch");
   });
 
-  it("never asks for less than the heading above it needs", () => {
-    // "MEMBERS" is wider than a one-character nick, so the floor holds.
+  it("never asks for less than the roster floor", () => {
     // The whole clamp is pinned: the bounds are constants, so matching only
     // them passed for any input.
     expect(rosterWidth([member("j")], false)).toBe("clamp(8rem, 1ch + 3.5rem, 13rem)");
@@ -74,16 +73,16 @@ describe("filtering the roster", () => {
 
   it("draws no filter until one is asked for", () => {
     expect(strip()).toBeNull();
+    expect(document.querySelector('[data-ui="members-header"]')?.className).not.toContain(
+      "border-b",
+    );
   });
 
-  it("opens the filter from the roster header", () => {
-    expect(screen.getByText("Members", { selector: "h2" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Filter members" }));
+  it("opens the filter from the channel header control", () => {
+    act(() => useAppStore.getState().setMemberFilter(TEST_VIEW, ""));
 
     expect(strip()).toHaveProperty("value", "");
     expect(document.activeElement).toBe(strip());
-    expect(screen.getByRole("button", { name: "Close member filter" })).toBeTruthy();
   });
 
   it("shows member actions only from the context menu", () => {

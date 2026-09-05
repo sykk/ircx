@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ContextMenu, type ContextMenuState } from "@/components/common/ContextMenu";
 import { IconButton } from "@/components/common/IconButton";
-import { HeaderButton } from "@/components/header/HeaderButton";
-import { SearchIcon } from "@/components/header/icons";
 import { useAnnounce } from "@/hooks/useAnnounce";
 import { ipc } from "@/lib/ipc";
 import { sendFileTo } from "@/lib/transfers";
@@ -276,22 +274,9 @@ export function ContextPanel({ view }: { view: ViewId | null }) {
       >
         <div
           data-ui="members-header"
-          className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-3 font-[family-name:var(--font-ui)]"
-        >
-          <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold tracking-[0.09em] text-[var(--text-secondary)] uppercase">
-            Members
-          </h2>
-          <HeaderButton
-            label={filter === undefined ? "Filter members" : "Close member filter"}
-            pressed={filter !== undefined}
-            onClick={() => {
-              if (selected !== undefined) setSelectedNick(null);
-              narrow(filter === undefined ? "" : null);
-            }}
-          >
-            <SearchIcon size={15} />
-          </HeaderButton>
-        </div>
+          aria-hidden="true"
+          className="h-10 shrink-0"
+        />
 
         {filter !== undefined && selected === undefined && (
           <MemberFilter
@@ -410,7 +395,7 @@ function RosterHandle({
       aria-valuemin={128}
       aria-valuemax={400}
       tabIndex={0}
-      className="w-1 shrink-0 cursor-col-resize border-l border-[var(--border-subtle)] hover:bg-[var(--accent-muted)] @max-[440px]:hidden"
+      className="w-1 shrink-0 cursor-col-resize hover:bg-[var(--accent-muted)] @max-[440px]:hidden"
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
         from.current = { x: event.clientX, width: drawn() };

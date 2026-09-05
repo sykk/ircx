@@ -33,6 +33,9 @@ export function ChannelHeader({
   const focused = useAppStore((s) => s.viewOrder.length < 2 || s.activeViewId === view);
   const rosterShown = useAppStore((s) => (view ? s.rosterHidden[view] !== true : false));
   const toggleRoster = useAppStore((s) => s.toggleRoster);
+  const memberFilter = useAppStore((s) => (view ? s.memberFilter[view] : undefined));
+  const setMemberFilter = useAppStore((s) => s.setMemberFilter);
+  const setViewSelectedUser = useAppStore((s) => s.setViewSelectedUser);
   const openSearch = useAppStore((s) => s.openSearch);
   const clearBuffer = useAppStore((s) => s.clearBuffer);
   const openSetup = useAppStore((s) => s.openSetup);
@@ -82,7 +85,7 @@ export function ChannelHeader({
     <header className="contents">
       <div
         data-ui="channel-header-row"
-        className="col-start-1 row-start-1 flex h-10 min-w-0 items-center gap-2.5 border-b border-[var(--border-subtle)] bg-[var(--surface-base)] px-3"
+        className="group col-start-1 row-start-1 flex h-10 min-w-0 items-center gap-2.5 bg-[var(--surface-base)] px-3"
       >
         <h1
           className={clsx(
@@ -93,49 +96,46 @@ export function ChannelHeader({
           {channel.name}
         </h1>
 
-        {topic !== null && !topicExpanded && (
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            <p
-              title={topic.text}
-              className="selectable min-w-0 truncate text-[var(--text-secondary)]"
-            >
-              <CollapsedTopic
-                text={topic.text}
-                onOpen={(url) => {
-                  setTopicError(null);
-                  void openExternal(url).catch((reason: unknown) => {
-                    setTopicError(`Could not open ${url} — ${String(reason)}`);
-                  });
-                }}
-              />
-            </p>
-            <button
-              type="button"
-              aria-label="Expand topic"
-              aria-expanded={false}
-              onClick={() => setTopicExpanded(true)}
-              className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-            >
-              <span className="block rotate-[-90deg]">
-                <ChevronIcon size={14} />
-              </span>
-            </button>
-          </div>
+        {network !== undefined && (
+          <span className="min-w-0 truncate text-[var(--text-muted)]">
+            on {network.name}
+          </span>
         )}
 
         <span
           aria-label={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
           title={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
-          className={clsx(
-            "flex shrink-0 items-center gap-1 text-[var(--text-muted)]",
-            topic === null ? "mr-auto" : topicExpanded && "ml-auto",
-          )}
+          className="flex shrink-0 items-center gap-1 text-[var(--text-muted)]"
         >
           <MembersIcon size={14} />
           <span aria-hidden="true">{channel.memberCount}</span>
         </span>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <span
+          data-ui="header-actions"
+          className="pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        >
+          <HeaderButton label={`Search ${channel.name}`} onClick={() => openSearch()}>
+            <SearchIcon size={15} />
+          </HeaderButton>
+        </span>
+
+        <div
+          data-ui="header-actions"
+          className="pointer-events-none ml-auto flex shrink-0 items-center gap-1 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        >
+          <HeaderButton
+            label={memberFilter === undefined ? "Filter members" : "Close member filter"}
+            pressed={memberFilter !== undefined}
+            onClick={() => {
+              if (!view) return;
+              setViewSelectedUser(view, null);
+              setMemberFilter(view, memberFilter === undefined ? "" : null);
+            }}
+          >
+            <SearchIcon size={15} />
+          </HeaderButton>
+
           {onCatchUp && (
             <HeaderButton
               label="Catch up"
@@ -158,13 +158,6 @@ export function ChannelHeader({
             onClick={() => view && toggleRoster(view)}
           >
             <MembersIcon size={16} />
-          </HeaderButton>
-
-          <HeaderButton
-            label={`Search ${channel.name}`}
-            onClick={() => openSearch()}
-          >
-            <SearchIcon size={16} />
           </HeaderButton>
 
           <div
@@ -243,44 +236,60 @@ export function ChannelHeader({
         </div>
       </div>
 
-      {topic !== null && (topicExpanded || topicError !== null) && (
-        <div
-          data-ui="topic-banner"
-          className="col-start-1 row-start-2 flex min-w-0 items-center gap-2 border-b border-[var(--border-default)] bg-[var(--surface-raised)] px-3 py-1.5"
-        >
-          {topicExpanded && (
-            <div className="flex min-w-0 flex-1 items-baseline gap-2">
-              <p
-                title={topic.text}
-                className="selectable min-w-0 whitespace-pre-wrap break-words text-[var(--text-primary)]"
-              >
-                {topic.text}
-              </p>
-              {(topic.setBy !== null || topic.setAt !== null) && (
-                <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
-                  {topicMetadata(topic.setBy, topic.setAt)}
-                </p>
+      <div
+        data-ui="topic-banner"
+        className="col-start-1 row-start-2 flex min-h-10 min-w-0 items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          {topic !== null && (
+            <p
+              title={topic.text}
+              className={clsx(
+                "selectable min-w-0 text-[var(--text-secondary)]",
+                topicExpanded ? "whitespace-pre-wrap break-words" : "truncate",
               )}
-            </div>
+            >
+              {topicExpanded ? (
+                topic.text
+              ) : (
+                <CollapsedTopic
+                  text={topic.text}
+                  onOpen={(url) => {
+                    setTopicError(null);
+                    void openExternal(url).catch((reason: unknown) => {
+                      setTopicError(`Could not open ${url} — ${String(reason)}`);
+                    });
+                  }}
+                />
+              )}
+            </p>
+          )}
+          {topic !== null && (topic.setBy !== null || topic.setAt !== null) && topicExpanded && (
+            <p className="max-w-[45%] shrink-0 truncate text-[11px] text-[var(--text-muted)]">
+              {topicMetadata(topic.setBy, topic.setAt)}
+            </p>
+          )}
+          {topic !== null && (
+            <button
+              type="button"
+              aria-label={topicExpanded ? "Collapse topic" : "Expand topic"}
+              aria-expanded={topicExpanded}
+              onClick={() => setTopicExpanded((expanded) => !expanded)}
+              className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <span className={clsx("block", !topicExpanded && "rotate-[-90deg]")}>
+                <ChevronIcon size={14} />
+              </span>
+            </button>
           )}
           {topicError !== null && (
-            <span role="alert" className="min-w-0 flex-1 truncate text-[11px] text-[var(--danger)]">
+            <span role="alert" className="min-w-0 truncate text-[11px] text-[var(--danger)]">
               {topicError}
             </span>
           )}
-          {topicExpanded && (
-            <button
-              type="button"
-              aria-label="Collapse topic"
-              aria-expanded={true}
-              onClick={() => setTopicExpanded(false)}
-              className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-            >
-              <ChevronIcon size={14} />
-            </button>
-          )}
         </div>
-      )}
+
+      </div>
     </header>
   );
 }

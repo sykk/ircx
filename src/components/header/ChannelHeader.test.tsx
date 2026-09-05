@@ -78,15 +78,17 @@ describe("ChannelHeader", () => {
    * being in the mockup, before anything had established that nothing else
    * showed it either. */
   describe("the topic", () => {
-    it("is drawn with the controls until it is expanded", () => {
+    it("is drawn below the header controls", () => {
       const { container } = render(<ChannelHeader view={TEST_VIEW} />);
       const controls = container.querySelector('[data-ui="channel-header-row"]');
       const banner = container.querySelector('[data-ui="topic-banner"]');
       const topic = container.querySelector(`p[title="${TOPIC}"]`);
       expect(controls).toBeTruthy();
-      expect(banner).toBeNull();
+      expect(banner).toBeTruthy();
       expect(topic).toBeTruthy();
-      expect(controls?.contains(topic)).toBe(true);
+      expect(banner?.contains(topic)).toBe(true);
+      expect(controls?.contains(screen.getByRole("button", { name: `Search ${CTF_OPS.name}` })))
+        .toBe(true);
 
       fireEvent.click(screen.getByRole("button", { name: "Expand topic" }));
       const expanded = container.querySelector('[data-ui="topic-banner"]');
@@ -131,7 +133,7 @@ describe("ChannelHeader", () => {
       render(<ChannelHeader view={TEST_VIEW} />);
       expect(screen.queryByText(TOPIC)).toBeNull();
       expect(screen.getByLabelText("16 members")).toBeTruthy();
-      expect(document.querySelector('[data-ui="topic-banner"]')).toBeNull();
+      expect(document.querySelector('[data-ui="topic-banner"]')).toBeTruthy();
     });
 
     /** A server that clears a topic sends an empty one rather than none. */
@@ -183,6 +185,20 @@ describe("ChannelHeader", () => {
     render(<ChannelHeader view={TEST_VIEW} />);
     fireEvent.click(screen.getByRole("button", { name: `Search ${CTF_OPS.name}` }));
     expect(useAppStore.getState().searchOpen).toBe(true);
+  });
+
+  it("places chat search beside the member count and keeps member filtering in the actions", () => {
+    const { container } = render(<ChannelHeader view={TEST_VIEW} />);
+    const count = screen.getByLabelText("16 members");
+    const search = screen.getByRole("button", { name: `Search ${CTF_OPS.name}` });
+    const filter = screen.getByRole("button", { name: "Filter members" });
+
+    expect(count.nextElementSibling?.contains(search)).toBe(true);
+    expect(count.nextElementSibling?.contains(filter)).toBe(false);
+    expect(container.querySelectorAll('[data-ui="header-actions"]')).toHaveLength(2);
+    fireEvent.click(filter);
+    expect(useAppStore.getState().memberFilter[TEST_VIEW]).toBe("");
+    expect(filter.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("clears only this conversation's buffer", () => {

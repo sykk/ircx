@@ -1,0 +1,85 @@
+/* Original ircx palette inspired by the variety of the irssi theme gallery. */
+:root {
+  --surface-base: #fffdf7;
+  --surface-sidebar: #faf7ee;
+  --surface-raised: #faf7ee;
+  --surface-overlay: #fffdf7;
+  --surface-hover: #f4f0e6;
+  --surface-active: #eee9dc;
+
+  --border-subtle: #e6eaef;
+  --border-default: #d0d7de;
+  --border-strong: #b6bfc9;
+
+  --text-primary: #302f36;
+  --text-secondary: #59636e;
+  --text-muted: #818b98;
+  --text-faint: #a3acb6;
+  --text-inverse: #ffffff;
+
+  --accent: #355e91;
+  --accent-hover: #244773;
+  --accent-muted: #355e9122;
+
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --danger: #cf222e;
+
+  --state-connected: #1a7f37;
+  --state-connecting: #9a6700;
+  --state-disconnected: #818b98;
+  --state-error: #cf222e;
+
+  --badge-bg: #eaeef2;
+  --badge-text: #59636e;
+  --badge-highlight-bg: #0969da;
+  --badge-highlight-text: #ffffff;
+
+  --divider-unread: #1e6f79;
+  --mention-bg: #355e9116;
+
+  --nick-1: #1e6f79;
+  --nick-2: #256b96;
+  --nick-3: #3062bf;
+  --nick-4: #4e57d3;
+  --nick-5: #694dd3;
+  --nick-6: #8440cf;
+  --nick-7: #9d30c1;
+  --nick-8: #ab2ba6;
+  --nick-9: #b22d89;
+  --nick-10: #b82e68;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --disabled-opacity: 0.75;
+
+  --pending-opacity: 0.7;
+
+  --timeline-row-pad-y: 1px;
+  --timeline-block-gap: 11px;
+  --timeline-body-leading: 1.7;
+
+  --timeline-rail-pad: 16px;
+  --timeline-spine-width: 2px;
+  --timeline-spine-gap: 28px;
+  --timeline-rule-gap: 20px;
+  --timeline-measure: 595px;
+  --timeline-actions-col: 60px;
+  --timeline-actions-gap: 16px;
+
+  --timeline-quote-width: 2px;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
+
+  --scrim: rgb(31 35 40 / 0.42);
+
+  --shadow-overlay: 0 12px 32px -12px rgb(31 35 40 / 0.24);
+
+  --font-smoothing: auto;
+}

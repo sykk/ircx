@@ -179,3 +179,9 @@ describe("CLOCK_FORMATS", () => {
     ]);
   });
 });
+
+// Larger reading sizes must survive a restart, not just the live dropdown.
+it.each(["16px", "18px"] as const)("remembers %s message text", (messageSize) => {
+  storePresentation({ ...DEFAULT_PRESENTATION, messageSize });
+  expect(storedPresentation().messageSize).toBe(messageSize);
+});

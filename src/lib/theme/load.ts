@@ -14,6 +14,15 @@ import glassUi from "@/styles/themes/ircx-glass/ui.css?raw";
 import lightManifest from "@/styles/themes/ircx-light/theme.json?raw";
 import lightStylesheet from "@/styles/themes/ircx-light/theme.css?raw";
 
+import frostManifest from "@/styles/themes/ircx-frost/theme.json?raw";
+import frostStylesheet from "@/styles/themes/ircx-frost/theme.css?raw";
+import violetManifest from "@/styles/themes/ircx-violet/theme.json?raw";
+import violetStylesheet from "@/styles/themes/ircx-violet/theme.css?raw";
+import terminalManifest from "@/styles/themes/ircx-terminal/theme.json?raw";
+import terminalStylesheet from "@/styles/themes/ircx-terminal/theme.css?raw";
+import paperManifest from "@/styles/themes/ircx-paper/theme.json?raw";
+import paperStylesheet from "@/styles/themes/ircx-paper/theme.css?raw";
+
 /* The list is derived in `./tokens`, beside the groups and kinds the editor
  * arranges it by, and re-exported here because this is where every caller has
  * always read it from. */
@@ -29,6 +38,11 @@ export const FALLBACK_THEME_ID = "ircx-dark";
 export const CLASSIC_THEME_ID = "ircx-classic";
 
 export const BUILT_IN_SOURCES: readonly ThemeSource[] = [
+  { id: "ircx-frost", manifest: frostManifest, stylesheet: frostStylesheet, uiStylesheet: "" },
+  { id: "ircx-violet", manifest: violetManifest, stylesheet: violetStylesheet, uiStylesheet: "" },
+  { id: "ircx-terminal", manifest: terminalManifest, stylesheet: terminalStylesheet, uiStylesheet: "" },
+  { id: "ircx-paper", manifest: paperManifest, stylesheet: paperStylesheet, uiStylesheet: "" },
+
   { id: FALLBACK_THEME_ID, manifest: darkManifest, stylesheet: darkStylesheet, uiStylesheet: "" },
   { id: "ircx-light", manifest: lightManifest, stylesheet: lightStylesheet, uiStylesheet: "" },
   {

@@ -125,6 +125,10 @@ describe("the cyberpunk example theme", () => {
 describe("catalogue", () => {
   it("is the built-ins when nothing is installed", () => {
     expect(catalogue().themes.map((theme) => theme.id)).toEqual([
+      "ircx-frost",
+      "ircx-violet",
+      "ircx-terminal",
+      "ircx-paper",
       "ircx-dark",
       "ircx-light",
       "ircx-glass",
@@ -137,6 +141,10 @@ describe("catalogue", () => {
     const { themes, broken } = catalogue([complete({ manifest: "{" })]);
 
     expect(themes.map((theme) => theme.id)).toEqual([
+      "ircx-frost",
+      "ircx-violet",
+      "ircx-terminal",
+      "ircx-paper",
       "ircx-dark",
       "ircx-light",
       "ircx-glass",

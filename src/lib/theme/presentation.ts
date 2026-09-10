@@ -8,7 +8,7 @@ export type ClockFormat = "24h" | "24h-seconds" | "12h" | "12h-bare" | "off";
 export type ClockSide = "before-spine" | "left" | "right";
 
 export type TimelineAlign = "rail" | "center";
-export type MessageSize = "13px" | "14px" | "15px";
+export type MessageSize = "13px" | "14px" | "15px" | "16px" | "18px";
 export type TimelineMeasure = "narrow" | "theme" | "wide";
 export type ClockEmphasis = "quiet" | "normal";
 
@@ -119,6 +119,8 @@ export const MESSAGE_SIZES: readonly { id: MessageSize; name: string }[] = [
   { id: "13px", name: "Small · 13px" },
   { id: "14px", name: "Default · 14px" },
   { id: "15px", name: "Large · 15px" },
+  { id: "16px", name: "Larger · 16px" },
+  { id: "18px", name: "Extra large · 18px" },
 ];
 
 export const TIMELINE_MEASURES: readonly { id: TimelineMeasure; name: string }[] = [

@@ -482,13 +482,17 @@ describe("CommandPalette", () => {
       type("theme");
 
       expect(optionLabels()).toEqual([
+        expect.stringContaining("Frost"),
         expect.stringContaining("Glass"),
+        expect.stringContaining("Paper"),
+        expect.stringContaining("Violet"),
+        expect.stringContaining("Terminal"),
         expect.stringContaining("ircx Dark"),
         expect.stringContaining("ircx Light"),
         expect.stringContaining("Classic IRC"),
         expect.stringContaining("solarized"),
       ]);
-      expect(optionLabels()[1]).toContain("in use");
+      expect(optionLabels().find((label) => label.includes("ircx Dark"))).toContain("in use");
     });
 
     it("puts the highlighted theme on the window before it is chosen", () => {

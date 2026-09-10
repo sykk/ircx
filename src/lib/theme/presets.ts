@@ -44,6 +44,39 @@ export interface Preset {
 
 export const PRESETS: readonly Preset[] = [
   {
+    id: "frost",
+    name: "Frost",
+    detail: "Icy blue, system type and a quiet centered conversation",
+    theme: "ircx-frost",
+    presentation: { spine: true, clock: "24h", clockSide: "right", nickBrackets: false, align: "center" },
+    faces: { prose: "system", mono: "jetbrains" },
+  },
+  {
+    id: "violet",
+    name: "Violet",
+    detail: "Plum surfaces, lavender accents and a conversation spine",
+    theme: "ircx-violet",
+    presentation: { spine: true, clock: "24h", clockSide: "right", nickBrackets: false, align: "center" },
+    faces: { prose: "inter", mono: "jetbrains" },
+  },
+  {
+    id: "terminal",
+    name: "Terminal",
+    detail: "Green on ink, monospace type and classic timestamps",
+    theme: "ircx-terminal",
+    presentation: { spine: false, clock: "24h", clockSide: "left", nickBrackets: true, align: "rail" },
+    faces: { prose: "mono", mono: "liberation" },
+  },
+  {
+    id: "paper",
+    name: "Paper",
+    detail: "Warm paper, blue ink and serif prose for reading",
+    theme: "ircx-paper",
+    presentation: { spine: false, clock: "24h", clockSide: "left", nickBrackets: false, align: "center" },
+    faces: { prose: "georgia", mono: "courier" },
+  },
+
+  {
     id: "classic",
     name: "Classic IRC",
     detail: "Black ground, no spine, the time and then <nick> at the head of a run",

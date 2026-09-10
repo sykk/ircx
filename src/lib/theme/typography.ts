@@ -32,6 +32,7 @@ export const PROSE_FACES: readonly Face[] = [
   },
   { id: "system", name: "System UI", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
   { id: "georgia", name: "Georgia", stack: 'Georgia, "Iowan Old Style", "Times New Roman", serif' },
+  { id: "humanist", name: "Humanist sans", stack: '"Trebuchet MS", "Liberation Sans", sans-serif' },
   { id: "mono", name: "Same as mono", stack: "" },
 ];
 
@@ -46,6 +47,7 @@ export const MONO_FACES: readonly Face[] = [
     name: "System mono",
     stack: 'ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace',
   },
+  { id: "liberation", name: "Liberation Mono", stack: '"Liberation Mono", "DejaVu Sans Mono", monospace' },
   { id: "courier", name: "Courier", stack: '"Courier New", Courier, monospace' },
 ];
 

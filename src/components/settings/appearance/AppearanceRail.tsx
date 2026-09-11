@@ -160,6 +160,13 @@ export function AppearanceRail({
               />
 
               <CheckField
+                label="Nickname at the rail"
+                hint="Right-aligned in a fixed column left of the spine, instead of on its own line above the run. A long name is cut off rather than given more room."
+                checked={presentation.nickAtRail}
+                onChange={(nickAtRail) => selectPresentation({ nickAtRail })}
+              />
+
+              <CheckField
                 label="Compact single-message runs"
                 hint="Puts the nickname and time in front of the message when a run has only one line."
                 checked={presentation.compactSingletons}

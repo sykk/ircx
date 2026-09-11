@@ -5,7 +5,7 @@ import { DEFAULT_PRESENTATION, type Presentation } from "@/lib/theme";
 import { useAppStore } from "@/store";
 import { makeMessage } from "./fixtures";
 import type { Group } from "./groups";
-import { MessageBlock } from "./MessageBlock";
+import { MessageBlock, NICK_RAIL_CHARS } from "./MessageBlock";
 
 function declared(opener = "phrack"): Group {
   return { id: "a", grade: "declared", name: "parser", opener };
@@ -293,6 +293,224 @@ describe("the nickname at the head of a run", () => {
     expect(clock.getAttribute("style")).toContain("grid-column: 1");
     expect(spine.getAttribute("style")).toContain("grid-column: 3");
     expect(content.getAttribute("style")).toContain("grid-column: 5");
+  });
+});
+
+describe("the nickname at the rail", () => {
+  beforeEach(() =>
+    useAppStore.setState({ presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true } }),
+  );
+
+  it("draws no rail column by default", () => {
+    useAppStore.setState({ presentation: DEFAULT_PRESENTATION });
+    const { container } = block();
+
+    expect(container.querySelector("[data-ui='rail-nick']")).toBeNull();
+  });
+
+  it("moves the name to a column of its own, and opens no header above the run", () => {
+    const { container } = block();
+
+    const rail = container.querySelector<HTMLElement>("[data-ui='rail-nick']")!;
+    expect(within(rail).getByText("phrack")).toBeTruthy();
+    expect(container.querySelector("[data-ui='message-head']")).toBeNull();
+    // Not printed twice: the only "phrack" left is the one in the rail.
+    expect(rail.textContent).toBe("phrack");
+  });
+
+  /* Right-aligned and cut off rather than resized, so a name longer than the
+   * column never moves the spine — the same bargain the clock's column keeps
+   * with the widest hour of the day. The column itself carries `text-align:
+   * right`, so a short name hugs the spine rather than opening a gap after
+   * itself; the name's own box is a *maximum* of `NICK_RAIL_CHARS`, so a
+   * short name is not stretched to fill it and a long one is capped rather
+   * than truncated by a flex remainder that came up short on a font's own
+   * rounding. */
+  it("holds the column to a fixed width and elides what does not fit", () => {
+    const { container } = block();
+    const outer = container.querySelector<HTMLElement>("[data-ui='rail-nick'] span")!;
+    const name = outer.querySelector<HTMLElement>("span")!;
+
+    expect(outer.style.width).toBe(`${NICK_RAIL_CHARS}ch`);
+    expect(outer.className).toContain("text-right");
+    expect(outer.getAttribute("title")).toBe("phrack");
+    expect(name.style.maxWidth).toBe(`${NICK_RAIL_CHARS}ch`);
+    expect(name.style.width).toBe("");
+    expect(name.className).toContain("truncate");
+  });
+
+  /* The bracket sits outside the shrinking span, so a name long enough to be
+   * cut off still closes with `>` instead of losing it to the ellipsis along
+   * with the end of the name. */
+  it("wears angle brackets there too, when the reader asked for them", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickBrackets: true },
+    });
+    const { container } = block();
+    const rail = container.querySelector<HTMLElement>("[data-ui='rail-nick']")!;
+
+    expect(rail.textContent).toBe("<phrack>");
+    expect(within(rail).getByText("phrack")).toBeTruthy();
+  });
+
+  it("keeps both brackets even when the name has to be cut off", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickBrackets: true },
+    });
+    const { container } = block({
+      messages: [
+        makeMessage({ id: "a", nick: "a-genuinely-enormous-nickname", text: "tags fail" }),
+      ],
+    });
+    const rail = container.querySelector<HTMLElement>("[data-ui='rail-nick']")!;
+
+    expect(rail.textContent!.startsWith("<")).toBe(true);
+    expect(rail.textContent!.endsWith(">")).toBe(true);
+  });
+
+  /* The brackets used to come out of the column's own `NICK_RAIL_CHARS`, so a
+   * name that fit bare truncated the moment brackets went on — the same
+   * width `NICK_RAIL_CHARS`'s own doc comment promises a column wide enough
+   * for. The column grows by the brackets' two characters instead, so
+   * wearing them never costs the name anything. */
+  it("widens the column for the brackets rather than taking the room from the name", () => {
+    const bareWidth = (() => {
+      const { container, unmount } = block();
+      const width = container.querySelector<HTMLElement>("[data-ui='rail-nick'] span")!.style
+        .width;
+      unmount();
+      return width;
+    })();
+
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickBrackets: true },
+    });
+    const nickAtTheLimit = "a".repeat(NICK_RAIL_CHARS);
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: nickAtTheLimit, text: "tags fail" })],
+    });
+    const rail = container.querySelector<HTMLElement>("[data-ui='rail-nick']")!;
+    const outer = rail.querySelector<HTMLElement>("span")!;
+
+    expect(bareWidth).toBe(`${NICK_RAIL_CHARS}ch`);
+    expect(outer.style.width).toBe(`${NICK_RAIL_CHARS + 2}ch`);
+    // A nick exactly at the limit is exactly what the column promises room
+    // for, so wearing brackets on top of it must not truncate it.
+    expect(rail.textContent).toBe(`<${nickAtTheLimit}>`);
+  });
+
+  /**
+   * The truncation regression, held down structurally: the name's box caps
+   * itself at `NICK_RAIL_CHARS` on its own terms, in both directions, rather
+   * than being whatever is left of a shared flex row after the brackets take
+   * theirs.
+   *
+   * jsdom lays nothing out, so this cannot assert that the sixteenth
+   * character is actually painted — a flex-shrink split reported the same
+   * `textContent` and the same declared widths in this environment and still
+   * clipped two real characters in a browser, on nothing this suite could
+   * see. What it can hold is the one fact that made the browser fix work:
+   * the name's own bound never moves when its sibling brackets appear.
+   */
+  it("gives the name the same bound whether or not it wears brackets", () => {
+    const bare = block({ messages: [makeMessage({ id: "a", nick: "phrack", text: "hi" })] });
+    const bareName = bare.container.querySelector<HTMLElement>(
+      "[data-ui='rail-nick'] span span",
+    )!;
+    expect(bareName.style.maxWidth).toBe(`${NICK_RAIL_CHARS}ch`);
+    bare.unmount();
+
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickBrackets: true },
+    });
+    const bracketed = block({ messages: [makeMessage({ id: "a", nick: "phrack", text: "hi" })] });
+    const bracketedName = bracketed.container.querySelector<HTMLElement>(
+      "[data-ui='rail-nick'] span span",
+    )!;
+    expect(bracketedName.style.maxWidth).toBe(`${NICK_RAIL_CHARS}ch`);
+  });
+
+  /**
+   * The grouping regression: a *maximum* rather than a fixed width lets a
+   * short name stay its own natural size instead of being stretched to
+   * sixteen characters of box, which is exactly what opened a gap between
+   * `<` and the name it belongs to — the bracket stayed pinned to the left
+   * of the column while the name's forced-wide box, right-aligned only
+   * *inside itself*, floated the real letters off to the right of it.
+   * `text-align: right` on the column is what closes that gap: the whole
+   * `<name>` run is one right-aligned unit now, so what is left over for a
+   * short name opens up before the `<` instead of splitting the name from
+   * its own bracket.
+   */
+  it("does not stretch a short name, so it groups with its brackets rather than splitting from them", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickBrackets: true },
+    });
+    const { container } = block({
+      messages: [makeMessage({ id: "a", nick: "syk", text: "hi" })],
+    });
+    const outer = container.querySelector<HTMLElement>("[data-ui='rail-nick'] span")!;
+    const name = outer.querySelector<HTMLElement>("span")!;
+
+    expect(outer.className).toContain("text-right");
+    expect(name.style.width).toBe("");
+    expect(name.style.maxWidth).toBe(`${NICK_RAIL_CHARS}ch`);
+    // The whole run reads as one word with nothing splitting the bracket
+    // from the name it closes over.
+    expect(outer.textContent).toBe("<syk>");
+  });
+
+  /* The clock followed the name to the rail, having nowhere left beside it in
+   * the content column — `before-spine` puts it ahead of the name, and every
+   * other side puts it after, still short of the spine. */
+  it("sends the clock along to the rail, ahead of the name for before-spine", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, clockSide: "before-spine" },
+    });
+    const { container } = block();
+
+    const clock = container.querySelector("[data-ui='rail-clock']")!;
+    const nick = container.querySelector("[data-ui='rail-nick']")!;
+    const spine = container.querySelector("[data-spine='solid']")!;
+    expect(container.querySelectorAll("time")).toHaveLength(1);
+    expect(clock.getAttribute("style")).toContain("grid-column: 1");
+    expect(nick.getAttribute("style")).toContain("grid-column: 3");
+    expect(spine.getAttribute("style")).toContain("grid-column: 5");
+  });
+
+  it("puts the clock after the name for every other side, still ahead of the spine", () => {
+    const { container } = block();
+
+    const clock = container.querySelector("[data-ui='rail-clock']")!;
+    const nick = container.querySelector("[data-ui='rail-nick']")!;
+    const spine = container.querySelector("[data-spine='solid']")!;
+    expect(nick.getAttribute("style")).toContain("grid-column: 1");
+    expect(clock.getAttribute("style")).toContain("grid-column: 3");
+    expect(spine.getAttribute("style")).toContain("grid-column: 5");
+  });
+
+  it("draws no clock at all when the reader turned it off", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, clock: "off" },
+    });
+    const { container } = block();
+
+    expect(container.querySelector("[data-ui='rail-clock']")).toBeNull();
+    expect(container.querySelector("time")).toBeNull();
+    const nick = container.querySelector("[data-ui='rail-nick']")!;
+    expect(nick.getAttribute("style")).toContain("grid-column: 1");
+  });
+
+  /* The prefix already names every line; a rail column with nothing in it
+   * would be a second, empty promise of the same information. */
+  it("opens an empty column for a run naming its sender on every line", () => {
+    useAppStore.setState({
+      presentation: { ...DEFAULT_PRESENTATION, nickAtRail: true, nickEveryLine: true },
+    });
+    const { container } = block();
+
+    const rail = container.querySelector("[data-ui='rail-nick']")!;
+    expect(rail.textContent).toBe("");
   });
 });
 

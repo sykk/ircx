@@ -96,6 +96,7 @@ function field(token: string): HTMLInputElement {
       "Line width",
       "Spine",
       "Nickname on every line",
+      "Nickname at the rail",
       "Compact single-message runs",
       "Angle brackets around nicknames",
       "Nickname colours",
@@ -370,6 +371,7 @@ describe("AppearancePage", () => {
         clock: "off",
         clockSide: "right",
         nickBrackets: false,
+        nickAtRail: false,
         nickEveryLine: false,
         align: "center",
         compactSingletons: false,
@@ -429,6 +431,14 @@ describe("AppearancePage", () => {
 
       expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
       expect(localStorage.getItem("ircx.presentation")).toContain('"nickEveryLine":true');
+    });
+
+    it("puts the nickname at the rail", () => {
+      open();
+      fireEvent.click(field("Nickname at the rail"));
+
+      expect(useAppStore.getState().presentation.nickAtRail).toBe(true);
+      expect(localStorage.getItem("ircx.presentation")).toContain('"nickAtRail":true');
     });
 
     it("compacts single-message runs", () => {
@@ -549,6 +559,7 @@ describe("AppearancePage", () => {
         clock: "24h-seconds",
         clockSide: "left",
         nickBrackets: true,
+        nickAtRail: false,
         nickEveryLine: false,
         align: "rail",
         compactSingletons: false,
@@ -570,6 +581,15 @@ describe("AppearancePage", () => {
       fireEvent.click(button("Start from Classic IRC"));
 
       expect(useAppStore.getState().presentation.nickEveryLine).toBe(true);
+      expect(useAppStore.getState().presentation.nickBrackets).toBe(true);
+    });
+
+    it("keeps the name at the rail for a reader who turned it on", () => {
+      open();
+      fireEvent.click(field("Nickname at the rail"));
+      fireEvent.click(button("Start from Classic IRC"));
+
+      expect(useAppStore.getState().presentation.nickAtRail).toBe(true);
       expect(useAppStore.getState().presentation.nickBrackets).toBe(true);
     });
 

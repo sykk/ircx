@@ -22,13 +22,15 @@ export interface Preset {
   name: string;
   detail: string;
   theme: string;
-  /** Every timeline setting but one. Whether the name is stated in front of
-   * every line stays where the reader left it: it decides how much of the
-   * window a conversation takes rather than what it looks like, and somebody
-   * who reads a channel that way reads every look that way. */
+  /** Every timeline setting but two. Whether the name is stated in front of
+   * every line, or at the rail instead of above the run, stays where the
+   * reader left it: both decide how much of the window a conversation takes
+   * rather than what it looks like, and somebody who reads a channel that way
+   * reads every look that way. */
   presentation: Omit<
     Presentation,
     | "nickEveryLine"
+    | "nickAtRail"
     | "compactSingletons"
     | "messageSize"
     | "measure"

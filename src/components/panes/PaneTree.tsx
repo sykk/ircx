@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useAppStore } from "@/store";
-import { ratioOf, type SplitPath } from "@/store/layout";
+import { ratioOf, widthDemand, type SplitPath } from "@/store/layout";
 import type { Layout } from "@/store/types";
 import { ChatPane } from "./ChatPane";
 
@@ -41,19 +41,23 @@ function PaneNode({ node, path }: { node: Layout; path: SplitPath }) {
 
   const row = node.direction === "row";
   const ratio = ratioOf(node);
+  const [left, right] = node.children;
 
   return (
     <div className={row ? "flex h-full min-h-0 min-w-0" : "flex h-full min-h-0 min-w-0 flex-col"}>
       {/* Basis zero and a proportional grow, so the two shares divide whatever
-          the parent gives this split rather than any fixed width. */}
-      <div className="min-h-0 min-w-0" style={{ flex: `${ratio} 1 0` }}>
-        <PaneNode node={node.children[0]} path={[...path, 0]} />
+          the parent gives this split rather than any fixed width. The explicit
+          `minWidth` is what a share alone cannot express: it is set from
+          `widthDemand`, so a pane three splits deep carries its floor with it
+          rather than trusting the split enforcing it to know it is there. */}
+      <div className="min-h-0" style={{ flex: `${ratio} 1 0`, minWidth: MIN_PANE_PX * widthDemand(left) }}>
+        <PaneNode node={left} path={[...path, 0]} />
       </div>
 
-      <Divider row={row} path={path} ratio={ratio} />
+      <Divider row={row} path={path} ratio={ratio} left={left} right={right} />
 
-      <div className="min-h-0 min-w-0" style={{ flex: `${1 - ratio} 1 0` }}>
-        <PaneNode node={node.children[1]} path={[...path, 1]} />
+      <div className="min-h-0" style={{ flex: `${1 - ratio} 1 0`, minWidth: MIN_PANE_PX * widthDemand(right) }}>
+        <PaneNode node={right} path={[...path, 1]} />
       </div>
     </div>
   );
@@ -64,7 +68,19 @@ function PaneNode({ node, path }: { node: Layout; path: SplitPath }) {
  * it draws: a one-pixel target is not one anybody can hit, so the hit area is
  * padded and the pixel is drawn inside it.
  */
-function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: number }) {
+function Divider({
+  row,
+  path,
+  ratio,
+  left,
+  right,
+}: {
+  row: boolean;
+  path: SplitPath;
+  ratio: number;
+  left: Layout;
+  right: Layout;
+}) {
   const setSplitRatio = useAppStore((s) => s.setSplitRatio);
   const [dragging, setDragging] = useState(false);
   const self = useRef<HTMLDivElement>(null);
@@ -81,20 +97,27 @@ function Divider({ row, path, ratio }: { row: boolean; path: SplitPath; ratio: n
   };
 
   /**
-   * The same share with neither side below `MIN_PANE_PX`, which the store's
-   * share floor cannot express.
+   * The same share with neither side below what `widthDemand` says it needs,
+   * which the store's share floor cannot express. Weighted by demand rather
+   * than the flat `MIN_PANE_PX` of a single pane: a side holding a further
+   * split of its own needs room for all of it, not just one pane's floor,
+   * which is what let three nested splits squeeze a leaf to nothing even
+   * though every individual divider was honouring this same floor.
    *
-   * Halved rather than refused when the split is too small to give both sides
-   * that much: an even split is the best the space allows, and a divider that
-   * will not move at all reads as broken. That case starts around a 600px
-   * split, which is a window narrower than the app opens at.
+   * Halved — or rather split by demand — rather than refused when the split
+   * is too small to give both sides what they ask: an even split is the best
+   * the space allows, and a divider that will not move at all reads as
+   * broken. That case starts around a 600px split for two plain panes, which
+   * is a window narrower than the app opens at.
    */
   const held = (share: number): number => {
     if (!row) return share;
     const span = self.current?.parentElement?.getBoundingClientRect().width;
     if (!span) return share;
-    const floor = Math.min(MIN_PANE_PX / span, 0.5);
-    return Math.min(Math.max(share, floor), 1 - floor);
+    const leftPx = MIN_PANE_PX * widthDemand(left);
+    const rightPx = MIN_PANE_PX * widthDemand(right);
+    if (leftPx + rightPx >= span) return leftPx / (leftPx + rightPx);
+    return Math.min(Math.max(share, leftPx / span), 1 - rightPx / span);
   };
 
   return (

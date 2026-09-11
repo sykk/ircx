@@ -38,6 +38,26 @@ export function setRatio(layout: Layout, path: SplitPath, ratio: number): Layout
   };
 }
 
+/**
+ * How many pane-widths of room a subtree needs side by side.
+ *
+ * A row split divides its width between its children, so what it needs is
+ * their sum; a column split stacks its children on the same width, so what it
+ * needs is the wider of the two. Multiplied by `MIN_PANE_PX` in `PaneTree`,
+ * this is what keeps a pane three splits deep from being squeezed to nothing:
+ * each split's own 280px floor only ever looked at its immediate children, so
+ * a pane nested under two more splits than the one enforcing it could still
+ * end up far narrower than 280px even though every individual divider was
+ * honouring its own floor.
+ */
+export function widthDemand(layout: Layout): number {
+  if (layout.type === "view") return 1;
+  const [left, right] = layout.children;
+  return layout.direction === "row"
+    ? widthDemand(left) + widthDemand(right)
+    : Math.max(widthDemand(left), widthDemand(right));
+}
+
 /** Depth-first left-to-right, which is what `viewOrder` holds. A subtree's
  * views are therefore contiguous in it, so a pane's neighbour in that order is
  * always a pane it shares a split with. */

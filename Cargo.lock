@@ -1980,7 +1980,7 @@ checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
 name = "ircx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "gtk",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "ircx-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "ircx-ipc",
@@ -2027,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "ircx-ipc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "ts-rs",
@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "ircx-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "http",
  "httparse",
@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "ircx-plugin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rquickjs",
  "serde",
@@ -2066,14 +2066,14 @@ dependencies = [
 
 [[package]]
 name = "ircx-proto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror 2.0.19",
 ]
 
 [[package]]
 name = "ircx-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ircx-ipc",
  "keyring",

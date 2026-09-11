@@ -6,7 +6,7 @@ import { ChannelHeader } from "@/components/header/ChannelHeader";
 import { QueryHeader } from "@/components/header/QueryHeader";
 import { Timeline } from "@/components/timeline/Timeline";
 import { useAppStore } from "@/store";
-import { useView } from "@/store/selectors";
+import { useChannelForView, useView } from "@/store/selectors";
 import type { ViewId } from "@/store/types";
 import { SERVER_TARGET } from "@/types";
 import { ServerConsole } from "./ServerConsole";
@@ -14,6 +14,7 @@ import { ServerConsole } from "./ServerConsole";
 /** One split: its own target, scroll position, and draft. */
 export function ChatPane({ view }: { view: ViewId | null }) {
   const pane = useView(view);
+  const channel = useChannelForView(view);
   const focusView = useAppStore((s) => s.focusView);
   const split = useAppStore((s) => s.viewOrder.length > 1);
   const active = useAppStore((s) => s.activeViewId === view);
@@ -84,8 +85,8 @@ export function ChatPane({ view }: { view: ViewId | null }) {
           <div className="col-start-1 row-start-3 min-h-0 min-w-0">
             <Timeline view={view} catchUp={catchUp} />
           </div>
-          {!hidden && (
-            <div className="col-start-2 row-start-1 row-end-5 min-h-0">
+          {!hidden && channel !== undefined && (
+            <div data-ui="roster-column" className="col-start-2 row-start-1 row-end-5 min-h-0">
               <ContextPanel view={view} />
             </div>
           )}

@@ -9,29 +9,98 @@ import type { Group } from "./groups";
 import { MessageRow } from "./MessageRow";
 import { failureRuns, writesOwnNick } from "./rows";
 
-const LADDER = "var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
-const CLOCK_LADDER =
-  "max-content 8px var(--timeline-spine-width) var(--timeline-spine-gap) minmax(0, 1fr)";
 const TIMELINE_BLOCK_WIDTH =
   "var(--timeline-rail-pad) + var(--timeline-spine-width) + var(--timeline-spine-gap) + var(--timeline-reading-measure, var(--timeline-measure)) + var(--timeline-actions-col) + var(--timeline-actions-gap) + 16px";
 export const TIMELINE_BLOCK_MAX = `calc(${TIMELINE_BLOCK_WIDTH})`;
-/** The same ladder with the spine's two columns closed up, for a reader who
- * turned it off: the room a spine would have taken goes back to the prose
- * rather than standing empty at the rail. */
-const FLAT = "0 0 minmax(0, 1fr)";
-const CLOCK_FLAT = "max-content 8px 0 0 minmax(0, 1fr)";
 
-export function timelineBlockLayout(spine: boolean, side: ClockSide, clock: ClockFormat) {
-  const clockAtRail = side === "before-spine" && clock !== "off";
+/** How wide the rail carries a name, in characters of the mono face. Fixed
+ * rather than sized to what is on screen, for the reason the every-line
+ * prefix is a prefix and not a column: a width that changed with the longest
+ * name visible would move the spine with it. A name longer than this is
+ * elided rather than given the room, which is `truncate`'s doing in the
+ * component below — some fixed width always accepts that bargain for some
+ * nick, and twenty was chosen over the sixteen `groups.ts` uses for
+ * `ADDRESSED` once a service's own naming scheme (`growthetarget1987`,
+ * `reactprobe70991234`) ran past it in practice. */
+export const NICK_RAIL_CHARS = 20;
+
+/**
+ * The rail column's total width: `NICK_RAIL_CHARS` for the name itself, plus
+ * two more when it wears brackets.
+ *
+ * The brackets sit outside the span that shrinks, so a name cut off still
+ * closes with `>` rather than losing it to the ellipsis — but that only holds
+ * the bracket itself onto the row; it does nothing about the room the name
+ * gets. Left at a flat `NICK_RAIL_CHARS`, the brackets ate two characters out
+ * of the column the name was promised, and a sixteen-character nick that fit
+ * bare truncated the moment brackets were turned on. The column grows to keep
+ * the promise instead.
+ */
+export function nickRailWidth(brackets: boolean): number {
+  return NICK_RAIL_CHARS + (brackets ? 2 : 0);
+}
+
+/**
+ * The ladder every block hangs from, in the columns a reader's choices open:
+ * the clock at the rail, the nickname at the rail, the spine, and the
+ * content. Either of the first two can be absent, both can, or both can
+ * stand together — the clock naming where it sits relative to the nickname
+ * once the nickname has nowhere else to go.
+ */
+export function timelineBlockLayout(
+  spine: boolean,
+  side: ClockSide,
+  clock: ClockFormat,
+  nickAtRail: boolean,
+) {
+  // "before-spine" always sends the clock to the rail. Otherwise the clock
+  // was keeping `side` relative to the nickname in the content column — and
+  // once the nickname leaves for the rail, that is where the clock has to
+  // follow it to stay beside it at all.
+  const clockAtRail = clock !== "off" && (side === "before-spine" || nickAtRail);
+  const clockBeforeNick = side !== "right";
   const clockColumns = CLOCK_FORMATS.find((format) => format.id === clock)?.columns ?? 0;
+
+  // "max-content", not a `ch` width here: this element is not set in the mono
+  // face, so `ch` on it would measure the UI face's zero rather than the
+  // clock's or the nickname's. Each rail item declares its own fixed width in
+  // its own face instead — `Clock`'s `minWidth` and the truncated span below —
+  // and a max-content track holds a column to exactly that.
+  const tracks: string[] = [];
+  let clockColumn: number | null = null;
+  let nickColumn: number | null = null;
+  const openColumn = () => {
+    tracks.push("max-content", "8px");
+    return tracks.length - 1;
+  };
+
+  if (clockAtRail && clockBeforeNick) clockColumn = openColumn();
+  if (nickAtRail) nickColumn = openColumn();
+  if (clockAtRail && !clockBeforeNick) clockColumn = openColumn();
+
+  const spineColumn = tracks.length + 1;
+  tracks.push(
+    spine ? "var(--timeline-spine-width)" : "0",
+    spine ? "var(--timeline-spine-gap)" : "0",
+  );
+  const contentColumn = tracks.length + 1;
+  tracks.push("minmax(0, 1fr)");
+
+  const extraWidth: string[] = [];
+  if (clockAtRail) extraWidth.push(`${clockColumns}ch + 8px`);
+  if (nickAtRail) extraWidth.push(`${NICK_RAIL_CHARS}ch + 8px`);
+
   return {
     clockAtRail,
-    columns: clockAtRail ? (spine ? CLOCK_LADDER : CLOCK_FLAT) : spine ? LADDER : FLAT,
-    contentColumn: clockAtRail ? 5 : 3,
-    maxWidth: clockAtRail
-      ? `calc(${TIMELINE_BLOCK_WIDTH} + ${clockColumns}ch + 8px)`
+    clockColumn,
+    nickAtRail,
+    nickColumn,
+    columns: tracks.join(" "),
+    contentColumn,
+    maxWidth: extraWidth.length
+      ? `calc(${TIMELINE_BLOCK_WIDTH} + ${extraWidth.join(" + ")})`
       : TIMELINE_BLOCK_MAX,
-    spineColumn: clockAtRail ? 3 : 1,
+    spineColumn,
   };
 }
 
@@ -47,6 +116,11 @@ interface BlockProps {
   onSpineClick?: (() => void) | undefined;
   spinePressed?: boolean;
   railClock?: ReactNode;
+  /** The head of a run's name, for a reader who put it at the rail. Undefined
+   * where this block has none to show — a continuing run, an action, a
+   * reader who wants it every line instead — and the column still opens
+   * empty rather than closing, so the rail stays one width down the pane. */
+  railNick?: ReactNode;
   children: ReactNode;
 }
 
@@ -67,13 +141,15 @@ export function Block({
   onSpineClick,
   spinePressed = false,
   railClock,
+  railNick,
   children,
 }: BlockProps) {
   const drawn = useAppStore((s) => s.presentation.spine);
   const align = useAppStore((s) => s.presentation.align);
   const clockSide = useAppStore((s) => s.presentation.clockSide);
   const clock = useAppStore((s) => s.presentation.clock);
-  const layout = timelineBlockLayout(drawn, clockSide, clock);
+  const nickAtRail = useAppStore((s) => s.presentation.nickAtRail);
+  const layout = timelineBlockLayout(drawn, clockSide, clock, nickAtRail);
   // Closing the gap between two blocks of one group is the spine's doing: it is
   // what spans the gap and says they are one thing. With no spine to span it
   // the blocks would run together with nothing accounting for it, so the gap
@@ -99,9 +175,20 @@ export function Block({
         paddingTop: continues ? undefined : "var(--timeline-block-gap)",
       }}
     >
-      {layout.clockAtRail && (
-        <div data-ui="rail-clock" style={{ gridColumn: 1 }}>
+      {/* Every child names its own row as well as its column. Two items that
+          each give only a column and leave the row to auto-placement do not
+          reliably land in the same one — the packing cursor the spec leaves
+          implementation-defined advanced past row 1 for the second of them,
+          stacking a rail clock and a rail nickname that share no column
+          instead of setting them side by side. */}
+      {layout.clockAtRail && layout.clockColumn !== null && (
+        <div data-ui="rail-clock" style={{ gridColumn: layout.clockColumn, gridRow: 1 }}>
           {railClock}
+        </div>
+      )}
+      {layout.nickAtRail && layout.nickColumn !== null && (
+        <div data-ui="rail-nick" style={{ gridColumn: layout.nickColumn, gridRow: 1 }}>
+          {railNick}
         </div>
       )}
       {/* Rounded on the right only. The radius is for the hover fill and the
@@ -123,6 +210,7 @@ export function Block({
           onClick={onSpineClick}
           style={{
             gridColumn: layout.spineColumn,
+            gridRow: 1,
             width: "calc(var(--timeline-spine-width) + var(--timeline-spine-gap))",
             // A border rather than a fill: only a border can be dashed.
             borderLeftWidth: "var(--timeline-spine-width)",
@@ -146,6 +234,7 @@ export function Block({
           data-spine="solid"
           style={{
             gridColumn: layout.spineColumn,
+            gridRow: 1,
             borderLeftWidth: "var(--timeline-spine-width)",
             borderLeftStyle: "solid",
             borderLeftColor: spineTint,
@@ -157,6 +246,7 @@ export function Block({
       <div
         style={{
           gridColumn: layout.contentColumn,
+          gridRow: 1,
           paddingTop: continues ? "var(--timeline-block-gap)" : undefined,
         }}
       >
@@ -248,6 +338,7 @@ export function MessageBlock({
   const brackets = useAppStore((s) => s.presentation.nickBrackets);
   const clockSide = useAppStore((s) => s.presentation.clockSide);
   const clock = useAppStore((s) => s.presentation.clock);
+  const nickAtRail = useAppStore((s) => s.presentation.nickAtRail);
   const everyLine = useAppStore((s) => s.presentation.nickEveryLine);
   const compactSingletons = useAppStore((s) => s.presentation.compactSingletons);
   const nickColors = useAppStore((s) => s.presentation.nickColors);
@@ -275,17 +366,57 @@ export function MessageBlock({
   const groupTint = group === null ? undefined : nickColor(group.opener);
   const spineTint = groupTint ?? (addressed || raised ? "var(--accent)" : undefined);
 
-  const name =
-    writesOwnNick(head.kind) || everyLine || compactSingleton ? null : (
+  const showsHead = !(writesOwnNick(head.kind) || everyLine || compactSingleton);
+  const label = brackets ? `<${head.sender.nick}>` : head.sender.nick;
+  const nameColor = nickColors ? nickColor(head.sender.nick) : "var(--text-primary)";
+  const name = showsHead ? (
+    <span
+      className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
+      style={{ color: nameColor }}
+    >
+      {label}
+    </span>
+  ) : null;
+  // Right-aligned against the spine and cut off rather than given the room, so
+  // a name longer than the column never moves it — the same bargain the
+  // clock's own column keeps with the widest hour of the day. `text-align:
+  // right` on the whole run is what does the right-aligning: a short `<syk>`
+  // has nothing else pinning it to either end, so without it the run falls
+  // back to sitting at the *left* of the column, opening a gap between `<`
+  // and the name instead of before it.
+  //
+  // The name's own box is a *maximum* of `NICK_RAIL_CHARS`, not a width: a
+  // width would hold every name to exactly sixteen characters of box whether
+  // or not it had that many to show, reopening the same gap for anything
+  // shorter. A flex-shrink split was tried before this and rejected for the
+  // opposite failure — the browser gives a shrunk flex sibling whatever is
+  // left of the row to the sub-pixel, and a name landing exactly at the limit
+  // had nothing to spare when the mono face's own metrics rounded a hair
+  // short, truncating sixteen real characters to fourteen and an ellipsis.
+  // `max-width` compares the name's own measured width against its own
+  // declared bound rather than subtracting two siblings from a shared total,
+  // which is what makes it hold exactly at the limit instead of just under.
+  const railNick =
+    showsHead && nickAtRail ? (
       <span
-        className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
-        style={{ color: nickColors ? nickColor(head.sender.nick) : "var(--text-primary)" }}
+        className="block text-right font-[family-name:var(--font-mono)] text-[13px] font-semibold whitespace-nowrap"
+        style={{ width: `${nickRailWidth(brackets)}ch`, color: nameColor }}
+        title={head.sender.nick}
       >
-        {brackets ? `<${head.sender.nick}>` : head.sender.nick}
+        {brackets && "<"}
+        <span
+          className="inline-block truncate align-bottom"
+          style={{ maxWidth: `${NICK_RAIL_CHARS}ch` }}
+        >
+          {head.sender.nick}
+        </span>
+        {brackets && ">"}
       </span>
-    );
-  // Nothing to line the prose up behind when the clock prints nothing.
-  const leadingClock = clockSide === "left" && clock !== "off";
+    ) : undefined;
+  // Nothing to line the prose up behind when the clock prints nothing, and
+  // nothing left in the content column to line up behind once the name has
+  // moved to the rail — the clock followed it there too.
+  const leadingClock = !nickAtRail && clockSide === "left" && clock !== "off";
 
   const rows = messages.map((message, at) => (
     <MessageRow
@@ -315,6 +446,7 @@ export function MessageBlock({
       onSpineClick={group === null || onFocusGroup === undefined ? undefined : () => onFocusGroup(group.id)}
       spinePressed={group !== null && group.id === focusedGroup}
       railClock={<Clock at={head.timestamp} column />}
+      railNick={railNick}
     >
       {opensGroup && group !== null && group.name !== null && (
         <GroupName name={group.name} tint={groupTint ?? "var(--text-faint)"} />
@@ -335,9 +467,11 @@ export function MessageBlock({
       )}
       {/* The name in front of the clock, the clock in front of the name, or
           neither: an action and a notice write their own nick into the body,
-          and a reader who asked for the name on every line is about to be told
-          who and when by each row for itself. */}
-      {name === null ? (
+          a reader who asked for the name on every line is about to be told who
+          and when by each row for itself, and a reader who put the name at the
+          rail has already been told by `railNick` above — the header line it
+          otherwise opens is one more place saying the same thing. */}
+      {name === null || nickAtRail ? (
         rows
       ) : leadingClock ? (
         /* The clock opens a column and the run is set beside it, so the prose

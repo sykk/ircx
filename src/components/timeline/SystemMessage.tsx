@@ -6,7 +6,7 @@ import { TransferControls } from "@/components/transfers/TransferControls";
 import { useAppStore } from "@/store";
 import { useTransferFor } from "@/store/selectors";
 import { Clock } from "./Clock";
-import { Block } from "./MessageBlock";
+import { Block, timelineBlockLayout } from "./MessageBlock";
 import {
   describePresenceSummary,
   describePresenceRun,
@@ -106,8 +106,13 @@ export function SystemMessage({
 }) {
   const { loud, presence, plain } = partitionSystemRun(messages);
   const [expanded, setExpanded] = useState(false);
-  const clockAtRail = useAppStore(
-    (s) => s.presentation.clockSide === "before-spine" && s.presentation.clock !== "off",
+  // Matches `Block`'s own layout exactly: a nickname at the rail sends the
+  // clock there too, having nowhere else left beside it, so a system row has
+  // to draw the same clock `Block` is about to draw rather than one of its
+  // own — this row carries no nickname of its own, but the rail column still
+  // opens for it (see `railNick`'s doc) and would show the clock twice.
+  const clockAtRail = useAppStore(({ presentation: { clockSide, clock, nickAtRail } }) =>
+    timelineBlockLayout(false, clockSide, clock, nickAtRail).clockAtRail,
   );
   // The digest is weather between two stretches of conversation, so it is given
   // the room a rule is given rather than the room a message is. Console output

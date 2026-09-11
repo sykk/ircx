@@ -27,12 +27,14 @@ describe("every preset", () => {
     expect(Object.keys(preset.faces).sort()).toEqual(["mono", "prose"]);
   });
 
-  /** The name in front of every line decides how much of the window a
-   * conversation takes rather than what it looks like, and somebody who reads a
-   * channel that way reads every look that way. A preset states the other four
-   * settings and says nothing about this one. */
-  it.each(PRESETS)("$name leaves the name on every line alone", (preset) => {
+  /** The name in front of every line, and the name at the rail, both decide
+   * how much of the window a conversation takes rather than what it looks
+   * like, and somebody who reads a channel that way reads every look that
+   * way. A preset states the other settings and says nothing about either of
+   * these. */
+  it.each(PRESETS)("$name leaves where the name goes alone", (preset) => {
     expect(Object.keys(preset.presentation)).not.toContain("nickEveryLine");
+    expect(Object.keys(preset.presentation)).not.toContain("nickAtRail");
   });
 });
 

@@ -37,6 +37,15 @@ export interface Presentation {
   /** `<nick>` at the head of a run, as clients that printed the name beside
    * every line wrote it. */
   nickBrackets: boolean;
+  /** The head of a run's name in a fixed column at the rail, left of the
+   * spine, instead of on its own line above the run. Right-aligned against
+   * the spine and truncated rather than resized, for the reason the name on
+   * every line is a prefix and not a column: a width that moved with each
+   * block's longest name would move the spine with it. `clockSide` still
+   * says where the clock sits, now relative to this column instead of the
+   * one in the content area — before it, or after it and still before the
+   * spine, there being no room left in the content area to hold it. */
+  nickAtRail: boolean;
   /** Who said it and when, in front of every line, instead of once above the
    * run. The prefix sits in the flow of the prose rather than in a column of
    * its own — a column sized to the widest name in the block is what the head
@@ -65,6 +74,7 @@ export const DEFAULT_PRESENTATION: Presentation = {
   clock: "24h",
   clockSide: "right",
   nickBrackets: false,
+  nickAtRail: false,
   nickEveryLine: false,
   align: "center",
   compactSingletons: false,
@@ -163,6 +173,8 @@ export function sanitisePresentation(raw: unknown): Presentation {
       typeof held.nickBrackets === "boolean"
         ? held.nickBrackets
         : DEFAULT_PRESENTATION.nickBrackets,
+    nickAtRail:
+      typeof held.nickAtRail === "boolean" ? held.nickAtRail : DEFAULT_PRESENTATION.nickAtRail,
     nickEveryLine:
       typeof held.nickEveryLine === "boolean"
         ? held.nickEveryLine

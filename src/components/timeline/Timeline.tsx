@@ -15,7 +15,7 @@ import { DateSeparator, GapDivider, HistoryDivider, UnreadDivider } from "./Divi
 import { Clock } from "./Clock";
 import { useFrameMessages } from "./frameMessages";
 import { assignGroups } from "./groups";
-import { MessageBlock, timelineBlockLayout } from "./MessageBlock";
+import { MessageBlock, NICK_RAIL_CHARS, nickRailWidth, timelineBlockLayout } from "./MessageBlock";
 import { SystemMessage } from "./SystemMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { buildRows, rowIndexOfMessage, rowMessages, type TimelineRow } from "./rows";
@@ -860,11 +860,12 @@ function TimelineFor({ view, network, target, catchUp }: TimelineForProps) {
 }
 
 function StickyAuthor({ message }: { message: ChatMessage }) {
-  const { align, clock, clockSide, nickBrackets, nickColors, spine } = useAppStore(
+  const { align, clock, clockSide, nickAtRail, nickBrackets, nickColors, spine } = useAppStore(
     (s) => s.presentation,
   );
   const name = nickBrackets ? `<${message.sender.nick}>` : message.sender.nick;
-  const layout = timelineBlockLayout(spine, clockSide, clock);
+  const nameColor = nickColors ? nickColor(message.sender.nick) : "var(--text-primary)";
+  const layout = timelineBlockLayout(spine, clockSide, clock, nickAtRail);
 
   return (
     <div
@@ -883,21 +884,55 @@ function StickyAuthor({ message }: { message: ChatMessage }) {
           paddingRight: "16px",
         }}
       >
-        {layout.clockAtRail && (
-          <div style={{ gridColumn: 1 }}>
+        {layout.clockAtRail && layout.clockColumn !== null && (
+          <div style={{ gridColumn: layout.clockColumn, gridRow: 1 }}>
             <Clock at={message.timestamp} column />
           </div>
         )}
-        <div className="flex items-baseline gap-2" style={{ gridColumn: layout.contentColumn }}>
-          {clockSide === "left" && <Clock at={message.timestamp} />}
+        {/* Mirrors the block below it exactly, down to which column carries
+            the name — a sticky header the reader is scrolling past that
+            disagreed with the row underneath about where the name sits would
+            read as a glitch rather than as the same run. Each of these two
+            names its own row: two items that share no column and leave the
+            row to auto-placement do not reliably land in the same one. The
+            brackets sit outside the part that shrinks, the name's box is a
+            maximum rather than a flex remainder, and `text-align: right` on
+            the run is what hugs a short name to the spine — as it is below. */}
+        {nickAtRail && layout.nickColumn !== null ? (
           <span
-            className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
-            style={{ color: nickColors ? nickColor(message.sender.nick) : "var(--text-primary)" }}
+            className="block text-right font-[family-name:var(--font-mono)] text-[13px] font-semibold whitespace-nowrap"
+            style={{
+              gridColumn: layout.nickColumn,
+              gridRow: 1,
+              width: `${nickRailWidth(nickBrackets)}ch`,
+              color: nameColor,
+            }}
+            title={message.sender.nick}
           >
-            {name}
+            {nickBrackets && "<"}
+            <span
+              className="inline-block truncate align-bottom"
+              style={{ maxWidth: `${NICK_RAIL_CHARS}ch` }}
+            >
+              {message.sender.nick}
+            </span>
+            {nickBrackets && ">"}
           </span>
-          {clockSide === "right" && <Clock at={message.timestamp} />}
-        </div>
+        ) : (
+          <div
+            className="flex items-baseline gap-2"
+            style={{ gridColumn: layout.contentColumn, gridRow: 1 }}
+          >
+            {clockSide === "left" && <Clock at={message.timestamp} />}
+            <span
+              className="font-[family-name:var(--font-mono)] text-[13px] font-semibold"
+              style={{ color: nameColor }}
+            >
+              {name}
+            </span>
+            {clockSide === "right" && <Clock at={message.timestamp} />}
+          </div>
+        )}
       </div>
     </div>
   );

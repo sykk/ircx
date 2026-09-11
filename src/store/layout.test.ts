@@ -10,6 +10,7 @@ import {
   setRatio,
   splitLeaf,
   toStored,
+  widthDemand,
 } from "./layout";
 import type { ChatView, Layout, StoredLayout } from "./types";
 
@@ -42,6 +43,43 @@ describe("splitLeaf", () => {
   it("returns the same tree for a pane it does not hold", () => {
     const tree = splitLeaf(leaf("a"), "a", "row", "b");
     expect(splitLeaf(tree, "gone", "row", "c")).toBe(tree);
+  });
+});
+
+describe("widthDemand", () => {
+  it("is one pane wide on its own", () => {
+    expect(widthDemand(leaf("a"))).toBe(1);
+  });
+
+  it("adds the two sides of a row split, which divides width between them", () => {
+    const tree = splitLeaf(leaf("a"), "a", "row", "b");
+    expect(widthDemand(tree)).toBe(2);
+  });
+
+  it("takes the wider side of a column split, which stacks rather than divides", () => {
+    const tree = splitLeaf(leaf("a"), "a", "column", "b");
+    expect(widthDemand(tree)).toBe(1);
+  });
+
+  /**
+   * The shape a live run actually hit: a column split, and one side of it
+   * split side by side twice more. Every individual divider honoured its own
+   * 280px floor, and the bottom row still squeezed to about 120px a pane,
+   * because nothing above the row split's own two children knew three panes
+   * were sharing that width rather than one. `widthDemand` is what
+   * `PaneTree`'s `minWidth` and `Divider`'s floor read instead of a flat
+   * constant, so this is the number that has to come out right.
+   */
+  it("carries a nested split's demand up through a stack, rather than losing it", () => {
+    let tree = splitLeaf(leaf("a"), "a", "column", "b");
+    tree = splitLeaf(tree, "b", "row", "c");
+    tree = splitLeaf(tree, "c", "row", "d");
+
+    // The bottom row alone needs three pane-widths.
+    expect(tree.type === "split" && widthDemand(tree.children[1])).toBe(3);
+    // The column stacking it above a single pane still needs that much,
+    // because both rows share the same width rather than dividing it.
+    expect(widthDemand(tree)).toBe(3);
   });
 });
 
